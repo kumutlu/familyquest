@@ -3,8 +3,10 @@ import { Card, CardContent } from '../components/ui/Card';
 import { Avatar } from '../components/ui/Avatar';
 import { Badge } from '../components/ui/Badge';
 import { Progress } from '../components/ui/Progress';
-import { ChevronLeft, Flame, Trophy, TrendingUp, TrendingDown } from 'lucide-react';
+import { ChevronLeft, Star, Flame, Trophy, TrendingUp, TrendingDown, Shield, Award, Zap } from 'lucide-react';
 import { useStore } from '../store/useStore';
+import { ACHIEVEMENTS } from '../lib/achievements';
+import { cn } from '../lib/utils';
 
 export function MemberProfile() {
   const { id } = useParams();
@@ -112,6 +114,37 @@ export function MemberProfile() {
             ))}
           </div>
         )}
+      </section>
+      <section>
+        <h2 className="text-lg font-bold text-gray-900 mb-4 flex items-center gap-2">
+          <Trophy size={20} className="text-reward-500" />
+          Achievement Gallery
+        </h2>
+        <div className="grid grid-cols-2 gap-3">
+          {ACHIEVEMENTS.map(badge => {
+            const isUnlocked = badge.checkUnlocked(member);
+            
+            // Map icon string to component
+            const IconComp = 
+              badge.iconName === 'Star' ? Star :
+              badge.iconName === 'Flame' ? Flame :
+              badge.iconName === 'Shield' ? Shield :
+              badge.iconName === 'Award' ? Award :
+              badge.iconName === 'Zap' ? Zap : Trophy;
+
+            return (
+              <Card key={badge.id} className={cn("transition-all", isUnlocked ? "border-primary-200 bg-white" : "opacity-60 grayscale bg-gray-50 border-dashed")}>
+                <CardContent className="p-4 flex flex-col items-center text-center">
+                  <div className={cn("w-12 h-12 rounded-2xl flex items-center justify-center mb-3 border-2", isUnlocked ? badge.color : "bg-gray-100 text-gray-400 border-gray-200")}>
+                    <IconComp size={24} />
+                  </div>
+                  <h4 className="font-bold text-gray-900 text-sm">{badge.name}</h4>
+                  <p className="text-xs text-gray-500 mt-1">{badge.description}</p>
+                </CardContent>
+              </Card>
+            );
+          })}
+        </div>
       </section>
     </div>
   );
