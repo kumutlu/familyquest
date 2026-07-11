@@ -1,11 +1,19 @@
-
+import { useEffect } from 'react';
 import { Link, Outlet, useLocation } from 'react-router-dom';
 import { Home, Users, CheckSquare, Gift, Wallet, Settings } from 'lucide-react';
 import { cn } from '../../lib/utils';
 import { Avatar } from '../ui/Avatar';
+import { useStore } from '../../store/useStore';
 
 export function AppLayout() {
   const location = useLocation();
+  const init = useStore(state => state.init);
+  const currentUser = useStore(state => state.currentUser);
+
+  useEffect(() => {
+    // Hardcoded for MVP dev mode based on seed data
+    init('child_1', 'fam_12345');
+  }, [init]);
 
   const navItems = [
     { name: 'Home', path: '/', icon: Home },
@@ -31,7 +39,9 @@ export function AppLayout() {
             <Link to="/settings" className="text-gray-400 hover:text-gray-600 transition-colors">
               <Settings size={24} />
             </Link>
-            <Avatar fallback="JD" src="https://i.pravatar.cc/150?u=1" size="sm" className="ring-2 ring-primary-100" />
+            {currentUser && (
+              <Avatar fallback={currentUser.displayName[0]} src={currentUser.avatarUrl} size="sm" className="ring-2 ring-primary-100" />
+            )}
           </div>
         </div>
       </header>

@@ -1,114 +1,74 @@
-import { useState } from 'react';
-import { Button } from '../components/ui/Button';
 import { Card, CardContent } from '../components/ui/Card';
-import { Progress } from '../components/ui/Progress';
-import { ArrowDownLeft, ArrowUpRight, Plus, Target, PiggyBank } from 'lucide-react';
+import { Stat } from '../components/ui/Stat';
+import { ArrowDownRight, ArrowUpRight, Wallet as WalletIcon, Target } from 'lucide-react';
+import { useStore } from '../store/useStore';
 
 export function Wallet() {
-  const [activeTab, setActiveTab] = useState<'ledger' | 'goals'>('ledger');
+  const { currentUser, walletTransactions, loading } = useStore();
 
-  const transactions = [
-    { id: 1, title: 'Weekly Allowance', amount: 5.00, type: 'credit', date: 'Today, 9:00 AM' },
-    { id: 2, title: 'Walked the dog', amount: 0.50, type: 'credit', date: 'Yesterday' },
-    { id: 3, title: 'Roblox Gift Card', amount: -4.99, type: 'debit', date: 'Oct 12' },
-    { id: 4, title: 'Birthday Gift from Grandma', amount: 20.00, type: 'credit', date: 'Oct 10' },
-  ];
+  if (loading || !currentUser) return <div className="p-8 text-center text-gray-500 animate-pulse">Loading Wallet...</div>;
 
-  const goals = [
-    { id: 1, title: 'New Bicycle', current: 45, target: 120, color: 'primary' as const },
-    { id: 2, title: 'Video Game', current: 24.50, target: 60, color: 'success' as const },
-  ];
+  const currentBalance = currentUser.walletBalance || 0; // Stored in cents
 
   return (
     <div className="space-y-6 animate-in fade-in duration-300">
-      <div className="bg-gray-900 text-white p-6 rounded-3xl shadow-xl relative overflow-hidden">
-        <div className="absolute top-0 right-0 p-8 opacity-10">
-          <svg viewBox="0 0 100 100" className="w-48 h-48 fill-white"><circle cx="50" cy="50" r="50"/></svg>
+      <header>
+        <h1 className="text-2xl font-bold text-gray-900 tracking-tight">Wallet</h1>
+        <p className="text-gray-500 mt-1">Manage your allowance.</p>
+      </header>
+
+      <div className="bg-gray-900 p-6 rounded-3xl text-white shadow-lg relative overflow-hidden">
+        <div className="absolute top-0 right-0 p-4 opacity-10">
+          <WalletIcon size={120} strokeWidth={1} />
         </div>
         <div className="relative z-10">
-          <p className="text-gray-400 font-medium mb-1 text-sm uppercase tracking-wider">Total Real Money</p>
-          <h1 className="text-5xl font-extrabold tracking-tight">$24.50</h1>
-          
-          <div className="flex gap-3 mt-8">
-            <Button variant="secondary" className="bg-white/10 hover:bg-white/20 text-white border-0 flex-1 h-12">
-              <PiggyBank size={18} className="mr-2" /> Add Savings
-            </Button>
-          </div>
+          <p className="text-gray-400 font-medium text-sm mb-1 uppercase tracking-wider">Total Balance</p>
+          <h2 className="text-4xl font-extrabold tracking-tight">${(currentBalance / 100).toFixed(2)}</h2>
         </div>
       </div>
 
-      <div className="flex gap-2 p-1 bg-gray-100 rounded-xl">
-        <button 
-          onClick={() => setActiveTab('ledger')}
-          className={`flex-1 py-2 text-sm font-semibold rounded-lg transition-all ${activeTab === 'ledger' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500'}`}
-        >
-          Transactions
-        </button>
-        <button 
-          onClick={() => setActiveTab('goals')}
-          className={`flex-1 py-2 text-sm font-semibold rounded-lg transition-all ${activeTab === 'goals' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500'}`}
-        >
-          Savings Goals
-        </button>
+      <div className="grid grid-cols-2 gap-4">
+        {/* Placeholder for future V2 goals, just showing static zero for MVP as goals are removed from schema */}
+        <Stat label="Saved this month" value="$0.00" icon={<Target className="text-primary-500" />} />
+        <Stat label="Spent this month" value="$0.00" icon={<ArrowDownRight className="text-danger-500" />} />
       </div>
 
-      {activeTab === 'ledger' && (
-        <div className="animate-in slide-in-from-left-2 duration-200">
-          <h2 className="text-lg font-bold text-gray-900 mb-4 px-1">Ledger</h2>
-          <div className="space-y-3">
-            {transactions.map(tx => (
-              <Card key={tx.id} className="hover:border-primary-100 transition-colors">
-                <CardContent className="p-4 flex items-center justify-between">
-                  <div className="flex items-center gap-4">
-                    <div className={`p-2.5 rounded-xl ${tx.type === 'credit' ? 'bg-success-50 text-success-600' : 'bg-gray-50 text-gray-600'}`}>
-                      {tx.type === 'credit' ? <ArrowDownLeft size={20} strokeWidth={2.5} /> : <ArrowUpRight size={20} strokeWidth={2.5} />}
-                    </div>
-                    <div>
-                      <h4 className="font-semibold text-gray-900">{tx.title}</h4>
-                      <p className="text-xs text-gray-500 font-medium mt-0.5">{tx.date}</p>
-                    </div>
-                  </div>
-                  <div className={`font-bold text-lg ${tx.type === 'credit' ? 'text-success-600' : 'text-gray-900'}`}>
-                    {tx.type === 'credit' ? '+' : '-'}${Math.abs(tx.amount).toFixed(2)}
-                  </div>
-                </CardContent>
-              </Card>
-            ))}
+      <section className="mt-8">
+        <h3 className="text-lg font-bold text-gray-900 mb-4">Recent Transactions</h3>
+        
+        {walletTransactions.length === 0 ? (
+          <div className="bg-white rounded-2xl border border-gray-100 p-8 text-center text-gray-500">
+            No transactions yet.
           </div>
-        </div>
-      )}
-
-      {activeTab === 'goals' && (
-        <div className="space-y-4 animate-in slide-in-from-right-2 duration-200">
-          <div className="flex justify-between items-center px-1">
-            <h2 className="text-lg font-bold text-gray-900">Your Goals</h2>
-            <Button size="sm" variant="ghost" className="text-primary-600 px-2"><Plus size={18} className="mr-1"/> New Goal</Button>
-          </div>
-          
-          {goals.map(goal => (
-            <Card key={goal.id}>
-              <CardContent className="p-5">
-                <div className="flex justify-between items-end mb-3">
-                  <div>
-                    <h4 className="font-bold text-gray-900 text-lg flex items-center gap-2">
-                      <Target size={18} className="text-gray-400" />
-                      {goal.title}
-                    </h4>
-                  </div>
-                  <div className="text-right">
-                    <span className="text-xl font-extrabold text-gray-900">${goal.current.toFixed(2)}</span>
-                    <span className="text-sm text-gray-500 font-medium"> / ${goal.target.toFixed(2)}</span>
-                  </div>
-                </div>
-                <Progress value={(goal.current / goal.target) * 100} color={goal.color} className="h-3" />
-                <p className="text-xs text-gray-500 mt-3 text-right font-medium">
-                  ${(goal.target - goal.current).toFixed(2)} more to go!
-                </p>
-              </CardContent>
-            </Card>
-          ))}
-        </div>
-      )}
+        ) : (
+          <Card>
+            <CardContent className="p-2">
+              <div className="divide-y divide-gray-50">
+                {walletTransactions.map((tx) => {
+                  const isCredit = tx.type === 'credit';
+                  const date = tx.timestamp?.toDate ? tx.timestamp.toDate() : new Date();
+                  return (
+                    <div key={tx.id} className="p-3 flex items-center justify-between">
+                      <div className="flex items-center gap-3">
+                        <div className={`w-10 h-10 rounded-full flex items-center justify-center shrink-0 ${isCredit ? 'bg-success-50 text-success-600' : 'bg-gray-100 text-gray-600'}`}>
+                          {isCredit ? <ArrowUpRight size={20} /> : <ArrowDownRight size={20} />}
+                        </div>
+                        <div>
+                          <p className="font-semibold text-gray-900 text-sm">{tx.description}</p>
+                          <p className="text-xs text-gray-400 mt-0.5">{date.toLocaleDateString()}</p>
+                        </div>
+                      </div>
+                      <div className={`font-bold ${isCredit ? 'text-success-600' : 'text-gray-900'}`}>
+                        {isCredit ? '+' : '-'}${(tx.amount / 100).toFixed(2)}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </CardContent>
+          </Card>
+        )}
+      </section>
     </div>
   );
 }
