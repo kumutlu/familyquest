@@ -11,6 +11,7 @@ export function Tasks() {
   const [filter, setFilter] = useState<'all' | 'daily' | 'weekly' | 'one-time'>('all');
   const [selectedTask, setSelectedTask] = useState<any>(null);
   const [isCompleting, setIsCompleting] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   if (loading) return <div className="p-8 text-center text-gray-500 animate-pulse">Loading Tasks...</div>;
 
@@ -29,11 +30,13 @@ export function Tasks() {
   const handleTaskClick = (task: any) => {
     setSelectedTask(task);
     setIsCompleting(false);
+    setError(null);
   };
 
   const handleComplete = async () => {
     if (!currentUser) return;
     setIsCompleting(true);
+    setError(null);
     
     try {
       await completeTask(currentUser.familyId, selectedTask.id, currentUser.id, selectedTask.requiresApproval);
@@ -41,8 +44,9 @@ export function Tasks() {
         setSelectedTask(null);
         setIsCompleting(false);
       }, 1500);
-    } catch (e) {
+    } catch (e: any) {
       console.error(e);
+      setError(e.message || 'Failed to complete task.');
       setIsCompleting(false);
     }
   };
@@ -134,6 +138,8 @@ export function Tasks() {
                     </div>
                   )}
                 </div>
+
+                {error && <p className="text-danger-500 text-sm text-center font-medium">{error}</p>}
 
                 {selectedTask.status === 'pending' && (
                   <Button fullWidth onClick={handleComplete} size="lg" className="shadow-primary-500/25">
