@@ -27,7 +27,7 @@ export function CardTitle({ className, children, ...props }: React.HTMLAttribute
 
 export function CardContent({ className, children, ...props }: React.HTMLAttributes<HTMLDivElement>) {
   return (
-    <div className={cn("p-6 pt-4", className)} {...props}>
+    <div className={cn("p-4", className)} {...props}>
       {children}
     </div>
   );

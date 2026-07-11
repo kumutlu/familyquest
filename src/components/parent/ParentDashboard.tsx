@@ -69,28 +69,33 @@ export function ParentDashboard() {
         <p className="text-gray-500 mt-1">Manage your family's progress.</p>
       </header>
 
+      {/* Overview Cards */}
+      <section className="grid grid-cols-3 gap-3">
+        <Link to="/tasks" className="bg-white border border-gray-100 rounded-xl p-3 flex flex-col items-center justify-center text-center shadow-sm hover:border-primary-300 transition-colors">
+          <span className="text-xs font-bold text-gray-500 uppercase mb-1">Tasks</span>
+          <span className="text-xl font-extrabold text-primary-600">{tasks.filter(t => t.isActive !== false).length}</span>
+        </Link>
+        <Link to="/rewards" className="bg-white border border-gray-100 rounded-xl p-3 flex flex-col items-center justify-center text-center shadow-sm hover:border-reward-300 transition-colors">
+          <span className="text-xs font-bold text-gray-500 uppercase mb-1">Rewards</span>
+          <span className="text-xl font-extrabold text-reward-600">{rewards.filter(r => r.isActive !== false).length}</span>
+        </Link>
+        <Link to="/family" className="bg-white border border-gray-100 rounded-xl p-3 flex flex-col items-center justify-center text-center shadow-sm hover:border-success-300 transition-colors">
+          <span className="text-xs font-bold text-gray-500 uppercase mb-1">Children</span>
+          <span className="text-xl font-extrabold text-success-600">{children.length}</span>
+        </Link>
+      </section>
+
       {/* Quick Actions */}
       <section>
-        <div className="flex items-center justify-between mb-3">
-          <h2 className="text-sm font-bold text-gray-500 uppercase tracking-wider">Quick Actions</h2>
-          <div className="flex gap-3 text-xs font-bold text-gray-400">
-            <span>{tasks.filter(t => t.isActive !== false).length} Active Tasks</span>
-            <span>•</span>
-            <span>{rewards.filter(r => r.isActive !== false).length} Active Rewards</span>
-          </div>
-        </div>
-        <div className="grid grid-cols-3 gap-3">
-          <Link to="/tasks" className="bg-primary-50 hover:bg-primary-100 transition-colors rounded-xl p-3 flex flex-col items-center justify-center text-center text-primary-700">
-            <Plus size={20} className="mb-1" />
-            <span className="text-xs font-bold">New Task</span>
+        <div className="flex gap-2">
+          <Link to="/tasks" className="flex-1 bg-primary-50 hover:bg-primary-100 transition-colors rounded-lg py-2 flex items-center justify-center text-primary-700 text-xs font-bold">
+            <Plus size={16} className="mr-1" /> New Task
           </Link>
-          <Link to="/rewards" className="bg-reward-50 hover:bg-reward-100 transition-colors rounded-xl p-3 flex flex-col items-center justify-center text-center text-reward-700">
-            <Gift size={20} className="mb-1" />
-            <span className="text-xs font-bold">New Reward</span>
+          <Link to="/rewards" className="flex-1 bg-reward-50 hover:bg-reward-100 transition-colors rounded-lg py-2 flex items-center justify-center text-reward-700 text-xs font-bold">
+            <Gift size={16} className="mr-1" /> New Reward
           </Link>
-          <button onClick={() => setIsEventModalOpen(true)} className="bg-warning-50 hover:bg-warning-100 transition-colors rounded-xl p-3 flex flex-col items-center justify-center text-center text-warning-700">
-            <Zap size={20} className="mb-1" />
-            <span className="text-xs font-bold">Log Event</span>
+          <button onClick={() => setIsEventModalOpen(true)} className="flex-1 bg-warning-50 hover:bg-warning-100 transition-colors rounded-lg py-2 flex items-center justify-center text-warning-700 text-xs font-bold">
+            <Zap size={16} className="mr-1" /> Log Event
           </button>
         </div>
       </section>
@@ -193,8 +198,8 @@ export function ParentDashboard() {
 
       {/* Review Modal */}
       {selectedCompletion && (
-        <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-gray-900/40 backdrop-blur-sm">
-          <div className="bg-white w-full sm:max-w-md sm:rounded-3xl rounded-t-3xl shadow-xl overflow-hidden flex flex-col">
+        <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-gray-900/40 backdrop-blur-sm animate-in fade-in duration-200">
+          <div className="bg-white w-full sm:max-w-md sm:rounded-3xl rounded-t-3xl shadow-xl overflow-hidden flex flex-col animate-in slide-in-from-bottom-full sm:slide-in-from-bottom-10 duration-300">
             <div className="px-6 py-4 flex justify-between items-center border-b border-gray-100">
               <h3 className="text-xl font-bold text-gray-900">Review Task</h3>
               <button onClick={() => setSelectedCompletion(null)} className="p-2 -mr-2 bg-gray-100 hover:bg-gray-200 rounded-full text-gray-500">✕</button>
@@ -235,18 +240,14 @@ export function ParentDashboard() {
       )}
 
       {/* Child Summaries */}
-      <section>
-        <h2 className="text-lg font-bold text-gray-900 mb-4 flex items-center gap-2">
-          <Users size={20} className="text-primary-500" />
-          Child Summaries
-        </h2>
-        <div className="space-y-3">
-          {children.length === 0 ? (
-            <div className="bg-white rounded-2xl border border-gray-100 p-8 text-center text-gray-500">
-              No children in this family yet.
-            </div>
-          ) : (
-            children.map(child => (
+      {children.length > 0 && (
+        <section>
+          <h2 className="text-lg font-bold text-gray-900 mb-4 flex items-center gap-2">
+            <Users size={20} className="text-primary-500" />
+            Child Summaries
+          </h2>
+          <div className="space-y-3">
+            {children.map(child => (
               <Link key={child.id} to={`/family/${child.id}`} className="block">
                 <Card className="hover:border-primary-300 transition-colors">
                   <CardContent className="p-4 flex items-center justify-between">
@@ -264,18 +265,14 @@ export function ParentDashboard() {
                   </CardContent>
                 </Card>
               </Link>
-            ))
-          )}
-        </div>
-      </section>
-      {/* Family Activity */}
-      <section>
-        <h2 className="text-lg font-bold text-gray-900 mb-4">Recent Activity</h2>
-        {feed.length === 0 ? (
-          <div className="bg-white rounded-2xl border border-gray-100 p-8 text-center text-gray-500">
-            No recent activity.
+            ))}
           </div>
-        ) : (
+        </section>
+      )}
+      {/* Family Activity */}
+      {feed.length > 0 && (
+        <section>
+          <h2 className="text-lg font-bold text-gray-900 mb-4">Recent Activity</h2>
           <div className="bg-white rounded-2xl border border-gray-100 p-1">
             {feed.slice(0, 5).map((item) => (
               <div key={item.id} className="p-4 flex items-start gap-3 border-b border-gray-50 last:border-0">
@@ -289,13 +286,13 @@ export function ParentDashboard() {
               </div>
             ))}
           </div>
-        )}
-      </section>
+        </section>
+      )}
 
       {/* Log Behaviour Event Modal */}
       {isEventModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-gray-900/40 backdrop-blur-sm">
-          <div className="bg-white w-full sm:max-w-md sm:rounded-3xl rounded-t-3xl shadow-xl overflow-hidden flex flex-col max-h-[90vh]">
+        <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-gray-900/40 backdrop-blur-sm animate-in fade-in duration-200">
+          <div className="bg-white w-full sm:max-w-md sm:rounded-3xl rounded-t-3xl shadow-xl overflow-hidden flex flex-col max-h-[90vh] animate-in slide-in-from-bottom-full sm:slide-in-from-bottom-10 duration-300">
             <div className="px-6 py-4 flex justify-between items-center border-b border-gray-100">
               <h3 className="text-xl font-bold text-gray-900">Log Behaviour</h3>
               <button onClick={() => setIsEventModalOpen(false)} className="p-2 -mr-2 bg-gray-100 hover:bg-gray-200 rounded-full text-gray-500">✕</button>

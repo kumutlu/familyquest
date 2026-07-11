@@ -6,7 +6,6 @@ import { Gift, Gamepad2, Pizza, Ticket, Plus, Edit, Trash2 } from 'lucide-react'
 import { useStore } from '../store/useStore';
 import { redeemReward, createReward, updateReward } from '../lib/api';
 import { cn } from '../lib/utils';
-import { useNavigate } from 'react-router-dom';
 
 export function Rewards() {
   const { currentUser, rewards, loading } = useStore();
@@ -17,6 +16,7 @@ export function Rewards() {
   
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [successMsg, setSuccessMsg] = useState<string | null>(null);
 
   if (loading || !currentUser) return <div className="p-8 text-center text-gray-500 animate-pulse">Loading Rewards...</div>;
 
@@ -78,8 +78,6 @@ export function Rewards() {
     }
   };
 
-  const navigate = useNavigate();
-
   const handleFormSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsSubmitting(true);
@@ -94,13 +92,13 @@ export function Rewards() {
 
       if (formData.id) {
         await updateReward(currentUser.familyId, formData.id, dataToSave);
-        alert('Reward updated successfully!');
+        setSuccessMsg('Reward updated successfully!');
       } else {
         await createReward(currentUser.familyId, dataToSave);
-        alert('Reward created successfully!');
+        setSuccessMsg('Reward created successfully!');
       }
       setIsFormOpen(false);
-      navigate('/');
+      setTimeout(() => setSuccessMsg(null), 3000);
     } catch (e: any) {
       setError(e.message);
     }
@@ -134,6 +132,12 @@ export function Rewards() {
           )}
         </div>
       </header>
+
+      {successMsg && (
+        <div className="bg-success-50 text-success-700 p-3 rounded-xl mb-4 text-sm font-medium animate-in fade-in slide-in-from-top-2">
+          {successMsg}
+        </div>
+      )}
 
       <div className="grid grid-cols-2 gap-4 pb-24">
         {activeRewards.length === 0 ? (
@@ -212,8 +216,8 @@ export function Rewards() {
 
       {/* Create/Edit Form Modal */}
       {isFormOpen && (
-        <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-gray-900/40 backdrop-blur-sm">
-          <div className="bg-white w-full sm:max-w-md sm:rounded-3xl rounded-t-3xl shadow-xl overflow-hidden flex flex-col max-h-[90vh]">
+        <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-gray-900/40 backdrop-blur-sm animate-in fade-in duration-200">
+          <div className="bg-white w-full sm:max-w-md sm:rounded-3xl rounded-t-3xl shadow-xl overflow-hidden flex flex-col max-h-[90vh] animate-in slide-in-from-bottom-full sm:slide-in-from-bottom-10 duration-300">
             <div className="px-6 py-4 flex justify-between items-center border-b border-gray-100">
               <h3 className="text-xl font-bold text-gray-900">{formData.id ? 'Edit Reward' : 'New Reward'}</h3>
               <button onClick={() => setIsFormOpen(false)} className="p-2 -mr-2 bg-gray-100 hover:bg-gray-200 rounded-full text-gray-500">✕</button>

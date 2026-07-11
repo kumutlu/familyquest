@@ -6,7 +6,6 @@ import { CheckCircle2, Plus, Edit, Trash2 } from 'lucide-react';
 import { useStore } from '../store/useStore';
 import { completeTask, createTask, updateTask } from '../lib/api';
 import { cn } from '../lib/utils';
-import { useNavigate } from 'react-router-dom';
 
 export function Tasks() {
   const { currentUser, tasks, taskCompletions, loading } = useStore();
@@ -18,6 +17,7 @@ export function Tasks() {
   
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [successMsg, setSuccessMsg] = useState<string | null>(null);
 
   if (loading) return <div className="p-8 text-center text-gray-500 animate-pulse">Loading Tasks...</div>;
 
@@ -83,8 +83,6 @@ export function Tasks() {
     }
   };
 
-  const navigate = useNavigate();
-
   const handleFormSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!currentUser) return;
@@ -97,7 +95,7 @@ export function Tasks() {
           type: formData.type,
           requiresApproval: formData.requiresApproval
         });
-        alert('Task updated successfully!');
+        setSuccessMsg('Task updated successfully!');
       } else {
         await createTask(currentUser.familyId, {
           title: formData.title,
@@ -105,10 +103,10 @@ export function Tasks() {
           type: formData.type,
           requiresApproval: formData.requiresApproval
         });
-        alert('Task created successfully!');
+        setSuccessMsg('Task created successfully!');
       }
       setIsFormOpen(false);
-      navigate('/');
+      setTimeout(() => setSuccessMsg(null), 3000);
     } catch (e: any) {
       setError(e.message);
     }
@@ -128,6 +126,12 @@ export function Tasks() {
           </Button>
         )}
       </header>
+
+      {successMsg && (
+        <div className="bg-success-50 text-success-700 p-3 rounded-xl mb-4 text-sm font-medium animate-in fade-in slide-in-from-top-2">
+          {successMsg}
+        </div>
+      )}
 
       <div className="flex gap-2 overflow-x-auto pb-2 scrollbar-hide -mx-4 px-4 sm:mx-0 sm:px-0">
         <Button variant={filter === 'all' ? 'primary' : 'secondary'} size="sm" onClick={() => setFilter('all')} className="rounded-full">All Tasks</Button>
@@ -234,8 +238,8 @@ export function Tasks() {
 
       {/* Create/Edit Form Modal */}
       {isFormOpen && (
-        <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-gray-900/40 backdrop-blur-sm">
-          <div className="bg-white w-full sm:max-w-md sm:rounded-3xl rounded-t-3xl shadow-xl overflow-hidden flex flex-col max-h-[90vh]">
+        <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-gray-900/40 backdrop-blur-sm animate-in fade-in duration-200">
+          <div className="bg-white w-full sm:max-w-md sm:rounded-3xl rounded-t-3xl shadow-xl overflow-hidden flex flex-col max-h-[90vh] animate-in slide-in-from-bottom-full sm:slide-in-from-bottom-10 duration-300">
             <div className="px-6 py-4 flex justify-between items-center border-b border-gray-100">
               <h3 className="text-xl font-bold text-gray-900">{formData.id ? 'Edit Task' : 'New Task'}</h3>
               <button onClick={() => setIsFormOpen(false)} className="p-2 -mr-2 bg-gray-100 hover:bg-gray-200 rounded-full text-gray-500">✕</button>

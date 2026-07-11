@@ -1,5 +1,5 @@
 import { Link, Outlet, useLocation, Navigate } from 'react-router-dom';
-import { Home, Users, CheckSquare, Gift, Wallet, Settings, Bell } from 'lucide-react';
+import { Home, Users, CheckSquare, Gift, Settings, Bell } from 'lucide-react';
 import { cn } from '../../lib/utils';
 import { Avatar } from '../ui/Avatar';
 import { useStore } from '../../store/useStore';
@@ -49,7 +49,7 @@ export function AppLayout() {
     { name: 'Tasks', path: '/tasks', icon: CheckSquare },
     { name: 'Family', path: '/family', icon: Users },
     { name: 'Rewards', path: '/rewards', icon: Gift },
-    { name: 'Wallet', path: '/wallet', icon: Wallet },
+    { name: 'Settings', path: '/settings', icon: Settings },
   ];
 
   return (
@@ -85,7 +85,7 @@ export function AppLayout() {
                     ) : (
                       feed.slice(0, 10).map((item: any) => (
                         <div key={item.id} className="p-3 bg-white hover:bg-gray-50 rounded-xl transition-colors text-sm text-gray-700">
-                          {item.text}
+                           {item.text}
                           <div className="text-[10px] text-gray-400 mt-1">
                             {item.timestamp?.toDate ? item.timestamp.toDate().toLocaleString() : 'Just now'}
                           </div>
@@ -96,9 +96,6 @@ export function AppLayout() {
                 </div>
               )}
             </div>
-            <Link to="/settings" className="text-gray-400 hover:text-gray-600 transition-colors">
-              <Settings size={24} />
-            </Link>
             {currentUser && (
               <Avatar fallback={currentUser.displayName[0]} src={currentUser.avatarUrl} size="sm" className="ring-2 ring-primary-100" />
             )}
