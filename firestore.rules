@@ -7,9 +7,13 @@ service cloud.firestore {
     function isAuthenticated() {
       return request.auth != null;
     }
-    
+
     function isFamilyMember(familyId) {
       return isAuthenticated() && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.familyId == familyId;
+    }
+
+    function isOwner(familyId) {
+      return isFamilyMember(familyId) && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'owner';
     }
 
     function isParent(familyId) {
@@ -68,11 +72,14 @@ service cloud.firestore {
         && hasValidReason(data.reason)
         && hasValidBehaviourDeltas(data)
         && hasValidCreatorSnapshot(data)
-        && data.createdAt is timestamp;
+        && data.createdAt is timestamp
+        && data.createdAt == request.time;
     }
 
     function isValidFinancialPenalty(familyId) {
       let data = request.resource.data;
+      let eventPath = /databases/$(database)/documents/families/$(familyId)/behaviour_events/$(data.behaviourEventId);
+      let event = getAfter(eventPath).data;
       return data.keys().hasOnly([
           'type', 'behaviourEventId', 'childId', 'amount', 'reason',
           'createdBy', 'createdByName', 'createdAt'
@@ -90,7 +97,48 @@ service cloud.firestore {
         && data.amount > 0
         && hasValidReason(data.reason)
         && hasValidCreatorSnapshot(data)
-        && data.createdAt is timestamp;
+        && data.createdAt is timestamp
+        && data.createdAt == request.time
+        && existsAfter(eventPath)
+        && event.familyId == familyId
+        && event.childId == data.childId
+        && event.type == 'financial'
+        && event.pointsDelta == 0
+        && event.walletDelta == 0 - data.amount
+        && event.reason == data.reason
+        && event.createdBy == data.createdBy
+        && event.createdByName == data.createdByName
+        && event.createdAt == data.createdAt;
+    }
+
+    function isValidSelfSignup(uid) {
+      let data = request.resource.data;
+      return request.auth.uid == uid
+        && data.uid == uid
+        && data.role == 'parent'
+        && !('familyId' in data);
+    }
+
+    function isValidManagedMemberCreate(uid) {
+      let data = request.resource.data;
+      return data.uid == uid
+        && data.familyId is string
+        && data.isManaged == true
+        && (data.role == 'parent' || data.role == 'child')
+        && isOwner(data.familyId);
+    }
+
+    function isValidOwnerBootstrap(uid) {
+      let familyId = request.resource.data.familyId;
+      let familyPath = /databases/$(database)/documents/families/$(familyId);
+      return request.auth.uid == uid
+        && !('familyId' in resource.data)
+        && resource.data.role == 'parent'
+        && request.resource.data.uid == uid
+        && request.resource.data.role == 'owner'
+        && familyId is string
+        && !exists(familyPath)
+        && existsAfter(familyPath);
     }
 
     // USERS
@@ -99,10 +147,23 @@ service cloud.firestore {
       allow read: if isAuthenticated() && (request.auth.uid == uid || get(/databases/$(database)/documents/users/$(request.auth.uid)).data.familyId == resource.data.familyId);
       allow update: if isAuthenticated() && (
         (request.auth.uid == uid && !request.resource.data.diff(resource.data).affectedKeys().hasAny([
-          'rewardPoints', 'lifetimeXP', 'walletBalance'
-        ])) || isParent(resource.data.familyId)
+          'role', 'familyId', 'rewardPoints', 'lifetimeXP', 'walletBalance'
+        ])) ||
+        isValidOwnerBootstrap(uid) ||
+        (isParent(resource.data.familyId) && resource.data.role == 'child' && !request.resource.data.diff(resource.data).affectedKeys().hasAny(['role', 'familyId'])) ||
+        (isOwner(resource.data.familyId)) ||
+        (isOwner(request.resource.data.familyId)) // Allow owner to adopt a pending user
       );
-      allow create: if isAuthenticated() && request.auth.uid == uid;
+
+      allow create: if isAuthenticated() && (
+        isValidSelfSignup(uid) ||
+        isValidManagedMemberCreate(uid)
+      );
+    }
+
+    match /claim_codes/{codeId} {
+      allow read: if isAuthenticated();
+      allow create, delete: if isAuthenticated() && isOwner(request.resource.data.familyId);
     }
 
     // FAMILIES
@@ -111,7 +172,7 @@ service cloud.firestore {
       // Only authenticated users can create a family. Only parents can update.
       allow create: if isAuthenticated();
       allow update: if isParent(familyId);
-      
+
       // TASKS
       match /tasks/{taskId} {
         allow read: if isFamilyMember(familyId);
@@ -153,10 +214,11 @@ service cloud.firestore {
         allow read: if isFamilyMember(familyId);
         // Wallet ledger is immutable and writeable only by parents
         allow create: if isBehaviourManager(familyId) && (
+          !(request.resource.data.keys().hasAny(['type'])) ||
           request.resource.data.type != 'financial_penalty' ||
           isValidFinancialPenalty(familyId)
         );
-        allow update, delete: if false; 
+        allow update, delete: if false;
       }
 
       // ACTIVITY FEED

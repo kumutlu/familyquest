@@ -102,3 +102,49 @@ The exact Phase-3-only staged rules blob was also verified independently (using 
 
 - Firebase Tools requires JDK 21+, while the machine's default Java is JDK 11; rule-test invocations need the JDK 21 environment override unless the default is upgraded.
 - Build warnings described above are pre-existing/outside Phase 3 and were not changed.
+
+## Fix Report
+
+### Status and files
+
+Phase 3 review findings were addressed in `firestore.rules` and `tests/firestore/behaviour.rules.test.ts`.
+
+- Self-profile creation now permits only the actual family-less `parent` signup shape. A self-update cannot change `familyId`; owner bootstrap is limited to an atomic transaction that creates a previously nonexistent family. Owner-created managed `parent`/`child` profiles remain supported.
+- Financial penalties use `existsAfter`/`getAfter` to require an existing or atomically created behaviour event in the same family, with exact child, creator ID/name, reason, financial type, zero points, negative wallet delta equal to the amount, and timestamp linkage.
+- Behaviour event and financial-penalty `createdAt` values must equal `request.time`.
+- Existing API wallet shapes from `src/lib/api.ts` are explicitly preserved: `deposit`, `withdrawal`, and `transfer`. Missing-key-safe discrimination also preserves older non-penalty entries without weakening the exact `financial_penalty` branch.
+- Corrected two pre-existing test-helper guards that accidentally removed `walletDelta`/`behaviourEventId` from unrelated malformed-shape cases.
+
+### TDD evidence
+
+- Initial review RED with the pre-fix rules: 53 tests, 7 failed and 46 passed. Failures were the owner-profile forgery plus nonexistent/wrong-type/wrong-child/wrong-amount/wrong-creator/wrong-reason penalty links.
+- Timestamp-specific RED after temporarily reverting only the freshness predicates: 53 tests, 4 failed and 49 passed. The failures were past/future event and linked-ledger timestamps.
+- Final GREEN: 53 tests passed (53), one test file passed, exit 0.
+
+### Commands and results
+
+```text
+JAVA_HOME=/opt/homebrew/Cellar/openjdk@21/21.0.11/libexec/openjdk.jdk/Contents/Home \
+PATH=/opt/homebrew/Cellar/openjdk@21/21.0.11/libexec/openjdk.jdk/Contents/Home/bin:$PATH \
+npm run test:rules
+
+Test Files  1 passed (1)
+Tests       53 passed (53)
+Duration    3.96s
+```
+
+```text
+npm run build
+
+TypeScript and Vite build exited 0; 1,835 modules transformed and PWA assets generated.
+```
+
+### Commit
+
+Commit subject: `security: close behaviour rule review gaps`. The resulting hash is reported in the task handoff because a commit cannot truthfully contain its own final hash.
+
+### Remaining concerns
+
+- Firebase Rules tests still require the explicit JDK 21 override on this machine.
+- The build retains the pre-existing mixed static/dynamic import and large-chunk warnings.
+- Unrelated dirty workspace changes were intentionally left unstaged and uncommitted.

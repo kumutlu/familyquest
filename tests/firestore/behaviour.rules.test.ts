@@ -13,6 +13,7 @@ import {
   serverTimestamp,
   setDoc,
   updateDoc,
+  writeBatch,
 } from 'firebase/firestore';
 import { afterAll, beforeAll, beforeEach, describe, test } from 'vitest';
 
@@ -52,6 +53,29 @@ const validPenalty = (overrides: Record<string, unknown> = {}) => ({
   ...overrides,
 });
 
+const createLinkedPenalty = async (
+  uid = PARENT_ID,
+  eventId = 'event-financial',
+  transactionId = 'penalty',
+  eventOverrides: Record<string, unknown> = {},
+  penaltyOverrides: Record<string, unknown> = {},
+) => {
+  const db = user(uid);
+  const batch = writeBatch(db);
+  batch.set(doc(db, `families/${FAMILY_ID}/behaviour_events/${eventId}`), validEvent({
+    type: 'financial',
+    reason: 'Damaged a book',
+    pointsDelta: 0,
+    walletDelta: -250,
+    ...eventOverrides,
+  }));
+  batch.set(doc(db, `families/${FAMILY_ID}/wallet_transactions/${transactionId}`), validPenalty({
+    behaviourEventId: eventId,
+    ...penaltyOverrides,
+  }));
+  return batch.commit();
+};
+
 beforeAll(async () => {
   testEnv = await initializeTestEnvironment({
     projectId: 'familyquest-behaviour-rules',
@@ -84,6 +108,35 @@ afterAll(async () => {
 });
 
 describe('behaviour event rules', () => {
+  test('a new authenticated user cannot forge ownership of an existing family', async () => {
+    const attacker = user('attacker');
+    await assertFails(setDoc(doc(attacker, 'users', 'attacker'), {
+      uid: 'attacker', familyId: FAMILY_ID, role: 'owner', displayName: 'Attacker',
+    }));
+    await assertFails(setDoc(doc(attacker, `families/${FAMILY_ID}/behaviour_events/forged`), validEvent({
+      createdBy: 'attacker', createdByName: 'Attacker',
+    })));
+    await assertFails(setDoc(doc(attacker, `families/${FAMILY_ID}/wallet_transactions/forged`), validPenalty({
+      createdBy: 'attacker', createdByName: 'Attacker',
+    })));
+  });
+
+  test('legitimate signup, family bootstrap, and managed-member creation remain allowed', async () => {
+    const newcomer = user('new-owner');
+    await assertSucceeds(setDoc(doc(newcomer, 'users', 'new-owner'), {
+      uid: 'new-owner', role: 'parent', displayName: 'New Owner', walletBalance: 0,
+    }));
+    const bootstrap = writeBatch(newcomer);
+    bootstrap.set(doc(newcomer, 'families', 'brand-new-family'), { name: 'Brand New' });
+    bootstrap.set(doc(newcomer, 'users', 'new-owner'), {
+      familyId: 'brand-new-family', role: 'owner',
+    }, { merge: true });
+    await assertSucceeds(bootstrap.commit());
+    await assertSucceeds(setDoc(doc(user(OWNER_ID), 'users', 'managed-new'), {
+      uid: 'managed-new', familyId: FAMILY_ID, role: 'child', displayName: 'Managed', isManaged: true,
+    }));
+  });
+
   test('family members can read history but another family cannot', async () => {
     await testEnv.withSecurityRulesDisabled(async (context) => {
       await setDoc(doc(context.firestore(), `families/${FAMILY_ID}/behaviour_events/existing`), validEvent({ createdAt: new Date() }));
@@ -127,9 +180,13 @@ describe('behaviour event rules', () => {
     ['extra key', { unexpected: true }],
     ['missing key', { walletDelta: undefined }],
     ['non-timestamp createdAt', { createdAt: 'now' }],
+    ['past createdAt', { createdAt: new Date(1) }],
+    ['future createdAt', { createdAt: new Date('2099-01-01') }],
   ])('rejects malformed event: %s', async (_label, overrides) => {
     const event = validEvent(overrides);
-    if (overrides.walletDelta === undefined) delete event.walletDelta;
+    if (Object.prototype.hasOwnProperty.call(overrides, 'walletDelta') && overrides.walletDelta === undefined) {
+      delete event.walletDelta;
+    }
     await assertFails(setDoc(doc(user(PARENT_ID), `families/${FAMILY_ID}/behaviour_events/malformed`), event));
   });
 
@@ -141,8 +198,30 @@ describe('behaviour event rules', () => {
 });
 
 describe('wallet ledger and direct balance writes', () => {
-  test('valid financial penalty ledger entry can be created by a parent', async () => {
-    await assertSucceeds(setDoc(doc(user(PARENT_ID), `families/${FAMILY_ID}/wallet_transactions/penalty`), validPenalty()));
+  test('valid financial event and linked penalty can be created atomically', async () => {
+    await assertSucceeds(createLinkedPenalty());
+  });
+
+  test('rejects a financial penalty linked to a nonexistent event', async () => {
+    await assertFails(setDoc(doc(user(PARENT_ID), `families/${FAMILY_ID}/wallet_transactions/nonexistent`), validPenalty()));
+  });
+
+  test.each([
+    ['wrong type', { type: 'positive', pointsDelta: 250, walletDelta: 0 }, {}],
+    ['wrong child', { childId: 'child-other' }, {}],
+    ['wrong amount', { walletDelta: -251 }, {}],
+    ['wrong creator', { createdBy: OWNER_ID, createdByName: 'Olivia Owner' }, {}],
+    ['wrong reason', { reason: 'Different reason' }, {}],
+  ])('rejects a penalty linked to an event with %s', async (_label, eventOverrides, penaltyOverrides) => {
+    await testEnv.withSecurityRulesDisabled(async (context) => {
+      const db = context.firestore();
+      await setDoc(doc(db, `families/${FAMILY_ID}/behaviour_events/mismatched`), validEvent({
+        type: 'financial', pointsDelta: 0, walletDelta: -250, createdAt: new Date(), ...eventOverrides,
+      }));
+    });
+    await assertFails(setDoc(doc(user(PARENT_ID), `families/${FAMILY_ID}/wallet_transactions/mismatched`), validPenalty({
+      behaviourEventId: 'mismatched', ...penaltyOverrides,
+    })));
   });
 
   test.each([
@@ -157,14 +236,38 @@ describe('wallet ledger and direct balance writes', () => {
     ['non-timestamp createdAt', { createdAt: 'now' }],
   ])('rejects malformed financial penalty ledger: %s', async (_label, overrides) => {
     const entry = validPenalty(overrides);
-    if (overrides.behaviourEventId === undefined) delete entry.behaviourEventId;
+    if (Object.prototype.hasOwnProperty.call(overrides, 'behaviourEventId') && overrides.behaviourEventId === undefined) {
+      delete entry.behaviourEventId;
+    }
     await assertFails(setDoc(doc(user(PARENT_ID), `families/${FAMILY_ID}/wallet_transactions/bad-penalty`), entry));
   });
 
+  test.each([
+    ['past', new Date(1)],
+    ['future', new Date('2099-01-01')],
+  ])('rejects a %s financial ledger createdAt', async (_label, createdAt) => {
+    await testEnv.withSecurityRulesDisabled(async (context) => {
+      await setDoc(doc(context.firestore(), `families/${FAMILY_ID}/behaviour_events/timestamp-link`), validEvent({
+        type: 'financial', reason: 'Damaged a book', pointsDelta: 0, walletDelta: -250, createdAt,
+      }));
+    });
+    await assertFails(setDoc(doc(user(PARENT_ID), `families/${FAMILY_ID}/wallet_transactions/timestamp-penalty`), validPenalty({
+      behaviourEventId: 'timestamp-link', createdAt,
+    })));
+  });
+
   test('wallet ledger is immutable after creation', async () => {
-    await assertSucceeds(setDoc(doc(user(PARENT_ID), `families/${FAMILY_ID}/wallet_transactions/immutable`), validPenalty()));
+    await assertSucceeds(createLinkedPenalty(PARENT_ID, 'immutable-event', 'immutable'));
     await assertFails(updateDoc(doc(user(PARENT_ID), `families/${FAMILY_ID}/wallet_transactions/immutable`), { amount: 1 }));
     await assertFails(deleteDoc(doc(user(OWNER_ID), `families/${FAMILY_ID}/wallet_transactions/immutable`)));
+  });
+
+  test.each([
+    ['deposit', { type: 'deposit', childId: CHILD_ID, amount: 500, note: 'Pocket money', parentRef: PARENT_ID, timestamp: serverTimestamp() }],
+    ['withdrawal', { type: 'withdrawal', childId: CHILD_ID, amount: 200, note: 'Shop', parentRef: PARENT_ID, timestamp: serverTimestamp() }],
+    ['transfer', { type: 'transfer', childId: CHILD_ID, fromChildId: 'child-other', amount: 100, note: 'Share', parentRef: PARENT_ID, timestamp: serverTimestamp() }],
+  ])('preserves the existing %s wallet transaction shape', async (type, entry) => {
+    await assertSucceeds(setDoc(doc(user(PARENT_ID), `families/${FAMILY_ID}/wallet_transactions/${type}`), entry));
   });
 
   test.each(['rewardPoints', 'lifetimeXP', 'walletBalance'])('child cannot directly change %s', async (field) => {
