@@ -58,10 +58,33 @@ export function AppLayout() {
       <header className="bg-white border-b border-gray-100 sticky top-0 z-40">
         <div className="max-w-5xl mx-auto px-4 h-16 flex items-center justify-between">
           <div className="flex items-center space-x-2">
-            <div className="w-8 h-8 bg-primary-500 rounded-xl flex items-center justify-center text-white font-bold">
-              F
-            </div>
-            <span className="text-xl font-extrabold tracking-tight text-gray-900">FamilyQuest</span>
+            <Link to="/" className="flex items-center space-x-2 hover:opacity-80 transition-opacity">
+              <div className="w-8 h-8 bg-primary-500 rounded-xl flex items-center justify-center text-white font-bold">
+                F
+              </div>
+              <span className="text-xl font-extrabold tracking-tight text-gray-900">FamilyQuest</span>
+            </Link>
+            
+            {/* Desktop Navigation */}
+            <nav className="hidden md:flex ml-8 space-x-6">
+              {navItems.map((item) => {
+                const isActive = location.pathname === item.path;
+                const Icon = item.icon;
+                return (
+                  <Link 
+                    key={item.name} 
+                    to={item.path} 
+                    className={cn(
+                      "flex items-center space-x-2 text-sm font-bold transition-colors", 
+                      isActive ? "text-primary-600" : "text-gray-500 hover:text-gray-900"
+                    )}
+                  >
+                    <Icon size={16} />
+                    <span>{item.name}</span>
+                  </Link>
+                );
+              })}
+            </nav>
           </div>
           
           <div className="flex items-center space-x-4">
