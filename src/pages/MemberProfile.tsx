@@ -1,15 +1,14 @@
 import { useParams, Link } from 'react-router-dom';
-import { Avatar } from '../components/ui/Avatar';
 import { Card, CardContent } from '../components/ui/Card';
+import { Avatar } from '../components/ui/Avatar';
 import { Badge } from '../components/ui/Badge';
 import { Progress } from '../components/ui/Progress';
-import { Stat } from '../components/ui/Stat';
-import { ChevronLeft, Flame, Star, Trophy } from 'lucide-react';
+import { ChevronLeft, Flame, Trophy, TrendingUp, TrendingDown } from 'lucide-react';
 import { useStore } from '../store/useStore';
 
 export function MemberProfile() {
   const { id } = useParams();
-  const { familyMembers, loading } = useStore();
+  const { familyMembers, loading, behaviourEvents } = useStore();
 
   if (loading) return <div className="p-8 text-center text-gray-500 animate-pulse">Loading Profile...</div>;
 
@@ -19,6 +18,8 @@ export function MemberProfile() {
   const currentLevel = Math.floor((member.lifetimeXP || 0) / 1000) + 1;
   const xpInLevel = (member.lifetimeXP || 0) % 1000;
   const levelProgress = (xpInLevel / 1000) * 100;
+  
+  const userEvents = behaviourEvents.filter(e => e.userId === id).slice(0, 10);
 
   return (
     <div className="space-y-6 animate-in fade-in slide-in-from-right-4 duration-300 pb-8">
@@ -29,32 +30,89 @@ export function MemberProfile() {
         <h1 className="text-xl font-bold text-gray-900">Profile</h1>
       </header>
 
-      <div className="flex flex-col items-center text-center mt-4">
-        <Avatar src={member.avatarUrl} fallback={member.displayName[0]} size="xl" className="ring-4 ring-primary-100 mb-4 shadow-sm" />
-        <h2 className="text-2xl font-extrabold text-gray-900 flex items-center gap-2">
-          {member.displayName}
-        </h2>
-        <Badge variant="default" className="mt-2 text-[10px] capitalize">{member.role}</Badge>
-      </div>
-
-      <div className="grid grid-cols-2 gap-4">
-        <Stat label="Total Points" value={member.rewardPoints || 0} icon={<Star className="fill-current" />} />
-        <Stat label="Current Streak" value={`${member.currentStreak || 0} Days`} icon={<Flame className="text-warning-500 fill-warning-500" />} />
-      </div>
-
-      <Card className="bg-primary-500 border-none text-white">
-        <CardContent className="p-6">
-          <div className="flex justify-between items-center mb-4">
-            <div className="flex items-center gap-2">
-              <Trophy size={20} className="text-reward-400 fill-reward-400" />
-              <span className="font-bold tracking-tight">Level {currentLevel}</span>
-            </div>
-            <span className="text-primary-100 font-medium text-sm">{member.lifetimeXP || 0} XP</span>
+      <div className="flex flex-col items-center text-center space-y-4 py-4">
+        <div className="relative">
+          <Avatar src={member.avatarUrl} fallback={member.displayName[0]} size="xl" className="w-24 h-24 ring-4 ring-white shadow-xl" />
+          <div className="absolute -bottom-2 -right-2 bg-primary-500 text-white w-8 h-8 rounded-full flex items-center justify-center font-bold border-2 border-white shadow-sm">
+            {currentLevel}
           </div>
-          <Progress value={levelProgress} className="bg-primary-700 [&>div]:bg-white" />
-          <p className="text-xs text-primary-200 mt-3 text-right font-medium">{1000 - xpInLevel} XP to Level {currentLevel + 1}</p>
+        </div>
+        
+        <div>
+          <h2 className="text-2xl font-extrabold text-gray-900">{member.displayName}</h2>
+          <p className="text-primary-600 font-bold">{member.rewardPoints || 0} Reward Points</p>
+        </div>
+      </div>
+
+      <Card>
+        <CardContent className="p-5">
+          <div className="flex justify-between items-end mb-2">
+            <div>
+              <p className="text-sm font-bold text-gray-500 uppercase tracking-wider">Level {currentLevel}</p>
+              <p className="font-bold text-gray-900 mt-1">{member.lifetimeXP || 0} Total XP</p>
+            </div>
+            <p className="text-sm font-medium text-gray-400">{1000 - xpInLevel} to next level</p>
+          </div>
+          <Progress value={levelProgress} className="h-2" />
         </CardContent>
       </Card>
+
+      <div className="grid grid-cols-2 gap-4">
+        <Card>
+          <CardContent className="p-4 flex flex-col items-center justify-center text-center">
+            <div className="w-10 h-10 bg-warning-50 rounded-full flex items-center justify-center mb-2">
+              <Flame size={20} className="text-warning-500" />
+            </div>
+            <p className="text-2xl font-bold text-gray-900">{member.currentStreak || 0}</p>
+            <p className="text-xs font-bold text-gray-500 uppercase tracking-wider mt-1">Day Streak</p>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardContent className="p-4 flex flex-col items-center justify-center text-center">
+            <div className="w-10 h-10 bg-primary-50 rounded-full flex items-center justify-center mb-2">
+              <Trophy size={20} className="text-primary-500" />
+            </div>
+            <p className="text-2xl font-bold text-gray-900">{member.longestStreak || 0}</p>
+            <p className="text-xs font-bold text-gray-500 uppercase tracking-wider mt-1">Best Streak</p>
+          </CardContent>
+        </Card>
+      </div>
+
+      <section>
+        <h2 className="text-lg font-bold text-gray-900 mb-4">Behaviour History</h2>
+        {userEvents.length === 0 ? (
+          <div className="bg-white rounded-2xl border border-gray-100 p-8 text-center text-gray-500">
+            No logged events.
+          </div>
+        ) : (
+          <div className="space-y-3">
+            {userEvents.map(event => (
+              <Card key={event.id}>
+                <CardContent className="p-4 flex items-center justify-between">
+                  <div>
+                    <h4 className="font-semibold text-gray-900">{event.title}</h4>
+                    <p className="text-xs text-gray-500 mt-1">
+                      {event.timestamp?.toDate ? event.timestamp.toDate().toLocaleString() : ''}
+                    </p>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    {event.pointsDelta >= 0 ? (
+                      <Badge variant="default" className="flex items-center gap-1 bg-green-100 text-green-700 hover:bg-green-100">
+                        <TrendingUp size={12} /> +{event.pointsDelta}
+                      </Badge>
+                    ) : (
+                      <Badge variant="default" className="flex items-center gap-1 bg-red-100 text-red-700 hover:bg-red-100">
+                        <TrendingDown size={12} /> {event.pointsDelta}
+                      </Badge>
+                    )}
+                  </div>
+                </CardContent>
+              </Card>
+            ))}
+          </div>
+        )}
+      </section>
     </div>
   );
 }

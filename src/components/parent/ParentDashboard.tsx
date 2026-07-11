@@ -3,7 +3,7 @@ import { Card, CardContent } from '../ui/Card';
 import { Badge } from '../ui/Badge';
 import { Avatar } from '../ui/Avatar';
 import { Button } from '../ui/Button';
-import { approveTaskCompletion, rejectTaskCompletion } from '../../lib/api';
+import { approveTaskCompletion, rejectTaskCompletion, addBehaviourEvent } from '../../lib/api';
 import { Clock, Plus, Zap, Gift, Users, MessageSquare } from 'lucide-react';
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
@@ -15,6 +15,9 @@ export function ParentDashboard() {
   const [comment, setComment] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [activeTab, setActiveTab] = useState<'pending' | 'history'>('pending');
+
+  const [isEventModalOpen, setIsEventModalOpen] = useState(false);
+  const [eventData, setEventData] = useState({ childId: '', title: '', pointsDelta: 0 });
 
   const pendingApprovals = taskCompletions.filter(c => c.status === 'pending_approval');
   const historyApprovals = taskCompletions.filter(c => c.status === 'approved' || c.status === 'rejected')
@@ -45,6 +48,20 @@ export function ParentDashboard() {
     setComment('');
   };
 
+  const handleLogEvent = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!currentUser || !eventData.childId) return;
+    setIsSubmitting(true);
+    try {
+      await addBehaviourEvent(currentUser.familyId, eventData.childId, currentUser.id, eventData.title, Number(eventData.pointsDelta));
+      setIsEventModalOpen(false);
+      setEventData({ childId: '', title: '', pointsDelta: 0 });
+    } catch (err) {
+      console.error(err);
+    }
+    setIsSubmitting(false);
+  };
+
   return (
     <div className="space-y-8 animate-in fade-in duration-300 pb-8">
       <header>
@@ -64,7 +81,7 @@ export function ParentDashboard() {
             <Gift size={20} className="mb-1" />
             <span className="text-xs font-bold">New Reward</span>
           </Link>
-          <button className="bg-warning-50 hover:bg-warning-100 transition-colors rounded-xl p-3 flex flex-col items-center justify-center text-center text-warning-700">
+          <button onClick={() => setIsEventModalOpen(true)} className="bg-warning-50 hover:bg-warning-100 transition-colors rounded-xl p-3 flex flex-col items-center justify-center text-center text-warning-700">
             <Zap size={20} className="mb-1" />
             <span className="text-xs font-bold">Log Event</span>
           </button>
@@ -267,6 +284,46 @@ export function ParentDashboard() {
           </div>
         )}
       </section>
+
+      {/* Log Behaviour Event Modal */}
+      {isEventModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-gray-900/40 backdrop-blur-sm">
+          <div className="bg-white w-full sm:max-w-md sm:rounded-3xl rounded-t-3xl shadow-xl overflow-hidden flex flex-col max-h-[90vh]">
+            <div className="px-6 py-4 flex justify-between items-center border-b border-gray-100">
+              <h3 className="text-xl font-bold text-gray-900">Log Behaviour</h3>
+              <button onClick={() => setIsEventModalOpen(false)} className="p-2 -mr-2 bg-gray-100 hover:bg-gray-200 rounded-full text-gray-500">✕</button>
+            </div>
+            <div className="p-6 overflow-y-auto">
+              <form onSubmit={handleLogEvent} className="space-y-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700">Child</label>
+                  <select required value={eventData.childId} onChange={e => setEventData({...eventData, childId: e.target.value})} className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md bg-white">
+                    <option value="" disabled>Select a child</option>
+                    {children.map(c => (
+                      <option key={c.id} value={c.id}>{c.displayName}</option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700">Reason / Notes</label>
+                  <input type="text" required placeholder="e.g. Helped with groceries" value={eventData.title} onChange={e => setEventData({...eventData, title: e.target.value})} className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md" />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700">Points Adjustment (+ or -)</label>
+                  <input type="number" required value={eventData.pointsDelta} onChange={e => setEventData({...eventData, pointsDelta: Number(e.target.value)})} className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md" />
+                  <p className="text-xs text-gray-500 mt-1">Use negative numbers to deduct points.</p>
+                </div>
+                
+                <div className="pt-4">
+                  <Button type="submit" fullWidth disabled={isSubmitting} className={eventData.pointsDelta >= 0 ? "bg-success-500 hover:bg-success-600" : "bg-danger-500 hover:bg-danger-600"}>
+                    {isSubmitting ? 'Saving...' : 'Log Event'}
+                  </Button>
+                </div>
+              </form>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
