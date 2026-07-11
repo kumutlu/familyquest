@@ -1,0 +1,85 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // Helper functions
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+    
+    function isFamilyMember(familyId) {
+      return isAuthenticated() && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.familyId == familyId;
+    }
+
+    function isParent(familyId) {
+      return isFamilyMember(familyId) && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'parent';
+    }
+
+    // USERS
+    match /users/{uid} {
+      // Users can read their own profile, or parents in the same family can read/write child profiles
+      allow read: if isAuthenticated() && (request.auth.uid == uid || get(/databases/$(database)/documents/users/$(request.auth.uid)).data.familyId == resource.data.familyId);
+      allow update: if isAuthenticated() && (request.auth.uid == uid || isParent(resource.data.familyId));
+      allow create: if isAuthenticated() && request.auth.uid == uid;
+    }
+
+    // FAMILIES
+    match /families/{familyId} {
+      allow read: if isFamilyMember(familyId);
+      // Only authenticated users can create a family. Only parents can update.
+      allow create: if isAuthenticated();
+      allow update: if isParent(familyId);
+      
+      // TASKS
+      match /tasks/{taskId} {
+        allow read: if isFamilyMember(familyId);
+        allow write: if isParent(familyId);
+      }
+
+      // TASK COMPLETIONS
+      match /task_completions/{completionId} {
+        allow read: if isFamilyMember(familyId);
+        // Children can create completions (mark as done)
+        allow create: if isFamilyMember(familyId);
+        // Only parents can approve/reject
+        allow update, delete: if isParent(familyId);
+      }
+
+      // BEHAVIOUR EVENTS
+      match /behaviour_events/{eventId} {
+        allow read: if isFamilyMember(familyId);
+        allow write: if isParent(familyId);
+      }
+
+      // REWARDS
+      match /rewards/{rewardId} {
+        allow read: if isFamilyMember(familyId);
+        allow write: if isParent(familyId);
+      }
+
+      // REDEMPTIONS
+      match /redemptions/{redemptionId} {
+        allow read: if isFamilyMember(familyId);
+        // Children can create redemptions (which deducts points via transaction)
+        allow create: if isFamilyMember(familyId);
+        allow update, delete: if isParent(familyId);
+      }
+
+      // WALLET TRANSACTIONS
+      match /wallet_transactions/{txId} {
+        allow read: if isFamilyMember(familyId);
+        // Wallet ledger is immutable and writeable only by parents
+        allow create: if isParent(familyId);
+        allow update, delete: if false; 
+      }
+
+      // ACTIVITY FEED
+      match /feed/{feedId} {
+        allow read: if isFamilyMember(familyId);
+        allow create: if isFamilyMember(familyId);
+        allow update, delete: if isParent(familyId);
+      }
+    }
+  }
+}
