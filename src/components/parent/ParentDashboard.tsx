@@ -9,7 +9,7 @@ import { useState } from 'react';
 import { Link } from 'react-router-dom';
 
 export function ParentDashboard() {
-  const { currentUser, taskCompletions, tasks, feed, familyMembers } = useStore();
+  const { currentUser, taskCompletions, tasks, rewards, feed, familyMembers } = useStore();
   
   const [selectedCompletion, setSelectedCompletion] = useState<any>(null);
   const [comment, setComment] = useState('');
@@ -71,7 +71,14 @@ export function ParentDashboard() {
 
       {/* Quick Actions */}
       <section>
-        <h2 className="text-sm font-bold text-gray-500 uppercase tracking-wider mb-3">Quick Actions</h2>
+        <div className="flex items-center justify-between mb-3">
+          <h2 className="text-sm font-bold text-gray-500 uppercase tracking-wider">Quick Actions</h2>
+          <div className="flex gap-3 text-xs font-bold text-gray-400">
+            <span>{tasks.filter(t => t.isActive !== false).length} Active Tasks</span>
+            <span>•</span>
+            <span>{rewards.filter(r => r.isActive !== false).length} Active Rewards</span>
+          </div>
+        </div>
         <div className="grid grid-cols-3 gap-3">
           <Link to="/tasks" className="bg-primary-50 hover:bg-primary-100 transition-colors rounded-xl p-3 flex flex-col items-center justify-center text-center text-primary-700">
             <Plus size={20} className="mb-1" />

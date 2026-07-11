@@ -6,6 +6,7 @@ import { Gift, Gamepad2, Pizza, Ticket, Plus, Edit, Trash2 } from 'lucide-react'
 import { useStore } from '../store/useStore';
 import { redeemReward, createReward, updateReward } from '../lib/api';
 import { cn } from '../lib/utils';
+import { useNavigate } from 'react-router-dom';
 
 export function Rewards() {
   const { currentUser, rewards, loading } = useStore();
@@ -77,6 +78,8 @@ export function Rewards() {
     }
   };
 
+  const navigate = useNavigate();
+
   const handleFormSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsSubmitting(true);
@@ -91,10 +94,13 @@ export function Rewards() {
 
       if (formData.id) {
         await updateReward(currentUser.familyId, formData.id, dataToSave);
+        alert('Reward updated successfully!');
       } else {
         await createReward(currentUser.familyId, dataToSave);
+        alert('Reward created successfully!');
       }
       setIsFormOpen(false);
+      navigate('/');
     } catch (e: any) {
       setError(e.message);
     }

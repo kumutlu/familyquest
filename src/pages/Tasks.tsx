@@ -6,6 +6,7 @@ import { CheckCircle2, Plus, Edit, Trash2 } from 'lucide-react';
 import { useStore } from '../store/useStore';
 import { completeTask, createTask, updateTask } from '../lib/api';
 import { cn } from '../lib/utils';
+import { useNavigate } from 'react-router-dom';
 
 export function Tasks() {
   const { currentUser, tasks, taskCompletions, loading } = useStore();
@@ -82,6 +83,8 @@ export function Tasks() {
     }
   };
 
+  const navigate = useNavigate();
+
   const handleFormSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!currentUser) return;
@@ -94,6 +97,7 @@ export function Tasks() {
           type: formData.type,
           requiresApproval: formData.requiresApproval
         });
+        alert('Task updated successfully!');
       } else {
         await createTask(currentUser.familyId, {
           title: formData.title,
@@ -101,8 +105,10 @@ export function Tasks() {
           type: formData.type,
           requiresApproval: formData.requiresApproval
         });
+        alert('Task created successfully!');
       }
       setIsFormOpen(false);
+      navigate('/');
     } catch (e: any) {
       setError(e.message);
     }

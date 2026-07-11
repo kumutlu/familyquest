@@ -100,10 +100,17 @@ export const joinFamilyAsChild = async (uid: string, name: string, inviteCode: s
 // ---------------------------
 
 export const createTask = async (familyId: string, taskData: any) => {
-  return addDoc(collection(db, `families/${familyId}/tasks`), {
+  const docRef = await addDoc(collection(db, `families/${familyId}/tasks`), {
     ...taskData,
-    isActive: true
+    isActive: true,
+    createdAt: serverTimestamp()
   });
+  await addDoc(collection(db, `families/${familyId}/feed`), {
+    actorId: 'system',
+    text: `New task added: ${taskData.title}`,
+    timestamp: serverTimestamp()
+  });
+  return docRef;
 };
 
 export const completeTask = async (familyId: string, taskId: string, userId: string, requiresApproval: boolean) => {
@@ -402,7 +409,16 @@ export const updateTask = async (familyId: string, taskId: string, data: any) =>
 };
 
 export const createReward = async (familyId: string, data: any) => {
-  return addDoc(collection(db, `families/${familyId}/rewards`), data);
+  const docRef = await addDoc(collection(db, `families/${familyId}/rewards`), {
+    ...data,
+    createdAt: serverTimestamp()
+  });
+  await addDoc(collection(db, `families/${familyId}/feed`), {
+    actorId: 'system',
+    text: `New reward added: ${data.title}`,
+    timestamp: serverTimestamp()
+  });
+  return docRef;
 };
 
 export const updateReward = async (familyId: string, rewardId: string, data: any) => {
