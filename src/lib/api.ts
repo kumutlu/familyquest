@@ -1,8 +1,41 @@
 import { 
-  collection, doc, getDoc, setDoc, 
+  collection, doc, getDoc, setDoc, updateDoc, 
   addDoc, runTransaction, query, where, getDocs, serverTimestamp 
 } from 'firebase/firestore';
-import { db } from './firebase';
+import { 
+  createUserWithEmailAndPassword, 
+  signInWithEmailAndPassword, 
+  signOut as firebaseSignOut 
+} from 'firebase/auth';
+import { db, auth } from './firebase';
+
+// ---------------------------
+// 0. AUTHENTICATION
+// ---------------------------
+
+export const signUp = async (email: string, pass: string, name: string) => {
+  const cred = await createUserWithEmailAndPassword(auth, email, pass);
+  // Create user doc without familyId first
+  await setDoc(doc(db, 'users', cred.user.uid), {
+    uid: cred.user.uid,
+    role: 'parent', // default role
+    displayName: name,
+    avatarUrl: `https://api.dicebear.com/7.x/avataaars/svg?seed=${name}`,
+    walletBalance: 0,
+    rewardPoints: 0,
+    lifetimeXP: 0,
+    currentStreak: 0,
+    longestStreak: 0,
+    lastActiveDate: serverTimestamp()
+  });
+  return cred.user;
+};
+
+export const signIn = async (email: string, pass: string) => {
+  return signInWithEmailAndPassword(auth, email, pass);
+};
+
+export const signOut = () => firebaseSignOut(auth);
 
 // ---------------------------
 // 1. FAMILIES & USERS
@@ -234,4 +267,16 @@ export const awardPoints = async (familyId: string, userId: string, points: numb
       timestamp: serverTimestamp()
     });
   });
+};
+
+export const updateTask = async (familyId: string, taskId: string, data: any) => {
+  return updateDoc(doc(db, `families/${familyId}/tasks`, taskId), data);
+};
+
+export const createReward = async (familyId: string, data: any) => {
+  return addDoc(collection(db, `families/${familyId}/rewards`), data);
+};
+
+export const updateReward = async (familyId: string, rewardId: string, data: any) => {
+  return updateDoc(doc(db, `families/${familyId}/rewards`, rewardId), data);
 };

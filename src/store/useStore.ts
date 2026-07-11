@@ -1,8 +1,10 @@
 import { create } from 'zustand';
 import { collection, doc, onSnapshot, query, orderBy, where } from 'firebase/firestore';
-import { db } from '../lib/firebase';
+import { onAuthStateChanged } from 'firebase/auth';
+import { db, auth } from '../lib/firebase';
 
 interface AppState {
+  authUser: any | null;
   currentUser: any | null;
   familyMembers: any[];
   tasks: any[];
@@ -12,10 +14,12 @@ interface AppState {
   walletTransactions: any[];
   loading: boolean;
   error: string | null;
-  init: (uid: string, familyId: string) => void;
+  initAuth: () => void;
+  loadFamilyData: (uid: string, familyId: string) => () => void;
 }
 
-export const useStore = create<AppState>((set) => ({
+export const useStore = create<AppState>((set, get) => ({
+  authUser: undefined, // undefined means auth state is still loading
   currentUser: null,
   familyMembers: [],
   tasks: [],
@@ -26,47 +30,65 @@ export const useStore = create<AppState>((set) => ({
   loading: true,
   error: null,
 
-  init: (uid, familyId) => {
+  initAuth: () => {
+    onAuthStateChanged(auth, (user) => {
+      set({ authUser: user });
+      if (!user) {
+        set({ currentUser: null, loading: false });
+      } else {
+        // Fetch user doc
+        onSnapshot(doc(db, 'users', user.uid), (docSnap) => {
+          if (docSnap.exists()) {
+            const userData: any = { id: docSnap.id, ...docSnap.data() };
+            set({ currentUser: userData, loading: false });
+            
+            // If they have a family, load family data
+            if (userData.familyId) {
+              get().loadFamilyData(userData.id, userData.familyId);
+            }
+          } else {
+            set({ currentUser: null, loading: false });
+          }
+        });
+      }
+    });
+  },
+
+  loadFamilyData: (uid, familyId) => {
     set({ loading: true });
+    
+    const unsubs: any[] = [];
+    
     try {
-      // 1. Current User
-      onSnapshot(doc(db, 'users', uid), (doc) => {
-        set({ currentUser: { id: doc.id, ...doc.data() } });
-      });
-
-      // 2. Family Members
-      onSnapshot(query(collection(db, 'users'), where('familyId', '==', familyId)), (snap) => {
+      unsubs.push(onSnapshot(query(collection(db, 'users'), where('familyId', '==', familyId)), (snap) => {
         set({ familyMembers: snap.docs.map(d => ({ id: d.id, ...d.data() })) });
-      });
+      }));
 
-      // 3. Tasks
-      onSnapshot(collection(db, `families/${familyId}/tasks`), (snap) => {
+      unsubs.push(onSnapshot(collection(db, `families/${familyId}/tasks`), (snap) => {
         set({ tasks: snap.docs.map(d => ({ id: d.id, ...d.data() })) });
-      });
+      }));
 
-      // 4. Task Completions
-      onSnapshot(collection(db, `families/${familyId}/task_completions`), (snap) => {
+      unsubs.push(onSnapshot(collection(db, `families/${familyId}/task_completions`), (snap) => {
         set({ taskCompletions: snap.docs.map(d => ({ id: d.id, ...d.data() })) });
-      });
+      }));
 
-      // 5. Rewards
-      onSnapshot(collection(db, `families/${familyId}/rewards`), (snap) => {
+      unsubs.push(onSnapshot(collection(db, `families/${familyId}/rewards`), (snap) => {
         set({ rewards: snap.docs.map(d => ({ id: d.id, ...d.data() })) });
-      });
+      }));
 
-      // 6. Feed
-      onSnapshot(query(collection(db, `families/${familyId}/feed`), orderBy('timestamp', 'desc')), (snap) => {
+      unsubs.push(onSnapshot(query(collection(db, `families/${familyId}/feed`), orderBy('timestamp', 'desc')), (snap) => {
         set({ feed: snap.docs.map(d => ({ id: d.id, ...d.data() })) });
-      });
+      }));
 
-      // 7. Wallet Transactions (for current user)
-      onSnapshot(query(collection(db, `families/${familyId}/wallet_transactions`), where('userId', '==', uid)), (snap) => {
+      unsubs.push(onSnapshot(query(collection(db, `families/${familyId}/wallet_transactions`), where('userId', '==', uid)), (snap) => {
         set({ walletTransactions: snap.docs.map(d => ({ id: d.id, ...d.data() })) });
-      });
+      }));
 
       set({ loading: false });
     } catch (error: any) {
       set({ error: error.message, loading: false });
     }
+    
+    return () => unsubs.forEach(u => u());
   }
 }));

@@ -1,14 +1,18 @@
 import { Card, CardHeader, CardTitle, CardContent } from '../components/ui/Card';
 import { Stat } from '../components/ui/Stat';
 import { Progress } from '../components/ui/Progress';
-import { Flame, Star,MessageCircle } from 'lucide-react';
-
+import { Flame, Star, MessageCircle } from 'lucide-react';
 import { useStore } from '../store/useStore';
+import { ParentDashboard } from '../components/parent/ParentDashboard';
 
 export function Dashboard() {
   const { currentUser, feed, loading } = useStore();
 
   if (loading || !currentUser) return <div className="p-8 text-center text-gray-500 animate-pulse">Loading Dashboard...</div>;
+
+  if (currentUser.role === 'parent') {
+    return <ParentDashboard />;
+  }
 
   const currentLevel = Math.floor((currentUser.lifetimeXP || 0) / 1000) + 1; // Simplified formula
   const xpInLevel = (currentUser.lifetimeXP || 0) % 1000;

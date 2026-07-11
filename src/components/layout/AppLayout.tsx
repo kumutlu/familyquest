@@ -1,5 +1,5 @@
-import { useEffect } from 'react';
-import { Link, Outlet, useLocation } from 'react-router-dom';
+
+import { Link, Outlet, useLocation, Navigate } from 'react-router-dom';
 import { Home, Users, CheckSquare, Gift, Wallet, Settings } from 'lucide-react';
 import { cn } from '../../lib/utils';
 import { Avatar } from '../ui/Avatar';
@@ -7,13 +7,31 @@ import { useStore } from '../../store/useStore';
 
 export function AppLayout() {
   const location = useLocation();
-  const init = useStore(state => state.init);
+  const authUser = useStore(state => state.authUser);
   const currentUser = useStore(state => state.currentUser);
 
-  useEffect(() => {
-    // Hardcoded for MVP dev mode based on seed data
-    init('child_1', 'fam_12345');
-  }, [init]);
+  // Still loading auth state
+  if (authUser === undefined) {
+    return <div className="min-h-screen bg-gray-50 flex items-center justify-center">Loading...</div>;
+  }
+
+  // Not logged in -> Login
+  if (authUser === null) {
+    return <Navigate to="/login" replace />;
+  }
+
+  // Logged in but no user doc yet (takes a moment to sync)
+  if (authUser && currentUser === null) {
+    return <div className="min-h-screen bg-gray-50 flex items-center justify-center">Setting up...</div>;
+  }
+
+  // Logged in, user doc exists, but no familyId -> Onboarding (unless already there)
+  if (currentUser && !currentUser.familyId && location.pathname !== '/onboarding') {
+    return <Navigate to="/onboarding" replace />;
+  }
+
+  // Hide nav on onboarding
+  
 
   const navItems = [
     { name: 'Home', path: '/', icon: Home },
