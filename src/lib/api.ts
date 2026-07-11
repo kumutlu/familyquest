@@ -99,7 +99,8 @@ export const createFamilyAndParent = async (uid: string, name: string, familyNam
 };
 
 export const joinFamilyAsChild = async (uid: string, name: string, inviteCode: string) => {
-  const q = query(collection(db, 'families'), where('inviteCode', '==', inviteCode));
+  const code = inviteCode.toUpperCase().trim();
+  const q = query(collection(db, 'families'), where('inviteCode', '==', code));
   const snap = await getDocs(q);
   if (snap.empty) throw new Error('Invalid invite code');
   

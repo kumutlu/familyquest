@@ -6,6 +6,7 @@ import { db, auth } from '../lib/firebase';
 interface AppState {
   authUser: any | null;
   currentUser: any | null;
+  familyData: any | null;
   familyMembers: any[];
   tasks: any[];
   taskCompletions: any[];
@@ -23,6 +24,7 @@ interface AppState {
 export const useStore = create<AppState>((set, get) => ({
   authUser: undefined, // undefined means auth state is still loading
   currentUser: null,
+  familyData: null,
   familyMembers: [],
   tasks: [],
   taskCompletions: [],
@@ -64,6 +66,10 @@ export const useStore = create<AppState>((set, get) => ({
     const unsubs: any[] = [];
     
     try {
+      unsubs.push(onSnapshot(doc(db, 'families', familyId), (snap) => {
+        set({ familyData: snap.exists() ? { id: snap.id, ...snap.data() } : null });
+      }));
+
       unsubs.push(onSnapshot(query(collection(db, 'users'), where('familyId', '==', familyId)), (snap) => {
         set({ familyMembers: snap.docs.map(d => ({ id: d.id, ...d.data() })) });
       }));

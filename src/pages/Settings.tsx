@@ -6,6 +6,7 @@ import { useStore } from '../store/useStore';
 
 export function Settings() {
   const currentUser = useStore(state => state.currentUser);
+  const familyData = useStore(state => state.familyData);
 
   const sections = [
     { title: 'Account', icon: User, items: ['Edit Profile', 'Change Avatar'] },
@@ -14,7 +15,7 @@ export function Settings() {
 
   // Only show Family settings to parents
   if (currentUser?.role === 'parent') {
-    sections.push({ title: 'Family', icon: Shield, items: ['Manage Members', 'Permissions', 'Invite Code: ' + currentUser.familyId] });
+    sections.push({ title: 'Family', icon: Shield, items: ['Manage Members', 'Permissions', 'Invite Code: ' + (familyData?.inviteCode || 'Loading...')] });
   }
 
   const handleSignOut = async () => {
