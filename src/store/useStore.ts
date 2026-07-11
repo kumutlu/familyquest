@@ -13,6 +13,7 @@ interface AppState {
   feed: any[];
   walletTransactions: any[];
   behaviourEvents: any[];
+  challenges: any[];
   loading: boolean;
   error: string | null;
   initAuth: () => void;
@@ -29,6 +30,7 @@ export const useStore = create<AppState>((set, get) => ({
   feed: [],
   walletTransactions: [],
   behaviourEvents: [],
+  challenges: [],
   loading: true,
   error: null,
 
@@ -88,6 +90,10 @@ export const useStore = create<AppState>((set, get) => ({
 
       unsubs.push(onSnapshot(query(collection(db, `families/${familyId}/behaviour_events`), orderBy('timestamp', 'desc')), (snap) => {
         set({ behaviourEvents: snap.docs.map(d => ({ id: d.id, ...d.data() })) });
+      }));
+
+      unsubs.push(onSnapshot(query(collection(db, `families/${familyId}/challenges`), orderBy('createdAt', 'desc')), (snap) => {
+        set({ challenges: snap.docs.map(d => ({ id: d.id, ...d.data() })) });
       }));
 
       set({ loading: false });

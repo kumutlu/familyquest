@@ -251,15 +251,21 @@ export const rejectTaskCompletion = async (familyId: string, completionId: strin
 export const addBehaviourEvent = async (familyId: string, userId: string, authorId: string, title: string, pointsDelta: number) => {
   const userRef = doc(db, 'users', userId);
   const eventRef = doc(collection(db, `families/${familyId}/behaviour_events`));
-  const feedRef = doc(collection(db, `families/${familyId}/feed`));
 
   await runTransaction(db, async (transaction) => {
     const userDoc = await transaction.get(userRef);
     if (!userDoc.exists()) throw new Error("User not found");
-    
-    // Ensure points don't drop below 0 if negative
-    const newPoints = Math.max(0, (userDoc.data().rewardPoints || 0) + pointsDelta);
-    
+    const currentPoints = userDoc.data().rewardPoints || 0;
+    const currentXP = userDoc.data().lifetimeXP || 0;
+
+    const newPoints = Math.max(0, currentPoints + pointsDelta);
+    const newXP = Math.max(0, currentXP + pointsDelta); // lifetime XP usually doesn't decrease, but for simplicity here
+
+    transaction.update(userRef, {
+      rewardPoints: newPoints,
+      lifetimeXP: newXP
+    });
+
     transaction.set(eventRef, {
       userId,
       authorId,
@@ -268,18 +274,64 @@ export const addBehaviourEvent = async (familyId: string, userId: string, author
       timestamp: serverTimestamp()
     });
 
-    transaction.update(userRef, { rewardPoints: newPoints });
-
+    const feedRef = doc(collection(db, `families/${familyId}/feed`));
     transaction.set(feedRef, {
       actorId: authorId,
-      text: `Gave ${pointsDelta > 0 ? '+' : ''}${pointsDelta} pts to user for: ${title}`,
+      text: `Logged behaviour for ${userDoc.data().displayName}: ${title} (${pointsDelta > 0 ? '+' : ''}${pointsDelta} pts)`,
       timestamp: serverTimestamp()
     });
   });
 };
 
 // ---------------------------
-// 4. REWARDS & REDEMPTIONS
+// 4. FAMILY CHALLENGES
+// ---------------------------
+
+export const createChallenge = async (familyId: string, title: string, targetXP: number, rewardPoints: number, startXP: number) => {
+  return addDoc(collection(db, `families/${familyId}/challenges`), {
+    title,
+    targetXP,
+    rewardPoints,
+    startXP,
+    isActive: true,
+    createdAt: serverTimestamp()
+  });
+};
+
+export const claimChallenge = async (familyId: string, challengeId: string, rewardPoints: number, childrenIds: string[], challengeTitle: string) => {
+  const challengeRef = doc(db, `families/${familyId}/challenges`, challengeId);
+  
+  await runTransaction(db, async (transaction) => {
+    const challengeDoc = await transaction.get(challengeRef);
+    if (!challengeDoc.exists() || !challengeDoc.data().isActive) throw new Error("Challenge not active");
+
+    transaction.update(challengeRef, {
+      isActive: false,
+      completedAt: serverTimestamp()
+    });
+
+    for (const childId of childrenIds) {
+      const userRef = doc(db, 'users', childId);
+      const userDoc = await transaction.get(userRef);
+      if (userDoc.exists()) {
+        transaction.update(userRef, {
+          rewardPoints: (userDoc.data().rewardPoints || 0) + rewardPoints,
+          lifetimeXP: (userDoc.data().lifetimeXP || 0) + rewardPoints
+        });
+      }
+    }
+
+    const feedRef = doc(collection(db, `families/${familyId}/feed`));
+    transaction.set(feedRef, {
+      actorId: 'system',
+      text: `Family Challenge Completed: ${challengeTitle}! Everyone got +${rewardPoints} pts!`,
+      timestamp: serverTimestamp()
+    });
+  });
+};
+
+// ---------------------------
+// 5. REWARDS & REDEMPTIONS
 // ---------------------------
 
 export const redeemReward = async (familyId: string, userId: string, rewardId: string) => {

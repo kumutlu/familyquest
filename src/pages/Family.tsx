@@ -2,13 +2,20 @@ import { Link } from 'react-router-dom';
 import { Avatar } from '../components/ui/Avatar';
 import { Card, CardContent } from '../components/ui/Card';
 import { Badge } from '../components/ui/Badge';
-import { Crown, ChevronRight, Trophy, History } from 'lucide-react';
+import { Crown, ChevronRight, Trophy, History, Target, Plus } from 'lucide-react';
 import { useStore } from '../store/useStore';
 import { useState } from 'react';
+import { Button } from '../components/ui/Button';
+import { Progress } from '../components/ui/Progress';
+import { createChallenge, claimChallenge } from '../lib/api';
 
 export function Family() {
-  const { familyMembers, loading, tasks, taskCompletions, behaviourEvents } = useStore();
+  const { currentUser, familyMembers, loading, tasks, taskCompletions, behaviourEvents, challenges } = useStore();
   const [activeTab, setActiveTab] = useState<'current' | 'history'>('current');
+  
+  const [isChallengeModalOpen, setIsChallengeModalOpen] = useState(false);
+  const [challengeData, setChallengeData] = useState({ title: 'Weekend Warriors', targetXP: 500, rewardPoints: 100 });
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   if (loading) return <div className="p-8 text-center text-gray-500 animate-pulse">Loading Family...</div>;
 
@@ -48,12 +55,86 @@ export function Family() {
   // Only declare someone a champion if they actually earned points
   const champion = sortedMembers.length > 0 && sortedMembers[0].weeklyXP > 0 ? sortedMembers[0] : null;
 
+  const children = familyMembers.filter(m => m.role === 'child');
+  const activeChallenge = challenges?.find(c => c.isActive);
+  
+  // Calculate Family XP (total of all children)
+  const totalFamilyXP = children.reduce((acc, child) => acc + (child.lifetimeXP || 0), 0);
+  
+  let challengeProgress = 0;
+  if (activeChallenge) {
+    const earnedSinceStart = Math.max(0, totalFamilyXP - (activeChallenge.startXP || 0));
+    challengeProgress = Math.min(100, (earnedSinceStart / activeChallenge.targetXP) * 100);
+  }
+
+  const handleCreateChallenge = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!currentUser) return;
+    setIsSubmitting(true);
+    try {
+      await createChallenge(currentUser.familyId, challengeData.title, Number(challengeData.targetXP), Number(challengeData.rewardPoints), totalFamilyXP);
+      setIsChallengeModalOpen(false);
+    } catch (e) {
+      console.error(e);
+    }
+    setIsSubmitting(false);
+  };
+
+  const handleClaimChallenge = async () => {
+    if (!currentUser || !activeChallenge) return;
+    setIsSubmitting(true);
+    try {
+      const childIds = children.map(c => c.id);
+      await claimChallenge(currentUser.familyId, activeChallenge.id, activeChallenge.rewardPoints, childIds, activeChallenge.title);
+    } catch (e) {
+      console.error(e);
+    }
+    setIsSubmitting(false);
+  };
+
   return (
-    <div className="space-y-6 animate-in fade-in duration-300">
-      <header>
-        <h1 className="text-2xl font-bold text-gray-900 tracking-tight">Family Hub</h1>
-        <p className="text-gray-500 mt-1">See how everyone is doing.</p>
+    <div className="space-y-6 animate-in fade-in duration-300 pb-8">
+      <header className="flex justify-between items-center">
+        <div>
+          <h1 className="text-2xl font-bold text-gray-900 tracking-tight">Family Hub</h1>
+          <p className="text-gray-500 mt-1">See how everyone is doing.</p>
+        </div>
+        {currentUser?.role === 'parent' && !activeChallenge && (
+          <Button onClick={() => setIsChallengeModalOpen(true)} size="sm" className="bg-primary-500 rounded-full h-10 w-10 p-0 shadow-lg flex items-center justify-center">
+            <Plus size={20} />
+          </Button>
+        )}
       </header>
+
+      {/* Active Family Challenge */}
+      {activeChallenge && (
+        <Card className="bg-primary-500 text-white border-none shadow-lg relative overflow-hidden">
+          <div className="absolute top-0 right-0 p-4 opacity-20">
+            <Target size={64} />
+          </div>
+          <CardContent className="p-6 relative z-10">
+            <div className="flex items-center gap-2 mb-1">
+              <Badge variant="default" className="bg-primary-400 text-white border-none">Family Challenge</Badge>
+            </div>
+            <h3 className="text-xl font-bold tracking-tight mb-4">{activeChallenge.title}</h3>
+            
+            <div className="mb-2 flex justify-between text-sm font-medium">
+              <span>{Math.floor(challengeProgress)}% Complete</span>
+              <span>Reward: {activeChallenge.rewardPoints} pts each</span>
+            </div>
+            <Progress value={challengeProgress} className="h-2 bg-primary-700 [&>div]:bg-white mb-4" />
+            
+            {challengeProgress >= 100 && currentUser?.role === 'parent' && (
+              <Button onClick={handleClaimChallenge} disabled={isSubmitting} fullWidth className="bg-white text-primary-600 hover:bg-primary-50 font-bold shadow-md">
+                {isSubmitting ? 'Claiming...' : 'Complete Challenge & Award Points!'}
+              </Button>
+            )}
+            {challengeProgress >= 100 && currentUser?.role === 'child' && (
+              <p className="text-sm font-bold text-center bg-primary-600/50 py-2 rounded-lg">Goal reached! Waiting for parent to claim.</p>
+            )}
+          </CardContent>
+        </Card>
+      )}
 
       {champion && (
         <div className="bg-gradient-to-br from-reward-400 to-reward-500 p-6 rounded-3xl text-white shadow-lg relative overflow-hidden">
@@ -124,6 +205,41 @@ export function Family() {
           <Trophy size={48} className="mx-auto text-gray-300 mb-4" />
           <h4 className="text-lg font-bold text-gray-900 mb-1">No Past Champions</h4>
           <p className="text-sm">Check back next week to see who won this week's leaderboard!</p>
+        </div>
+      )}
+
+      {/* Create Challenge Modal */}
+      {isChallengeModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-gray-900/40 backdrop-blur-sm">
+          <div className="bg-white w-full sm:max-w-md sm:rounded-3xl rounded-t-3xl shadow-xl overflow-hidden flex flex-col">
+            <div className="px-6 py-4 flex justify-between items-center border-b border-gray-100">
+              <h3 className="text-xl font-bold text-gray-900">New Family Challenge</h3>
+              <button onClick={() => setIsChallengeModalOpen(false)} className="p-2 -mr-2 bg-gray-100 hover:bg-gray-200 rounded-full text-gray-500">✕</button>
+            </div>
+            <div className="p-6">
+              <form onSubmit={handleCreateChallenge} className="space-y-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700">Challenge Title</label>
+                  <input type="text" required value={challengeData.title} onChange={e => setChallengeData({...challengeData, title: e.target.value})} className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md" />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700">Family XP Target</label>
+                  <input type="number" required min="10" value={challengeData.targetXP} onChange={e => setChallengeData({...challengeData, targetXP: Number(e.target.value)})} className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md" />
+                  <p className="text-xs text-gray-500 mt-1">XP the family needs to earn together.</p>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700">Reward Per Child (Points)</label>
+                  <input type="number" required min="1" value={challengeData.rewardPoints} onChange={e => setChallengeData({...challengeData, rewardPoints: Number(e.target.value)})} className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md" />
+                  <p className="text-xs text-gray-500 mt-1">Every child gets this if successful.</p>
+                </div>
+                <div className="pt-4">
+                  <Button type="submit" fullWidth disabled={isSubmitting} className="bg-primary-500">
+                    {isSubmitting ? 'Starting...' : 'Start Challenge'}
+                  </Button>
+                </div>
+              </form>
+            </div>
+          </div>
         </div>
       )}
     </div>
