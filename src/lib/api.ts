@@ -9,6 +9,8 @@ import {
   signOut as firebaseSignOut 
 } from 'firebase/auth';
 import { db, auth, googleProvider } from './firebase';
+import { calculateBehaviourEffect, DEFAULT_DEBT_LIMIT_PENCE } from './behaviour';
+import type { BehaviourEventInput } from './behaviour';
 
 // ---------------------------
 // 0. AUTHENTICATION
@@ -283,38 +285,133 @@ export const rejectTaskCompletion = async (familyId: string, completionId: strin
 // 3. BEHAVIOUR EVENTS
 // ---------------------------
 
-export const addBehaviourEvent = async (familyId: string, userId: string, authorId: string, title: string, pointsDelta: number) => {
-  const userRef = doc(db, 'users', userId);
+export function addBehaviourEvent(
+  familyId: string,
+  childId: string,
+  createdBy: string,
+  input: BehaviourEventInput,
+): Promise<string>;
+/** @deprecated Use the BehaviourEventInput overload. */
+export function addBehaviourEvent(
+  familyId: string,
+  childId: string,
+  createdBy: string,
+  reason: string,
+  pointsDelta: number,
+): Promise<string>;
+export async function addBehaviourEvent(
+  familyId: string,
+  childId: string,
+  createdBy: string,
+  inputOrReason: BehaviourEventInput | string,
+  legacyPointsDelta?: number,
+): Promise<string> {
+  const input: BehaviourEventInput = typeof inputOrReason === 'string'
+    ? {
+        type: (legacyPointsDelta ?? 0) >= 0 ? 'positive' : 'negative',
+        reason: inputOrReason,
+        pointsDelta: legacyPointsDelta ?? 0,
+        walletDelta: 0,
+      }
+    : inputOrReason;
+  const familyRef = doc(db, 'families', familyId);
+  const childRef = doc(db, 'users', childId);
+  const creatorRef = doc(db, 'users', createdBy);
   const eventRef = doc(collection(db, `families/${familyId}/behaviour_events`));
+  const ledgerRef = input.type === 'financial'
+    ? doc(collection(db, `families/${familyId}/wallet_transactions`))
+    : null;
+  const feedRef = doc(collection(db, `families/${familyId}/feed`));
 
   await runTransaction(db, async (transaction) => {
-    const userDoc = await transaction.get(userRef);
-    if (!userDoc.exists()) throw new Error("User not found");
-    const currentPoints = userDoc.data().rewardPoints || 0;
-    const currentXP = userDoc.data().lifetimeXP || 0;
+    const familyDoc = await transaction.get(familyRef);
+    const childDoc = await transaction.get(childRef);
+    const creatorDoc = await transaction.get(creatorRef);
 
-    const newPoints = Math.max(0, currentPoints + pointsDelta);
-    const newXP = Math.max(0, currentXP + pointsDelta); // lifetime XP usually doesn't decrease, but for simplicity here
+    if (!familyDoc.exists()) throw new Error('Family not found.');
+    if (!childDoc.exists()) throw new Error('Child not found.');
+    if (!creatorDoc.exists()) throw new Error('Creator not found.');
 
-    transaction.update(userRef, {
-      rewardPoints: newPoints,
-      lifetimeXP: newXP
-    });
+    const child = childDoc.data();
+    const creator = creatorDoc.data();
+    if (child.familyId !== familyId) throw new Error('Child does not belong to this family.');
+    if (child.role !== 'child') throw new Error('Behaviour events can only target a child.');
+    if (creator.familyId !== familyId) throw new Error('Creator does not belong to this family.');
+    if (creator.role !== 'parent' && creator.role !== 'owner') {
+      throw new Error('Only a parent or owner can create behaviour events.');
+    }
+
+    const effect = calculateBehaviourEffect(
+      input,
+      {
+        rewardPoints: child.rewardPoints ?? 0,
+        lifetimeXP: child.lifetimeXP ?? 0,
+        walletBalance: child.walletBalance ?? 0,
+      },
+      familyDoc.data().debtLimitPence ?? DEFAULT_DEBT_LIMIT_PENCE,
+    );
+
+    if (input.type === 'positive') {
+      transaction.update(childRef, { rewardPoints: effect.rewardPoints, lifetimeXP: effect.lifetimeXP });
+    } else if (input.type === 'negative') {
+      transaction.update(childRef, { rewardPoints: effect.rewardPoints });
+    } else {
+      transaction.update(childRef, { walletBalance: effect.walletBalance });
+    }
 
     transaction.set(eventRef, {
-      userId,
-      authorId,
-      title,
-      pointsDelta,
-      timestamp: serverTimestamp()
+      familyId,
+      childId,
+      type: input.type,
+      reason: input.reason.trim(),
+      pointsDelta: effect.pointsDelta,
+      walletDelta: effect.walletDelta,
+      createdBy,
+      createdByName: creator.displayName,
+      createdAt: serverTimestamp(),
     });
 
-    const feedRef = doc(collection(db, `families/${familyId}/feed`));
+    if (ledgerRef) {
+      transaction.set(ledgerRef, {
+        type: 'financial_penalty',
+        behaviourEventId: eventRef.id,
+        childId,
+        amount: -effect.walletDelta,
+        reason: input.reason.trim(),
+        createdBy,
+        createdByName: creator.displayName,
+        createdAt: serverTimestamp(),
+      });
+    }
+
+    const deltaText = input.type === 'financial'
+      ? `-£${(-effect.walletDelta / 100).toFixed(2)}`
+      : `${effect.pointsDelta > 0 ? '+' : ''}${effect.pointsDelta} pts`;
+    const feedTimestamp = serverTimestamp();
     transaction.set(feedRef, {
-      actorId: authorId,
-      text: `Logged behaviour for ${userDoc.data().displayName}: ${title} (${pointsDelta > 0 ? '+' : ''}${pointsDelta} pts)`,
-      timestamp: serverTimestamp()
+      actorId: createdBy,
+      text: `Logged behaviour for ${child.displayName}: ${input.reason.trim()} (${deltaText})`,
+      createdAt: feedTimestamp,
+      timestamp: feedTimestamp,
     });
+  });
+
+  return eventRef.id;
+}
+
+export const updateDebtLimit = async (
+  familyId: string,
+  ownerId: string,
+  debtLimitPence: number,
+): Promise<void> => {
+  if (!Number.isSafeInteger(debtLimitPence) || debtLimitPence >= 0) {
+    throw new Error('Debt limit must be a negative integer number of pence.');
+  }
+
+  await updateDoc(doc(db, 'families', familyId), {
+    debtLimitPence,
+    updatedBy: ownerId,
+    updatedAt: serverTimestamp(),
   });
 };
 
