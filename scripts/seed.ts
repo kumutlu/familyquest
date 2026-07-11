@@ -5,7 +5,7 @@ import { getFirestore, doc, setDoc, writeBatch, collection } from 'firebase/fire
 // This is a node/browser script hybrid. For a real production app, use firebase-admin.
 const firebaseConfig = {
   apiKey: "AIzaSy_MOCK_API_KEY",
-  projectId: "familiya-gamification-mock",
+  projectId: "familyquest-mock",
 };
 
 const app = initializeApp(firebaseConfig);

@@ -5,9 +5,9 @@ import { getFirestore } from 'firebase/firestore';
 const firebaseConfig = {
   // Placeholder configuration for the MVP. Replace with actual Firebase project config.
   apiKey: "AIzaSy_MOCK_API_KEY",
-  authDomain: "familiya-gamification-mock.firebaseapp.com",
-  projectId: "familiya-gamification-mock",
-  storageBucket: "familiya-gamification-mock.appspot.com",
+  authDomain: "familyquest-mock.firebaseapp.com",
+  projectId: "familyquest-mock",
+  storageBucket: "familyquest-mock.appspot.com",
   messagingSenderId: "1234567890",
   appId: "1:1234567890:web:mock123"
 };
