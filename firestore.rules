@@ -80,6 +80,12 @@ service cloud.firestore {
         allow create: if isFamilyMember(familyId);
         allow update, delete: if isParent(familyId);
       }
+
+      // CHALLENGES
+      match /challenges/{challengeId} {
+        allow read: if isFamilyMember(familyId);
+        allow write: if isParent(familyId);
+      }
     }
   }
 }
