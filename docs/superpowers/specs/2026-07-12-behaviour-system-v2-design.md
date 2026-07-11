@@ -43,6 +43,7 @@ interface BehaviourEvent {
 - Add the delta to `rewardPoints`, clamping the resulting balance at zero.
 - Do not change `lifetimeXP`.
 - Store the actual applied delta. For example, applying `-25` to a balance of `10` stores `pointsDelta: -10` and leaves `rewardPoints: 0`.
+- Only the applied delta is stored. Requested values are intentionally discarded in V1.
 
 ### Financial Penalty
 
@@ -56,7 +57,7 @@ All event reasons are trimmed, required, and at least three characters long.
 
 ## Family Debt Limit
 
-Store `debtLimitPence` on `families/{familyId}`. New families and settings use `-5000`, representing a maximum debt of £50 in the family's configured currency. Existing families without the field use `-5000` at runtime for backward compatibility.
+Store `debtLimitPence` on `families/{familyId}`. New families and settings use `-5000`, representing a maximum debt of £50 in the family's configured currency. Existing families without the field use `-5000` at runtime for backward compatibility. When the limit is changed, also store `updatedBy` with the owner's user ID and `updatedAt` with a server timestamp on the family document.
 
 For a financial penalty, calculate:
 
@@ -81,6 +82,7 @@ The financial ledger entry remains in `families/{familyId}/wallet_transactions/{
 ```ts
 interface FinancialPenaltyLedgerEntry {
   type: 'financial_penalty';
+  behaviourEventId: string;
   childId: string;
   amount: number; // positive pence
   reason: string;
@@ -90,7 +92,17 @@ interface FinancialPenaltyLedgerEntry {
 }
 ```
 
+The transaction allocates the behavior-event document reference before writing either record and stores that document ID as `behaviourEventId` on the ledger entry. This provides a stable audit link from the financial transaction to its originating behavior event.
+
 Wallet history supports both `createdAt` on V2 penalty entries and the legacy `timestamp` field on existing entries.
+
+## Financial Storage
+
+All financial values are stored as integer pence. This applies to wallet balances, debt limits, financial penalties, and wallet ledger entries. Currency conversion occurs only at the UI boundary:
+
+- `£5.00` in the UI is stored as `500`.
+- `-£12.50` in the UI is stored as `-1250`.
+- A financial event stores its signed penalty in `walletDelta`, while its ledger entry stores the corresponding `amount` as a positive integer.
 
 ## Authorization and Firestore Rules
 
@@ -121,6 +133,8 @@ All family members, including children, can view behavior history. Each item sho
 - `createdByName` snapshot.
 
 The child profile history filters by `childId`, with V1 `userId` fallback. The shared history/feed integration uses the same presentation fields so financial events are visible without creating a new history module.
+
+All histories are newest first. V2 behavior history, child history, shared family feed entries created for behavior events, and financial-penalty history sort by `createdAt DESC`. Compatibility readers normalize legacy `timestamp` values to the same descending order.
 
 ## Negative Wallet Balance Presentation
 
