@@ -1,14 +1,29 @@
-
 import { Card, CardContent } from '../components/ui/Card';
 import { Button } from '../components/ui/Button';
 import { Bell, User, Shield, LogOut } from 'lucide-react';
+import { signOut } from '../lib/api';
+import { useStore } from '../store/useStore';
 
 export function Settings() {
+  const currentUser = useStore(state => state.currentUser);
+
   const sections = [
     { title: 'Account', icon: User, items: ['Edit Profile', 'Change Avatar'] },
     { title: 'Preferences', icon: Bell, items: ['Notifications', 'Theme', 'Sound Effects'] },
-    { title: 'Family', icon: Shield, items: ['Manage Members', 'Permissions', 'Invite Code'] },
   ];
+
+  // Only show Family settings to parents
+  if (currentUser?.role === 'parent') {
+    sections.push({ title: 'Family', icon: Shield, items: ['Manage Members', 'Permissions', 'Invite Code: ' + currentUser.familyId] });
+  }
+
+  const handleSignOut = async () => {
+    try {
+      await signOut();
+    } catch (e) {
+      console.error(e);
+    }
+  };
 
   return (
     <div className="space-y-6">
@@ -37,7 +52,7 @@ export function Settings() {
           </div>
         ))}
 
-        <Button variant="danger" fullWidth className="mt-8">
+        <Button variant="danger" fullWidth className="mt-8" onClick={handleSignOut}>
           <LogOut size={18} className="mr-2" /> Sign Out
         </Button>
       </div>
