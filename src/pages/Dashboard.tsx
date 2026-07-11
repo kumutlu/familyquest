@@ -1,8 +1,8 @@
-import React from 'react';
+
 import { Card, CardHeader, CardTitle, CardContent } from '../components/ui/Card';
 import { Stat } from '../components/ui/Stat';
 import { Progress } from '../components/ui/Progress';
-import { Flame, Star, Trophy, Target, Clock, MessageCircle } from 'lucide-react';
+import { Flame, Star,Target, Clock, MessageCircle } from 'lucide-react';
 import { Avatar } from '../components/ui/Avatar';
 
 export function Dashboard() {
