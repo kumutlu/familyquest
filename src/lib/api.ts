@@ -131,7 +131,7 @@ export const completeTask = async (familyId: string, taskId: string, userId: str
   return completionRef.id;
 };
 
-export const approveTaskCompletion = async (familyId: string, completionId: string, taskId: string, userId: string) => {
+export const approveTaskCompletion = async (familyId: string, completionId: string, taskId: string, userId: string, comment?: string) => {
   const completionRef = doc(db, `families/${familyId}/task_completions`, completionId);
   const taskRef = doc(db, `families/${familyId}/tasks`, taskId);
   
@@ -142,6 +142,7 @@ export const approveTaskCompletion = async (familyId: string, completionId: stri
 
     transaction.update(completionRef, {
       status: 'approved',
+      parentComment: comment || null,
       approvedAt: serverTimestamp()
     });
 
@@ -158,11 +159,33 @@ export const approveTaskCompletion = async (familyId: string, completionId: stri
       }
     }
 
-    // Add to activity feed
     const feedRef = doc(collection(db, `families/${familyId}/feed`));
     transaction.set(feedRef, {
       actorId: userId,
-      text: `Completed task: ${taskDoc.data().title} (+${points} pts)`,
+      text: `Task approved: ${taskDoc.data().title} (+${points} pts)${comment ? ` - "${comment}"` : ''}`,
+      timestamp: serverTimestamp()
+    });
+  });
+};
+
+export const rejectTaskCompletion = async (familyId: string, completionId: string, taskId: string, userId: string, comment: string) => {
+  const completionRef = doc(db, `families/${familyId}/task_completions`, completionId);
+  const taskRef = doc(db, `families/${familyId}/tasks`, taskId);
+
+  await runTransaction(db, async (transaction) => {
+    const taskDoc = await transaction.get(taskRef);
+    if (!taskDoc.exists()) throw new Error("Task not found");
+
+    transaction.update(completionRef, {
+      status: 'rejected',
+      parentComment: comment,
+      rejectedAt: serverTimestamp()
+    });
+
+    const feedRef = doc(collection(db, `families/${familyId}/feed`));
+    transaction.set(feedRef, {
+      actorId: userId,
+      text: `Task rejected: ${taskDoc.data().title} - "${comment}"`,
       timestamp: serverTimestamp()
     });
   });
