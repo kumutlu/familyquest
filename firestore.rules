@@ -16,11 +16,92 @@ service cloud.firestore {
       return isFamilyMember(familyId) && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'parent';
     }
 
+    function isBehaviourManager(familyId) {
+      let role = get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role;
+      return isFamilyMember(familyId) && (role == 'parent' || role == 'owner');
+    }
+
+    function isChildInFamily(familyId, childId) {
+      let child = get(/databases/$(database)/documents/users/$(childId)).data;
+      return child.familyId == familyId && child.role == 'child';
+    }
+
+    function hasValidReason(reason) {
+      return reason is string
+        && reason.size() >= 3
+        && !reason.matches('^\\s.*')
+        && !reason.matches('.*\\s$');
+    }
+
+    function hasValidCreatorSnapshot(data) {
+      let creator = get(/databases/$(database)/documents/users/$(request.auth.uid)).data;
+      return data.createdBy == request.auth.uid
+        && data.createdByName is string
+        && data.createdByName == creator.displayName;
+    }
+
+    function hasValidBehaviourDeltas(data) {
+      return data.pointsDelta is int
+        && data.walletDelta is int
+        && (
+          (data.type == 'positive' && data.pointsDelta > 0 && data.walletDelta == 0) ||
+          (data.type == 'negative' && data.pointsDelta < 0 && data.walletDelta == 0) ||
+          (data.type == 'financial' && data.pointsDelta == 0 && data.walletDelta < 0)
+        );
+    }
+
+    function isValidBehaviourEvent(familyId) {
+      let data = request.resource.data;
+      return data.keys().hasOnly([
+          'familyId', 'childId', 'type', 'reason', 'pointsDelta',
+          'walletDelta', 'createdBy', 'createdByName', 'createdAt'
+        ])
+        && data.keys().hasAll([
+          'familyId', 'childId', 'type', 'reason', 'pointsDelta',
+          'walletDelta', 'createdBy', 'createdByName', 'createdAt'
+        ])
+        && data.familyId is string
+        && data.familyId == familyId
+        && data.childId is string
+        && isChildInFamily(familyId, data.childId)
+        && data.type is string
+        && hasValidReason(data.reason)
+        && hasValidBehaviourDeltas(data)
+        && hasValidCreatorSnapshot(data)
+        && data.createdAt is timestamp;
+    }
+
+    function isValidFinancialPenalty(familyId) {
+      let data = request.resource.data;
+      return data.keys().hasOnly([
+          'type', 'behaviourEventId', 'childId', 'amount', 'reason',
+          'createdBy', 'createdByName', 'createdAt'
+        ])
+        && data.keys().hasAll([
+          'type', 'behaviourEventId', 'childId', 'amount', 'reason',
+          'createdBy', 'createdByName', 'createdAt'
+        ])
+        && data.type == 'financial_penalty'
+        && data.behaviourEventId is string
+        && data.behaviourEventId.size() > 0
+        && data.childId is string
+        && isChildInFamily(familyId, data.childId)
+        && data.amount is int
+        && data.amount > 0
+        && hasValidReason(data.reason)
+        && hasValidCreatorSnapshot(data)
+        && data.createdAt is timestamp;
+    }
+
     // USERS
     match /users/{uid} {
       // Users can read their own profile, or parents in the same family can read/write child profiles
       allow read: if isAuthenticated() && (request.auth.uid == uid || get(/databases/$(database)/documents/users/$(request.auth.uid)).data.familyId == resource.data.familyId);
-      allow update: if isAuthenticated() && (request.auth.uid == uid || isParent(resource.data.familyId));
+      allow update: if isAuthenticated() && (
+        (request.auth.uid == uid && !request.resource.data.diff(resource.data).affectedKeys().hasAny([
+          'rewardPoints', 'lifetimeXP', 'walletBalance'
+        ])) || isParent(resource.data.familyId)
+      );
       allow create: if isAuthenticated() && request.auth.uid == uid;
     }
 
@@ -49,7 +130,8 @@ service cloud.firestore {
       // BEHAVIOUR EVENTS
       match /behaviour_events/{eventId} {
         allow read: if isFamilyMember(familyId);
-        allow write: if isParent(familyId);
+        allow create: if isBehaviourManager(familyId) && isValidBehaviourEvent(familyId);
+        allow update, delete: if false;
       }
 
       // REWARDS
@@ -70,7 +152,10 @@ service cloud.firestore {
       match /wallet_transactions/{txId} {
         allow read: if isFamilyMember(familyId);
         // Wallet ledger is immutable and writeable only by parents
-        allow create: if isParent(familyId);
+        allow create: if isBehaviourManager(familyId) && (
+          request.resource.data.type != 'financial_penalty' ||
+          isValidFinancialPenalty(familyId)
+        );
         allow update, delete: if false; 
       }
 
