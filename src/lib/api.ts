@@ -1,5 +1,5 @@
 import { 
-  collection, doc, getDoc, setDoc, updateDoc, 
+  collection, doc, setDoc, updateDoc, 
   addDoc, runTransaction, query, where, getDocs, serverTimestamp 
 } from 'firebase/firestore';
 import { 
@@ -107,28 +107,81 @@ export const createTask = async (familyId: string, taskData: any) => {
 };
 
 export const completeTask = async (familyId: string, taskId: string, userId: string, requiresApproval: boolean) => {
-  const completionRef = doc(collection(db, `families/${familyId}/task_completions`));
-  const status = requiresApproval ? 'pending_approval' : 'approved';
-  
-  await setDoc(completionRef, {
-    taskId,
-    assigneeId: userId,
-    status,
-    completedAt: serverTimestamp(),
-    approvedAt: requiresApproval ? null : serverTimestamp()
-  });
+  await runTransaction(db, async (transaction) => {
+    // 1. Evaluate user streak
+    const userRef = doc(db, 'users', userId);
+    const userDoc = await transaction.get(userRef);
+    if (!userDoc.exists()) throw new Error("User not found");
+    const userData = userDoc.data();
+    
+    const lastActiveTimestamp = userData.lastActiveDate;
+    const lastActive = lastActiveTimestamp ? lastActiveTimestamp.toDate() : new Date(0);
+    const today = new Date();
+    today.setHours(0,0,0,0);
+    const lastActiveDay = new Date(lastActive);
+    lastActiveDay.setHours(0,0,0,0);
 
-  // If no approval required, points should be awarded immediately (optimistic UI handles local state)
-  if (!requiresApproval) {
-    const taskSnap = await getDoc(doc(db, `families/${familyId}/tasks/${taskId}`));
-    if (taskSnap.exists()) {
-      const pts = taskSnap.data().pointsReward || 0;
-      if (pts > 0) {
-        await awardPoints(familyId, userId, pts, `Completed task: ${taskSnap.data().title}`);
+    const diffTime = today.getTime() - lastActiveDay.getTime();
+    const diffDays = Math.floor(diffTime / (1000 * 60 * 60 * 24));
+
+    let newCurrentStreak = userData.currentStreak || 0;
+    let newLongestStreak = userData.longestStreak || 0;
+
+    if (diffDays === 1) {
+      newCurrentStreak += 1;
+      if (newCurrentStreak > newLongestStreak) newLongestStreak = newCurrentStreak;
+    } else if (diffDays > 1) {
+      newCurrentStreak = 1;
+      if (newCurrentStreak > newLongestStreak) newLongestStreak = newCurrentStreak;
+    } else if (diffDays === 0) {
+      if (newCurrentStreak === 0) {
+        newCurrentStreak = 1;
+        if (newCurrentStreak > newLongestStreak) newLongestStreak = newCurrentStreak;
       }
     }
-  }
-  return completionRef.id;
+
+    let finalRewardPoints = userData.rewardPoints || 0;
+    let finalLifetimeXP = userData.lifetimeXP || 0;
+
+    // 2. Mark task completion
+    const completionRef = doc(collection(db, `families/${familyId}/task_completions`));
+    const status = requiresApproval ? 'pending_approval' : 'approved';
+    transaction.set(completionRef, {
+      taskId,
+      assigneeId: userId,
+      status,
+      completedAt: serverTimestamp(),
+      approvedAt: requiresApproval ? null : serverTimestamp()
+    });
+
+    // 3. Auto-award if no approval required
+    if (!requiresApproval) {
+      const taskRef = doc(db, `families/${familyId}/tasks`, taskId);
+      const taskSnap = await transaction.get(taskRef);
+      if (taskSnap.exists()) {
+        const pts = taskSnap.data().pointsReward || 0;
+        if (pts > 0) {
+          finalRewardPoints += pts;
+          finalLifetimeXP += pts;
+          const feedRef = doc(collection(db, `families/${familyId}/feed`));
+          transaction.set(feedRef, {
+            actorId: userId,
+            text: `Completed task: ${taskSnap.data().title} (+${pts} pts)`,
+            timestamp: serverTimestamp()
+          });
+        }
+      }
+    }
+
+    // 4. Update user doc with streak and points
+    transaction.update(userRef, {
+      currentStreak: newCurrentStreak,
+      longestStreak: newLongestStreak,
+      lastActiveDate: serverTimestamp(),
+      rewardPoints: finalRewardPoints,
+      lifetimeXP: finalLifetimeXP
+    });
+  });
 };
 
 export const approveTaskCompletion = async (familyId: string, completionId: string, taskId: string, userId: string, comment?: string) => {
