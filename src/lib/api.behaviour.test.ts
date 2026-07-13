@@ -66,7 +66,7 @@ describe('addBehaviourEvent transaction contract', () => {
     })
 
     expect(firestore.runTransaction).toHaveBeenCalledTimes(1)
-    expect(transaction.update).toHaveBeenCalledWith(expect.objectContaining({ path: 'users/child-1' }), { walletBalance: -500 })
+    expect(transaction.update).toHaveBeenCalledWith(expect.objectContaining({ path: 'families/family-1/wallets/child-1' }), { balance: -500 })
     const eventWrite = transaction.set.mock.calls.find(([ref]) => ref.path.includes('/behaviour_events/'))?.[1]
     const ledgerWrite = transaction.set.mock.calls.find(([ref]) => ref.path.includes('/wallet_transactions/'))?.[1]
     expect(eventWrite).toMatchObject({
@@ -78,6 +78,13 @@ describe('addBehaviourEvent transaction contract', () => {
       reason: 'Broken headphones', createdBy: 'owner-1', createdByName: 'Kemal',
     })
     expect(eventId).toBe('generated-1')
+
+    const feedWrite = transaction.set.mock.calls.find(([ref]) => ref.path.includes('/feed/'))?.[1]
+    expect(feedWrite).toMatchObject({
+      type: 'behaviour', behaviourType: 'financial', reason: 'Broken headphones',
+      pointsDelta: 0, walletDelta: -500, childId: 'child-1', actorId: 'owner-1',
+      text: 'Logged behaviour for Ada: Broken headphones (-£5.00)'
+    })
   })
 
   it('stores the applied negative delta, clamps points, preserves XP, and creates no ledger', async () => {
@@ -91,15 +98,29 @@ describe('addBehaviourEvent transaction contract', () => {
     const eventWrite = transaction.set.mock.calls.find(([ref]) => ref.path.includes('/behaviour_events/'))?.[1]
     expect(eventWrite).toMatchObject({ pointsDelta: -10, walletDelta: 0 })
     expect(transaction.set.mock.calls.some(([ref]) => ref.path.includes('/wallet_transactions/'))).toBe(false)
+
+    const feedWrite = transaction.set.mock.calls.find(([ref]) => ref.path.includes('/feed/'))?.[1]
+    expect(feedWrite).toMatchObject({
+      type: 'behaviour', behaviourType: 'negative', reason: 'Late home',
+      pointsDelta: -10, walletDelta: 0, childId: 'child-1', actorId: 'owner-1',
+      text: 'Logged behaviour for Ada: Late home (-10 pts)'
+    })
   })
 
   it('normalizes the legacy dashboard call into the V2 event shape during migration', async () => {
     const transaction = installTransaction(baseDocs)
 
-    await addBehaviourEvent('family-1', 'child-1', 'owner-1', 'Helped out', 5)
+    await addBehaviourEvent('family-1', 'child-1', 'owner-1', { type: 'positive', reason: 'Helped out', pointsDelta: 5, walletDelta: 0 })
 
     const eventWrite = transaction.set.mock.calls.find(([ref]) => ref.path.includes('/behaviour_events/'))?.[1]
     expect(eventWrite).toMatchObject({ type: 'positive', reason: 'Helped out', pointsDelta: 5, walletDelta: 0 })
+
+    const feedWrite = transaction.set.mock.calls.find(([ref]) => ref.path.includes('/feed/'))?.[1]
+    expect(feedWrite).toMatchObject({
+      type: 'behaviour', behaviourType: 'positive', reason: 'Helped out',
+      pointsDelta: 5, walletDelta: 0, childId: 'child-1', actorId: 'owner-1',
+      text: 'Logged behaviour for Ada: Helped out (+5 pts)'
+    })
   })
 
   it.each([
@@ -114,6 +135,36 @@ describe('addBehaviourEvent transaction contract', () => {
     })).rejects.toThrow()
     expect(transaction.update).not.toHaveBeenCalled()
     expect(transaction.set).not.toHaveBeenCalled()
+  })
+
+  it('rejects a financial penalty that exceeds the family debt limit', async () => {
+    const transaction = installTransaction(baseDocs)
+    await expect(addBehaviourEvent('family-1', 'child-1', 'owner-1', {
+      type: 'financial', reason: 'Expensive', pointsDelta: 0, walletDelta: -6000
+    })).rejects.toThrow('This penalty would exceed the family debt limit.')
+    expect(transaction.set).not.toHaveBeenCalled()
+  })
+
+  it('allows a parent or owner to create a behaviour event', async () => {
+    const docs = {
+      ...baseDocs,
+      'users/parent-1': { familyId: 'family-1', role: 'parent', displayName: 'Mom' },
+    }
+    const transaction = installTransaction(docs)
+
+    // Parent
+    await addBehaviourEvent('family-1', 'child-1', 'parent-1', {
+      type: 'positive', reason: 'Good', pointsDelta: 10, walletDelta: 0
+    })
+    expect(transaction.set).toHaveBeenCalled()
+
+    vi.clearAllMocks()
+
+    // Owner
+    await addBehaviourEvent('family-1', 'child-1', 'owner-1', {
+      type: 'positive', reason: 'Good', pointsDelta: 10, walletDelta: 0
+    })
+    expect(transaction.set).toHaveBeenCalled()
   })
 })
 

@@ -3,112 +3,293 @@ rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
 
-    // Helper functions
+    // HELPER FUNCTIONS
     function isAuthenticated() {
       return request.auth != null;
     }
 
-    function isFamilyMember(familyId) {
-      return isAuthenticated() && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.familyId == familyId;
-    }
-
     function isOwner(familyId) {
-      return isFamilyMember(familyId) && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'owner';
+      let userDoc = get(/databases/$(database)/documents/users/$(request.auth.uid));
+      return userDoc != null
+        && userDoc.data.familyId == familyId
+        && userDoc.data.role == 'owner';
     }
 
     function isParent(familyId) {
-      return isFamilyMember(familyId) && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'parent';
-    }
-
-    function isBehaviourManager(familyId) {
-      let role = get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role;
-      return isFamilyMember(familyId) && (role == 'parent' || role == 'owner');
+      let userDoc = get(/databases/$(database)/documents/users/$(request.auth.uid));
+      return userDoc != null
+        && userDoc.data.familyId == familyId
+        && (userDoc.data.role == 'parent' || userDoc.data.role == 'owner');
     }
 
     function isChildInFamily(familyId, childId) {
-      let child = get(/databases/$(database)/documents/users/$(childId)).data;
-      return child.familyId == familyId && child.role == 'child';
+      let childDoc = get(/databases/$(database)/documents/users/$(childId));
+      return childDoc != null
+        && childDoc.data.familyId == familyId
+        && childDoc.data.role == 'child';
     }
 
-    function hasValidReason(reason) {
-      return reason is string
-        && reason.size() >= 3
-        && !reason.matches('^\\s.*')
-        && !reason.matches('.*\\s$');
+    function isFamilyMember(familyId) {
+      let userDoc = get(/databases/$(database)/documents/users/$(request.auth.uid));
+      return userDoc != null
+        && userDoc.data.familyId == familyId;
+    }
+
+    function isBehaviourManager(familyId) {
+      return isParent(familyId);
     }
 
     function hasValidCreatorSnapshot(data) {
-      let creator = get(/databases/$(database)/documents/users/$(request.auth.uid)).data;
-      return data.createdBy == request.auth.uid
-        && data.createdByName is string
-        && data.createdByName == creator.displayName;
+      let creatorDoc = get(/databases/$(database)/documents/users/$(request.auth.uid));
+      return creatorDoc != null && 'displayName' in creatorDoc.data && creatorDoc.data.displayName == data.get('createdByName', 'null');
     }
 
-    function hasValidBehaviourDeltas(data) {
-      return data.pointsDelta is int
+    function isValidBehaviourEvent(familyId) {
+      let data = request.resource.data;
+      let childIdStr = data.get('childId', 'null');
+      let requiredKeys = ['familyId', 'childId', 'type', 'pointsDelta', 'walletDelta', 'reason', 'createdBy', 'createdByName', 'createdAt'];
+
+      return data.keys().hasAll(requiredKeys)
+        && data.keys().hasOnly(requiredKeys)
+        && isChildInFamily(familyId, childIdStr)
+        && data.pointsDelta is int
         && data.walletDelta is int
         && (
           (data.type == 'positive' && data.pointsDelta > 0 && data.walletDelta == 0) ||
           (data.type == 'negative' && data.pointsDelta < 0 && data.walletDelta == 0) ||
           (data.type == 'financial' && data.pointsDelta == 0 && data.walletDelta < 0)
-        );
-    }
-
-    function isValidBehaviourEvent(familyId) {
-      let data = request.resource.data;
-      return data.keys().hasOnly([
-          'familyId', 'childId', 'type', 'reason', 'pointsDelta',
-          'walletDelta', 'createdBy', 'createdByName', 'createdAt'
-        ])
-        && data.keys().hasAll([
-          'familyId', 'childId', 'type', 'reason', 'pointsDelta',
-          'walletDelta', 'createdBy', 'createdByName', 'createdAt'
-        ])
-        && data.familyId is string
-        && data.familyId == familyId
-        && data.childId is string
-        && isChildInFamily(familyId, data.childId)
-        && data.type is string
-        && hasValidReason(data.reason)
-        && hasValidBehaviourDeltas(data)
+        )
+        && data.reason is string
+        && data.reason.trim().size() >= 3
+        && data.createdBy == request.auth.uid
+        && data.createdByName is string
         && hasValidCreatorSnapshot(data)
+        && data.familyId == familyId
         && data.createdAt is timestamp
         && data.createdAt == request.time;
     }
 
     function isValidFinancialPenalty(familyId) {
       let data = request.resource.data;
-      let eventPath = /databases/$(database)/documents/families/$(familyId)/behaviour_events/$(data.behaviourEventId);
-      let event = getAfter(eventPath).data;
-      return data.keys().hasOnly([
-          'type', 'behaviourEventId', 'childId', 'amount', 'reason',
-          'createdBy', 'createdByName', 'createdAt'
-        ])
-        && data.keys().hasAll([
-          'type', 'behaviourEventId', 'childId', 'amount', 'reason',
-          'createdBy', 'createdByName', 'createdAt'
-        ])
+      let eventId = data.get('eventId', 'null');
+      let childIdStr = data.get('childId', 'null');
+      let eventPath = /databases/$(database)/documents/families/$(familyId)/behaviour_events/$(eventId);
+      let eventDoc = getAfter(eventPath);
+      let requiredKeys = ['familyId', 'type', 'childId', 'amount', 'reason', 'eventId', 'createdBy', 'createdByName', 'createdAt'];
+
+      return data.keys().hasAll(requiredKeys)
+        && data.keys().hasOnly(requiredKeys)
         && data.type == 'financial_penalty'
-        && data.behaviourEventId is string
-        && data.behaviourEventId.size() > 0
-        && data.childId is string
-        && isChildInFamily(familyId, data.childId)
-        && data.amount is int
+        && isChildInFamily(familyId, childIdStr)
         && data.amount > 0
-        && hasValidReason(data.reason)
+        && data.amount is int
+        && data.eventId is string
+        && data.createdBy == request.auth.uid
         && hasValidCreatorSnapshot(data)
         && data.createdAt is timestamp
         && data.createdAt == request.time
         && existsAfter(eventPath)
-        && event.familyId == familyId
-        && event.childId == data.childId
-        && event.type == 'financial'
-        && event.pointsDelta == 0
-        && event.walletDelta == 0 - data.amount
-        && event.reason == data.reason
-        && event.createdBy == data.createdBy
-        && event.createdByName == data.createdByName
-        && event.createdAt == data.createdAt;
+        && eventDoc.data.familyId == familyId
+        && eventDoc.data.childId == data.childId
+        && eventDoc.data.type == 'financial'
+        && eventDoc.data.pointsDelta == 0
+        && eventDoc.data.walletDelta == (0 - data.amount)
+        && eventDoc.data.reason == data.reason
+        && eventDoc.data.createdBy == data.createdBy
+        && eventDoc.data.createdByName == data.createdByName
+        && eventDoc.data.createdAt == data.createdAt;
+    }
+
+    function isValidDepositCredit(familyId, childId) {
+      let data = request.resource.data;
+      let oldData = resource.data;
+      let diff = data.diff(oldData).affectedKeys();
+      let txId = data.get('lastManualTxId', 'null');
+      let tx = getAfter(/databases/$(database)/documents/families/$(familyId)/wallet_transactions/$(txId));
+
+      return isParent(familyId)
+        && 'lastManualTxId' in data
+        && diff.hasOnly(['balance', 'lastManualTxId'])
+        && tx != null
+        && tx.data.amount == (data.balance - oldData.balance)
+        && tx.data.amount > 0
+        && tx.data.type == 'deposit'
+        && tx.data.childId == childId
+        && tx.data.createdAt == request.time
+        && !exists(/databases/$(database)/documents/families/$(familyId)/wallet_transactions/$(txId));
+    }
+
+    function isValidWithdrawalDeduction(familyId, childId) {
+      let data = request.resource.data;
+      let oldData = resource.data;
+      let diff = data.diff(oldData).affectedKeys();
+      let txId = data.get('lastManualTxId', 'null');
+      let tx = getAfter(/databases/$(database)/documents/families/$(familyId)/wallet_transactions/$(txId));
+
+      return isParent(familyId)
+        && 'lastManualTxId' in data
+        && diff.hasOnly(['balance', 'lastManualTxId'])
+        && tx != null
+        && tx.data.amount == (oldData.balance - data.balance)
+        && tx.data.amount > 0
+        && tx.data.type == 'withdrawal'
+        && tx.data.childId == childId
+        && tx.data.createdAt == request.time
+        && !exists(/databases/$(database)/documents/families/$(familyId)/wallet_transactions/$(txId));
+    }
+
+    function isValidParentTransferDeduction(familyId, childId) {
+      let data = request.resource.data;
+      let oldData = resource.data;
+      let diff = data.diff(oldData).affectedKeys();
+      let txId = data.get('lastManualTxId', 'null');
+      let tx = getAfter(/databases/$(database)/documents/families/$(familyId)/wallet_transactions/$(txId));
+
+      return isParent(familyId)
+        && 'lastManualTxId' in data
+        && diff.hasOnly(['balance', 'lastManualTxId'])
+        && tx != null
+        && tx.data.amount == (oldData.balance - data.balance)
+        && tx.data.amount > 0
+        && tx.data.type == 'transfer'
+        && tx.data.fromChildId == childId
+        && tx.data.createdAt == request.time
+        && !exists(/databases/$(database)/documents/families/$(familyId)/wallet_transactions/$(txId));
+    }
+
+    function isValidParentTransferCredit(familyId, childId) {
+      let data = request.resource.data;
+      let oldData = resource.data;
+      let diff = data.diff(oldData).affectedKeys();
+      let txId = data.get('lastManualTxId', 'null');
+      let tx = getAfter(/databases/$(database)/documents/families/$(familyId)/wallet_transactions/$(txId));
+
+      return isParent(familyId)
+        && 'lastManualTxId' in data
+        && diff.hasOnly(['balance', 'lastManualTxId'])
+        && tx != null
+        && tx.data.amount == (data.balance - oldData.balance)
+        && tx.data.amount > 0
+        && tx.data.type == 'transfer'
+        && tx.data.childId == childId
+        && tx.data.createdAt == request.time
+        && !exists(/databases/$(database)/documents/families/$(familyId)/wallet_transactions/$(txId));
+    }
+
+    function isValidBehaviourPenaltyDeduction(familyId, childId) {
+      let data = request.resource.data;
+      let oldData = resource.data;
+      let diff = data.diff(oldData).affectedKeys();
+      let txId = data.get('lastPenaltyTxId', 'null');
+      let tx = getAfter(/databases/$(database)/documents/families/$(familyId)/wallet_transactions/$(txId));
+
+      return isParent(familyId)
+        && 'lastPenaltyTxId' in data
+        && diff.hasOnly(['balance', 'lastPenaltyTxId'])
+        && tx != null
+        && tx.data.amount == (oldData.balance - data.balance)
+        && tx.data.amount > 0
+        && tx.data.type == 'financial_penalty'
+        && tx.data.childId == childId
+        && tx.data.createdAt == request.time
+        && !exists(/databases/$(database)/documents/families/$(familyId)/wallet_transactions/$(txId));
+    }
+
+    function isValidFundDonationDeduction(familyId, childId) {
+      let data = request.resource.data;
+      let oldData = resource.data;
+      let diff = data.diff(oldData).affectedKeys();
+      let txId = data.get('lastFundTxId', 'null');
+      let tx = getAfter(/databases/$(database)/documents/families/$(familyId)/fund_transactions/$(txId));
+
+      return request.auth.uid == childId
+        && 'lastFundTxId' in data
+        && diff.hasOnly(['balance', 'lastFundTxId'])
+        && tx != null
+        && tx.data.amount == (oldData.balance - data.balance)
+        && tx.data.amount > 0
+        && tx.data.amount is int
+        && tx.data.fromUserId == childId
+        && tx.data.type == 'contribution'
+        && tx.data.createdAt == request.time
+        && !exists(/databases/$(database)/documents/families/$(familyId)/fund_transactions/$(txId));
+    }
+
+    function isValidPetBoxDonationDeduction(familyId, childId) {
+      let data = request.resource.data;
+      let oldData = resource.data;
+      let diff = data.diff(oldData).affectedKeys();
+      let txId = data.get('lastTransferTxId', 'null');
+      let tx = getAfter(/databases/$(database)/documents/families/$(familyId)/wallet_transactions/$(txId));
+
+      return isParent(familyId)
+        && 'lastTransferTxId' in data
+        && diff.hasOnly(['balance', 'lastTransferTxId'])
+        && tx != null
+        && tx.data.amountPence == (data.balance - oldData.balance)
+        && tx.data.amountPence < 0
+        && tx.data.type == 'petbox_donation'
+        && tx.data.childId == childId
+        && tx.data.createdAt == request.time
+        && !exists(/databases/$(database)/documents/families/$(familyId)/wallet_transactions/$(txId));
+    }
+
+    function isValidLedgerSync(familyId, childId) {
+      let data = request.resource.data;
+      let oldData = resource.data;
+      let diffPence = data.balance - oldData.balance;
+
+      let txId = data.get('lastTransferTxId', 'null');
+      let txDoc = getAfter(/databases/$(database)/documents/families/$(familyId)/wallet_transactions/$(txId));
+      return data.diff(oldData).affectedKeys().hasOnly(['balance', 'lastTransferTxId', 'lastTransferReqId'])
+        && data.lastTransferTxId != oldData.get('lastTransferTxId', '')
+        && txDoc != null
+        && txDoc.data.amountPence == diffPence
+        && txDoc.data.childId == childId
+        && txDoc.data.get('transferRequestId', txDoc.data.get('moneyRequestId', 'null')) == data.get('lastTransferReqId', '')
+        && txDoc.data.approvalTxId != null
+        && (
+             (diffPence < 0 && txDoc.data.type == 'transfer_out') ||
+             (diffPence > 0 && txDoc.data.type == 'transfer_in')
+           );
+    }
+
+    function isValidRedemptionDeduction(uid) {
+      let data = request.resource.data;
+      let oldData = resource.data;
+      let diff = data.diff(oldData).affectedKeys();
+      let txId = data.get('lastRedemptionId', 'null');
+      let tx = getAfter(/databases/$(database)/documents/families/$(oldData.get('familyId', 'null'))/redemptions/$(txId));
+
+      return request.auth.uid == uid
+        && 'lastRedemptionId' in data
+        && diff.hasOnly(['rewardPoints', 'lastRedemptionId'])
+        && tx != null
+        && tx.data.costPaid == (oldData.rewardPoints - data.rewardPoints)
+        && tx.data.costPaid > 0
+        && tx.data.costPaid is int
+        && tx.data.userId == uid
+        && tx.data.createdAt == request.time
+        && !exists(/databases/$(database)/documents/families/$(oldData.get('familyId', 'null'))/redemptions/$(txId));
+    }
+
+    function isValidFundDonationInjection(familyId, fundId) {
+      let data = request.resource.data;
+      let oldData = resource.data;
+      let diff = data.diff(oldData).affectedKeys();
+      let txId = data.get('lastFundTxId', 'null');
+      let tx = getAfter(/databases/$(database)/documents/families/$(familyId)/fund_transactions/$(txId));
+
+      return 'lastFundTxId' in data
+        && diff.hasOnly(['balance', 'lastFundTxId'])
+        && tx != null
+        && tx.data.amount == (data.balance - oldData.balance)
+        && tx.data.amount > 0
+        && tx.data.amount is int
+        && tx.data.fundId == fundId
+        && tx.data.type == 'contribution'
+        && tx.data.createdAt == request.time
+        && !exists(/databases/$(database)/documents/families/$(familyId)/fund_transactions/$(txId));
     }
 
     function isValidSelfSignup(uid) {
@@ -122,116 +303,407 @@ service cloud.firestore {
     function isValidManagedMemberCreate(uid) {
       let data = request.resource.data;
       return data.uid == uid
-        && data.familyId is string
+        && data.get('familyId', '') != ''
         && data.isManaged == true
         && (data.role == 'parent' || data.role == 'child')
         && isOwner(data.familyId);
     }
 
     function isValidOwnerBootstrap(uid) {
-      let familyId = request.resource.data.familyId;
+      let data = request.resource.data;
+      let familyId = data.get('familyId', 'null');
       let familyPath = /databases/$(database)/documents/families/$(familyId);
+
       return request.auth.uid == uid
-        && !('familyId' in resource.data)
+        && !('familyId' in resource.data) // Must not have a family yet
         && resource.data.role == 'parent'
-        && request.resource.data.uid == uid
-        && request.resource.data.role == 'owner'
-        && familyId is string
+        && data.uid == uid
+        && data.role == 'owner'
+        && familyId != 'null'
         && !exists(familyPath)
         && existsAfter(familyPath);
     }
 
+    function isValidTransferApproval(familyId, requestId, data, oldData) {
+      let txId = data.approvalTxId;
+      let txOut = getAfter(/databases/$(database)/documents/families/$(familyId)/wallet_transactions/$(txId + '_out'));
+      let txIn = getAfter(/databases/$(database)/documents/families/$(familyId)/wallet_transactions/$(txId + '_in'));
+      let senderWallet = getAfter(/databases/$(database)/documents/families/$(familyId)/wallets/$(oldData.fromChildId));
+      let recipientWallet = getAfter(/databases/$(database)/documents/families/$(familyId)/wallets/$(oldData.toChildId));
+
+      let oldSenderWallet = get(/databases/$(database)/documents/families/$(familyId)/wallets/$(oldData.fromChildId));
+      let senderLegacy = get(/databases/$(database)/documents/users/$(oldData.fromChildId)).data.get('walletBalance', 0);
+      let oldSenderBalance = oldSenderWallet == null ? senderLegacy : oldSenderWallet.data.balance;
+
+      let oldRecipientWallet = get(/databases/$(database)/documents/families/$(familyId)/wallets/$(oldData.toChildId));
+      let recipientLegacy = get(/databases/$(database)/documents/users/$(oldData.toChildId)).data.get('walletBalance', 0);
+      let oldRecipientBalance = oldRecipientWallet == null ? recipientLegacy : oldRecipientWallet.data.balance;
+
+      return txOut != null && txIn != null
+        && senderWallet != null && recipientWallet != null
+        && senderWallet.data.lastTransferReqId == requestId
+        && recipientWallet.data.lastTransferReqId == requestId
+        && senderWallet.data.lastTransferTxId == txId + '_out'
+        && recipientWallet.data.lastTransferTxId == txId + '_in'
+        && senderWallet.data.balance == oldSenderBalance - oldData.amountPence
+        && recipientWallet.data.balance == oldRecipientBalance + oldData.amountPence
+        && txOut.data.approvalTxId == txId
+        && txIn.data.approvalTxId == txId
+        && txOut.data.transferRequestId == requestId
+        && txIn.data.transferRequestId == requestId
+        && txOut.data.amountPence == (0 - oldData.amountPence)
+        && txIn.data.amountPence == oldData.amountPence
+        && data.reviewedBy == request.auth.uid
+        && data.reviewedAt == request.time;
+    }
+
+    function isValidTransferOutLedger(familyId) {
+      let data = request.resource.data;
+      let reqId = data.get('transferRequestId', 'null');
+      let req = get(/databases/$(database)/documents/families/$(familyId)/transfer_requests/$(reqId));
+      let requiredKeys = ['type', 'childId', 'counterpartyChildId', 'amountPence', 'transferRequestId', 'approvalTxId', 'createdAt', 'parentRef', 'note'];
+
+      return data.keys().hasOnly(requiredKeys)
+        && data.keys().hasAll(requiredKeys)
+        && data.type == 'transfer_out'
+        && req != null
+        && req.data.status == 'pending'
+        && data.childId == req.data.fromChildId
+        && data.counterpartyChildId == req.data.toChildId
+        && data.amountPence == (0 - req.data.amountPence)
+        && data.approvalTxId != null
+        && data.createdAt == request.time
+        && data.parentRef == request.auth.uid;
+    }
+
+    function isValidMoneyRequestOutLedger(familyId) {
+      let data = request.resource.data;
+      let reqId = data.get('moneyRequestId', 'null');
+      let req = get(/databases/$(database)/documents/families/$(familyId)/money_requests/$(reqId));
+      let requiredKeys = ['type', 'childId', 'counterpartyChildId', 'amountPence', 'moneyRequestId', 'approvalTxId', 'createdAt', 'timestamp', 'parentRef', 'note'];
+
+      return data.keys().hasOnly(requiredKeys)
+        && data.keys().hasAll(requiredKeys)
+        && data.type == 'transfer_out'
+        && req != null
+        && req.data.status == 'pending'
+        && data.childId == req.data.requestedFromId
+        && data.counterpartyChildId == req.data.requesterId
+        && data.amountPence == (0 - req.data.amountPence)
+        && data.approvalTxId != null
+        && data.createdAt == request.time
+        && data.parentRef == request.auth.uid;
+    }
+
+    function isValidTransferInLedger(familyId) {
+      let data = request.resource.data;
+      let reqId = data.get('transferRequestId', 'null');
+      let req = get(/databases/$(database)/documents/families/$(familyId)/transfer_requests/$(reqId));
+      let requiredKeys = ['type', 'childId', 'counterpartyChildId', 'amountPence', 'transferRequestId', 'approvalTxId', 'createdAt', 'parentRef', 'note'];
+
+      return data.keys().hasOnly(requiredKeys)
+        && data.keys().hasAll(requiredKeys)
+        && data.type == 'transfer_in'
+        && req != null
+        && req.data.status == 'pending'
+        && data.childId == req.data.toChildId
+        && data.counterpartyChildId == req.data.fromChildId
+        && data.amountPence == req.data.amountPence
+        && data.approvalTxId != null
+        && data.createdAt == request.time
+        && data.parentRef == request.auth.uid;
+    }
+
+    function isValidMoneyRequestInLedger(familyId) {
+      let data = request.resource.data;
+      let reqId = data.get('moneyRequestId', 'null');
+      let req = get(/databases/$(database)/documents/families/$(familyId)/money_requests/$(reqId));
+      let requiredKeys = ['type', 'childId', 'counterpartyChildId', 'amountPence', 'moneyRequestId', 'approvalTxId', 'createdAt', 'timestamp', 'parentRef', 'note'];
+
+      return data.keys().hasOnly(requiredKeys)
+        && data.keys().hasAll(requiredKeys)
+        && data.type == 'transfer_in'
+        && req != null
+        && req.data.status == 'pending'
+        && data.childId == req.data.requesterId
+        && data.counterpartyChildId == req.data.requestedFromId
+        && data.amountPence == req.data.amountPence
+        && data.approvalTxId != null
+        && data.createdAt == request.time
+        && data.parentRef == request.auth.uid;
+    }
+
+    function isValidMoneyRequestPaymentLedger(familyId) {
+      let data = request.resource.data;
+      let reqId = data.get('moneyRequestId', 'null');
+      let req = get(/databases/$(database)/documents/families/$(familyId)/money_requests/$(reqId));
+      let requiredKeys = ['type', 'childId', 'amount', 'amountPence', 'moneyRequestId', 'approvalTxId', 'createdAt', 'timestamp', 'parentRef', 'note'];
+      return data.keys().hasAll(requiredKeys) && data.keys().hasOnly(requiredKeys)
+        && data.type == 'request_payment' && req != null && req.data.status == 'pending'
+        && data.childId == req.data.requesterId && data.amountPence == req.data.amountPence
+        && data.amount == data.amountPence && data.amountPence > 0 && data.amountPence is int
+        && data.parentRef == request.auth.uid && data.createdAt == request.time && data.timestamp == request.time;
+    }
+
+    function isValidMoneyRequestApproval(familyId, requestId, data, oldData) {
+      let txId = data.paymentTransferId;
+      let source = get(/databases/$(database)/documents/users/$(oldData.requestedFromId));
+      let requesterWallet = getAfter(/databases/$(database)/documents/families/$(familyId)/wallets/$(oldData.requesterId));
+      let txIn = getAfter(/databases/$(database)/documents/families/$(familyId)/wallet_transactions/$(txId + '_in'));
+      let sourceIsParent = source != null && (source.data.role == 'parent' || source.data.role == 'owner');
+      return requesterWallet != null && txIn != null
+        && requesterWallet.data.lastTransferReqId == requestId
+        && requesterWallet.data.lastTransferTxId == txId + '_in'
+        && txIn.data.moneyRequestId == requestId && txIn.data.approvalTxId == txId
+        && txIn.data.amountPence == oldData.amountPence
+        && data.reviewedBy == request.auth.uid && data.reviewedAt == request.time
+        && (sourceIsParent || (
+          getAfter(/databases/$(database)/documents/families/$(familyId)/wallets/$(oldData.requestedFromId)) != null
+          && getAfter(/databases/$(database)/documents/families/$(familyId)/wallets/$(oldData.requestedFromId)).data.lastTransferReqId == requestId
+          && getAfter(/databases/$(database)/documents/families/$(familyId)/wallet_transactions/$(txId + '_out')) != null
+          && getAfter(/databases/$(database)/documents/families/$(familyId)/wallet_transactions/$(txId + '_out')).data.moneyRequestId == requestId
+          && getAfter(/databases/$(database)/documents/families/$(familyId)/wallet_transactions/$(txId + '_out')).data.approvalTxId == txId
+        ));
+    }
+
+    function isValidPetBoxApproval(familyId, data, oldData) {
+      let wallet = getAfter(/databases/$(database)/documents/families/$(familyId)/wallets/$(oldData.childId));
+      let fund = getAfter(/databases/$(database)/documents/families/$(familyId)/funds/$(oldData.fundId));
+      let walletTx = getAfter(/databases/$(database)/documents/families/$(familyId)/wallet_transactions/$(data.approvalTxId));
+      let fundTx = getAfter(/databases/$(database)/documents/families/$(familyId)/fund_transactions/$(data.fundTransactionId));
+      return wallet != null && fund != null && walletTx != null && fundTx != null
+        && wallet.data.lastTransferTxId == data.approvalTxId
+        && walletTx.data.type == 'petbox_donation' && walletTx.data.childId == oldData.childId
+        && walletTx.data.amountPence == (0 - oldData.amountPence)
+        && fund.data.lastFundTxId == data.fundTransactionId
+        && fundTx.data.fundId == oldData.fundId && fundTx.data.fromUserId == oldData.childId
+        && fundTx.data.amount == oldData.amountPence && fundTx.data.type == 'contribution'
+        && data.reviewedBy == request.auth.uid && data.reviewedAt == request.time;
+    }
+
     // USERS
     match /users/{uid} {
-      // Users can read their own profile, or parents in the same family can read/write child profiles
       allow read: if isAuthenticated() && (request.auth.uid == uid || get(/databases/$(database)/documents/users/$(request.auth.uid)).data.familyId == resource.data.familyId);
+
       allow update: if isAuthenticated() && (
         (request.auth.uid == uid && !request.resource.data.diff(resource.data).affectedKeys().hasAny([
-          'role', 'familyId', 'rewardPoints', 'lifetimeXP', 'walletBalance'
+          'role', 'familyId', 'rewardPoints', 'lifetimeXP', 'walletBalance', 'balance', 'lastFundTxId'
         ])) ||
-        isValidOwnerBootstrap(uid) ||
+        (request.resource.data.diff(resource.data).affectedKeys().hasAny(['rewardPoints']) ? isValidRedemptionDeduction(uid) : false) ||
+        (!('familyId' in resource.data) && 'familyId' in request.resource.data ? isValidOwnerBootstrap(uid) || isOwner(request.resource.data.get('familyId', '')) : false) ||
         (isParent(resource.data.familyId) && resource.data.role == 'child' && !request.resource.data.diff(resource.data).affectedKeys().hasAny(['role', 'familyId'])) ||
-        (isOwner(resource.data.familyId)) ||
-        (isOwner(request.resource.data.familyId)) // Allow owner to adopt a pending user
+        (isOwner(resource.data.familyId))
       );
 
       allow create: if isAuthenticated() && (
         isValidSelfSignup(uid) ||
         isValidManagedMemberCreate(uid)
       );
-    }
 
-    match /claim_codes/{codeId} {
-      allow read: if isAuthenticated();
-      allow create, delete: if isAuthenticated() && isOwner(request.resource.data.familyId);
+      allow delete: if false;
     }
 
     // FAMILIES
     match /families/{familyId} {
-      allow read: if isFamilyMember(familyId);
-      // Only authenticated users can create a family. Only parents can update.
+      allow read: if isAuthenticated();
       allow create: if isAuthenticated();
-      allow update: if isParent(familyId);
+      allow update: if isOwner(familyId);
 
-      // TASKS
+      match /join_requests/{requestId} {
+        allow create: if isAuthenticated() && request.resource.data.uid == request.auth.uid;
+        allow update: if isOwner(familyId) && resource.data.status == 'pending'
+          && request.resource.data.status in ['approved', 'rejected']
+          && request.resource.data.reviewedBy == request.auth.uid
+          && request.resource.data.reviewedAt == request.time
+          && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'assignedRole', 'reviewedBy', 'reviewedByName', 'reviewedAt']);
+        allow read: if isFamilyMember(familyId) || (isAuthenticated() && resource.data.uid == request.auth.uid);
+        allow delete: if isOwner(familyId);
+      }
+
       match /tasks/{taskId} {
         allow read: if isFamilyMember(familyId);
         allow write: if isParent(familyId);
       }
 
-      // TASK COMPLETIONS
       match /task_completions/{completionId} {
-        allow read: if isFamilyMember(familyId);
-        // Children can create completions (mark as done)
+        allow read: if isParent(familyId) || (isAuthenticated() && resource.data.assigneeId == request.auth.uid);
         allow create: if isFamilyMember(familyId);
-        // Only parents can approve/reject
-        allow update, delete: if isParent(familyId);
+        allow update: if isParent(familyId) && resource.data.status == 'pending_approval'
+          && request.resource.data.status in ['approved', 'rejected']
+          && request.resource.data.reviewedBy == request.auth.uid
+          && request.resource.data.reviewedAt == request.time
+          && ((request.resource.data.status == 'approved'
+              && request.resource.data.approvedAt == request.time
+              && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'parentComment', 'approvedAt', 'awardedPoints', 'reviewedBy', 'reviewedByName', 'reviewedAt']))
+            || (request.resource.data.status == 'rejected'
+              && request.resource.data.rejectedAt == request.time
+              && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'parentComment', 'rejectedAt', 'reviewedBy', 'reviewedByName', 'reviewedAt'])));
+        allow delete: if false;
       }
 
-      // BEHAVIOUR EVENTS
       match /behaviour_events/{eventId} {
         allow read: if isFamilyMember(familyId);
         allow create: if isBehaviourManager(familyId) && isValidBehaviourEvent(familyId);
         allow update, delete: if false;
       }
 
-      // REWARDS
       match /rewards/{rewardId} {
         allow read: if isFamilyMember(familyId);
         allow write: if isParent(familyId);
       }
 
-      // REDEMPTIONS
       match /redemptions/{redemptionId} {
-        allow read: if isFamilyMember(familyId);
-        // Children can create redemptions (which deducts points via transaction)
-        allow create: if isFamilyMember(familyId);
+        allow read: if isParent(familyId) || (isAuthenticated() && resource.data.userId == request.auth.uid);
+        allow create: if isFamilyMember(familyId)
+          && request.resource.data.keys().hasAll(['rewardId', 'userId', 'costPaid', 'redeemedAt', 'createdAt', 'status'])
+          && request.resource.data.keys().hasOnly(['rewardId', 'userId', 'costPaid', 'redeemedAt', 'createdAt', 'status'])
+          && request.resource.data.userId == request.auth.uid
+          && request.resource.data.costPaid is int && request.resource.data.costPaid > 0
+          && request.resource.data.redeemedAt == request.time && request.resource.data.createdAt == request.time
+          && request.resource.data.status == 'completed';
         allow update, delete: if isParent(familyId);
       }
 
-      // WALLET TRANSACTIONS
+      match /wallets/{childId} {
+        allow read: if isParent(familyId) || (isAuthenticated() && request.auth.uid == childId);
+        allow create: if isParent(familyId)
+          && existsAfter(/databases/$(database)/documents/users/$(childId))
+          && getAfter(/databases/$(database)/documents/users/$(childId)).data.role == 'child'
+          && getAfter(/databases/$(database)/documents/users/$(childId)).data.familyId == familyId
+          && request.resource.data.keys().hasOnly(['balance', 'createdAt', 'migratedFromLegacy', 'lastTransferTxId', 'lastTransferReqId', 'lastManualTxId', 'lastFundTxId'])
+          && request.resource.data.keys().hasAll(['balance', 'createdAt', 'migratedFromLegacy'])
+          && request.resource.data.balance is int
+          && request.resource.data.migratedFromLegacy == true
+          && request.resource.data.createdAt == request.time;
+        allow update: if isValidDepositCredit(familyId, childId)
+          || isValidWithdrawalDeduction(familyId, childId)
+          || isValidParentTransferDeduction(familyId, childId)
+          || isValidParentTransferCredit(familyId, childId)
+          || isValidBehaviourPenaltyDeduction(familyId, childId)
+          || isValidPetBoxDonationDeduction(familyId, childId)
+          || (isParent(familyId) && isValidLedgerSync(familyId, childId));
+      }
+
       match /wallet_transactions/{txId} {
-        allow read: if isFamilyMember(familyId);
-        // Wallet ledger is immutable and writeable only by parents
+        allow read: if isParent(familyId) || (isAuthenticated() && resource.data.childId == request.auth.uid);
         allow create: if isBehaviourManager(familyId) && (
-          !(request.resource.data.keys().hasAny(['type'])) ||
-          request.resource.data.type != 'financial_penalty' ||
-          isValidFinancialPenalty(familyId)
+          (request.resource.data.type == 'financial_penalty' && isValidFinancialPenalty(familyId)) ||
+          (request.resource.data.type == 'deposit' && request.resource.data.keys().hasAll(['type', 'childId', 'amount', 'note', 'parentRef', 'createdAt']) && request.resource.data.keys().hasOnly(['type', 'childId', 'amount', 'note', 'parentRef', 'createdAt']) && request.resource.data.amount > 0 && request.resource.data.amount is int && isChildInFamily(familyId, request.resource.data.childId) && request.resource.data.parentRef == request.auth.uid && request.resource.data.createdAt == request.time) ||
+          (request.resource.data.type == 'withdrawal' && request.resource.data.keys().hasAll(['type', 'childId', 'amount', 'note', 'parentRef', 'createdAt']) && request.resource.data.keys().hasOnly(['type', 'childId', 'amount', 'note', 'parentRef', 'createdAt']) && request.resource.data.amount > 0 && request.resource.data.amount is int && isChildInFamily(familyId, request.resource.data.childId) && request.resource.data.parentRef == request.auth.uid && request.resource.data.createdAt == request.time) ||
+          (request.resource.data.type == 'transfer' && request.resource.data.keys().hasAll(['type', 'childId', 'fromChildId', 'amount', 'note', 'parentRef', 'createdAt']) && request.resource.data.keys().hasOnly(['type', 'childId', 'fromChildId', 'amount', 'note', 'parentRef', 'createdAt']) && request.resource.data.amount > 0 && request.resource.data.amount is int && isChildInFamily(familyId, request.resource.data.childId) && isChildInFamily(familyId, request.resource.data.fromChildId) && request.resource.data.parentRef == request.auth.uid && request.resource.data.createdAt == request.time) ||
+          (request.resource.data.type == 'transfer_out' && ('transferRequestId' in request.resource.data ? isValidTransferOutLedger(familyId) : isValidMoneyRequestOutLedger(familyId))) ||
+          (request.resource.data.type == 'transfer_in' && ('transferRequestId' in request.resource.data ? isValidTransferInLedger(familyId) : isValidMoneyRequestInLedger(familyId))) ||
+          (request.resource.data.type == 'request_payment' && isValidMoneyRequestPaymentLedger(familyId)) ||
+          (request.resource.data.type == 'petbox_donation' && request.resource.data.keys().hasAll(['type', 'childId', 'amountPence', 'amount', 'note', 'createdAt', 'timestamp']) && request.resource.data.keys().hasOnly(['type', 'childId', 'amountPence', 'amount', 'note', 'createdAt', 'timestamp']) && request.resource.data.amountPence < 0 && request.resource.data.amountPence is int && request.resource.data.amount == request.resource.data.amountPence && isChildInFamily(familyId, request.resource.data.childId) && request.resource.data.createdAt == request.time)
         );
         allow update, delete: if false;
       }
 
-      // ACTIVITY FEED
+      match /savings_goals/{goalId} {
+        allow read: if isFamilyMember(familyId);
+        allow create: if isParent(familyId) || (isAuthenticated() && request.resource.data.childId == request.auth.uid);
+        allow update: if isParent(familyId) || (isAuthenticated() && resource.data.childId == request.auth.uid);
+        allow delete: if isParent(familyId) || (isAuthenticated() && resource.data.childId == request.auth.uid);
+      }
+
       match /feed/{feedId} {
+        allow read: if isFamilyMember(familyId) && (
+          !('visibleTo' in resource.data) || request.auth.uid in resource.data.visibleTo || isParent(familyId)
+        );
+        allow create: if isFamilyMember(familyId)
+          && request.resource.data.keys().hasOnly(['actorId', 'actorName', 'type', 'behaviourType', 'reason', 'pointsDelta', 'walletDelta', 'childId', 'text', 'visibleTo', 'createdAt', 'timestamp'])
+          && request.resource.data.actorId == request.auth.uid
+          && (
+            !('visibleTo' in request.resource.data) ||
+            (request.resource.data.visibleTo is list && request.resource.data.visibleTo.hasOnly([request.resource.data.get('childId', ''), request.auth.uid, request.resource.data.get('visibleTo', [])[0], request.resource.data.get('visibleTo', [])[1]]))
+          );
+        allow update, delete: if isParent(familyId);
+      }
+
+      match /challenges/{challengeId} {
+        allow read: if isFamilyMember(familyId);
+        allow write: if isParent(familyId);
+      }
+
+      match /funds/{fundId} {
+        allow read: if isFamilyMember(familyId);
+        allow write: if isParent(familyId) || (isFamilyMember(familyId) && isValidFundDonationInjection(familyId, fundId));
+      }
+
+      match /fund_transactions/{txId} {
         allow read: if isFamilyMember(familyId);
         allow create: if isFamilyMember(familyId);
         allow update, delete: if isParent(familyId);
       }
 
-      // CHALLENGES
-      match /challenges/{challengeId} {
-        allow read: if isFamilyMember(familyId);
-        allow write: if isParent(familyId);
+      match /transfer_requests/{requestId} {
+        allow read: if isParent(familyId) || (isAuthenticated() && (resource.data.fromChildId == request.auth.uid || resource.data.toChildId == request.auth.uid));
+        allow create: if isChildInFamily(familyId, request.auth.uid)
+          && request.resource.data.keys().hasAll(['familyId', 'fromChildId', 'toChildId', 'amountPence', 'status', 'createdAt'])
+          && request.resource.data.keys().hasOnly(['id', 'familyId', 'fromChildId', 'fromChildName', 'toChildId', 'toChildName', 'amountPence', 'message', 'status', 'createdAt'])
+          && request.auth.uid == request.resource.data.fromChildId
+          && request.resource.data.familyId == familyId
+          && isChildInFamily(familyId, request.resource.data.get('toChildId', 'null'))
+          && request.resource.data.get('fromChildId', '') != request.resource.data.get('toChildId', '')
+          && request.resource.data.amountPence is int
+          && request.resource.data.amountPence > 0
+          && request.resource.data.status == 'pending'
+          && request.resource.data.createdAt == request.time;
+
+        allow update: if isParent(familyId)
+          && resource.data.status == 'pending'
+          && request.resource.data.status in ['approved', 'rejected']
+          && request.resource.data.reviewedBy == request.auth.uid
+          && request.resource.data.reviewedAt == request.time
+          && (
+            (request.resource.data.status == 'rejected' && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'reviewedBy', 'reviewedAt', 'reviewedByName']))
+            ||
+            (request.resource.data.status == 'approved'
+              && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'reviewedBy', 'reviewedAt', 'reviewedByName', 'approvalTxId'])
+              && request.resource.data.get('approvalTxId', '') != ''
+              && isValidTransferApproval(familyId, requestId, request.resource.data, resource.data)
+            )
+          );
+        allow delete: if false;
+      }
+
+      match /money_requests/{requestId} {
+        allow read: if isParent(familyId) || (isAuthenticated() && (resource.data.requesterId == request.auth.uid || resource.data.requestedFromId == request.auth.uid));
+        allow create: if isFamilyMember(familyId)
+          && request.resource.data.status in ['pending', 'pending_acceptance']
+          && request.resource.data.createdAt == request.time;
+        allow update: if isParent(familyId) && resource.data.status == 'pending'
+          && request.resource.data.status in ['approved', 'rejected']
+          && request.resource.data.reviewedBy == request.auth.uid
+          && request.resource.data.reviewedAt == request.time
+          && ((request.resource.data.status == 'rejected'
+              && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'reviewedAt', 'reviewedBy', 'reviewedByName']))
+            || (request.resource.data.status == 'approved'
+              && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'reviewedAt', 'reviewedBy', 'reviewedByName', 'paymentTransferId'])
+              && isValidMoneyRequestApproval(familyId, requestId, request.resource.data, resource.data)));
+        allow delete: if false;
+      }
+
+      match /petbox_requests/{requestId} {
+        allow read: if isParent(familyId) || (isAuthenticated() && resource.data.childId == request.auth.uid);
+        allow create: if isChildInFamily(familyId, request.auth.uid)
+          && request.resource.data.keys().hasAll(['familyId', 'fundId', 'fundName', 'childId', 'childName', 'amountPence', 'status', 'createdAt'])
+          && request.resource.data.keys().hasOnly(['familyId', 'fundId', 'fundName', 'childId', 'childName', 'amountPence', 'status', 'createdAt'])
+          && request.resource.data.familyId == familyId
+          && request.resource.data.childId == request.auth.uid
+          && request.resource.data.amountPence is int && request.resource.data.amountPence > 0
+          && request.resource.data.status == 'pending'
+          && request.resource.data.createdAt == request.time;
+        allow update: if isParent(familyId) && resource.data.status == 'pending'
+          && request.resource.data.status in ['approved', 'rejected']
+          && request.resource.data.reviewedBy == request.auth.uid
+          && request.resource.data.reviewedAt == request.time
+          && ((request.resource.data.status == 'rejected'
+              && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'reviewedAt', 'reviewedBy']))
+            || (request.resource.data.status == 'approved'
+              && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'reviewedAt', 'reviewedBy', 'approvalTxId', 'fundTransactionId'])
+              && isValidPetBoxApproval(familyId, request.resource.data, resource.data)));
+        allow delete: if false;
       }
     }
   }

@@ -42,8 +42,9 @@ const validEvent = (overrides: Record<string, unknown> = {}) => ({
 });
 
 const validPenalty = (overrides: Record<string, unknown> = {}) => ({
+  familyId: FAMILY_ID,
   type: 'financial_penalty',
-  behaviourEventId: 'event-financial',
+  eventId: 'event-financial',
   childId: CHILD_ID,
   amount: 250,
   reason: 'Damaged a book',
@@ -52,29 +53,6 @@ const validPenalty = (overrides: Record<string, unknown> = {}) => ({
   createdAt: serverTimestamp(),
   ...overrides,
 });
-
-const createLinkedPenalty = async (
-  uid = PARENT_ID,
-  eventId = 'event-financial',
-  transactionId = 'penalty',
-  eventOverrides: Record<string, unknown> = {},
-  penaltyOverrides: Record<string, unknown> = {},
-) => {
-  const db = user(uid);
-  const batch = writeBatch(db);
-  batch.set(doc(db, `families/${FAMILY_ID}/behaviour_events/${eventId}`), validEvent({
-    type: 'financial',
-    reason: 'Damaged a book',
-    pointsDelta: 0,
-    walletDelta: -250,
-    ...eventOverrides,
-  }));
-  batch.set(doc(db, `families/${FAMILY_ID}/wallet_transactions/${transactionId}`), validPenalty({
-    behaviourEventId: eventId,
-    ...penaltyOverrides,
-  }));
-  return batch.commit();
-};
 
 beforeAll(async () => {
   testEnv = await initializeTestEnvironment({
@@ -199,7 +177,11 @@ describe('behaviour event rules', () => {
 
 describe('wallet ledger and direct balance writes', () => {
   test('valid financial event and linked penalty can be created atomically', async () => {
-    await assertSucceeds(createLinkedPenalty());
+    const db = user(PARENT_ID);
+    const batch = writeBatch(db);
+    batch.set(doc(db, `families/${FAMILY_ID}/behaviour_events/financial`), validEvent({ type: 'financial', pointsDelta: 0, walletDelta: -100, reason: 'Damaged a book' }));
+    batch.set(doc(db, `families/${FAMILY_ID}/wallet_transactions/penalty`), validPenalty({ amount: 100, eventId: 'financial', reason: 'Damaged a book' }));
+    await assertSucceeds(batch.commit());
   });
 
   test('rejects a financial penalty linked to a nonexistent event', async () => {
@@ -257,15 +239,21 @@ describe('wallet ledger and direct balance writes', () => {
   });
 
   test('wallet ledger is immutable after creation', async () => {
-    await assertSucceeds(createLinkedPenalty(PARENT_ID, 'immutable-event', 'immutable'));
-    await assertFails(updateDoc(doc(user(PARENT_ID), `families/${FAMILY_ID}/wallet_transactions/immutable`), { amount: 1 }));
+    const db = user(PARENT_ID);
+    const batch = writeBatch(db);
+    batch.set(doc(db, `families/${FAMILY_ID}/behaviour_events/financial2`), validEvent({ type: 'financial', pointsDelta: 0, walletDelta: -100, reason: 'Damaged a book' }));
+    batch.set(doc(db, `families/${FAMILY_ID}/wallet_transactions/immutable`), validPenalty({ amount: 100, eventId: 'financial2', reason: 'Damaged a book' }));
+    await assertSucceeds(batch.commit());
+    await assertFails(updateDoc(doc(user(PARENT_ID), `families/${FAMILY_ID}/wallet_transactions/immutable`), {
+      amount: 200
+    }));
     await assertFails(deleteDoc(doc(user(OWNER_ID), `families/${FAMILY_ID}/wallet_transactions/immutable`)));
   });
 
   test.each([
-    ['deposit', { type: 'deposit', childId: CHILD_ID, amount: 500, note: 'Pocket money', parentRef: PARENT_ID, timestamp: serverTimestamp() }],
-    ['withdrawal', { type: 'withdrawal', childId: CHILD_ID, amount: 200, note: 'Shop', parentRef: PARENT_ID, timestamp: serverTimestamp() }],
-    ['transfer', { type: 'transfer', childId: CHILD_ID, fromChildId: 'child-other', amount: 100, note: 'Share', parentRef: PARENT_ID, timestamp: serverTimestamp() }],
+    ['deposit', { type: 'deposit', childId: CHILD_ID, amount: 500, note: 'Pocket money', parentRef: PARENT_ID, createdAt: serverTimestamp() }],
+    ['withdrawal', { type: 'withdrawal', childId: CHILD_ID, amount: 200, note: 'Shop', parentRef: PARENT_ID, createdAt: serverTimestamp() }],
+    ['transfer', { type: 'transfer', childId: CHILD_ID, fromChildId: CHILD_ID, amount: 100, note: 'Share', parentRef: PARENT_ID, createdAt: serverTimestamp() }],
   ])('preserves the existing %s wallet transaction shape', async (type, entry) => {
     await assertSucceeds(setDoc(doc(user(PARENT_ID), `families/${FAMILY_ID}/wallet_transactions/${type}`), entry));
   });
