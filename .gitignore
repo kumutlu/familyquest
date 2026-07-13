@@ -12,6 +12,7 @@ dist
 dist-ssr
 coverage
 .firebase/
+.worktrees/
 *.local
 family-data-exports/
 
