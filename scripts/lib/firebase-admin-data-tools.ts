@@ -2,7 +2,13 @@ import { mkdir, writeFile } from 'node:fs/promises'
 import { dirname } from 'node:path'
 import { applicationDefault, getApps, initializeApp } from 'firebase-admin/app'
 import { FieldValue, getFirestore, type Firestore } from 'firebase-admin/firestore'
-import type { DataOperation, DataToolsStore, DocumentRecord, ExportWriter } from './family-data-tools'
+import type {
+  DataOperation,
+  DataToolsStore,
+  DocumentRecord,
+  DocumentReferenceRecord,
+  ExportWriter,
+} from './family-data-tools'
 
 function asRecord(path: string, id: string, data: FirebaseFirestore.DocumentData): DocumentRecord {
   return { id, path, data: data as Record<string, unknown> }
@@ -19,6 +25,11 @@ export class FirebaseAdminDataStore implements DataToolsStore {
   async listDocuments(collectionPath: string): Promise<DocumentRecord[]> {
     const snapshot = await this.db.collection(collectionPath).get()
     return snapshot.docs.map(document => asRecord(document.ref.path, document.id, document.data()))
+  }
+
+  async listDocumentReferences(collectionPath: string): Promise<DocumentReferenceRecord[]> {
+    const references = await this.db.collection(collectionPath).listDocuments()
+    return references.map(reference => ({ id: reference.id, path: reference.path }))
   }
 
   async listSubcollections(documentPath: string): Promise<string[]> {
@@ -53,26 +64,47 @@ export class FirebaseAdminDataStore implements DataToolsStore {
 export class LocalJsonWriter implements ExportWriter {
   async writeJson(path: string, value: unknown): Promise<void> {
     await mkdir(dirname(path), { recursive: true })
-    await writeFile(path, `${JSON.stringify(value, jsonReplacer, 2)}\n`, { encoding: 'utf8', flag: 'wx', mode: 0o600 })
+    await writeFile(path, `${JSON.stringify(encodeFirestoreValue(value), null, 2)}\n`, {
+      encoding: 'utf8', flag: 'wx', mode: 0o600,
+    })
   }
 }
 
-function jsonReplacer(_key: string, value: unknown): unknown {
-  if (value instanceof Date) return { __type: 'date', value: value.toISOString() }
-  if (Buffer.isBuffer(value)) return { __type: 'bytes', value: value.toString('base64') }
-  if (value && typeof value === 'object') {
-    const candidate = value as { path?: unknown; latitude?: unknown; longitude?: unknown; toDate?: unknown }
-    if (typeof candidate.toDate === 'function') {
-      return { __type: 'timestamp', value: (candidate.toDate as () => Date)().toISOString() }
-    }
-    if (typeof candidate.path === 'string' && value.constructor?.name === 'DocumentReference') {
-      return { __type: 'reference', value: candidate.path }
-    }
-    if (typeof candidate.latitude === 'number' && typeof candidate.longitude === 'number') {
-      return { __type: 'geopoint', latitude: candidate.latitude, longitude: candidate.longitude }
+export function encodeFirestoreValue(value: unknown): unknown {
+  if (value instanceof Date) {
+    return { __firestoreType: 'date', value: value.toISOString() }
+  }
+  if (Buffer.isBuffer(value) || value instanceof Uint8Array) {
+    return { __firestoreType: 'bytes', value: Buffer.from(value).toString('base64') }
+  }
+  if (Array.isArray(value)) return value.map(encodeFirestoreValue)
+  if (!value || typeof value !== 'object') return value
+
+  const candidate = value as {
+    path?: unknown
+    latitude?: unknown
+    longitude?: unknown
+    toDate?: unknown
+  }
+  if (typeof candidate.toDate === 'function') {
+    return {
+      __firestoreType: 'timestamp',
+      value: (candidate.toDate as () => Date)().toISOString(),
     }
   }
-  return value
+  if (typeof candidate.path === 'string' && value.constructor?.name === 'DocumentReference') {
+    return { __firestoreType: 'reference', value: candidate.path }
+  }
+  if (typeof candidate.latitude === 'number' && typeof candidate.longitude === 'number') {
+    return {
+      __firestoreType: 'geopoint',
+      latitude: candidate.latitude,
+      longitude: candidate.longitude,
+    }
+  }
+  return Object.fromEntries(
+    Object.entries(value).map(([key, nestedValue]) => [key, encodeFirestoreValue(nestedValue)]),
+  )
 }
 
 export function createFirebaseAdminStore(projectId: string): FirebaseAdminDataStore {

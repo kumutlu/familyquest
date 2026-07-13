@@ -5,8 +5,10 @@ import {
   parseExportArgs,
   parseResetArgs,
   runFamilyReset,
+  formatResetReport,
   type DataOperation,
   type DataToolsStore,
+  type DocumentReferenceRecord,
   type DocumentRecord,
   type ExportWriter,
 } from '../../scripts/lib/family-data-tools'
@@ -14,17 +16,24 @@ import {
 class FakeStore implements DataToolsStore {
   documents = new Map<string, Record<string, unknown>>()
   collectionDocuments = new Map<string, DocumentRecord[]>()
+  collectionReferences = new Map<string, DocumentReferenceRecord[]>()
   subcollections = new Map<string, string[]>()
   commits: DataOperation[][] = []
   events: string[] = []
 
   async getDocument(path: string) {
     const data = this.documents.get(path)
+      ?? [...this.collectionDocuments.values()].flat().find(document => document.path === path)?.data
     return data ? { id: path.split('/').at(-1)!, path, data } : null
   }
 
   async listDocuments(collectionPath: string) {
     return this.collectionDocuments.get(collectionPath) ?? []
+  }
+
+  async listDocumentReferences(collectionPath: string) {
+    return this.collectionReferences.get(collectionPath)
+      ?? (this.collectionDocuments.get(collectionPath) ?? []).map(({ id, path }) => ({ id, path }))
   }
 
   async listSubcollections(documentPath: string) {
@@ -61,6 +70,10 @@ function record(path: string, data: Record<string, unknown>): DocumentRecord {
   return { id: path.split('/').at(-1)!, path, data }
 }
 
+function reference(path: string): DocumentReferenceRecord {
+  return { id: path.split('/').at(-1)!, path }
+}
+
 function seededStore() {
   const store = new FakeStore()
   store.documents.set('families/fam-1', {
@@ -85,6 +98,26 @@ function seededStore() {
   store.collectionDocuments.set('families/fam-1/tasks', [
     record('families/fam-1/tasks/task-1', { title: 'Task' }),
   ])
+  store.documents.set('families/fam-1/tasks/task-1', { title: 'Task' })
+  store.collectionReferences.set('families/fam-1/tasks', [
+    reference('families/fam-1/tasks/task-1'),
+    reference('families/fam-1/tasks/orphan-task'),
+  ])
+  store.collectionDocuments.set('families/fam-1/tasks/task-1/comments', [
+    record('families/fam-1/tasks/task-1/comments/comment-1', { text: 'Nested' }),
+  ])
+  store.documents.set('families/fam-1/tasks/task-1/comments/comment-1', { text: 'Nested' })
+  store.collectionDocuments.set('families/fam-1/tasks/task-1/comments/comment-1/audit', [
+    record('families/fam-1/tasks/task-1/comments/comment-1/audit/audit-1', { action: 'created' }),
+  ])
+  store.documents.set('families/fam-1/tasks/task-1/comments/comment-1/audit/audit-1', { action: 'created' })
+  store.collectionDocuments.set('families/fam-1/tasks/orphan-task/attachments', [
+    record('families/fam-1/tasks/orphan-task/attachments/attachment-1', { name: 'proof.jpg' }),
+  ])
+  store.documents.set('families/fam-1/tasks/orphan-task/attachments/attachment-1', { name: 'proof.jpg' })
+  store.subcollections.set('families/fam-1/tasks/task-1', ['comments'])
+  store.subcollections.set('families/fam-1/tasks/task-1/comments/comment-1', ['audit'])
+  store.subcollections.set('families/fam-1/tasks/orphan-task', ['attachments'])
   store.collectionDocuments.set('families/fam-1/feed', [
     record('families/fam-1/feed/feed-1', { text: 'History' }),
   ])
@@ -105,12 +138,21 @@ describe('parseResetArgs', () => {
     })
   })
 
+  it('defaults omitted mode to dry-run', () => {
+    expect(parseResetArgs([
+      '--project', 'p', '--family-id', 'fam-1', '--confirm-family-name', 'The Family',
+    ]).mode).toBe('dry-run')
+  })
+
   it.each([
     ['missing project', ['--family-id', 'fam-1', '--confirm-family-name', 'The Family', '--dry-run']],
     ['missing family', ['--project', 'p', '--confirm-family-name', 'The Family', '--dry-run']],
     ['missing confirmation', ['--project', 'p', '--family-id', 'fam-1', '--dry-run']],
-    ['missing mode', ['--project', 'p', '--family-id', 'fam-1', '--confirm-family-name', 'The Family']],
     ['both modes', ['--project', 'p', '--family-id', 'fam-1', '--confirm-family-name', 'The Family', '--dry-run', '--execute']],
+    ['duplicate dry-run', ['--project', 'p', '--family-id', 'fam-1', '--confirm-family-name', 'The Family', '--dry-run', '--dry-run']],
+    ['duplicate project', ['--project', 'p', '--project', 'p2', '--family-id', 'fam-1', '--confirm-family-name', 'The Family']],
+    ['unknown option', ['--project', 'p', '--family-id', 'fam-1', '--confirm-family-name', 'The Family', '--typo']],
+    ['positional argument', ['--project', 'p', '--family-id', 'fam-1', '--confirm-family-name', 'The Family', 'surprise']],
     ['a path-like family id', ['--project', 'p', '--family-id', '../fam-1', '--confirm-family-name', 'The Family', '--dry-run']],
   ])('rejects %s', (_name, argv) => {
     expect(() => parseResetArgs(argv)).toThrow()
@@ -122,6 +164,14 @@ describe('parseExportArgs', () => {
     expect(parseExportArgs(['--project', 'project-1', '--family-id', 'fam-1'])).toEqual({
       projectId: 'project-1', familyId: 'fam-1', outputDirectory: 'family-data-exports',
     })
+  })
+
+  it.each([
+    ['unknown option', ['--project', 'p', '--family-id', 'fam-1', '--typo']],
+    ['duplicate output directory', ['--project', 'p', '--family-id', 'fam-1', '--output-dir', 'one', '--output-dir', 'two']],
+    ['positional argument', ['--project', 'p', '--family-id', 'fam-1', 'surprise']],
+  ])('rejects %s', (_name, argv) => {
+    expect(() => parseExportArgs(argv)).toThrow()
   })
 })
 
@@ -145,7 +195,21 @@ describe('exportFamilyData', () => {
         { path: 'users/child-1' }, { path: 'users/child-2' }, { path: 'users/owner-1' }, { path: 'users/parent-1' },
       ],
       subcollections: {
-        tasks: [{ path: 'families/fam-1/tasks/task-1' }],
+        tasks: [
+          {
+            path: 'families/fam-1/tasks/orphan-task', exists: false,
+            subcollections: { attachments: [{ path: 'families/fam-1/tasks/orphan-task/attachments/attachment-1' }] },
+          },
+          {
+            path: 'families/fam-1/tasks/task-1', exists: true,
+            subcollections: {
+              comments: [{
+                path: 'families/fam-1/tasks/task-1/comments/comment-1',
+                subcollections: { audit: [{ path: 'families/fam-1/tasks/task-1/comments/comment-1/audit/audit-1' }] },
+              }],
+            },
+          },
+        ],
         feed: [{ path: 'families/fam-1/feed/feed-1' }],
         wallets: [{ path: 'families/fam-1/wallets/child-1' }],
       },
@@ -165,8 +229,18 @@ describe('runFamilyReset', () => {
 
     expect(result.executed).toBe(false)
     expect(result.backupPath).toBeNull()
-    expect(result.collections.map(item => item.collection)).toEqual(OPERATIONAL_SUBCOLLECTIONS)
-    expect(result.collections.find(item => item.collection === 'tasks')?.documentCount).toBe(1)
+    expect(result.collections.map(item => item.collectionPath)).toEqual(expect.arrayContaining(
+      OPERATIONAL_SUBCOLLECTIONS.map(name => `families/fam-1/${name}`),
+    ))
+    expect(result.collections).toEqual(expect.arrayContaining([
+      { collectionPath: 'families/fam-1/tasks', documentCount: 1 },
+      { collectionPath: 'families/fam-1/tasks/task-1/comments', documentCount: 1 },
+      { collectionPath: 'families/fam-1/tasks/task-1/comments/comment-1/audit', documentCount: 1 },
+      { collectionPath: 'families/fam-1/tasks/orphan-task/attachments', documentCount: 1 },
+    ]))
+    expect(formatResetReport(result)).toContain(
+      'families/fam-1/tasks/orphan-task/attachments: 1 document(s) to delete',
+    )
     expect(store.commits).toHaveLength(0)
     expect(writer.writes).toHaveLength(0)
   })
@@ -186,6 +260,10 @@ describe('runFamilyReset', () => {
 
     const operations = store.commits.flat()
     expect(operations).toContainEqual({ type: 'delete', path: 'families/fam-1/tasks/task-1' })
+    expect(operations).toContainEqual({ type: 'delete', path: 'families/fam-1/tasks/task-1/comments/comment-1' })
+    expect(operations).toContainEqual({ type: 'delete', path: 'families/fam-1/tasks/task-1/comments/comment-1/audit/audit-1' })
+    expect(operations).toContainEqual({ type: 'delete', path: 'families/fam-1/tasks/orphan-task/attachments/attachment-1' })
+    expect(operations).not.toContainEqual({ type: 'delete', path: 'families/fam-1/tasks/orphan-task' })
     expect(operations).toContainEqual({ type: 'delete', path: 'families/fam-1/feed/feed-1' })
     expect(operations.some(op => op.path.startsWith('families/fam-2/'))).toBe(false)
     expect(operations.some(op => op.type === 'delete' && op.path === 'families/fam-1')).toBe(false)
@@ -230,5 +308,26 @@ describe('runFamilyReset', () => {
       outputDirectory: 'backups', now: new Date(),
     })).rejects.toThrow('backup failed')
     expect(store.commits).toHaveLength(0)
+  })
+
+  it('keeps every commit below the configured 400-operation safety boundary', async () => {
+    const store = seededStore()
+    const tasks = Array.from({ length: 401 }, (_, index) => record(
+      `families/fam-1/tasks/task-${index}`,
+      { title: `Task ${index}` },
+    ))
+    store.collectionDocuments.set('families/fam-1/tasks', tasks)
+    store.collectionReferences.delete('families/fam-1/tasks')
+    store.subcollections.clear()
+    const writer = new FakeWriter(store.events)
+
+    await runFamilyReset(store, writer, {
+      projectId: 'project-1', familyId: 'fam-1', confirmFamilyName: 'The Family', mode: 'execute',
+      outputDirectory: 'backups', now: new Date('2026-07-13T08:09:10.000Z'),
+    })
+
+    expect(store.commits.length).toBeGreaterThan(1)
+    expect(store.commits.every(operations => operations.length <= 400)).toBe(true)
+    expect(store.commits[0]).toHaveLength(400)
   })
 })

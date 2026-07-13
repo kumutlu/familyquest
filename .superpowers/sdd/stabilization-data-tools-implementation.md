@@ -20,7 +20,7 @@ The tools use Firebase Admin with Application Default Credentials and an explici
 
 ## Safety contract
 
-- Reset requires `--project`, `--family-id`, `--confirm-family-name`, and exactly one of `--dry-run` or `--execute`.
+- Reset requires `--project`, `--family-id`, and `--confirm-family-name`; omitted mode defaults to dry-run and `--execute` is the only destructive opt-in.
 - Project and family identifiers cannot be path-like values.
 - Family-name confirmation is an exact, case-sensitive comparison against the selected family document.
 - Dry-run performs reads only, prints every selected operational collection count, and reports wallet/child-profile reset counts.
@@ -137,9 +137,40 @@ npx tsx scripts/reset-family-data.ts \
   --execute
 ```
 
-## Package scripts to add later
+## Review remediation
 
-These were intentionally not added to avoid shared-file conflicts:
+The `CHANGES_REQUIRED` findings in `stabilization-data-tools-review.md` were addressed with a second TDD cycle:
+
+- Omitting both mode flags now defaults to dry-run; `--execute` remains the only destructive opt-in. Both modes, duplicate flags, unknown options, and positional arguments are rejected.
+- Added `data:export`, `data:reset:dry-run`, and `data:reset` package scripts. Appending `--execute` to the dry-run script produces conflicting flags and is rejected.
+- Recursive export/reset now uses Admin `CollectionReference.listDocuments()` references, calls `getDocument()` separately, and always inspects each reference for subcollections. This discovers descendants under deleted/missing parent documents while avoiding deletion of the missing parent itself.
+- Dry-run results retain a separate count for every full collection path, including discovered nested paths, and the CLI prints those path/count pairs.
+- Backup JSON declares `firestore-tagged-v1` encoding and pre-encodes Date, Timestamp, DocumentReference, GeoPoint, Buffer/Uint8Array, arrays, and maps before `JSON.stringify` can erase type information.
+- Production adapter coverage now checks reference enumeration and removal-field translation. File coverage checks exclusive creation, `0600` permissions, and tagged values. A 401-document fixture verifies the 400-operation commit boundary.
+
+RED evidence was observed before implementation: 10 assertions failed across omitted-mode parsing, strict export parsing, orphan recursion/export, per-path reporting, Admin reference enumeration, and tagged serialization.
+
+Focused GREEN:
+
+```text
+npx vitest run tests/scripts/resetFamilyData.test.ts tests/scripts/firebaseAdminDataTools.test.ts
+Test Files  2 passed (2)
+Tests       25 passed (25)
+```
+
+Standalone script TypeScript verification exited 0.
+
+Non-rules GREEN:
+
+```text
+npx vitest run <all non-firestore test files>
+Test Files  9 passed (9)
+Tests       98 passed (98)
+```
+
+No real reset command, destructive mode, Firebase write, or production-data mutation was executed. Tests of execute-mode planning use only the in-memory fake store.
+
+## Package scripts
 
 ```json
 {
@@ -149,7 +180,7 @@ These were intentionally not added to avoid shared-file conflicts:
 }
 ```
 
-Usage after those entries are added:
+Usage:
 
 ```bash
 npm run data:export -- --project PROJECT --family-id FAMILY_ID

@@ -1,5 +1,5 @@
 import { pathToFileURL } from 'node:url'
-import { parseResetArgs, runFamilyReset } from './lib/family-data-tools'
+import { formatResetReport, parseResetArgs, runFamilyReset } from './lib/family-data-tools'
 import { createFirebaseAdminStore, LocalJsonWriter } from './lib/firebase-admin-data-tools'
 
 export async function main(argv = process.argv.slice(2)): Promise<void> {
@@ -11,9 +11,7 @@ export async function main(argv = process.argv.slice(2)): Promise<void> {
   )
 
   console.log(`Family reset ${result.executed ? 'executed' : 'dry-run'} for ${args.familyId} in ${args.projectId}`)
-  for (const collection of result.collections) {
-    console.log(`${collection.collection}: ${collection.documentCount} document(s) to delete`)
-  }
+  console.log(formatResetReport(result))
   console.log(`wallets: ${result.walletResetCount} balance(s) to reset`)
   console.log(`child profiles: ${result.childProfileResetCount} operational balance/counter record(s) to reset`)
   if (result.backupPath) console.log(`Pre-reset backup: ${result.backupPath}`)

@@ -4,6 +4,8 @@ export type DocumentRecord = {
   data: Record<string, unknown>
 }
 
+export type DocumentReferenceRecord = Pick<DocumentRecord, 'id' | 'path'>
+
 export type DataOperation =
   | { type: 'delete'; path: string }
   | { type: 'update'; path: string; data: Record<string, unknown>; removeFields: string[] }
@@ -12,6 +14,7 @@ export type DataOperation =
 export interface DataToolsStore {
   getDocument(path: string): Promise<DocumentRecord | null>
   listDocuments(collectionPath: string): Promise<DocumentRecord[]>
+  listDocumentReferences(collectionPath: string): Promise<DocumentReferenceRecord[]>
   listSubcollections(documentPath: string): Promise<string[]>
   listFamilyMembers(familyId: string): Promise<DocumentRecord[]>
   commit(operations: DataOperation[]): Promise<void>
@@ -69,11 +72,36 @@ export type ExportOptions = {
 
 export type ResetOptions = ResetArguments & Pick<ExportOptions, 'outputDirectory' | 'now'>
 
-function requiredValue(argv: string[], flag: string): string {
-  const positions = argv.reduce<number[]>((found, value, index) => value === flag ? [...found, index] : found, [])
-  if (positions.length !== 1) throw new Error(`${flag} must be provided exactly once.`)
-  const value = argv[positions[0] + 1]
-  if (!value || value.startsWith('--')) throw new Error(`${flag} requires a value.`)
+function parseOptions(
+  argv: string[],
+  valueFlags: readonly string[],
+  booleanFlags: readonly string[] = [],
+): Map<string, string | true> {
+  const allowedValueFlags = new Set(valueFlags)
+  const allowedBooleanFlags = new Set(booleanFlags)
+  const parsed = new Map<string, string | true>()
+  for (let index = 0; index < argv.length; index += 1) {
+    const option = argv[index]
+    if (!option.startsWith('--')) throw new Error(`Unexpected positional argument: ${option}`)
+    if (!allowedValueFlags.has(option) && !allowedBooleanFlags.has(option)) {
+      throw new Error(`Unknown option: ${option}`)
+    }
+    if (parsed.has(option)) throw new Error(`${option} must be provided at most once.`)
+    if (allowedBooleanFlags.has(option)) {
+      parsed.set(option, true)
+      continue
+    }
+    const value = argv[index + 1]
+    if (!value || value.startsWith('--')) throw new Error(`${option} requires a value.`)
+    parsed.set(option, value)
+    index += 1
+  }
+  return parsed
+}
+
+function requiredValue(options: Map<string, string | true>, flag: string): string {
+  const value = options.get(flag)
+  if (typeof value !== 'string') throw new Error(`${flag} must be provided exactly once.`)
   return value
 }
 
@@ -85,45 +113,55 @@ function validateIdentifier(value: string, flag: string): string {
 }
 
 export function parseResetArgs(argv: string[]): ResetArguments {
-  const projectId = validateIdentifier(requiredValue(argv, '--project'), '--project')
-  const familyId = validateIdentifier(requiredValue(argv, '--family-id'), '--family-id')
-  const confirmFamilyName = requiredValue(argv, '--confirm-family-name')
-  const dryRun = argv.filter(value => value === '--dry-run').length
-  const execute = argv.filter(value => value === '--execute').length
-  if (dryRun + execute !== 1) {
-    throw new Error('Provide exactly one of --dry-run or --execute.')
+  const options = parseOptions(
+    argv,
+    ['--project', '--family-id', '--confirm-family-name'],
+    ['--dry-run', '--execute'],
+  )
+  const projectId = validateIdentifier(requiredValue(options, '--project'), '--project')
+  const familyId = validateIdentifier(requiredValue(options, '--family-id'), '--family-id')
+  const confirmFamilyName = requiredValue(options, '--confirm-family-name')
+  if (options.has('--dry-run') && options.has('--execute')) {
+    throw new Error('Provide at most one of --dry-run or --execute.')
   }
-
-  const valueFlags = new Set(['--project', '--family-id', '--confirm-family-name'])
-  const allowedFlags = new Set([...valueFlags, '--dry-run', '--execute'])
-  for (let index = 0; index < argv.length; index += 1) {
-    const value = argv[index]
-    if (value.startsWith('--') && !allowedFlags.has(value)) throw new Error(`Unknown option: ${value}`)
-    if (valueFlags.has(value)) index += 1
-  }
-
-  return { projectId, familyId, confirmFamilyName, mode: execute ? 'execute' : 'dry-run' }
+  return { projectId, familyId, confirmFamilyName, mode: options.has('--execute') ? 'execute' : 'dry-run' }
 }
 
 export function parseExportArgs(argv: string[]): { projectId: string; familyId: string; outputDirectory: string } {
-  const projectId = validateIdentifier(requiredValue(argv, '--project'), '--project')
-  const familyId = validateIdentifier(requiredValue(argv, '--family-id'), '--family-id')
-  const outputIndex = argv.indexOf('--output-dir')
-  const outputDirectory = outputIndex >= 0 ? argv[outputIndex + 1] : 'family-data-exports'
-  if (!outputDirectory || outputDirectory.startsWith('--')) throw new Error('--output-dir requires a value.')
+  const options = parseOptions(argv, ['--project', '--family-id', '--output-dir'])
+  const projectId = validateIdentifier(requiredValue(options, '--project'), '--project')
+  const familyId = validateIdentifier(requiredValue(options, '--family-id'), '--family-id')
+  const configuredOutputDirectory = options.get('--output-dir')
+  const outputDirectory = typeof configuredOutputDirectory === 'string'
+    ? configuredOutputDirectory
+    : 'family-data-exports'
   return { projectId, familyId, outputDirectory }
 }
 
-type ExportedDocument = DocumentRecord & { subcollections?: Record<string, ExportedDocument[]> }
+type ExportedDocument = DocumentReferenceRecord & {
+  exists: boolean
+  data?: Record<string, unknown>
+  subcollections?: Record<string, ExportedDocument[]>
+}
 
-async function exportDocument(store: DataToolsStore, document: DocumentRecord): Promise<ExportedDocument> {
-  const collectionNames = await store.listSubcollections(document.path)
+async function exportDocument(
+  store: DataToolsStore,
+  reference: DocumentReferenceRecord,
+): Promise<ExportedDocument> {
+  const document = await store.getDocument(reference.path)
+  const collectionNames = await store.listSubcollections(reference.path)
   const subcollections: Record<string, ExportedDocument[]> = {}
   for (const name of collectionNames.sort()) {
-    const children = await store.listDocuments(`${document.path}/${name}`)
+    const children = (await store.listDocumentReferences(`${reference.path}/${name}`))
+      .sort((left, right) => left.path.localeCompare(right.path))
     subcollections[name] = await Promise.all(children.map(child => exportDocument(store, child)))
   }
-  return Object.keys(subcollections).length > 0 ? { ...document, subcollections } : document
+  return {
+    ...reference,
+    exists: document !== null,
+    ...(document ? { data: document.data } : {}),
+    ...(Object.keys(subcollections).length > 0 ? { subcollections } : {}),
+  }
 }
 
 function exportFileName(familyId: string, now: Date): string {
@@ -144,7 +182,8 @@ export async function exportFamilyData(
   const subcollections: Record<string, ExportedDocument[]> = {}
   let documentCount = 1
   for (const name of topLevelCollections) {
-    const documents = await store.listDocuments(`${familyPath}/${name}`)
+    const documents = (await store.listDocumentReferences(`${familyPath}/${name}`))
+      .sort((left, right) => left.path.localeCompare(right.path))
     subcollections[name] = await Promise.all(documents.map(document => exportDocument(store, document)))
     documentCount += countExportedDocuments(subcollections[name])
   }
@@ -154,6 +193,7 @@ export async function exportFamilyData(
   const outputPath = `${options.outputDirectory.replace(/\/$/, '')}/${exportFileName(options.familyId, options.now)}`
   await writer.writeJson(outputPath, {
     schemaVersion: 1,
+    valueEncoding: 'firestore-tagged-v1',
     exportedAt: options.now.toISOString(),
     projectId: options.projectId,
     family,
@@ -167,19 +207,27 @@ function countExportedDocuments(documents: ExportedDocument[]): number {
   return documents.reduce((count, document) => {
     const descendants = Object.values(document.subcollections ?? {})
       .reduce((sum, children) => sum + countExportedDocuments(children), 0)
-    return count + 1 + descendants
+    return count + (document.exists ? 1 : 0) + descendants
   }, 0)
 }
 
-async function collectDocumentTree(store: DataToolsStore, collectionPath: string): Promise<DocumentRecord[]> {
-  const documents = await store.listDocuments(collectionPath)
+async function collectDocumentTree(
+  store: DataToolsStore,
+  collectionPath: string,
+  collectionCounts: Map<string, number>,
+): Promise<DocumentRecord[]> {
+  const references = await store.listDocumentReferences(collectionPath)
   const result: DocumentRecord[] = []
-  for (const document of documents) {
-    for (const subcollection of await store.listSubcollections(document.path)) {
-      result.push(...await collectDocumentTree(store, `${document.path}/${subcollection}`))
+  let existingCount = 0
+  for (const reference of references) {
+    const document = await store.getDocument(reference.path)
+    if (document) existingCount += 1
+    for (const subcollection of await store.listSubcollections(reference.path)) {
+      result.push(...await collectDocumentTree(store, `${reference.path}/${subcollection}`, collectionCounts))
     }
-    result.push(document)
+    if (document) result.push(document)
   }
+  collectionCounts.set(collectionPath, existingCount)
   return result
 }
 
@@ -201,13 +249,15 @@ export async function runFamilyReset(
     throw new Error('Family name confirmation does not exactly match the selected family.')
   }
 
-  const collections = [] as Array<{ collection: string; documentCount: number }>
+  const collectionCounts = new Map<string, number>()
   const deleteOperations: DataOperation[] = []
   for (const collectionName of OPERATIONAL_SUBCOLLECTIONS) {
-    const documents = await collectDocumentTree(store, `${familyPath}/${collectionName}`)
-    collections.push({ collection: collectionName, documentCount: documents.length })
+    const documents = await collectDocumentTree(store, `${familyPath}/${collectionName}`, collectionCounts)
     deleteOperations.push(...documents.map(document => ({ type: 'delete' as const, path: document.path })))
   }
+  const collections = [...collectionCounts.entries()]
+    .map(([collectionPath, documentCount]) => ({ collectionPath, documentCount }))
+    .sort((left, right) => left.collectionPath.localeCompare(right.collectionPath))
 
   const wallets = await store.listDocuments(`${familyPath}/wallets`)
   const existingWalletIds = new Set(wallets.map(wallet => wallet.id))
@@ -260,4 +310,12 @@ export async function runFamilyReset(
     walletResetCount: walletOperations.length,
     childProfileResetCount: childOperations.length,
   }
+}
+
+export function formatResetReport(result: {
+  collections: Array<{ collectionPath: string; documentCount: number }>
+}): string {
+  return result.collections
+    .map(collection => `${collection.collectionPath}: ${collection.documentCount} document(s) to delete`)
+    .join('\n')
 }
