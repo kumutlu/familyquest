@@ -900,7 +900,7 @@ service cloud.firestore {
         ])) ||
         (request.resource.data.diff(resource.data).affectedKeys().hasAny(['rewardPoints', 'lastTaskCompletionId', 'lastBehaviourEventId']) ? isValidRedemptionDeduction(uid) || isValidTaskApprovalMutation(uid) || isValidBehaviourPointMutation(uid) : false) ||
         (!('familyId' in resource.data) && 'familyId' in request.resource.data ? isValidOwnerBootstrap(uid) || isValidJoinProfileUpdate(uid) : false) ||
-        ('familyId' in resource.data && isOwner(resource.data.familyId) && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['role']))
+        ('familyId' in resource.data && isOwner(resource.data.familyId) && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['role']) && resource.data.get('role', 'null') != 'child' && request.resource.data.role != 'child')
       );
 
       allow create: if isAuthenticated() && (
