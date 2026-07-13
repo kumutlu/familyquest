@@ -11,28 +11,28 @@ service cloud.firestore {
     function isOwner(familyId) {
       let userDoc = get(/databases/$(database)/documents/users/$(request.auth.uid));
       return userDoc != null
-        && userDoc.data.familyId == familyId
-        && userDoc.data.role == 'owner';
+        && userDoc.data.get('familyId', 'null') == familyId
+        && userDoc.data.get('role', 'null') == 'owner';
     }
 
     function isParent(familyId) {
       let userDoc = get(/databases/$(database)/documents/users/$(request.auth.uid));
       return userDoc != null
-        && userDoc.data.familyId == familyId
-        && (userDoc.data.role == 'parent' || userDoc.data.role == 'owner');
+        && userDoc.data.get('familyId', 'null') == familyId
+        && (userDoc.data.get('role', 'null') == 'parent' || userDoc.data.get('role', 'null') == 'owner');
     }
 
     function isChildInFamily(familyId, childId) {
       let childDoc = get(/databases/$(database)/documents/users/$(childId));
       return childDoc != null
-        && childDoc.data.familyId == familyId
-        && childDoc.data.role == 'child';
+        && childDoc.data.get('familyId', 'null') == familyId
+        && childDoc.data.get('role', 'null') == 'child';
     }
 
     function isFamilyMember(familyId) {
       let userDoc = get(/databases/$(database)/documents/users/$(request.auth.uid));
       return userDoc != null
-        && userDoc.data.familyId == familyId;
+        && userDoc.data.get('familyId', 'null') == familyId;
     }
 
     function isBehaviourManager(familyId) {
@@ -653,9 +653,9 @@ service cloud.firestore {
 
       return request.auth.uid == uid
         && !('familyId' in resource.data) // Must not have a family yet
-        && resource.data.role == 'parent'
-        && data.uid == uid
-        && data.role == 'owner'
+        && resource.data.get('role', 'null') == 'parent'
+        && data.get('uid', 'null') == uid
+        && data.get('role', 'null') == 'owner'
         && familyId != 'null'
         && !exists(familyPath)
         && existsAfter(familyPath);
@@ -669,23 +669,23 @@ service cloud.firestore {
       let reqAfter = getAfter(/databases/$(database)/documents/families/$(familyId)/join_requests/$(requestId));
       return isOwner(familyId) && !('familyId' in resource.data)
         && req != null && req.data.status == 'pending' && req.data.uid == uid
-        && reqAfter != null && reqAfter.data.status == 'approved' && reqAfter.data.assignedRole == data.role
-        && data.uid == uid && data.displayName == req.data.displayName
-        && data.role in ['parent', 'child']
+        && reqAfter != null && reqAfter.data.status == 'approved' && reqAfter.data.assignedRole == data.get('role', 'null')
+        && data.get('uid', 'null') == uid && data.get('displayName', 'null') == req.data.displayName
+        && data.get('role', 'null') in ['parent', 'child']
         && data.diff(resource.data).affectedKeys().hasOnly(['uid', 'joinRequestId', 'familyId', 'role', 'displayName', 'avatarUrl', 'rewardPoints', 'lifetimeXP', 'currentStreak', 'longestStreak', 'lastActiveDate'])
-        && data.rewardPoints == 0 && data.lifetimeXP == 0
-        && data.currentStreak == 0 && data.longestStreak == 0 && data.lastActiveDate == request.time;
+        && data.get('rewardPoints', -1) == 0 && data.get('lifetimeXP', -1) == 0
+        && data.get('currentStreak', -1) == 0 && data.get('longestStreak', -1) == 0 && data.get('lastActiveDate', 'null') == request.time;
     }
 
     function hasValidJoinApproval(familyId, requestId, oldData, data) {
       let user = getAfter(/databases/$(database)/documents/users/$(oldData.get('uid', 'null')));
       let wallet = getAfter(/databases/$(database)/documents/families/$(familyId)/wallets/$(oldData.get('uid', 'null')));
       let feed = getAfter(/databases/$(database)/documents/families/$(familyId)/feed/$(('join_') + requestId));
-      return user != null && user.data.uid == oldData.uid && user.data.joinRequestId == requestId
-        && user.data.familyId == familyId && user.data.role == data.assignedRole
-        && user.data.displayName == oldData.displayName
-        && (data.assignedRole == 'parent' || (wallet != null && wallet.data.balance == 0))
-        && feed != null && feed.data.actorId == request.auth.uid;
+      return user != null && user.data.get('uid', 'null') == oldData.get('uid', 'null') && user.data.get('joinRequestId', 'null') == requestId
+        && user.data.get('familyId', 'null') == familyId && user.data.get('role', 'null') == data.get('assignedRole', 'null')
+        && user.data.get('displayName', 'null') == oldData.get('displayName', 'null')
+        && (data.get('assignedRole', 'null') == 'parent' || (wallet != null && wallet.data.get('balance', -1) == 0))
+        && feed != null && feed.data.get('actorId', 'null') == request.auth.uid;
     }
 
     function isValidTransferApproval(familyId, requestId, data, oldData) {
@@ -900,7 +900,7 @@ service cloud.firestore {
         ])) ||
         (request.resource.data.diff(resource.data).affectedKeys().hasAny(['rewardPoints', 'lastTaskCompletionId', 'lastBehaviourEventId']) ? isValidRedemptionDeduction(uid) || isValidTaskApprovalMutation(uid) || isValidBehaviourPointMutation(uid) : false) ||
         (!('familyId' in resource.data) && 'familyId' in request.resource.data ? isValidOwnerBootstrap(uid) || isValidJoinProfileUpdate(uid) : false) ||
-        (isOwner(resource.data.familyId) && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['role']))
+        ('familyId' in resource.data && isOwner(resource.data.familyId) && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['role']))
       );
 
       allow create: if isAuthenticated() && (
@@ -913,7 +913,7 @@ service cloud.firestore {
 
     // FAMILIES
     match /families/{familyId} {
-      allow read: if isAuthenticated();
+      allow read: if isFamilyMember(familyId);
       allow create: if isAuthenticated();
       allow update: if isOwner(familyId);
 
