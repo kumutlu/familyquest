@@ -7,16 +7,28 @@ type Listener = {
   unsubscribe: ReturnType<typeof vi.fn>;
 };
 
+type ServerRead = {
+  target: string;
+  resolve: (snapshot: any) => void;
+  reject: (error: any) => void;
+};
+
 const listeners: Listener[] = [];
+const serverReads: ServerRead[] = [];
+const queryShapes: Array<{ target: string; constraints: any[] }> = [];
 let authNext: ((user: any) => Promise<void> | void) | undefined;
+let authError: ((error: any) => void) | undefined;
 const authUnsubscribe = vi.fn();
 
 vi.mock('firebase/firestore', () => ({
   collection: vi.fn((_db: unknown, path: string) => path),
   doc: vi.fn((_db: unknown, collectionOrPath: string, id?: string) => id ? `${collectionOrPath}/${id}` : collectionOrPath),
-  query: vi.fn((target: string) => target),
-  orderBy: vi.fn(() => ({ type: 'orderBy' })),
-  where: vi.fn(() => ({ type: 'where' })),
+  query: vi.fn((target: string, ...constraints: any[]) => {
+    queryShapes.push({ target, constraints });
+    return target;
+  }),
+  orderBy: vi.fn((field: string, direction?: string) => ({ type: 'orderBy', field, direction })),
+  where: vi.fn((field: string, operator: string, value: unknown) => ({ type: 'where', field, operator, value })),
   onSnapshot: vi.fn((target: string, optionsOrNext: any, nextOrError: any, maybeError: any) => {
     const hasOptions = typeof optionsOrNext !== 'function';
     const unsubscribe = vi.fn();
@@ -28,12 +40,19 @@ vi.mock('firebase/firestore', () => ({
     });
     return unsubscribe;
   }),
+  getDocFromServer: vi.fn((target: string) => new Promise((resolve, reject) => {
+    serverReads.push({ target, resolve, reject });
+  })),
+  getDocsFromServer: vi.fn((target: string) => new Promise((resolve, reject) => {
+    serverReads.push({ target, resolve, reject });
+  })),
   getFirestore: vi.fn(),
 }));
 
 vi.mock('firebase/auth', () => ({
-  onAuthStateChanged: vi.fn((_auth: unknown, next: typeof authNext) => {
+  onAuthStateChanged: vi.fn((_auth: unknown, next: typeof authNext, error: typeof authError) => {
     authNext = next;
+    authError = error;
     return authUnsubscribe;
   }),
   getAuth: vi.fn(),
@@ -65,10 +84,21 @@ const familyResources = [
   'families/fam1/petbox_requests',
 ] as const;
 
+const childFamilyResources = familyResources
+  .filter(target => target !== 'families/fam1/join_requests')
+  .map(target => target === 'families/fam1/wallets' ? 'families/fam1/wallets/user1' : target);
+
 function listener(target: string, occurrence = 0) {
   const matches = listeners.filter(item => item.target === target);
   const found = matches[occurrence];
   if (!found) throw new Error(`No listener for ${target} at ${occurrence}`);
+  return found;
+}
+
+function serverRead(target: string, occurrence = 0) {
+  const matches = serverReads.filter(item => item.target === target);
+  const found = matches[occurrence];
+  if (!found) throw new Error(`No server read for ${target} at ${occurrence}`);
   return found;
 }
 
@@ -90,17 +120,29 @@ function emitAllFamilySnapshots(overrides: Record<string, any[]> = {}) {
   }
 }
 
+function emitAllChildSnapshots(overrides: Record<string, any[]> = {}) {
+  for (const target of childFamilyResources) {
+    const matches = listeners.filter(item => item.target === target);
+    for (const subscription of matches) {
+      if (target === 'families/fam1') subscription.next(familySnapshot());
+      else if (target === 'families/fam1/wallets/user1') {
+        subscription.next({ exists: () => true, id: 'user1', data: () => ({ balance: 0 }), metadata: { fromCache: false } });
+      } else subscription.next(collectionSnapshot(overrides[target] ?? []));
+    }
+  }
+}
+
 function deferred<T>() {
   let resolve!: (value: T) => void;
   const promise = new Promise<T>(res => { resolve = res; });
   return { promise, resolve };
 }
 
-function authenticatedState(familyId = 'fam1') {
+function authenticatedState(familyId = 'fam1', role = 'parent') {
   useStore.setState({
     authInitialized: true,
     authUser: { uid: 'user1' },
-    currentUser: { id: 'user1', familyId, role: 'parent' },
+    currentUser: { id: 'user1', familyId, role },
   });
 }
 
@@ -108,7 +150,10 @@ describe('bootstrap/auth/listener state machine', () => {
   beforeEach(() => {
     useStore.getState().cleanup();
     listeners.length = 0;
+    serverReads.length = 0;
+    queryShapes.length = 0;
     authNext = undefined;
+    authError = undefined;
     authUnsubscribe.mockClear();
     vi.clearAllMocks();
     useStore.setState({
@@ -178,6 +223,15 @@ describe('bootstrap/auth/listener state machine', () => {
     expect(useStore.getState().appReady).toBe(false);
   });
 
+  it('does not let a slower initial server read overwrite a newer listener snapshot', async () => {
+    authenticatedState();
+    useStore.getState().loadFamilyData('user1', 'fam1');
+    listener('families/fam1/tasks').next(collectionSnapshot([{ id: 'new', title: 'New' }]));
+    serverRead('families/fam1/tasks').resolve(collectionSnapshot([{ id: 'old', title: 'Old' }]));
+    await Promise.resolve();
+    expect(useStore.getState().tasks).toEqual([{ id: 'new', title: 'New' }]);
+  });
+
   it('8. treats authoritative empty collections as resolved', () => {
     authenticatedState();
     useStore.getState().loadFamilyData('user1', 'fam1');
@@ -200,6 +254,52 @@ describe('bootstrap/auth/listener state machine', () => {
     listener('families/fam1').next(familySnapshot(false, {}, true));
     expect(useStore.getState()).toMatchObject({ bootstrapError: null, activeFamilyId: 'fam1', loading: true });
     expect(useStore.getState().bootstrapStatus.family).toBe('loading');
+  });
+
+  it('turns cache-only startup into a recoverable error when the server read rejects', async () => {
+    authenticatedState();
+    useStore.getState().loadFamilyData('user1', 'fam1');
+    listener('families/fam1/tasks').next(collectionSnapshot([], true));
+    serverRead('families/fam1/tasks').reject({ code: 'unavailable', message: 'offline' });
+    await Promise.resolve();
+    await Promise.resolve();
+    expect(useStore.getState()).toMatchObject({ appReady: false, loading: false, activeFamilyId: null });
+    expect(useStore.getState().bootstrapError).toContain('unavailable');
+    useStore.getState().retryBootstrap();
+    expect(listener('families/fam1/tasks', 1)).toBeDefined();
+  });
+
+  it.each(['parent', 'owner'])('uses parent-wide listeners for the %s role', role => {
+    authenticatedState('fam1', role);
+    useStore.getState().loadFamilyData('user1', 'fam1');
+    expect(listeners.some(item => item.target === 'families/fam1/join_requests')).toBe(true);
+    const transferQuery = queryShapes.find(shape => shape.target === 'families/fam1/transfer_requests');
+    expect(transferQuery?.constraints.some(constraint => constraint.type === 'where')).toBe(false);
+  });
+
+  it('uses least-privilege child queries and excludes parent-only join requests from readiness', () => {
+    useStore.setState({
+      authInitialized: true,
+      authUser: { uid: 'user1' },
+      currentUser: { id: 'user1', familyId: 'fam1', role: 'child' },
+    });
+    useStore.getState().loadFamilyData('user1', 'fam1');
+
+    expect(listeners.some(item => item.target === 'families/fam1/join_requests')).toBe(false);
+    expect(listeners.some(item => item.target === 'families/fam1/wallets/user1')).toBe(true);
+    expect(useStore.getState().bootstrapStatus.joinRequests).toBe('idle');
+    expect(queryShapes).toEqual(expect.arrayContaining([
+      expect.objectContaining({ target: 'families/fam1/task_completions', constraints: expect.arrayContaining([expect.objectContaining({ type: 'where', field: 'assigneeId', value: 'user1' })]) }),
+      expect.objectContaining({ target: 'families/fam1/redemptions', constraints: expect.arrayContaining([expect.objectContaining({ type: 'where', field: 'userId', value: 'user1' })]) }),
+      expect.objectContaining({ target: 'families/fam1/wallet_transactions', constraints: expect.arrayContaining([expect.objectContaining({ type: 'where', field: 'childId', value: 'user1' })]) }),
+      expect.objectContaining({ target: 'families/fam1/transfer_requests', constraints: expect.arrayContaining([expect.objectContaining({ type: 'where', field: 'fromChildId', value: 'user1' })]) }),
+      expect.objectContaining({ target: 'families/fam1/petbox_requests', constraints: expect.arrayContaining([expect.objectContaining({ type: 'where', field: 'childId', value: 'user1' })]) }),
+      expect.objectContaining({ target: 'families/fam1/money_requests', constraints: expect.arrayContaining([expect.objectContaining({ type: 'where', field: 'requesterId', value: 'user1' })]) }),
+      expect.objectContaining({ target: 'families/fam1/money_requests', constraints: expect.arrayContaining([expect.objectContaining({ type: 'where', field: 'requestedFromId', value: 'user1' })]) }),
+    ]));
+
+    emitAllChildSnapshots();
+    expect(useStore.getState()).toMatchObject({ appReady: true, loading: false, bootstrapError: null });
   });
 
   it('9. prevents readiness when any listener fails', () => {
@@ -272,6 +372,60 @@ describe('bootstrap/auth/listener state machine', () => {
     await oldAuth;
     expect(listeners).toHaveLength(0);
     expect(useStore.getState().authUser).toBeNull();
+  });
+
+  it('recovers automatically when signup auth resolves before the profile is created', async () => {
+    useStore.getState().initAuth();
+    await authNext!({ uid: 'user1', getIdToken: vi.fn().mockResolvedValue('token') });
+    const profile = listener('users/user1');
+    profile.next({ exists: () => false, metadata: { fromCache: false } });
+    expect(useStore.getState().bootstrapError).toContain('not-found');
+    profile.next({
+      exists: () => true,
+      id: 'user1',
+      data: () => ({ familyId: 'fam1', role: 'parent' }),
+      metadata: { fromCache: false },
+    });
+    expect(useStore.getState().bootstrapError).toBeNull();
+    expect(useStore.getState().activeFamilyId).toBe('fam1');
+  });
+
+  it('does not let a slower missing-profile server read undo a resolved profile listener', async () => {
+    useStore.getState().initAuth();
+    await authNext!({ uid: 'user1', getIdToken: vi.fn().mockResolvedValue('token') });
+    listener('users/user1').next({
+      exists: () => true,
+      id: 'user1',
+      data: () => ({ familyId: 'fam1', role: 'parent' }),
+      metadata: { fromCache: false },
+    });
+    serverRead('users/user1').resolve({ exists: () => false });
+    await Promise.resolve();
+    expect(useStore.getState().bootstrapError).toBeNull();
+    expect(useStore.getState().currentUser?.familyId).toBe('fam1');
+  });
+
+  it.each([['   '], [42], [{}]])('rejects malformed familyId %j without attaching family listeners', async familyId => {
+    useStore.getState().initAuth();
+    await authNext!({ uid: 'user1', getIdToken: vi.fn().mockResolvedValue('token') });
+    listener('users/user1').next({
+      exists: () => true,
+      id: 'user1',
+      data: () => ({ familyId, role: 'parent' }),
+      metadata: { fromCache: false },
+    });
+    expect(listeners).toHaveLength(1);
+    expect(useStore.getState().bootstrapError).toContain('familyId');
+  });
+
+  it('surfaces an auth observer error as recoverable', () => {
+    useStore.getState().initAuth();
+    authError!({ code: 'auth/network-request-failed', message: 'offline' });
+    expect(useStore.getState()).toMatchObject({ appReady: false, loading: false });
+    expect(useStore.getState().bootstrapError).toContain('network-request-failed');
+    useStore.getState().retryBootstrap();
+    expect(onAuthStateChanged).toHaveBeenCalledTimes(2);
+    expect(useStore.getState()).toMatchObject({ bootstrapError: null, loading: true });
   });
 
   it('handles a missing family document as a recoverable bootstrap error', () => {

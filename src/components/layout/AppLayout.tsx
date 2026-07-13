@@ -28,7 +28,7 @@ export function AppLayout() {
   }, []);
 
   // Still loading auth state
-  if (authUser === undefined) {
+  if (authUser === undefined && !bootstrapError) {
     return <div className="min-h-screen bg-gray-50 flex items-center justify-center">Loading...</div>;
   }
 
