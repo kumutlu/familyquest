@@ -110,3 +110,54 @@ Tests: 102 passed
 ```
 
 The unfiltered non-rules run also collected a concurrent untracked `src/lib/api.traceability.test.ts`: 104 tests passed and 3 unrelated transaction/reversal tests failed. On the final requested `npm run build`, TypeScript was blocked by the concurrent untracked `src/lib/reversalContracts.test.ts` (`type` is not accepted by its in-progress contract), not by a bootstrap file. These shared-worktree files were left untouched.
+
+## Production query-plan closure
+
+The final bootstrap review identified two production query mismatches that snapshot mocks could not detect. They are now fixed through a single query-plan factory consumed by both `useStore` and the Firestore emulator tests:
+
+- Child savings goals query `childId == uid`, matching the production savings-goal schema.
+- Child feed query `visibleTo array-contains uid`, which is provably compatible with the existing per-document visibility rule. Parent and owner feeds remain collection-wide. The child feed contract is deliberately explicit: family-wide feed items must list the child in `visibleTo`; legacy/unscoped records remain visible to parent/owner bootstrap but are not leaked through a child collection query.
+- Parent, owner, and child readiness resource sets and all query targets are constructed by `src/lib/bootstrapQueries.ts`. The store no longer maintains an independent query shape that can drift from the rules test.
+- The child money-request plan retains both constrained branches and the store retains its deterministic merge/readiness barrier.
+
+TDD RED for the two incorrect child query shapes:
+
+```text
+npx vitest run tests/store/useStore.test.ts -t 'least-privilege child queries' --reporter=verbose
+Test Files: 1 failed
+Tests: 1 failed (savings_goals used userId; feed lacked visibleTo array-contains)
+```
+
+TDD RED for production-plan rules coverage:
+
+```text
+npx firebase emulators:exec --only firestore "npx vitest run tests/firestore/bootstrapQueries.rules.test.ts --reporter=verbose"
+Test Files: 1 failed (shared production query-plan module did not yet exist)
+```
+
+Focused unit GREEN after production adopted the shared plan:
+
+```text
+npx vitest run tests/store/useStore.test.ts tests/components/bootstrap.test.tsx --reporter=verbose
+Test Files: 2 passed
+Tests: 34 passed
+```
+
+Rules-backed query-plan GREEN:
+
+```text
+npx firebase emulators:exec --only firestore "npx vitest run tests/firestore/bootstrapQueries.rules.test.ts --reporter=verbose"
+Test Files: 1 passed
+Tests: 3 passed
+```
+
+The emulator fixtures execute every required initial parent, owner, and child document/query read through production `firestore.rules`. They include family-wide, child-visible, sibling-only, and parent-only feed records, assert child sibling privacy, verify the `childId` savings result, and execute both child money-request branches. No rule was broadened for this fix.
+
+The requested build was attempted after focused verification but is temporarily blocked by concurrent reversal TDD work:
+
+```text
+npm run build
+src/lib/reversalApi.test.ts(13,57): error TS2307: Cannot find module './reversalApi'
+```
+
+The missing reversal module is outside this bootstrap change. Build verification will be rerun once that concurrent RED cycle turns green.

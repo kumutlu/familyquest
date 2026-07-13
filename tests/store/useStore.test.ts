@@ -292,6 +292,8 @@ describe('bootstrap/auth/listener state machine', () => {
       expect.objectContaining({ target: 'families/fam1/task_completions', constraints: expect.arrayContaining([expect.objectContaining({ type: 'where', field: 'assigneeId', value: 'user1' })]) }),
       expect.objectContaining({ target: 'families/fam1/redemptions', constraints: expect.arrayContaining([expect.objectContaining({ type: 'where', field: 'userId', value: 'user1' })]) }),
       expect.objectContaining({ target: 'families/fam1/wallet_transactions', constraints: expect.arrayContaining([expect.objectContaining({ type: 'where', field: 'childId', value: 'user1' })]) }),
+      expect.objectContaining({ target: 'families/fam1/savings_goals', constraints: expect.arrayContaining([expect.objectContaining({ type: 'where', field: 'childId', value: 'user1' })]) }),
+      expect.objectContaining({ target: 'families/fam1/feed', constraints: expect.arrayContaining([expect.objectContaining({ type: 'where', field: 'visibleTo', operator: 'array-contains', value: 'user1' })]) }),
       expect.objectContaining({ target: 'families/fam1/transfer_requests', constraints: expect.arrayContaining([expect.objectContaining({ type: 'where', field: 'fromChildId', value: 'user1' })]) }),
       expect.objectContaining({ target: 'families/fam1/petbox_requests', constraints: expect.arrayContaining([expect.objectContaining({ type: 'where', field: 'childId', value: 'user1' })]) }),
       expect.objectContaining({ target: 'families/fam1/money_requests', constraints: expect.arrayContaining([expect.objectContaining({ type: 'where', field: 'requesterId', value: 'user1' })]) }),
