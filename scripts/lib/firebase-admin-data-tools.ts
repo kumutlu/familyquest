@@ -71,6 +71,13 @@ export class LocalJsonWriter implements ExportWriter {
 }
 
 export function encodeFirestoreValue(value: unknown): unknown {
+  if (typeof value === 'number') {
+    if (Number.isNaN(value)) return { __firestoreType: 'number', value: 'NaN' }
+    if (value === Number.POSITIVE_INFINITY) return { __firestoreType: 'number', value: '+Infinity' }
+    if (value === Number.NEGATIVE_INFINITY) return { __firestoreType: 'number', value: '-Infinity' }
+    if (Object.is(value, -0)) return { __firestoreType: 'number', value: '-0' }
+    return value
+  }
   if (value instanceof Date) {
     return { __firestoreType: 'date', value: value.toISOString() }
   }
@@ -84,9 +91,18 @@ export function encodeFirestoreValue(value: unknown): unknown {
     path?: unknown
     latitude?: unknown
     longitude?: unknown
+    nanoseconds?: unknown
+    seconds?: unknown
     toDate?: unknown
   }
   if (typeof candidate.toDate === 'function') {
+    if (typeof candidate.seconds === 'number' && typeof candidate.nanoseconds === 'number') {
+      return {
+        __firestoreType: 'timestamp',
+        seconds: candidate.seconds,
+        nanoseconds: candidate.nanoseconds,
+      }
+    }
     return {
       __firestoreType: 'timestamp',
       value: (candidate.toDate as () => Date)().toISOString(),

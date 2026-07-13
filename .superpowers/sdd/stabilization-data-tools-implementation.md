@@ -172,6 +172,36 @@ A later broad rerun during concurrent bootstrap work reported 100/101 passing, w
 
 No real reset command, destructive mode, Firebase write, or production-data mutation was executed. Tests of execute-mode planning use only the in-memory fake store.
 
+## Lossless scalar encoding follow-up
+
+The tagged backup encoding now preserves Firestore Timestamp precision as exact integer `seconds` and `nanoseconds` fields instead of converting through millisecond-resolution `Date`. It also tags `NaN`, positive infinity, negative infinity, and negative zero before `JSON.stringify` can coerce them to `null` or erase the sign. Ordinary finite numbers remain ordinary JSON numbers.
+
+RED was observed with the real Firebase Admin `Timestamp` shape and special-number expectations:
+
+```text
+npx vitest run tests/scripts/firebaseAdminDataTools.test.ts
+Test Files  1 failed (1)
+Tests       3 failed | 3 passed (6)
+```
+
+Focused GREEN plus standalone script TypeScript verification:
+
+```text
+npx vitest run tests/scripts/resetFamilyData.test.ts tests/scripts/firebaseAdminDataTools.test.ts
+Test Files  2 passed (2)
+Tests       27 passed (27)
+
+npx tsc --ignoreConfig --noEmit --target es2023 --module esnext \
+  --moduleResolution bundler --types node --skipLibCheck \
+  scripts/lib/family-data-tools.ts \
+  scripts/lib/firebase-admin-data-tools.ts \
+  scripts/export-family-data.ts \
+  scripts/reset-family-data.ts
+Exit code: 0
+```
+
+No reset CLI mode or external Firebase operation was invoked during this follow-up.
+
 ## Package scripts
 
 ```json

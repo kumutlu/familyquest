@@ -2,7 +2,7 @@ import { mkdtemp, readFile, rm, stat } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import type { Firestore } from 'firebase-admin/firestore'
+import { Timestamp, type Firestore } from 'firebase-admin/firestore'
 import {
   encodeFirestoreValue,
   FirebaseAdminDataStore,
@@ -61,9 +61,6 @@ describe('LocalJsonWriter', () => {
     const path = join(directory, 'nested', 'backup.json')
     const writer = new LocalJsonWriter()
 
-    class Timestamp {
-      toDate() { return new Date('2026-07-13T08:09:10.000Z') }
-    }
     class DocumentReference {
       constructor(readonly path: string) {}
     }
@@ -73,7 +70,7 @@ describe('LocalJsonWriter', () => {
 
     await writer.writeJson(path, {
       date: new Date('2026-07-13T08:09:10.000Z'),
-      timestamp: new Timestamp(),
+      timestamp: new Timestamp(1_784_042_950, 123_456_789),
       reference: new DocumentReference('families/fam-1'),
       geopoint: new GeoPoint(51.5, -0.1),
       bytes: Buffer.from('safe'),
@@ -82,7 +79,7 @@ describe('LocalJsonWriter', () => {
     expect((await stat(path)).mode & 0o777).toBe(0o600)
     expect(JSON.parse(await readFile(path, 'utf8'))).toEqual({
       date: { __firestoreType: 'date', value: '2026-07-13T08:09:10.000Z' },
-      timestamp: { __firestoreType: 'timestamp', value: '2026-07-13T08:09:10.000Z' },
+      timestamp: { __firestoreType: 'timestamp', seconds: 1_784_042_950, nanoseconds: 123_456_789 },
       reference: { __firestoreType: 'reference', value: 'families/fam-1' },
       geopoint: { __firestoreType: 'geopoint', latitude: 51.5, longitude: -0.1 },
       bytes: { __firestoreType: 'bytes', value: Buffer.from('safe').toString('base64') },
@@ -93,6 +90,32 @@ describe('LocalJsonWriter', () => {
   it('recursively encodes nested arrays and maps before Date.toJSON can run', () => {
     expect(encodeFirestoreValue({ nested: [new Date('2026-07-13T08:09:10.000Z')] })).toEqual({
       nested: [{ __firestoreType: 'date', value: '2026-07-13T08:09:10.000Z' }],
+    })
+  })
+
+  it('preserves Firestore Timestamp seconds and nanoseconds without millisecond truncation', () => {
+    const timestamp = new Timestamp(1_784_042_950, 987_654_321)
+
+    expect(encodeFirestoreValue(timestamp)).toEqual({
+      __firestoreType: 'timestamp',
+      seconds: 1_784_042_950,
+      nanoseconds: 987_654_321,
+    })
+  })
+
+  it('preserves JSON-unsafe and signed-zero numeric values with explicit tags', () => {
+    expect(encodeFirestoreValue({
+      nan: Number.NaN,
+      positiveInfinity: Number.POSITIVE_INFINITY,
+      negativeInfinity: Number.NEGATIVE_INFINITY,
+      negativeZero: -0,
+      ordinary: 42.5,
+    })).toEqual({
+      nan: { __firestoreType: 'number', value: 'NaN' },
+      positiveInfinity: { __firestoreType: 'number', value: '+Infinity' },
+      negativeInfinity: { __firestoreType: 'number', value: '-Infinity' },
+      negativeZero: { __firestoreType: 'number', value: '-0' },
+      ordinary: 42.5,
     })
   })
 })
