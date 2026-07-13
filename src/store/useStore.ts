@@ -31,6 +31,27 @@ const validatedFamilyId = (value: unknown): string | null => {
   return value;
 };
 
+const timestampMillis = (value: any): number => {
+  if (typeof value?.toMillis === 'function') return value.toMillis();
+  if (typeof value?.toDate === 'function') return value.toDate().getTime();
+  if (value instanceof Date) return value.getTime();
+  if (typeof value === 'number') return value;
+  if (typeof value?.seconds === 'number') {
+    return value.seconds * 1_000 + Math.floor((value.nanoseconds ?? 0) / 1_000_000);
+  }
+  return 0;
+};
+
+const normalizeHistory = (items: any[]) => items
+  .map(item => item.timestamp == null && item.createdAt != null
+    ? { ...item, timestamp: item.createdAt }
+    : item)
+  .sort((left, right) => {
+    const timeDifference = timestampMillis(right.timestamp ?? right.createdAt)
+      - timestampMillis(left.timestamp ?? left.createdAt);
+    return timeDifference || String(left.id).localeCompare(String(right.id));
+  });
+
 const emptyFamilyState = () => ({
   familyData: null,
   familyMembers: [] as any[],
@@ -446,7 +467,7 @@ export const useStore = create<AppState>((set, get) => ({
         subscribePlanned('joinRequests', 'Join requests', snapshot => set({ joinRequests: docs(snapshot) }));
         subscribePlanned('taskCompletions', 'Task completions', snapshot => set({ taskCompletions: docs(snapshot) }));
         subscribePlanned('redemptions', 'Redemptions', snapshot => set({ redemptions: docs(snapshot) }));
-        subscribePlanned('walletTransactions', 'Wallet transactions', snapshot => set({ walletTransactions: docs(snapshot) }));
+        subscribePlanned('walletTransactions', 'Wallet transactions', snapshot => set({ walletTransactions: normalizeHistory(docs(snapshot)) }));
         subscribePlanned('savingsGoals', 'Savings goals', snapshot => set({ savingsGoals: docs(snapshot) }));
         subscribePlanned('transferRequests', 'Transfer requests', snapshot => set({ transferRequests: docs(snapshot) }));
         subscribePlanned('moneyRequests', 'Money requests', snapshot => set({ moneyRequests: docs(snapshot) }));
@@ -454,7 +475,7 @@ export const useStore = create<AppState>((set, get) => ({
       } else {
         subscribePlanned('taskCompletions', 'Task completions', snapshot => set({ taskCompletions: docs(snapshot) }));
         subscribePlanned('redemptions', 'Redemptions', snapshot => set({ redemptions: docs(snapshot) }));
-        subscribePlanned('walletTransactions', 'Wallet transactions', snapshot => set({ walletTransactions: docs(snapshot) }));
+        subscribePlanned('walletTransactions', 'Wallet transactions', snapshot => set({ walletTransactions: normalizeHistory(docs(snapshot)) }));
         subscribePlanned('savingsGoals', 'Savings goals', snapshot => set({ savingsGoals: docs(snapshot) }));
         subscribePlanned('transferRequests', 'Transfer requests', snapshot => set({ transferRequests: docs(snapshot) }));
         subscribePlanned('petboxRequests', 'Pet Box requests', snapshot => set({ petboxRequests: docs(snapshot) }));
@@ -498,7 +519,7 @@ export const useStore = create<AppState>((set, get) => ({
       }
 
       subscribePlanned('feed', 'Feed', snapshot => set({ feed: docs(snapshot) }));
-      subscribePlanned('behaviourEvents', 'Behaviour events', snapshot => set({ behaviourEvents: docs(snapshot) }));
+      subscribePlanned('behaviourEvents', 'Behaviour events', snapshot => set({ behaviourEvents: normalizeHistory(docs(snapshot)) }));
       subscribePlanned('challenges', 'Challenges', snapshot => set({ challenges: docs(snapshot) }));
       subscribePlanned('funds', 'Funds', snapshot => set({ funds: docs(snapshot) }));
       subscribePlanned('fundTransactions', 'Fund transactions', snapshot => set({ fundTransactions: docs(snapshot) }));

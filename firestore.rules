@@ -1021,9 +1021,7 @@ service cloud.firestore {
       }
 
       match /feed/{feedId} {
-        allow read: if isFamilyMember(familyId) && (
-          !('visibleTo' in resource.data) || request.auth.uid in resource.data.visibleTo || isParent(familyId)
-        );
+        allow read: if isFamilyMember(familyId);
         allow create: if isFamilyMember(familyId)
           && request.resource.data.keys().hasOnly(['actorId', 'actorName', 'type', 'behaviourType', 'reason', 'pointsDelta', 'walletDelta', 'childId', 'text', 'visibleTo', 'createdAt', 'timestamp'])
           && request.resource.data.actorId == request.auth.uid

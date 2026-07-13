@@ -185,3 +185,38 @@ Vite: 1845 modules transformed; PWA service worker generated
 ```
 
 The tracked non-rules run emitted existing React `act(...)` warnings from the concurrently added Approval Center interaction test; it had zero test failures. The production build emitted only its existing dynamic-import and large-chunk advisories.
+
+## Remaining bootstrap review fixes
+
+The final review follow-up makes the feed an explicitly shared family resource: every family member uses the same unfiltered feed query, and the feed read rule is now exactly `isFamilyMember(familyId)`. Wallet transactions remain scoped to the authenticated child, while sibling wallet history stays unreadable.
+
+Wallet and behaviour history queries no longer order by a field that is absent from part of the persisted history. Both streams retrieve the complete legacy/V2 result set, normalize `createdAt` into the canonical `timestamp` when necessary, and sort descending client-side. Production composite queries are now represented by `firestore.indexes.json`, referenced by `firebase.json`, and checked against the query-plan index contract in source.
+
+TDD RED:
+
+```text
+npx vitest run tests/store/useStore.test.ts tests/config/firestoreIndexes.test.ts
+Test Files: 2 failed
+Tests: 3 failed, 29 passed
+(visibleTo child filter/orderBy constraints remained, mixed histories were unsorted, and firestore.indexes.json was absent)
+```
+
+Final GREEN verification:
+
+```text
+npx vitest run tests/store/useStore.test.ts tests/config/firestoreIndexes.test.ts
+Test Files: 2 passed
+Tests: 32 passed
+
+npx firebase emulators:exec --only firestore "npx vitest run tests/firestore/bootstrapQueries.rules.test.ts --reporter=verbose"
+Test Files: 1 passed
+Tests: 3 passed
+
+npm run test:rules
+Test Files: 6 passed
+Tests: 128 passed
+
+npm run build
+Exit: 0
+Vite: 1852 modules transformed; PWA service worker generated
+```

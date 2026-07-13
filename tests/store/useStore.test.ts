@@ -305,15 +305,44 @@ describe('bootstrap/auth/listener state machine', () => {
       expect.objectContaining({ target: 'families/fam1/redemptions', constraints: expect.arrayContaining([expect.objectContaining({ type: 'where', field: 'userId', value: 'user1' })]) }),
       expect.objectContaining({ target: 'families/fam1/wallet_transactions', constraints: expect.arrayContaining([expect.objectContaining({ type: 'where', field: 'childId', value: 'user1' })]) }),
       expect.objectContaining({ target: 'families/fam1/savings_goals', constraints: expect.arrayContaining([expect.objectContaining({ type: 'where', field: 'childId', value: 'user1' })]) }),
-      expect.objectContaining({ target: 'families/fam1/feed', constraints: expect.arrayContaining([expect.objectContaining({ type: 'where', field: 'visibleTo', operator: 'array-contains', value: 'user1' })]) }),
+      expect.objectContaining({ target: 'families/fam1/feed', constraints: expect.not.arrayContaining([expect.objectContaining({ type: 'where' })]) }),
       expect.objectContaining({ target: 'families/fam1/transfer_requests', constraints: expect.arrayContaining([expect.objectContaining({ type: 'where', field: 'fromChildId', value: 'user1' })]) }),
       expect.objectContaining({ target: 'families/fam1/petbox_requests', constraints: expect.arrayContaining([expect.objectContaining({ type: 'where', field: 'childId', value: 'user1' })]) }),
       expect.objectContaining({ target: 'families/fam1/money_requests', constraints: expect.arrayContaining([expect.objectContaining({ type: 'where', field: 'requesterId', value: 'user1' })]) }),
       expect.objectContaining({ target: 'families/fam1/money_requests', constraints: expect.arrayContaining([expect.objectContaining({ type: 'where', field: 'requestedFromId', value: 'user1' })]) }),
     ]));
+    const walletQuery = queryShapes.find(shape => shape.target === 'families/fam1/wallet_transactions');
+    expect(walletQuery?.constraints).not.toEqual(expect.arrayContaining([expect.objectContaining({ type: 'orderBy' })]));
+    const behaviourQuery = queryShapes.find(shape => shape.target === 'families/fam1/behaviour_events');
+    expect(behaviourQuery?.constraints).not.toEqual(expect.arrayContaining([expect.objectContaining({ type: 'orderBy' })]));
 
     emitAllChildSnapshots();
     expect(useStore.getState()).toMatchObject({ appReady: true, loading: false, bootstrapError: null });
+  });
+
+  it('normalizes and sorts mixed legacy and V2 wallet and behaviour histories client-side', () => {
+    authenticatedState();
+    useStore.getState().loadFamilyData('user1', 'fam1');
+    const legacyTime = { toMillis: () => 1_000 };
+    const v2Time = { toMillis: () => 2_000 };
+
+    listener('families/fam1/wallet_transactions').next(collectionSnapshot([
+      { id: 'legacy-wallet', createdAt: legacyTime },
+      { id: 'v2-wallet', timestamp: v2Time },
+    ]));
+    listener('families/fam1/behaviour_events').next(collectionSnapshot([
+      { id: 'legacy-behaviour', createdAt: legacyTime },
+      { id: 'v2-behaviour', timestamp: v2Time },
+    ]));
+
+    expect(useStore.getState().walletTransactions).toEqual([
+      expect.objectContaining({ id: 'v2-wallet', timestamp: v2Time }),
+      expect.objectContaining({ id: 'legacy-wallet', createdAt: legacyTime, timestamp: legacyTime }),
+    ]);
+    expect(useStore.getState().behaviourEvents).toEqual([
+      expect.objectContaining({ id: 'v2-behaviour', timestamp: v2Time }),
+      expect.objectContaining({ id: 'legacy-behaviour', createdAt: legacyTime, timestamp: legacyTime }),
+    ]);
   });
 
   it('9. prevents readiness when any listener fails', () => {

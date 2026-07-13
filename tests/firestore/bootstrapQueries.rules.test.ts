@@ -61,7 +61,8 @@ beforeEach(async () => {
       setDoc(doc(db, `families/${familyId}/task_completions/sibling`), { assigneeId: siblingId }),
       setDoc(doc(db, `families/${familyId}/redemptions/own`), { userId: childId }),
       setDoc(doc(db, `families/${familyId}/redemptions/sibling`), { userId: siblingId }),
-      setDoc(doc(db, `families/${familyId}/wallet_transactions/own`), { childId, timestamp: now }),
+      setDoc(doc(db, `families/${familyId}/wallet_transactions/own-legacy`), { childId, createdAt: now }),
+      setDoc(doc(db, `families/${familyId}/wallet_transactions/own-v2`), { childId, timestamp: now }),
       setDoc(doc(db, `families/${familyId}/wallet_transactions/sibling`), { childId: siblingId, timestamp: now }),
       setDoc(doc(db, `families/${familyId}/savings_goals/own`), { childId }),
       setDoc(doc(db, `families/${familyId}/savings_goals/sibling`), { childId: siblingId }),
@@ -75,10 +76,13 @@ beforeEach(async () => {
       setDoc(doc(db, `families/${familyId}/feed/child-visible`), { visibleTo: [parentId, childId], timestamp: now }),
       setDoc(doc(db, `families/${familyId}/feed/sibling-only`), { visibleTo: [parentId, siblingId], timestamp: now }),
       setDoc(doc(db, `families/${familyId}/feed/parent-only`), { visibleTo: [parentId, ownerId], timestamp: now }),
-      setDoc(doc(db, `families/${familyId}/behaviour_events/event`), { timestamp: now }),
+      setDoc(doc(db, `families/${familyId}/feed/public`), { timestamp: now }),
+      setDoc(doc(db, `families/${familyId}/behaviour_events/legacy`), { createdAt: now }),
+      setDoc(doc(db, `families/${familyId}/behaviour_events/v2`), { timestamp: now }),
       setDoc(doc(db, `families/${familyId}/challenges/challenge`), { createdAt: now }),
       setDoc(doc(db, `families/${familyId}/funds/fund`), { balance: 0 }),
       setDoc(doc(db, `families/${familyId}/fund_transactions/transaction`), { createdAt: now }),
+      setDoc(doc(db, `families/${familyId}/reversals/completed`), { completedAt: now }),
     ])
   })
 })
@@ -109,16 +113,22 @@ describe('production bootstrap query plan against Firestore rules', () => {
   ] as const)('resolves every required %s query', async (role, userId) => {
     const results = await executePlan(testEnv.authenticatedContext(userId).firestore(), userId, role)
     expect(results.get('feed')).toEqual(expect.arrayContaining([
-      'family-wide', 'child-visible', 'sibling-only', 'parent-only',
+      'family-wide', 'child-visible', 'sibling-only', 'parent-only', 'public',
     ]))
+    expect(results.get('walletTransactions')).toEqual(expect.arrayContaining(['own-legacy', 'own-v2', 'sibling']))
+    expect(results.get('behaviourEvents')).toEqual(expect.arrayContaining(['legacy', 'v2']))
+    expect(results.get('reversals')).toEqual(['completed'])
   })
 
-  it('resolves every required child query without exposing sibling-only data', async () => {
+  it('resolves every required child query while keeping private resources scoped', async () => {
     const results = await executePlan(testEnv.authenticatedContext(childId).firestore(), childId, 'child')
-    expect(results.get('feed')).toEqual(expect.arrayContaining(['family-wide', 'child-visible']))
-    expect(results.get('feed')).not.toEqual(expect.arrayContaining(['sibling-only', 'parent-only']))
+    expect(results.get('feed')).toEqual(expect.arrayContaining([
+      'family-wide', 'child-visible', 'sibling-only', 'parent-only', 'public',
+    ]))
     expect(results.get('savingsGoals')).toEqual(['own'])
-    expect(results.get('walletTransactions')).toEqual(['own'])
+    expect(results.get('walletTransactions')).toEqual(expect.arrayContaining(['own-legacy', 'own-v2']))
+    expect(results.get('walletTransactions')).not.toContain('sibling')
+    expect(results.get('behaviourEvents')).toEqual(expect.arrayContaining(['legacy', 'v2']))
     expect(results.get('petboxRequests')).toEqual(['own'])
     expect(results.get('moneyRequests:requester')).toEqual(['sent'])
     expect(results.get('moneyRequests:requestedFrom')).toEqual(['received'])
