@@ -59,7 +59,7 @@ The unfiltered `npm test` command is not the repository's valid rules-test entry
 
 ## Commit
 
-The implementation and this report were committed as `0e326bf` (`docs: record family data tool evidence`) because a concurrent worker committed the shared staged index after bootstrap verification and before the bootstrap-specific commit command ran. The commit contains the intended bootstrap files unchanged; the commit subject is not bootstrap-specific.
+The implementation and permanent tests were committed as `b224c48` (`docs: record bootstrap stabilization evidence`).
 
 ## Concerns
 
