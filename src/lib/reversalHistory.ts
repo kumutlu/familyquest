@@ -36,15 +36,37 @@ interface NormalizeHistoryActionInput {
   names: Record<string, string>;
 }
 
-const originatorField: Partial<Record<ReversalSourceKind, string>> = {
-  transfer_request: 'fromChildId', money_request: 'requesterId', petbox_request: 'childId', task_completion: 'assigneeId',
-};
+export function historyActionContext(state: any) {
+  return {
+    actor: state.currentUser,
+    reversals: state.reversals || [],
+    names: Object.fromEntries([
+      ...(state.familyMembers || []).map((member: any) => [member.id, member.displayName]),
+      ...(state.funds || []).map((fund: any) => [fund.id, fund.name]),
+      ...(state.tasks || []).map((task: any) => [task.id, task.title]),
+      ...(state.rewards || []).map((reward: any) => [reward.id, reward.title]),
+    ]),
+    balances: {
+      wallets: Object.fromEntries((state.childWallets || []).map((wallet: any) => [wallet.id, wallet.balance])),
+      funds: Object.fromEntries((state.funds || []).map((fund: any) => [fund.id, fund.balance])),
+      points: Object.fromEntries((state.familyMembers || []).map((member: any) => [member.id, member.rewardPoints || 0])),
+    },
+  };
+}
 
 export function findReversal(reversals: any[], sourceKind: ReversalSourceKind, sourceId: string) {
   return reversals.find(reversal => reversal.sourceKind === sourceKind && reversal.sourceId === sourceId);
 }
 
-const summaryFor = (source: any) => source.note || source.reason || source.message || source.title || source.type?.replaceAll('_', ' ') || 'Recorded action';
+const summaryFor = (sourceKind: ReversalSourceKind, source: any, names: Record<string, string>) => {
+  if (source.note || source.reason || source.message || source.title) return source.note || source.reason || source.message || source.title;
+  if (sourceKind === 'task_completion') return `Task completed: ${names[source.taskId] || 'Task'}`;
+  if (sourceKind === 'reward_redemption') return `Reward redeemed: ${names[source.rewardId] || 'Reward'}`;
+  if (sourceKind === 'transfer_request') return `${names[source.fromChildId] || 'Child'} → ${names[source.toChildId] || 'Child'}`;
+  if (sourceKind === 'money_request') return `${names[source.requesterId] || 'Child'} requested money from ${names[source.requestedFromId] || 'family'}`;
+  if (sourceKind === 'petbox_request') return `${names[source.childId] || 'Child'} donated to ${names[source.fundId] || 'fund'}`;
+  return source.type?.replaceAll('_', ' ') || 'Recorded action';
+};
 
 function targetsFor(snapshot: EffectSnapshot | undefined, balances: NormalizeHistoryActionInput['balances'], names: Record<string, string>): HistoryActionTarget[] {
   if (!snapshot) return [];
@@ -63,18 +85,20 @@ function targetsFor(snapshot: EffectSnapshot | undefined, balances: NormalizeHis
 export function normalizeHistoryAction(input: NormalizeHistoryActionInput): HistoryAction {
   const { sourceKind, source, actor, reversals, balances, names } = input;
   const snapshot = source.effectSnapshot as EffectSnapshot | undefined;
-  const reversal = findReversal(reversals, sourceKind, source.id);
+  const storedReversal = findReversal(reversals, sourceKind, source.id);
+  const reversal = storedReversal ? { ...storedReversal, occurredAt: storedReversal.completedAt ?? storedReversal.createdAt } : undefined;
   const targets = targetsFor(snapshot, balances, names);
   const refund = targets.some(target => target.originalDelta < 0);
   const normalized: HistoryAction = {
     sourceKind, sourceId: source.id, source, targets, reversal,
-    summary: summaryFor(source), actionLabel: refund ? 'Refund' : 'Reverse',
+    summary: summaryFor(sourceKind, source, names), actionLabel: refund ? 'Refund' : 'Reverse',
   };
   if (!actor || !['parent', 'owner'].includes(actor.role)) return normalized;
 
   if (source.status === 'pending' || source.status === 'pending_acceptance' || source.status === 'pending_approval') {
-    const field = originatorField[sourceKind];
-    if (field && source[field] === actor.id) return { ...normalized, action: 'cancel', actionLabel: 'Cancel' };
+    if (['task_completion', 'transfer_request', 'money_request', 'petbox_request'].includes(sourceKind)) {
+      return { ...normalized, action: 'cancel', actionLabel: 'Cancel' };
+    }
     return normalized;
   }
 

@@ -21,7 +21,7 @@ vi.mock('firebase/auth', () => ({
 }))
 vi.mock('./firebase', () => ({ db: { name: 'db' }, auth: authState, googleProvider: {} }))
 
-import { approveJoinRequest, approveMoneyRequest, approveTaskCompletion, approveTransferRequest, rejectTaskCompletion } from './api'
+import { approveJoinRequest, approveMoneyRequest, approveTaskCompletion, approveTransferRequest, cancelPendingApproval, rejectTaskCompletion } from './api'
 
 function snapshot(data?: Record<string, any>) { return { exists: () => data !== undefined, data: () => data } }
 function transactionWith(docs: Record<string, Record<string, any> | undefined>, enforceReadBeforeWrite = false) {
@@ -136,5 +136,16 @@ describe('approval API transaction contracts', () => {
     expect(tx.set).toHaveBeenCalledWith(expect.objectContaining({ path: 'families/family-1/wallets/child-2' }), expect.objectContaining({
       balance: 125, lastTransferReqId: 'money-1', migratedFromLegacy: true,
     }), { merge: true })
+  })
+
+  it('allows an authenticated family parent to cancel a child-created pending request', async () => {
+    const tx = transactionWith({
+      'users/owner-1': { familyId: 'family-1', role: 'owner' },
+      'families/family-1/transfer_requests/transfer-1': { fromChildId: 'child-1', status: 'pending' },
+    })
+    await cancelPendingApproval('family-1', 'transfer', 'transfer-1')
+    expect(tx.update).toHaveBeenCalledWith(expect.objectContaining({ path: 'families/family-1/transfer_requests/transfer-1' }), expect.objectContaining({
+      status: 'cancelled', cancelledBy: 'owner-1',
+    }))
   })
 })

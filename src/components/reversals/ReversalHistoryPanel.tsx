@@ -27,6 +27,8 @@ export function ReversalHistoryPanel() {
     const names = Object.fromEntries([
       ...state.familyMembers.map((member: any) => [member.id, member.displayName]),
       ...state.funds.map((fund: any) => [fund.id, fund.name]),
+      ...(state.tasks || []).map((task: any) => [task.id, task.title]),
+      ...(state.rewards || []).map((reward: any) => [reward.id, reward.title]),
     ]);
     const balances = {
       wallets: Object.fromEntries(state.childWallets.map((wallet: any) => [wallet.id, wallet.balance])),
@@ -49,7 +51,7 @@ export function ReversalHistoryPanel() {
       .filter(action => action.action || action.reversal)
       .sort((left, right) => sourceDate(right.source).getTime() - sourceDate(left.source).getTime())
       .slice(0, 20);
-  }, [currentUser, isParent, optimisticReversals, state.behaviourEvents, state.childWallets, state.familyMembers, state.fundTransactions, state.funds, state.moneyRequests, state.petboxRequests, state.redemptions, state.reversals, state.taskCompletions, state.transferRequests, state.walletTransactions]);
+  }, [currentUser, isParent, optimisticReversals, state.behaviourEvents, state.childWallets, state.familyMembers, state.fundTransactions, state.funds, state.moneyRequests, state.petboxRequests, state.redemptions, state.reversals, state.rewards, state.taskCompletions, state.tasks, state.transferRequests, state.walletTransactions]);
 
   if (!isParent || actions.length === 0) return null;
 
@@ -76,7 +78,7 @@ export function ReversalHistoryPanel() {
                   <div className="mt-2 text-xs text-gray-600">
                     <Badge variant="danger">Reversed</Badge>
                     <p className="mt-1 font-medium">{action.reversal.reason}</p>
-                    <p>by {action.reversal.actorName} · {reversalDate(action.reversal.createdAt).toLocaleString()}</p>
+                    <p>by {action.reversal.actorName} · {reversalDate(action.reversal.occurredAt).toLocaleString()}</p>
                   </div>
                 )}
               </div>
@@ -91,8 +93,8 @@ export function ReversalHistoryPanel() {
         historyAction={selected}
         onClose={() => setSelected(null)}
         onCancel={cancel}
-        onSuccess={(action, reason) => {
-          if (action.action !== 'reverse') return;
+        onSuccess={(action, reason, result) => {
+          if (action.action !== 'reverse' || result?.status === 'already_reversed') return;
           setOptimisticReversals(previous => [...previous, {
             sourceKind: action.sourceKind, sourceId: action.sourceId, reason,
             actorName: currentUser.displayName || 'Parent', createdAt: new Date(),

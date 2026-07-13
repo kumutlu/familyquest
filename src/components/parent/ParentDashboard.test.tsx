@@ -19,6 +19,7 @@ vi.mock('../../store/useStore', () => ({
 }));
 vi.mock('./ApprovalCenter', () => ({ ApprovalCenter: () => null }));
 vi.mock('../reversals/ReversalHistoryPanel', () => ({ ReversalHistoryPanel: () => null }));
+vi.mock('../reversals/HistoryActionControl', () => ({ HistoryActionControl: () => null }));
 vi.mock('../forms/TaskFormModal', () => ({ TaskFormModal: () => null }));
 vi.mock('../forms/RewardFormModal', () => ({ RewardFormModal: () => null }));
 vi.mock('../forms/BehaviourFormModal', () => ({ BehaviourFormModal: () => null }));

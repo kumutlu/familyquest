@@ -6,10 +6,12 @@ import { Gift, Gamepad2, Pizza, Ticket, Plus, Edit, Trash2 } from 'lucide-react'
 import { useStore } from '../store/useStore';
 import { redeemReward, createReward, updateReward } from '../lib/api';
 import { cn } from '../lib/utils';
+import { HistoryActionControl } from '../components/reversals/HistoryActionControl';
 
 export function Rewards() {
-  const { currentUser, rewards, loading } = useStore();
+  const { currentUser, rewards, redemptions, loading } = useStore();
   const [selectedReward, setSelectedReward] = useState<any>(null);
+  const isParent = currentUser?.role === 'parent' || currentUser?.role === 'owner';
   
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [formData, setFormData] = useState<any>({ title: '', cost: 50, icon: 'Gift', inventory: '' });
@@ -168,6 +170,28 @@ export function Rewards() {
           })
         )}
       </div>
+
+      {isParent && redemptions.length > 0 && (
+        <section>
+          <h2 className="mb-3 text-lg font-bold text-gray-900">Redemption history</h2>
+          <div className="space-y-2">
+            {redemptions.map(redemption => {
+              const reward = rewards.find(item => item.id === redemption.rewardId);
+              return (
+                <Card key={redemption.id}>
+                  <CardContent className="flex items-center justify-between gap-4 p-4">
+                    <div>
+                      <p className="font-semibold text-gray-900">{reward?.title || 'Reward'}</p>
+                      <p className="text-sm text-gray-500">{redemption.costPaid} points redeemed</p>
+                    </div>
+                    <HistoryActionControl sourceKind="reward_redemption" source={redemption} />
+                  </CardContent>
+                </Card>
+              );
+            })}
+          </div>
+        </section>
+      )}
 
       {/* Detail & Redemption Modal */}
       {selectedReward && (

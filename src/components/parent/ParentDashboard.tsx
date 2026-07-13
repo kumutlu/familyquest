@@ -14,6 +14,7 @@ import { BehaviourFormModal } from '../forms/BehaviourFormModal';
 import { Stat } from '../ui/Stat';
 import { ApprovalCenter } from './ApprovalCenter';
 import { ReversalHistoryPanel } from '../reversals/ReversalHistoryPanel';
+import { HistoryActionControl } from '../reversals/HistoryActionControl';
 
 const joinRequestProcessingKey = (request: { id: string; uid: string }) => `join:${request.id}:${request.uid}`;
 
@@ -291,6 +292,7 @@ export function ParentDashboard() {
                       {isCredit ? <TrendingUp size={12} /> : <TrendingDown size={12} />}
                       {isCredit ? '+' : '-'}<CurrencyDisplay amountPence={txAmount} forceColor={false} />
                     </Badge>
+                    <HistoryActionControl sourceKind="wallet_transaction" source={tx} />
                   </div>
                 </div>
               );

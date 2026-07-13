@@ -1,0 +1,185 @@
+import { Card, CardContent } from '../ui/Card';
+import { Button } from '../ui/Button';
+import { Progress } from '../ui/Progress';
+import { ExpenseModal } from './ExpenseModal';
+import { useState } from 'react';
+import { contributeToFund } from '../../lib/api';
+import { PetBoxConfirmationModal } from './PetBoxConfirmationModal';
+import { useStore } from '../../store/useStore';
+import { HistoryActionControl } from '../reversals/HistoryActionControl';
+
+export function FundCard({ fund, fundTransactions, isParent, currencySymbol }: { fund: any, fundTransactions: any[], isParent: boolean, currencySymbol: string }) {
+  const [showExpense, setShowExpense] = useState(false);
+  const [isContributing, setIsContributing] = useState(false);
+  const [showHistory, setShowHistory] = useState(false);
+  const [confirmAmount, setConfirmAmount] = useState<number | null>(null);
+  const { currentUser, familyData, familyMembers } = useStore();
+
+  const getSpeciesEmoji = (species: string) => {
+    const s = species?.toLowerCase();
+    if (s === 'dog') return '🐶';
+    if (s === 'cat') return '🐱';
+    if (s === 'rabbit') return '🐰';
+    if (s === 'bird') return '🦜';
+    if (s === 'hamster') return '🐹';
+    return '🐾';
+  };
+
+  const fundTxs = fundTransactions.filter(tx => tx.fundId === fund.id);
+
+  const spentThisMonth = fundTxs
+    .filter(tx => tx.fundId === fund.id && tx.type === 'expense')
+    .filter(tx => {
+      if (!tx.createdAt) return false;
+      const date = tx.createdAt.toDate();
+      const now = new Date();
+      return date.getMonth() === now.getMonth() && date.getFullYear() === now.getFullYear();
+    })
+    .reduce((acc, tx) => acc + tx.amount, 0);
+
+  const budgetProgress = fund.monthlyBudget ? Math.min((spentThisMonth / fund.monthlyBudget) * 100, 100) : 0;
+  const emergencyProgress = fund.emergencyGoal ? Math.min((fund.balance / fund.emergencyGoal) * 100, 100) : 0;
+  const recentTxs = fundTxs.slice(0, 5); // Latest 5 transactions
+
+  const handleContribute = async (amountPounds: number) => {
+    setConfirmAmount(amountPounds * 100);
+  };
+
+  const executeContribution = async () => {
+    if (!currentUser || !confirmAmount) return;
+
+    setIsContributing(true);
+    try {
+      await contributeToFund(familyData.id, fund.id, currentUser.id, confirmAmount, fund.name, currentUser.displayName);
+      alert(`Successfully contributed ${currencySymbol}${(confirmAmount / 100).toFixed(2)} to ${fund.name}!`);
+      setConfirmAmount(null);
+    } catch (e: any) {
+      alert(e.message);
+    } finally {
+      setIsContributing(false);
+    }
+  };
+
+  return (
+    <Card>
+      <CardContent className="p-4">
+        <div className="flex justify-between items-start mb-4">
+          <div className="flex items-center gap-3">
+            <div className="w-16 h-16 bg-primary-100 rounded-2xl flex items-center justify-center text-4xl shadow-sm border border-primary-200">
+              {fund.type === 'pet' ? getSpeciesEmoji(fund.species) : '🎯'}
+            </div>
+            <div>
+              <h3 className="font-bold text-xl text-gray-900">{fund.name}</h3>
+              <p className="text-sm text-gray-500 capitalize">{fund.species || fund.type}</p>
+            </div>
+          </div>
+          <div className="text-right">
+            <p className="text-xs text-gray-500 font-bold uppercase mb-1">Balance</p>
+            <p className="text-xl font-extrabold text-success-600">{currencySymbol}{(fund.balance / 100).toFixed(2)}</p>
+          </div>
+        </div>
+
+        {fund.monthlyBudget > 0 && (
+          <div className="bg-gray-50 p-4 rounded-xl mb-3">
+            <div className="flex justify-between text-sm mb-2">
+              <span className="font-medium text-gray-700">Monthly Budget Spent</span>
+              <span className="font-bold">{currencySymbol}{(spentThisMonth / 100).toFixed(2)} / {currencySymbol}{(fund.monthlyBudget / 100).toFixed(2)}</span>
+            </div>
+            <Progress value={budgetProgress} />
+          </div>
+        )}
+
+        {fund.emergencyGoal > 0 && (
+          <div className="bg-gray-50 p-4 rounded-xl mb-4 border border-success-100">
+            <div className="flex justify-between text-sm mb-2">
+              <span className="font-medium text-success-700">Emergency Fund Goal</span>
+              <span className="font-bold text-success-700">{currencySymbol}{(fund.balance / 100).toFixed(2)} / {currencySymbol}{(fund.emergencyGoal / 100).toFixed(2)}</span>
+            </div>
+            <Progress value={emergencyProgress} color="success" />
+          </div>
+        )}
+
+        <div className="flex gap-2 mb-4">
+          <button
+            onClick={() => setShowHistory(!showHistory)}
+            className="flex-1 text-xs font-bold text-gray-500 bg-gray-100 hover:bg-gray-200 py-2 rounded-lg transition-colors"
+          >
+            {showHistory ? 'Hide History' : 'Show History'}
+          </button>
+        </div>
+
+        {showHistory && (
+          <div className="mb-4 space-y-2 border-t border-gray-100 pt-4">
+            <h4 className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-2">Recent Activity</h4>
+            {recentTxs.length === 0 ? (
+              <p className="text-sm text-gray-500 text-center py-2">No activity yet</p>
+            ) : (
+              recentTxs.map((tx: any) => {
+                const isExpense = tx.type === 'expense';
+                const helper = tx.fromUserId ? familyMembers.find((m: any) => m.id === tx.fromUserId) : null;
+                return (
+                  <div key={tx.id} className="flex justify-between items-center text-sm p-2 bg-gray-50 rounded-lg">
+                    <div className="flex items-center gap-2">
+                      <span className="text-lg">{isExpense ? '📉' : '💖'}</span>
+                      <div>
+                        <p className="font-bold text-gray-700">
+                          {isExpense ? tx.category : (helper?.displayName || 'Someone')}
+                        </p>
+                        <p className="text-[10px] text-gray-500">{isExpense ? tx.description : 'Contributed'}</p>
+                      </div>
+                    </div>
+                    <div className="flex flex-col items-end gap-1">
+                      <span className={`font-bold ${isExpense ? 'text-gray-900' : 'text-success-600'}`}>
+                        {isExpense ? '-' : '+'}{currencySymbol}{(tx.amount / 100).toFixed(2)}
+                      </span>
+                      <HistoryActionControl sourceKind="fund_transaction" source={tx} />
+                    </div>
+                  </div>
+                );
+              })
+            )}
+          </div>
+        )}
+
+        {isParent ? (
+          <Button fullWidth onClick={() => setShowExpense(true)}>Add Expense</Button>
+        ) : (
+          <div className="space-y-3 bg-reward-50 p-4 rounded-xl border border-reward-100">
+            <p className="text-sm font-bold text-reward-700 text-center mb-1">Quick Donate to {fund.name}</p>
+            <div className="grid grid-cols-4 gap-2">
+              {[1, 2, 5].map(amt => (
+                <button
+                  key={amt}
+                  onClick={() => handleContribute(amt)}
+                  disabled={isContributing}
+                  className="bg-white text-reward-600 font-extrabold py-3 rounded-xl shadow-sm hover:shadow transition-all disabled:opacity-50 border border-reward-200 hover:bg-reward-100 flex flex-col items-center justify-center leading-none"
+                >
+                  <span className="text-lg">{currencySymbol}{amt}</span>
+                </button>
+              ))}
+              <button
+                onClick={() => {
+                  const amt = parseFloat(prompt(`Enter amount to contribute (${currencySymbol}):`, "10") || "0");
+                  if (amt > 0) handleContribute(amt);
+                }}
+                disabled={isContributing}
+                className="bg-white text-reward-600 font-bold py-3 rounded-xl shadow-sm hover:shadow transition-all disabled:opacity-50 border border-reward-200 hover:bg-reward-100 flex items-center justify-center text-xs"
+              >
+                Other
+              </button>
+            </div>
+          </div>
+        )}
+      </CardContent>
+
+      <PetBoxConfirmationModal
+        isOpen={confirmAmount !== null}
+        onClose={() => setConfirmAmount(null)}
+        onConfirm={executeContribution}
+        amountPence={confirmAmount || 0}
+        fundName={fund.name}
+      />
+      {showExpense && <ExpenseModal fund={fund} familyId={familyData.id} onClose={() => setShowExpense(false)} currencySymbol={currencySymbol} />}
+    </Card>
+  );
+}

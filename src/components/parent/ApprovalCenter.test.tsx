@@ -42,6 +42,7 @@ describe('ApprovalCenter interaction contract', () => {
     const pending = deferred()
     api.approveTaskCompletion.mockReturnValue(pending.promise)
     render(<ApprovalCenter />)
+    expect(screen.getAllByRole('button', { name: 'Cancel' })).toHaveLength(2)
 
     const approveButtons = screen.getAllByRole('button', { name: 'Approve' })
     fireEvent.click(approveButtons[0])

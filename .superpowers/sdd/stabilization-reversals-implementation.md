@@ -59,9 +59,10 @@ Task C evidence:
 
 - Added a single normalized `HistoryAction` resolver for wallet transactions, fund transactions, behaviour events, task completions, reward redemptions, transfer requests, money requests, and Pet Box requests. It joins deterministic reversal records, derives signed original effects and predicted post-action balances from live state, and hides controls for children, legacy/missing snapshots, insufficient balance linkage, reversal ledgers, unsupported sources, and already-reversed records.
 - Added `reversals` to the role-aware bootstrap query plan and Zustand family state. All family members receive immutable reversal snapshots, cleanup clears them, and the parent history reconciles without a refresh.
-- Added one parent/owner `Reversible history` panel to the Parent Console. It selects canonical economic sources only: manual wallet entries, fund expenses, behaviour events, task completions, redemptions, and approved transfer/money/Pet Box requests. Approval wallet/fund legs are deliberately excluded as duplicate UI entry points for the same economic action.
+- Added parent/owner controls to the existing Parent Console wallet history, wallet transaction details, fund history, member behaviour history, Approval Center pending/history cards, and reward redemption history, plus a consolidated `Reversible history` panel. Canonical request/event sources suppress duplicate approval wallet/fund-leg controls.
 - Added a reusable confirmation modal with source summary, affected targets, signed original effect, predicted balance/points, a trimmed three-character reason, synchronous duplicate-submit protection, action-specific loading, exact errors without closing, success reconciliation, and the exact warning: “This creates a linked reversal record. The original action will remain in history.”
-- Successful submission immediately replaces the control with a `Reversed` badge plus reason, actor name, and time while the Firestore listener reconciles the immutable stored record. Failure retains both modal and reason.
+- Successful submission immediately replaces the control with a `Reversed` badge plus reason, actor name, and time while the Firestore listener reconciles the immutable stored record. Persisted audit time is normalized from `completedAt` (with `createdAt` compatibility). Failure retains both modal and reason; reopening a different action resets stale modal state.
+- Parent/owner cancellation is now authorized by both the production API and exact pending-only Firestore transitions, while the existing originator cancellation remains valid. Cancellation performs no balance mutation and reconciles to `Cancelled` immediately.
 
 Task D action matrix:
 
@@ -72,17 +73,17 @@ Task D action matrix:
 | Manual parent transfer | N/A | Reverse/Refund preview for both wallets | `wallet_transaction` |
 | Fund expense | N/A | Refund | `fund_transaction` |
 | Behaviour event / financial penalty | N/A | Reverse/Refund | `behaviour_event` |
-| Task completion | Cancel only when current actor is the stored originator; otherwise hidden | Reverse | `task_completion` |
+| Task completion | Parent/owner or stored originator can Cancel | Reverse | `task_completion` |
 | Reward redemption | N/A | Refund | `reward_redemption` |
-| Transfer request | Cancel only when current actor is `fromChildId`; otherwise hidden | Reverse | `transfer_request` |
-| Money request | Cancel only when current actor is `requesterId`; otherwise hidden | Reverse/Refund | `money_request` |
-| Pet Box request | Cancel only when current actor is `childId`; otherwise hidden | Refund | `petbox_request` |
+| Transfer request | Parent/owner or `fromChildId` can Cancel | Reverse | `transfer_request` |
+| Money request | Parent/owner or `requesterId` can Cancel | Reverse/Refund | `money_request` |
+| Pet Box request | Parent/owner or `childId` can Cancel | Refund | `petbox_request` |
 | Approval wallet/fund legs, reversal ledgers, legacy/unsupported records | Hidden | Hidden | Canonical request/event is used instead |
 
 Task D evidence:
 
-- Focused normalization/store/modal/panel/parent tests: 40 passed.
-- Non-emulator unit/component suite: 134 passed.
-- Full Firestore rules suite on JDK 21: 127 passed.
+- Focused normalization/store/modal/control/surface/API tests: 70 passed across 12 files.
+- Non-emulator unit/component suite: 149 passed across 21 files.
+- Full Firestore rules suite on JDK 21: 128 passed across 6 files.
 - Scoped Oxlint: passed.
 - Production build: passed with the existing advisory dynamic-import and chunk-size warnings.

@@ -17,6 +17,8 @@ import {
   approvePetBoxDonation,
   rejectPetBoxDonation
 } from '../../lib/api';
+import { HistoryActionControl } from '../reversals/HistoryActionControl';
+import type { ReversalSourceKind } from '../../lib/reversalApi';
 
 export function ApprovalCenter() {
   const { currentUser, tasks, familyMembers, taskCompletions, transferRequests, moneyRequests, petboxRequests } = useStore();
@@ -141,6 +143,7 @@ export function ApprovalCenter() {
     let badge = null;
     let avatarSrc = '';
     let fallback = '';
+    const sourceKind = ({ task: 'task_completion', transfer: 'transfer_request', money_request: 'money_request', petbox: 'petbox_request' } as Record<string, ReversalSourceKind>)[item.category];
 
     if (item.category === 'task') {
       const task = tasks.find(t => t.id === item.taskId);
@@ -202,6 +205,7 @@ export function ApprovalCenter() {
           <div className="flex gap-2 shrink-0 self-end md:self-center">
             {item.isPending ? (
               <>
+                <HistoryActionControl sourceKind={sourceKind} source={item} />
                 <Button size="sm" variant="danger" disabled={itemKey(item) in processing} onClick={() => handleReject(item)}>
                   {processing[itemKey(item)] === 'reject' ? 'Rejecting…' : 'Reject'}
                 </Button>
@@ -210,9 +214,10 @@ export function ApprovalCenter() {
                 </Button>
               </>
             ) : (
-              <Badge variant={item.status === 'approved' ? 'success' : 'danger'}>
-                {item.status}
-              </Badge>
+              <div className="flex items-center gap-2">
+                <Badge variant={item.status === 'approved' ? 'success' : 'danger'}>{item.status}</Badge>
+                <HistoryActionControl sourceKind={sourceKind} source={item} />
+              </div>
             )}
           </div>
         </CardContent>

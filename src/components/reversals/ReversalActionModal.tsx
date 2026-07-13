@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import type { HistoryAction } from '../../lib/reversalHistory';
 import { reverseTransaction } from '../../lib/reversalApi';
 import { Button } from '../ui/Button';
@@ -9,7 +9,7 @@ interface ReversalActionModalProps {
   historyAction: HistoryAction | null;
   onClose: () => void;
   onCancel?: (action: HistoryAction, reason: string) => Promise<unknown>;
-  onSuccess?: (action: HistoryAction, reason: string) => void;
+  onSuccess?: (action: HistoryAction, reason: string, result?: { status?: string }) => void;
 }
 
 const signedValue = (amount: number, unit: 'money' | 'points') => unit === 'money'
@@ -24,6 +24,13 @@ export function ReversalActionModal({ open, familyId, historyAction, onClose, on
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
   const inFlight = useRef(false);
+  useEffect(() => {
+    if (!open) return;
+    setReason('');
+    setError('');
+    setLoading(false);
+    inFlight.current = false;
+  }, [open, historyAction?.sourceId, historyAction?.sourceKind]);
   if (!open || !historyAction?.action) return null;
 
   const submit = async () => {
@@ -37,13 +44,14 @@ export function ReversalActionModal({ open, familyId, historyAction, onClose, on
     setLoading(true);
     setError('');
     try {
+      let result: { status?: string } | undefined;
       if (historyAction.action === 'cancel') {
         if (!onCancel) throw new Error('Cancellation is not supported for this action');
         await onCancel(historyAction, trimmed);
       } else {
-        await reverseTransaction({ familyId, sourceKind: historyAction.sourceKind, sourceId: historyAction.sourceId, reason: trimmed });
+        result = await reverseTransaction({ familyId, sourceKind: historyAction.sourceKind, sourceId: historyAction.sourceId, reason: trimmed });
       }
-      onSuccess?.(historyAction, trimmed);
+      onSuccess?.(historyAction, trimmed, result);
       onClose();
     } catch (err: any) {
       setError(`${err?.code ? `${err.code}: ` : ''}${err?.message || 'Action failed.'}`);
@@ -70,7 +78,11 @@ export function ReversalActionModal({ open, familyId, historyAction, onClose, on
             </div>
           ))}
         </div>
-        <p className="mt-4 rounded-xl bg-warning-50 p-3 text-sm font-medium text-warning-800">This creates a linked reversal record. The original action will remain in history.</p>
+        <p className="mt-4 rounded-xl bg-warning-50 p-3 text-sm font-medium text-warning-800">
+          {historyAction.action === 'cancel'
+            ? 'Cancelling a pending action does not change balances.'
+            : 'This creates a linked reversal record. The original action will remain in history.'}
+        </p>
         <label className="mt-4 block text-sm font-semibold text-gray-700" htmlFor="reversal-reason">Reason</label>
         <textarea id="reversal-reason" aria-label="Reason" value={reason} onChange={event => setReason(event.target.value)} className="mt-1 min-h-20 w-full rounded-xl border border-gray-200 p-3" />
         {error && <p role="alert" className="mt-2 text-sm font-medium text-danger-600">{error}</p>}

@@ -949,7 +949,7 @@ service cloud.firestore {
               && request.resource.data.rejectedAt == request.time
               && request.resource.data.parentComment is string && request.resource.data.parentComment.trim().size() > 0
               && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'parentComment', 'rejectedAt', 'reviewedBy', 'reviewedByName', 'reviewedAt']))))
-          || (isAuthenticated() && resource.data.status == 'pending_approval' && resource.data.assigneeId == request.auth.uid
+          || (isAuthenticated() && resource.data.status == 'pending_approval' && (resource.data.assigneeId == request.auth.uid || isParent(familyId))
               && request.resource.data.status == 'cancelled' && request.resource.data.cancelledBy == request.auth.uid
               && request.resource.data.cancelledAt == request.time
               && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'cancelledBy', 'cancelledAt']));
@@ -1092,7 +1092,7 @@ service cloud.firestore {
               && isValidTransferApproval(familyId, requestId, request.resource.data, resource.data)
             )
           ))
-          || (isAuthenticated() && resource.data.status == 'pending' && resource.data.fromChildId == request.auth.uid
+          || (isAuthenticated() && resource.data.status == 'pending' && (resource.data.fromChildId == request.auth.uid || isParent(familyId))
               && request.resource.data.status == 'cancelled' && request.resource.data.cancelledBy == request.auth.uid
               && request.resource.data.cancelledAt == request.time
               && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'cancelledBy', 'cancelledAt']));
@@ -1113,7 +1113,7 @@ service cloud.firestore {
             || (request.resource.data.status == 'approved'
               && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'reviewedAt', 'reviewedBy', 'reviewedByName', 'paymentTransferId', 'effectSnapshot'])
               && isValidMoneyRequestApproval(familyId, requestId, request.resource.data, resource.data))))
-          || (isAuthenticated() && resource.data.status in ['pending', 'pending_acceptance'] && resource.data.requesterId == request.auth.uid
+          || (isAuthenticated() && resource.data.status in ['pending', 'pending_acceptance'] && (resource.data.requesterId == request.auth.uid || isParent(familyId))
               && request.resource.data.status == 'cancelled' && request.resource.data.cancelledBy == request.auth.uid
               && request.resource.data.cancelledAt == request.time
               && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'cancelledBy', 'cancelledAt']));
@@ -1139,7 +1139,7 @@ service cloud.firestore {
             || (request.resource.data.status == 'approved'
               && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'reviewedAt', 'reviewedBy', 'approvalTxId', 'fundTransactionId', 'effectSnapshot'])
               && isValidPetBoxApproval(familyId, request.resource.data, resource.data))))
-          || (isAuthenticated() && resource.data.status == 'pending' && resource.data.childId == request.auth.uid
+          || (isAuthenticated() && resource.data.status == 'pending' && (resource.data.childId == request.auth.uid || isParent(familyId))
               && request.resource.data.status == 'cancelled' && request.resource.data.cancelledBy == request.auth.uid
               && request.resource.data.cancelledAt == request.time
               && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'cancelledBy', 'cancelledAt']));

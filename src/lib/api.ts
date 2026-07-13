@@ -1580,13 +1580,16 @@ export const cancelPendingApproval = async (familyId: string, kind: PendingAppro
   if (!actorId) throw new Error('Not authenticated');
   const contract = pendingApprovalContract[kind];
   const requestRef = doc(db, `families/${familyId}/${contract.collectionName}`, requestId);
+  const actorRef = doc(db, 'users', actorId);
 
   await runTransaction(db, async (transaction) => {
-    const requestDoc = await transaction.get(requestRef);
+    const [requestDoc, actorDoc] = await Promise.all([transaction.get(requestRef), transaction.get(actorRef)]);
     if (!requestDoc.exists()) throw new Error('Request not found');
     const request = requestDoc.data();
     if (!contract.pendingStatuses.includes(request.status)) throw new Error('Request is not pending');
-    if (request[contract.actorField] !== actorId) throw new Error('Only the request originator can cancel it');
+    const actor = actorDoc.exists() ? actorDoc.data() : null;
+    const isFamilyReviewer = actor?.familyId === familyId && (actor.role === 'parent' || actor.role === 'owner');
+    if (request[contract.actorField] !== actorId && !isFamilyReviewer) throw new Error('Only the request originator or a family parent/owner can cancel it');
     transaction.update(requestRef, { status: 'cancelled', cancelledBy: actorId, cancelledAt: serverTimestamp() });
   });
 };

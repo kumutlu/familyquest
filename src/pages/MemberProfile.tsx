@@ -7,6 +7,7 @@ import { ChevronLeft, Star, Flame, Trophy, TrendingUp, TrendingDown, Shield, Awa
 import { useStore } from '../store/useStore';
 import { ACHIEVEMENTS } from '../lib/achievements';
 import { cn } from '../lib/utils';
+import { HistoryActionControl } from '../components/reversals/HistoryActionControl';
 
 export function MemberProfile() {
   const { id } = useParams();
@@ -108,6 +109,7 @@ export function MemberProfile() {
                         <TrendingDown size={12} /> {event.pointsDelta}
                       </Badge>
                     )}
+                    <HistoryActionControl sourceKind="behaviour_event" source={event} />
                   </div>
                 </CardContent>
               </Card>

@@ -133,6 +133,13 @@ describe('Approval Center Actions', () => {
     });
   });
 
+  it('parent can cancel a child-created pending transfer without moving balances', async () => {
+    const db = testEnv.authenticatedContext(parentId).firestore();
+    await assertSucceeds(updateDoc(doc(db, `families/${familyId}/transfer_requests`, 'trans1'), {
+      status: 'cancelled', cancelledBy: parentId, cancelledAt: serverTimestamp(),
+    }));
+  });
+
   it('sibling cannot cancel another child’s pending transfer', async () => {
     const db = testEnv.authenticatedContext(siblingId).firestore();
     await assertFails(updateDoc(doc(db, `families/${familyId}/transfer_requests`, 'trans1'), {
