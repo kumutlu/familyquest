@@ -19,3 +19,21 @@ Evidence:
 - Unit/component suite excluding emulator-only rule files: 110 passed.
 - Firestore rules suite on JDK 21: 95 passed (including two cancellation rule tests).
 - Production build: passed.
+
+## Task B — typed atomic reversal dispatcher
+
+- Added a typed dispatcher for every traceable action family present in the application: wallet transactions (deposit, withdrawal, manual/approved transfers, money and Pet Box wallet effects), fund transactions (expense and Pet Box), behaviour events, approved task completions, reward redemptions, transfer requests, money requests, and Pet Box requests.
+- Each source kind resolves through a closed collection map. Unsupported kinds are rejected before a transaction starts.
+- Reversal IDs are deterministic (`<sourceKind>__<encodedSourceId>`). The transaction reads that record before applying effects, so retries return `already_reversed` without a second inverse.
+- The transaction authenticates a current family parent/owner, reads the immutable source snapshot and every affected balance before writing, validates the family/version/XP contract, then applies the exact signed inverse atomically.
+- Wallet reversals enforce the family debt limit; fund and points reversals enforce non-negative sufficiency. Lifetime XP is never updated. Both reversal records and events explicitly persist `xpAdjustment: 0` and `xpReversed: false`.
+- Every affected wallet/fund receives a deterministic immutable inverse ledger record. Every action also receives a deterministic reversal event and completed reversal record containing original and inverse snapshots.
+- Legacy sources retain the exact failure: `This legacy transaction cannot be reversed automatically. Missing effectSnapshot.`
+- Allowance and direct fund contribution remain N/A because those actions do not exist in the application.
+
+Task B evidence:
+
+- Reversal domain/API tests: 7 passed, including multi-account exact inversion, debt/fund/points sufficiency, deterministic IDs, all source mappings, atomic evidence, retry idempotency, and exact legacy rejection.
+- Non-emulator unit/component suite: 117 passed.
+- Scoped Oxlint: passed.
+- Production build: passed.
