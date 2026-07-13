@@ -733,10 +733,11 @@ export const ensureWalletDocument = async (
   transaction: any,
   familyId: string,
   childId: string,
-  userSnapshot: any
+  userSnapshot: any,
+  walletSnapshot?: any
 ): Promise<number> => {
   const walletRef = doc(db, `families/${familyId}/wallets`, childId);
-  const walletDoc = await transaction.get(walletRef);
+  const walletDoc = walletSnapshot ?? await transaction.get(walletRef);
 
   if (walletDoc.exists()) {
     return walletDoc.data().balance || 0;
@@ -1158,10 +1159,15 @@ export const approveTransferRequest = async (familyId: string, requestId: string
     const senderRef = doc(db, 'users', requestData.fromChildId);
     const recipientRef = doc(db, 'users', requestData.toChildId);
 
-    const [userDoc, senderDoc, recipientDoc] = await Promise.all([
+    const fromWalletRef = doc(db, `families/${familyId}/wallets`, requestData.fromChildId);
+    const toWalletRef = doc(db, `families/${familyId}/wallets`, requestData.toChildId);
+
+    const [userDoc, senderDoc, recipientDoc, fromWalletDoc, toWalletDoc] = await Promise.all([
       transaction.get(currentUserRef),
       transaction.get(senderRef),
-      transaction.get(recipientRef)
+      transaction.get(recipientRef),
+      transaction.get(fromWalletRef),
+      transaction.get(toWalletRef)
     ]);
 
     if (!userDoc.exists()) throw new Error("Reviewer not found");
@@ -1176,23 +1182,22 @@ export const approveTransferRequest = async (familyId: string, requestId: string
     if (senderData.role !== 'child' || recipientData.role !== 'child') throw new Error("Both participants must be children");
     if (senderData.familyId !== familyId || recipientData.familyId !== familyId) throw new Error("Both participants must be in the same family");
 
-    const fromWalletRef = doc(db, `families/${familyId}/wallets`, requestData.fromChildId);
-    const toWalletRef = doc(db, `families/${familyId}/wallets`, requestData.toChildId);
-
-    const fromBalance = await ensureWalletDocument(transaction, familyId, requestData.fromChildId, senderDoc);
-    const toBalance = await ensureWalletDocument(transaction, familyId, requestData.toChildId, recipientDoc);
+    const fromBalance = await ensureWalletDocument(transaction, familyId, requestData.fromChildId, senderDoc, fromWalletDoc);
+    const toBalance = await ensureWalletDocument(transaction, familyId, requestData.toChildId, recipientDoc, toWalletDoc);
 
     if (fromBalance < requestData.amountPence) {
       throw new Error("Sender no longer has sufficient funds.");
     }
 
     transaction.set(fromWalletRef, {
+      ...(!fromWalletDoc.exists() ? { createdAt: serverTimestamp(), migratedFromLegacy: true } : {}),
       balance: fromBalance - requestData.amountPence,
       lastTransferTxId: txOutRef.id,
       lastTransferReqId: requestId
     }, { merge: true });
 
     transaction.set(toWalletRef, {
+      ...(!toWalletDoc.exists() ? { createdAt: serverTimestamp(), migratedFromLegacy: true } : {}),
       balance: toBalance + requestData.amountPence,
       lastTransferTxId: txInRef.id,
       lastTransferReqId: requestId
@@ -1408,19 +1413,25 @@ export const approveMoneyRequest = async (familyId: string, requestId: string) =
 
     // If request was to parent
     const requestedFromRef = doc(db, 'users', reqData.requestedFromId);
-    const requestedFromDoc = await transaction.get(requestedFromRef);
+    const requesterUserRef = doc(db, 'users', reqData.requesterId);
+    const requestedFromWalletRef = doc(db, `families/${familyId}/wallets`, reqData.requestedFromId);
+    const [requestedFromDoc, requesterUserDoc, requesterWalletDoc, requestedFromWalletDoc] = await Promise.all([
+      transaction.get(requestedFromRef),
+      transaction.get(requesterUserRef),
+      transaction.get(requesterWalletRef),
+      transaction.get(requestedFromWalletRef),
+    ]);
     const isFromParent = requestedFromDoc.data()?.role === 'parent' || requestedFromDoc.data()?.role === 'owner';
     const requestEffect = isFromParent
       ? effectSnapshot({ entityType: 'money_request', familyId, actorId: currentUserUid, childId: reqData.requesterId, sourceRequestId: requestId, walletDeltaPence: reqData.amountPence })
       : effectSnapshot({ entityType: 'money_request', familyId, actorId: currentUserUid, childId: reqData.requestedFromId, counterpartyChildId: reqData.requesterId, sourceRequestId: requestId, walletDeltaPence: -reqData.amountPence, counterpartyWalletDeltaPence: reqData.amountPence });
 
-    const requesterUserRef = doc(db, 'users', reqData.requesterId);
-    const requesterUserDoc = await transaction.get(requesterUserRef);
     if (!requesterUserDoc.exists()) throw new Error("User not found");
-    const reqBalance = await ensureWalletDocument(transaction, familyId, reqData.requesterId, requesterUserDoc);
+    const reqBalance = await ensureWalletDocument(transaction, familyId, reqData.requesterId, requesterUserDoc, requesterWalletDoc);
 
     if (isFromParent) {
       transaction.set(requesterWalletRef, {
+        ...(!requesterWalletDoc.exists() ? { createdAt: serverTimestamp(), migratedFromLegacy: true } : {}),
         balance: reqBalance + reqData.amountPence,
         lastTransferTxId: txInRef.id,
         lastTransferReqId: requestId,
@@ -1444,19 +1455,21 @@ export const approveMoneyRequest = async (familyId: string, requestId: string) =
         createdAt: serverTimestamp()
       });
     } else {
-      const fromWalletRef = doc(db, `families/${familyId}/wallets`, reqData.requestedFromId);
+      const fromWalletRef = requestedFromWalletRef;
       if (!requestedFromDoc.exists()) throw new Error("User not found");
-      const fromBalance = await ensureWalletDocument(transaction, familyId, reqData.requestedFromId, requestedFromDoc);
+      const fromBalance = await ensureWalletDocument(transaction, familyId, reqData.requestedFromId, requestedFromDoc, requestedFromWalletDoc);
 
       if (fromBalance < reqData.amountPence) throw new Error("Insufficient funds");
 
       transaction.set(fromWalletRef, {
+        ...(!requestedFromWalletDoc.exists() ? { createdAt: serverTimestamp(), migratedFromLegacy: true } : {}),
         balance: fromBalance - reqData.amountPence,
         lastTransferTxId: txOutRef.id,
         lastTransferReqId: requestId,
       }, { merge: true });
 
       transaction.set(requesterWalletRef, {
+        ...(!requesterWalletDoc.exists() ? { createdAt: serverTimestamp(), migratedFromLegacy: true } : {}),
         balance: reqBalance + reqData.amountPence,
         lastTransferTxId: txInRef.id,
         lastTransferReqId: requestId,

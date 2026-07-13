@@ -17,3 +17,20 @@ Verification observed after remediation:
 - Focused API/UI: 18 passed.
 - Firestore emulator: 104 passed.
 - Production build: passed.
+
+## Follow-up after independent review blockers
+
+The subsequent independent review identified approved-request wallet replay, standalone Pet Box wallet ledgers, Firestore read-after-write ordering for missing wallets, and single-slot join loading. The follow-up closes each boundary:
+
+- Wallet creation now has exact migration, manual, transfer, money, and Pet Box branches. Operation branches require the stored request to move from pending to approved in the same transaction, bind the affected child and canonical transaction ID, and enforce the exact legacy-plus-delta balance.
+- Pet Box wallet ledgers require the pending-to-approved request transition, canonical approval ID, authenticated actor, family/child/fund/source linkage, exact signed amount, timestamp, terminal status, and effect snapshot.
+- Transfer and money approval APIs preload every user and wallet snapshot before queuing any write. Production-path tests use a transaction mock that rejects reads after writes and cover both transfer wallets missing plus a missing sibling-money requester wallet.
+- Join processing is a composite-keyed map, with a concurrent two-card component regression.
+
+Final verification after this follow-up:
+
+- Focused API/UI: 8 passed.
+- Firestore emulator: 127 passed, including the additional typed-transfer missing-wallet success regression.
+- Non-emulator unit/component: 124 passed.
+- Scoped oxlint: clean.
+- Production build: passed (advisory chunk-size/dynamic-import warnings only).

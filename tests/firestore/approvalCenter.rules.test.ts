@@ -162,6 +162,29 @@ describe('Approval Center Actions', () => {
     }));
   });
 
+  it('denies replaying an unrelated approved request to create an arbitrary wallet', async () => {
+    await testEnv.withSecurityRulesDisabled(async (context: any) => {
+      const db = context.firestore();
+      await setDoc(doc(db, 'users', 'new-child'), { familyId, role: 'child', walletBalance: 25 });
+      await setDoc(doc(db, `families/${familyId}/money_requests/old-approved`), {
+        requesterId: siblingId, requestedFromId: parentId, amountPence: 100, status: 'approved', paymentTransferId: 'old-payment',
+      });
+    });
+    const db = testEnv.authenticatedContext(parentId).firestore();
+    await assertFails(setDoc(doc(db, `families/${familyId}/wallets/new-child`), {
+      balance: 999, createdAt: serverTimestamp(), migratedFromLegacy: true,
+      lastTransferTxId: 'old-payment_in', lastTransferReqId: 'old-approved',
+    }));
+  });
+
+  it('denies a standalone Pet Box wallet ledger', async () => {
+    const db = testEnv.authenticatedContext(parentId).firestore();
+    await assertFails(setDoc(doc(db, `families/${familyId}/wallet_transactions/fake-pet`), {
+      type: 'petbox_donation', childId, amountPence: -100, amount: -100, note: 'forged', sourceId: 'pet1',
+      createdAt: serverTimestamp(), timestamp: serverTimestamp(),
+    }));
+  });
+
   it('denies standalone fabricated fund ledger history', async () => {
     const db = testEnv.authenticatedContext(childId).firestore();
     await assertFails(setDoc(doc(db, `families/${familyId}/fund_transactions/fake`), {
@@ -243,6 +266,39 @@ describe('Approval Center Actions', () => {
     });
     batch.update(doc(db, `families/${familyId}/money_requests/${requestId}`), {
       status: 'approved', reviewedAt: serverTimestamp(), reviewedBy: parentId, reviewedByName: 'Kemal', paymentTransferId: approvalId,
+    });
+    await assertSucceeds(batch.commit());
+  });
+
+  it('approves a transfer with both wallets missing using exact typed creates', async () => {
+    await testEnv.withSecurityRulesDisabled(async (context: any) => {
+      const db = context.firestore();
+      await setDoc(doc(db, 'users', 'sender-new'), { familyId, role: 'child', walletBalance: 250 });
+      await setDoc(doc(db, 'users', 'recipient-new'), { familyId, role: 'child' });
+      await setDoc(doc(db, `families/${familyId}/transfer_requests/new-transfer`), {
+        fromChildId: 'sender-new', toChildId: 'recipient-new', amountPence: 100, status: 'pending',
+      });
+    });
+    const db = testEnv.authenticatedContext(parentId).firestore();
+    const batch = writeBatch(db);
+    batch.set(doc(db, `families/${familyId}/wallets/sender-new`), {
+      balance: 150, createdAt: serverTimestamp(), migratedFromLegacy: true,
+      lastTransferTxId: 'new-transfer-tx_out', lastTransferReqId: 'new-transfer',
+    });
+    batch.set(doc(db, `families/${familyId}/wallets/recipient-new`), {
+      balance: 100, createdAt: serverTimestamp(), migratedFromLegacy: true,
+      lastTransferTxId: 'new-transfer-tx_in', lastTransferReqId: 'new-transfer',
+    });
+    batch.set(doc(db, `families/${familyId}/wallet_transactions/new-transfer-tx_out`), {
+      type: 'transfer_out', childId: 'sender-new', counterpartyChildId: 'recipient-new', amountPence: -100,
+      transferRequestId: 'new-transfer', approvalTxId: 'new-transfer-tx', createdAt: serverTimestamp(), parentRef: parentId, note: '',
+    });
+    batch.set(doc(db, `families/${familyId}/wallet_transactions/new-transfer-tx_in`), {
+      type: 'transfer_in', childId: 'recipient-new', counterpartyChildId: 'sender-new', amountPence: 100,
+      transferRequestId: 'new-transfer', approvalTxId: 'new-transfer-tx', createdAt: serverTimestamp(), parentRef: parentId, note: '',
+    });
+    batch.update(doc(db, `families/${familyId}/transfer_requests/new-transfer`), {
+      status: 'approved', reviewedAt: serverTimestamp(), reviewedBy: parentId, reviewedByName: 'Kemal', approvalTxId: 'new-transfer-tx',
     });
     await assertSucceeds(batch.commit());
   });
@@ -563,6 +619,10 @@ describe('Approval Center Actions', () => {
       amount: -100,
       note: `Donated to Cat Shelter`,
       sourceId: 'pet1',
+      familyId,
+      actorId: parentId,
+      status: 'completed',
+      effectSnapshot: { schemaVersion: 1, entityType: 'petbox_donation', familyId, actorId: parentId, childId, fundId: 'fund1', sourceRequestId: 'pet1', fundDeltaPence: 100, walletDeltaPence: -100, pointsDelta: 0, xpAdjustment: 0 },
       createdAt: serverTimestamp(),
       timestamp: serverTimestamp()
     });

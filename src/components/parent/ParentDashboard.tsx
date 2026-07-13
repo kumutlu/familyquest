@@ -14,12 +14,14 @@ import { BehaviourFormModal } from '../forms/BehaviourFormModal';
 import { Stat } from '../ui/Stat';
 import { ApprovalCenter } from './ApprovalCenter';
 
+const joinRequestProcessingKey = (request: { id: string; uid: string }) => `join:${request.id}:${request.uid}`;
+
 export function ParentDashboard() {
   const { currentUser, familyData, tasks, familyMembers, joinRequests, feed, rewards, childWallets, walletTransactions, loading } = useStore();
   const currencySymbol = familyData?.currency || '£';
 
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [joinProcessing, setJoinProcessing] = useState<{ key: string, action: 'approve' | 'reject' } | null>(null);
+  const [joinProcessing, setJoinProcessing] = useState<Record<string, 'approve' | 'reject'>>({});
   const [joinError, setJoinError] = useState('');
   const joinInFlight = useRef(new Set<string>());
 
@@ -39,10 +41,10 @@ export function ParentDashboard() {
   const children = familyMembers.filter(m => m.role === 'child');
 
   const reviewJoin = async (request: any, action: 'approve' | 'reject') => {
-    const key = `join:${request.uid}`;
+    const key = joinRequestProcessingKey(request);
     if (joinInFlight.current.has(key)) return;
     joinInFlight.current.add(key);
-    setJoinProcessing({ key, action });
+    setJoinProcessing(previous => ({ ...previous, [key]: action }));
     setJoinError('');
     try {
       if (action === 'approve') await approveJoinRequest(currentUser.familyId, request.id, 'child');
@@ -55,7 +57,11 @@ export function ParentDashboard() {
       setJoinError(`${error?.code ? `${error.code}: ` : ''}${error?.message || 'Join review failed.'}`);
     } finally {
       joinInFlight.current.delete(key);
-      setJoinProcessing(null);
+      setJoinProcessing(previous => {
+        const next = { ...previous };
+        delete next[key];
+        return next;
+      });
     }
   };
 
@@ -140,7 +146,9 @@ export function ParentDashboard() {
           </h2>
           {joinError && <div className="mb-3 rounded-lg bg-danger-50 p-3 text-sm font-medium text-danger-600">{joinError}</div>}
           <div className="space-y-3">
-            {joinRequests.filter((request: any) => request.status === 'pending').map((req: any) => (
+            {joinRequests.filter((request: any) => request.status === 'pending').map((req: any) => {
+              const processingKey = joinRequestProcessingKey(req);
+              return (
               <Card key={req.id} className="border-primary-200">
                 <CardContent className="p-4 flex items-center justify-between">
                   <div className="flex items-center gap-3">
@@ -153,18 +161,18 @@ export function ParentDashboard() {
                     </div>
                   </div>
                   <div className="flex gap-2">
-                    <Button size="sm" variant="secondary" disabled={joinProcessing?.key === `join:${req.uid}`} onClick={() => reviewJoin(req, 'reject')}>
-                      {joinProcessing?.key === `join:${req.uid}` && joinProcessing.action === 'reject' ? 'Rejecting…' : 'Reject'}
+                    <Button size="sm" variant="secondary" disabled={processingKey in joinProcessing} onClick={() => reviewJoin(req, 'reject')}>
+                      {joinProcessing[processingKey] === 'reject' ? 'Rejecting…' : 'Reject'}
                     </Button>
                     {!req.claimCode && (
-                      <Button size="sm" disabled={joinProcessing?.key === `join:${req.uid}`} onClick={() => reviewJoin(req, 'approve')}>
-                        {joinProcessing?.key === `join:${req.uid}` && joinProcessing.action === 'approve' ? 'Approving…' : 'Approve as Child'}
+                      <Button size="sm" disabled={processingKey in joinProcessing} onClick={() => reviewJoin(req, 'approve')}>
+                        {joinProcessing[processingKey] === 'approve' ? 'Approving…' : 'Approve as Child'}
                       </Button>
                     )}
                   </div>
                 </CardContent>
               </Card>
-            ))}
+            )})}
           </div>
         </section>
       )}

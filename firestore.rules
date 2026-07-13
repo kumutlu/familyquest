@@ -351,26 +351,79 @@ service cloud.firestore {
         && user.data.lastRedemptionId == redemptionId;
     }
 
+    function isValidWalletMigrationCreate(familyId, childId, legacyBalance) {
+      let data = request.resource.data;
+      return data.keys().hasOnly(['balance', 'createdAt', 'migratedFromLegacy'])
+        && data.balance == legacyBalance;
+    }
+
+    function isValidManualWalletCreate(familyId, childId, legacyBalance) {
+      let data = request.resource.data;
+      let manualId = data.get('lastManualTxId', 'null');
+      let manualTx = getAfter(/databases/$(database)/documents/families/$(familyId)/wallet_transactions/$(manualId));
+      return data.keys().hasOnly(['balance', 'createdAt', 'migratedFromLegacy', 'lastManualTxId'])
+        && manualTx != null && !exists(/databases/$(database)/documents/families/$(familyId)/wallet_transactions/$(manualId))
+        && manualTx.data.childId == childId && manualTx.data.createdAt == request.time
+        && data.balance == legacyBalance + (manualTx.data.type == 'deposit' ? manualTx.data.amount : (0 - manualTx.data.amount));
+    }
+
+    function isValidTransferWalletCreate(familyId, childId, legacyBalance) {
+      let data = request.resource.data;
+      let requestId = data.get('lastTransferReqId', 'null');
+      let transfer = get(/databases/$(database)/documents/families/$(familyId)/transfer_requests/$(requestId));
+      let transferAfter = getAfter(/databases/$(database)/documents/families/$(familyId)/transfer_requests/$(requestId));
+      return transfer != null && transfer.data.status == 'pending'
+        && transferAfter != null && transferAfter.data.status == 'approved'
+        && transferAfter.data.approvalTxId != null
+        && ((childId == transfer.data.fromChildId
+            && data.lastTransferTxId == transferAfter.data.approvalTxId + '_out'
+            && data.balance == legacyBalance - transfer.data.amountPence)
+          || (childId == transfer.data.toChildId
+            && data.lastTransferTxId == transferAfter.data.approvalTxId + '_in'
+            && data.balance == legacyBalance + transfer.data.amountPence));
+    }
+
+    function isValidMoneyWalletCreate(familyId, childId, legacyBalance) {
+      let data = request.resource.data;
+      let requestId = data.get('lastTransferReqId', 'null');
+      let money = get(/databases/$(database)/documents/families/$(familyId)/money_requests/$(requestId));
+      let moneyAfter = getAfter(/databases/$(database)/documents/families/$(familyId)/money_requests/$(requestId));
+      return money != null && money.data.status == 'pending'
+        && moneyAfter != null && moneyAfter.data.status == 'approved'
+        && moneyAfter.data.paymentTransferId != null
+        && ((childId == money.data.requesterId
+            && data.lastTransferTxId == moneyAfter.data.paymentTransferId + '_in'
+            && data.balance == legacyBalance + money.data.amountPence)
+          || (childId == money.data.requestedFromId
+            && data.lastTransferTxId == moneyAfter.data.paymentTransferId + '_out'
+            && data.balance == legacyBalance - money.data.amountPence));
+    }
+
+    function isValidPetWalletCreate(familyId, childId, legacyBalance) {
+      let data = request.resource.data;
+      let requestId = data.get('lastTransferReqId', 'null');
+      let pet = get(/databases/$(database)/documents/families/$(familyId)/petbox_requests/$(requestId));
+      let petAfter = getAfter(/databases/$(database)/documents/families/$(familyId)/petbox_requests/$(requestId));
+      return pet != null && pet.data.status == 'pending' && pet.data.childId == childId
+        && petAfter != null && petAfter.data.status == 'approved'
+        && data.lastTransferTxId == petAfter.data.approvalTxId
+        && data.balance == legacyBalance - pet.data.amountPence;
+    }
+
     function isValidWalletCreate(familyId, childId) {
       let data = request.resource.data;
       let child = getAfter(/databases/$(database)/documents/users/$(childId));
       let legacyBalance = child == null ? 0 : child.data.get('walletBalance', 0);
-      let manualId = data.get('lastManualTxId', 'null');
-      let manualTx = getAfter(/databases/$(database)/documents/families/$(familyId)/wallet_transactions/$(manualId));
-      let requestId = data.get('lastTransferReqId', 'null');
-      let transfer = getAfter(/databases/$(database)/documents/families/$(familyId)/transfer_requests/$(requestId));
-      let money = getAfter(/databases/$(database)/documents/families/$(familyId)/money_requests/$(requestId));
-      let pet = getAfter(/databases/$(database)/documents/families/$(familyId)/petbox_requests/$(requestId));
       return isParent(familyId) && child != null && child.data.role == 'child' && child.data.familyId == familyId
         && data.keys().hasOnly(['balance', 'createdAt', 'migratedFromLegacy', 'lastTransferTxId', 'lastTransferReqId', 'lastManualTxId', 'lastFundTxId'])
         && data.balance is int && data.migratedFromLegacy == true && data.createdAt == request.time
         && (
-          data.balance == legacyBalance
-          || (manualTx != null && manualTx.data.childId == childId && manualTx.data.createdAt == request.time
-              && data.balance == legacyBalance + (manualTx.data.type == 'deposit' ? manualTx.data.amount : (0 - manualTx.data.amount)))
-          || (transfer != null && transfer.data.status == 'approved')
-          || (money != null && money.data.status == 'approved')
-          || (pet != null && pet.data.status == 'approved')
+          isValidWalletMigrationCreate(familyId, childId, legacyBalance)
+          || isValidManualWalletCreate(familyId, childId, legacyBalance)
+          || (data.keys().hasOnly(['balance', 'createdAt', 'migratedFromLegacy', 'lastTransferTxId', 'lastTransferReqId'])
+            && (isValidTransferWalletCreate(familyId, childId, legacyBalance)
+              || isValidMoneyWalletCreate(familyId, childId, legacyBalance)
+              || isValidPetWalletCreate(familyId, childId, legacyBalance)))
         );
     }
 
@@ -765,6 +818,30 @@ service cloud.firestore {
         && data.parentRef == request.auth.uid && data.createdAt == request.time && data.timestamp == request.time;
     }
 
+    function isValidPetBoxWalletLedger(familyId, txId) {
+      let data = request.resource.data;
+      let requestId = data.get('sourceId', 'null');
+      let req = get(/databases/$(database)/documents/families/$(familyId)/petbox_requests/$(requestId));
+      let reqAfter = getAfter(/databases/$(database)/documents/families/$(familyId)/petbox_requests/$(requestId));
+      return data.keys().hasAll(['type', 'childId', 'amountPence', 'amount', 'note', 'sourceId', 'familyId', 'actorId', 'status', 'effectSnapshot', 'createdAt', 'timestamp'])
+        && data.keys().hasOnly(['type', 'childId', 'amountPence', 'amount', 'note', 'sourceId', 'familyId', 'actorId', 'status', 'effectSnapshot', 'createdAt', 'timestamp'])
+        && req != null && req.data.status == 'pending'
+        && reqAfter != null && reqAfter.data.status == 'approved'
+        && reqAfter.data.approvalTxId == txId && reqAfter.data.reviewedBy == request.auth.uid
+        && data.type == 'petbox_donation' && data.childId == req.data.childId
+        && data.amountPence == (0 - req.data.amountPence) && data.amount == data.amountPence
+        && data.familyId == familyId && data.actorId == request.auth.uid && data.status == 'completed'
+        && data.createdAt == request.time && data.timestamp == request.time
+        && hasCanonicalEffectSnapshot(data, familyId)
+        && data.effectSnapshot.entityType == 'petbox_donation'
+        && data.effectSnapshot.actorId == request.auth.uid
+        && data.effectSnapshot.childId == req.data.childId
+        && data.effectSnapshot.fundId == req.data.fundId
+        && data.effectSnapshot.sourceRequestId == requestId
+        && data.effectSnapshot.walletDeltaPence == (0 - req.data.amountPence)
+        && data.effectSnapshot.fundDeltaPence == req.data.amountPence;
+    }
+
     function isValidMoneyRequestApproval(familyId, requestId, data, oldData) {
       let txId = data.paymentTransferId;
       let source = get(/databases/$(database)/documents/users/$(oldData.requestedFromId));
@@ -931,7 +1008,7 @@ service cloud.firestore {
           (request.resource.data.type == 'transfer_out' && ('transferRequestId' in request.resource.data ? isValidTransferOutLedger(familyId) : isValidMoneyRequestOutLedger(familyId))) ||
           (request.resource.data.type == 'transfer_in' && ('transferRequestId' in request.resource.data ? isValidTransferInLedger(familyId) : isValidMoneyRequestInLedger(familyId))) ||
           (request.resource.data.type == 'request_payment' && isValidMoneyRequestPaymentLedger(familyId)) ||
-          (request.resource.data.type == 'petbox_donation' && request.resource.data.keys().hasAll(['type', 'childId', 'amountPence', 'amount', 'note', 'createdAt', 'timestamp']) && request.resource.data.keys().hasOnly(['type', 'childId', 'amountPence', 'amount', 'note', 'createdAt', 'timestamp', 'sourceId', 'familyId', 'actorId', 'status', 'effectSnapshot']) && request.resource.data.amountPence < 0 && request.resource.data.amountPence is int && request.resource.data.amount == request.resource.data.amountPence && isChildInFamily(familyId, request.resource.data.childId) && request.resource.data.createdAt == request.time)
+          (request.resource.data.type == 'petbox_donation' && isValidPetBoxWalletLedger(familyId, txId))
         ));
         allow update, delete: if false;
       }

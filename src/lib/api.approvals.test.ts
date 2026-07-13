@@ -21,13 +21,17 @@ vi.mock('firebase/auth', () => ({
 }))
 vi.mock('./firebase', () => ({ db: { name: 'db' }, auth: authState, googleProvider: {} }))
 
-import { approveJoinRequest, approveMoneyRequest, approveTaskCompletion, rejectTaskCompletion } from './api'
+import { approveJoinRequest, approveMoneyRequest, approveTaskCompletion, approveTransferRequest, rejectTaskCompletion } from './api'
 
 function snapshot(data?: Record<string, any>) { return { exists: () => data !== undefined, data: () => data } }
-function transactionWith(docs: Record<string, Record<string, any> | undefined>) {
+function transactionWith(docs: Record<string, Record<string, any> | undefined>, enforceReadBeforeWrite = false) {
+  let wrote = false
   const tx = {
-    get: vi.fn(async (ref: { path: string }) => snapshot(docs[ref.path])),
-    update: vi.fn(), set: vi.fn(), delete: vi.fn(),
+    get: vi.fn(async (ref: { path: string }) => {
+      if (enforceReadBeforeWrite && wrote) throw new Error('Firestore transactions require all reads to be executed before all writes.')
+      return snapshot(docs[ref.path])
+    }),
+    update: vi.fn(() => { wrote = true }), set: vi.fn(() => { wrote = true }), delete: vi.fn(() => { wrote = true }),
   }
   firestore.runTransaction.mockImplementation(async (_db: unknown, callback: any) => callback(tx))
   return tx
@@ -98,5 +102,39 @@ describe('approval API transaction contracts', () => {
     expect(tx.set).toHaveBeenCalledWith(expect.objectContaining({ path: 'families/family-1/wallet_transactions/generated-1_in' }), expect.objectContaining({
       type: 'request_payment', childId: 'child-1', amountPence: 100, moneyRequestId: 'money-1', approvalTxId: 'generated-1', parentRef: 'owner-1',
     }))
+  })
+
+  it('uses the production transfer path when both wallets are missing without reading after a write', async () => {
+    const tx = transactionWith({
+      'families/family-1/transfer_requests/transfer-1': { fromChildId: 'child-1', toChildId: 'child-2', amountPence: 100, status: 'pending' },
+      'users/owner-1': { familyId: 'family-1', role: 'owner', displayName: 'Owner' },
+      'users/child-1': { familyId: 'family-1', role: 'child', walletBalance: 250 },
+      'users/child-2': { familyId: 'family-1', role: 'child' },
+    }, true)
+
+    await approveTransferRequest('family-1', 'transfer-1')
+
+    expect(tx.set).toHaveBeenCalledWith(expect.objectContaining({ path: 'families/family-1/wallets/child-1' }), expect.objectContaining({
+      balance: 150, lastTransferReqId: 'transfer-1', migratedFromLegacy: true,
+    }), { merge: true })
+    expect(tx.set).toHaveBeenCalledWith(expect.objectContaining({ path: 'families/family-1/wallets/child-2' }), expect.objectContaining({
+      balance: 100, lastTransferReqId: 'transfer-1', migratedFromLegacy: true,
+    }), { merge: true })
+  })
+
+  it('uses the production sibling-money path when the requester wallet is missing without reading after a write', async () => {
+    const tx = transactionWith({
+      'families/family-1/money_requests/money-1': { requesterId: 'child-2', requestedFromId: 'child-1', amountPence: 100, status: 'pending' },
+      'users/owner-1': { familyId: 'family-1', role: 'owner', displayName: 'Owner' },
+      'users/child-1': { familyId: 'family-1', role: 'child' },
+      'users/child-2': { familyId: 'family-1', role: 'child', walletBalance: 25 },
+      'families/family-1/wallets/child-1': { balance: 300 },
+    }, true)
+
+    await approveMoneyRequest('family-1', 'money-1')
+
+    expect(tx.set).toHaveBeenCalledWith(expect.objectContaining({ path: 'families/family-1/wallets/child-2' }), expect.objectContaining({
+      balance: 125, lastTransferReqId: 'money-1', migratedFromLegacy: true,
+    }), { merge: true })
   })
 })
