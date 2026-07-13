@@ -8,6 +8,7 @@ import { useState } from 'react';
 import { Button } from '../components/ui/Button';
 import { Progress } from '../components/ui/Progress';
 import { createChallenge, claimChallenge } from '../lib/api';
+import { isChildRole, isParentRole, getRoleLabel } from '../lib/roles';
 
 export function Family() {
   const { currentUser, familyMembers, loading, tasks, taskCompletions, behaviourEvents, challenges } = useStore();
@@ -23,7 +24,8 @@ export function Family() {
   const sevenDaysAgo = new Date();
   sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
 
-  const membersWithWeeklyXP = familyMembers.map(member => {
+  const children = familyMembers.filter(m => isChildRole(m.role));
+  const membersWithWeeklyXP = children.map(member => {
     let weeklyXP = 0;
     
     // Add approved task points
@@ -55,7 +57,7 @@ export function Family() {
   // Only declare someone a champion if they actually earned points
   const champion = sortedMembers.length > 0 && sortedMembers[0].weeklyXP > 0 ? sortedMembers[0] : null;
 
-  const children = familyMembers.filter(m => m.role === 'child');
+  
   const activeChallenge = challenges?.find(c => c.isActive);
   
   // Calculate Family XP (total of all children)
@@ -99,7 +101,7 @@ export function Family() {
           <h1 className="text-2xl font-bold text-gray-900 tracking-tight">Family Hub</h1>
           <p className="text-gray-500 mt-1">See how everyone is doing.</p>
         </div>
-        {currentUser?.role === 'parent' && !activeChallenge && (
+        {isParentRole(currentUser?.role) && !activeChallenge && (
           <Button onClick={() => setIsChallengeModalOpen(true)} size="sm" className="bg-primary-500 rounded-full h-10 w-10 p-0 shadow-lg flex items-center justify-center">
             <Plus size={20} />
           </Button>
@@ -124,12 +126,12 @@ export function Family() {
             </div>
             <Progress value={challengeProgress} className="h-2 bg-primary-700 [&>div]:bg-white mb-4" />
             
-            {challengeProgress >= 100 && currentUser?.role === 'parent' && (
+            {challengeProgress >= 100 && isParentRole(currentUser?.role) && (
               <Button onClick={handleClaimChallenge} disabled={isSubmitting} fullWidth className="bg-white text-primary-600 hover:bg-primary-50 font-bold shadow-md">
                 {isSubmitting ? 'Claiming...' : 'Complete Challenge & Award Points!'}
               </Button>
             )}
-            {challengeProgress >= 100 && currentUser?.role === 'child' && (
+            {challengeProgress >= 100 && isChildRole(currentUser?.role) && (
               <p className="text-sm font-bold text-center bg-primary-600/50 py-2 rounded-lg">Goal reached! Waiting for parent to claim.</p>
             )}
           </CardContent>
@@ -185,7 +187,9 @@ export function Family() {
                       <div>
                         <h4 className="font-semibold text-gray-900 flex items-center gap-2">
                           {member.displayName}
-                          {member.role === 'parent' && <Badge variant="default" className="text-[10px]">Admin</Badge>}
+                          {!isChildRole(member.role) && getRoleLabel(member.role) && (
+                            <Badge variant="default" className="text-[10px]">{getRoleLabel(member.role)}</Badge>
+                          )}
                         </h4>
                         <p className="text-sm text-gray-500 font-medium mt-0.5">{member.weeklyXP.toLocaleString()} pts this week</p>
                       </div>
