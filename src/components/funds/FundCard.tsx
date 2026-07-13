@@ -11,7 +11,7 @@ import { HistoryActionControl } from '../reversals/HistoryActionControl';
 export function FundCard({ fund, fundTransactions, isParent, currencySymbol }: { fund: any, fundTransactions: any[], isParent: boolean, currencySymbol: string }) {
   const [showExpense, setShowExpense] = useState(false);
   const [isContributing, setIsContributing] = useState(false);
-  const [showHistory, setShowHistory] = useState(false);
+  const [showAllExpenses, setShowAllExpenses] = useState(false);
   const [confirmAmount, setConfirmAmount] = useState<number | null>(null);
   const { currentUser, familyData, familyMembers } = useStore();
 
@@ -39,7 +39,20 @@ export function FundCard({ fund, fundTransactions, isParent, currencySymbol }: {
 
   const budgetProgress = fund.monthlyBudget ? Math.min((spentThisMonth / fund.monthlyBudget) * 100, 100) : 0;
   const emergencyProgress = fund.emergencyGoal ? Math.min((fund.balance / fund.emergencyGoal) * 100, 100) : 0;
-  const recentTxs = fundTxs.slice(0, 5); // Latest 5 transactions
+  const expenseTxs = fundTxs
+    .filter(tx => tx.type === 'expense')
+    .sort((a, b) => {
+      const aTime = a.createdAt?.toMillis() || 0;
+      const bTime = b.createdAt?.toMillis() || 0;
+      return bTime - aTime;
+    });
+
+  const visibleExpenses = showAllExpenses ? expenseTxs : expenseTxs.slice(0, 5);
+
+  const formatDate = (ts: any) => {
+    if (!ts) return '';
+    return ts.toDate().toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
+  };
 
   const handleContribute = async (amountPounds: number) => {
     setConfirmAmount(amountPounds * 100);
@@ -99,47 +112,56 @@ export function FundCard({ fund, fundTransactions, isParent, currencySymbol }: {
           </div>
         )}
 
-        <div className="flex gap-2 mb-4">
-          <button
-            onClick={() => setShowHistory(!showHistory)}
-            className="flex-1 text-xs font-bold text-gray-500 bg-gray-100 hover:bg-gray-200 py-2 rounded-lg transition-colors"
-          >
-            {showHistory ? 'Hide History' : 'Show History'}
-          </button>
-        </div>
-
-        {showHistory && (
-          <div className="mb-4 space-y-2 border-t border-gray-100 pt-4">
-            <h4 className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-2">Recent Activity</h4>
-            {recentTxs.length === 0 ? (
-              <p className="text-sm text-gray-500 text-center py-2">No activity yet</p>
-            ) : (
-              recentTxs.map((tx: any) => {
-                const isExpense = tx.type === 'expense';
-                const helper = tx.fromUserId ? familyMembers.find((m: any) => m.id === tx.fromUserId) : null;
+        <div className="mb-4 space-y-2 border-t border-gray-100 pt-4">
+          <h4 className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-2">Recent Expenses</h4>
+          {expenseTxs.length === 0 ? (
+            <p className="text-sm text-gray-500 text-center py-2">No expenses recorded yet.</p>
+          ) : (
+            <>
+              {visibleExpenses.map((tx: any) => {
+                const creator = tx.actorId ? familyMembers.find((m: any) => m.id === tx.actorId) : null;
+                const creatorName = creator?.displayName || tx.createdByName || 'Someone';
                 return (
                   <div key={tx.id} className="flex justify-between items-center text-sm p-2 bg-gray-50 rounded-lg">
                     <div className="flex items-center gap-2">
-                      <span className="text-lg">{isExpense ? '📉' : '💖'}</span>
+                      <span className="text-lg">📉</span>
                       <div>
                         <p className="font-bold text-gray-700">
-                          {isExpense ? tx.category : (helper?.displayName || 'Someone')}
+                          {tx.category || 'Expense'}{tx.description && tx.description !== tx.category ? ` — ${tx.description}` : ''}
                         </p>
-                        <p className="text-[10px] text-gray-500">{isExpense ? tx.description : 'Contributed'}</p>
+                        <p className="text-[10px] text-gray-500">
+                          Added by {creatorName} &middot; {formatDate(tx.createdAt)}
+                        </p>
                       </div>
                     </div>
                     <div className="flex flex-col items-end gap-1">
-                      <span className={`font-bold ${isExpense ? 'text-gray-900' : 'text-success-600'}`}>
-                        {isExpense ? '-' : '+'}{currencySymbol}{(tx.amount / 100).toFixed(2)}
+                      <span className="font-bold text-gray-900">
+                        -{currencySymbol}{(tx.amount / 100).toFixed(2)}
                       </span>
                       <HistoryActionControl sourceKind="fund_transaction" source={tx} />
                     </div>
                   </div>
                 );
-              })
-            )}
-          </div>
-        )}
+              })}
+              {!showAllExpenses && expenseTxs.length > 5 && (
+                <button
+                  onClick={() => setShowAllExpenses(true)}
+                  className="w-full text-xs font-bold text-gray-500 bg-gray-100 hover:bg-gray-200 py-2 rounded-lg transition-colors mt-2"
+                >
+                  View all expenses
+                </button>
+              )}
+              {showAllExpenses && expenseTxs.length > 5 && (
+                <button
+                  onClick={() => setShowAllExpenses(false)}
+                  className="w-full text-xs font-bold text-gray-500 bg-gray-100 hover:bg-gray-200 py-2 rounded-lg transition-colors mt-2"
+                >
+                  Show less
+                </button>
+              )}
+            </>
+          )}
+        </div>
 
         {isParent ? (
           <Button fullWidth onClick={() => setShowExpense(true)}>Add Expense</Button>
