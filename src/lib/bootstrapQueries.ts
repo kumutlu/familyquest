@@ -30,6 +30,7 @@ export type BootstrapResource =
   | 'transferRequests'
   | 'moneyRequests'
   | 'petboxRequests'
+  | 'reversals'
   | 'wallets'
 
 export type BootstrapQueryPlanEntry =
@@ -64,6 +65,7 @@ export const bootstrapResources: BootstrapResource[] = [
   'transferRequests',
   'moneyRequests',
   'petboxRequests',
+  'reversals',
   'wallets',
 ]
 
@@ -136,6 +138,7 @@ export function createBootstrapQueryPlan(
     { resource: 'challenges', key: 'challenges', kind: 'query', target: query(collection(db, `${familyPath}/challenges`), orderBy('createdAt', 'desc')) },
     { resource: 'funds', key: 'funds', kind: 'query', target: collection(db, `${familyPath}/funds`) },
     { resource: 'fundTransactions', key: 'fundTransactions', kind: 'query', target: query(collection(db, `${familyPath}/fund_transactions`), orderBy('createdAt', 'desc')) },
+    { resource: 'reversals', key: 'reversals', kind: 'query', target: query(collection(db, `${familyPath}/reversals`), orderBy('createdAt', 'desc')) },
   )
 
   return plan

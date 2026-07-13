@@ -49,6 +49,7 @@ const emptyFamilyState = () => ({
   transferRequests: [] as any[],
   moneyRequests: [] as any[],
   petboxRequests: [] as any[],
+  reversals: [] as any[],
   myWallet: null,
   childWallets: [] as any[],
 });
@@ -83,6 +84,7 @@ interface AppState {
   transferRequests: any[];
   moneyRequests: any[];
   petboxRequests: any[];
+  reversals: any[];
   myWallet: any | null;
   childWallets: any[];
   error: string | null;
@@ -422,6 +424,7 @@ export const useStore = create<AppState>((set, get) => ({
 
       subscribePlanned('tasks', 'Tasks', snapshot => set({ tasks: docs(snapshot) }));
       subscribePlanned('rewards', 'Rewards', snapshot => set({ rewards: docs(snapshot) }));
+      subscribePlanned('reversals', 'Reversals', snapshot => set({ reversals: docs(snapshot) }));
 
       const currentUser = state.currentUser;
       if (currentUser?.role === 'parent' || currentUser?.role === 'owner') {

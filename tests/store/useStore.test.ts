@@ -82,6 +82,7 @@ const familyResources = [
   'families/fam1/transfer_requests',
   'families/fam1/money_requests',
   'families/fam1/petbox_requests',
+  'families/fam1/reversals',
 ] as const;
 
 const childFamilyResources = familyResources
@@ -275,6 +276,17 @@ describe('bootstrap/auth/listener state machine', () => {
     expect(listeners.some(item => item.target === 'families/fam1/join_requests')).toBe(true);
     const transferQuery = queryShapes.find(shape => shape.target === 'families/fam1/transfer_requests');
     expect(transferQuery?.constraints.some(constraint => constraint.type === 'where')).toBe(false);
+  });
+
+  it('subscribes to immutable reversals and applies snapshots immediately', () => {
+    authenticatedState();
+    useStore.getState().loadFamilyData('user1', 'fam1');
+    listener('families/fam1/reversals').next(collectionSnapshot([{ id: 'wallet_transaction__tx-1', sourceKind: 'wallet_transaction', sourceId: 'tx-1', reason: 'Duplicate' }]));
+    expect(useStore.getState().reversals).toEqual([
+      { id: 'wallet_transaction__tx-1', sourceKind: 'wallet_transaction', sourceId: 'tx-1', reason: 'Duplicate' },
+    ]);
+    useStore.getState().cleanup();
+    expect(useStore.getState().reversals).toEqual([]);
   });
 
   it('uses least-privilege child queries and excludes parent-only join requests from readiness', () => {

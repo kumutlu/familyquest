@@ -13,6 +13,7 @@ import { RewardFormModal } from '../forms/RewardFormModal';
 import { BehaviourFormModal } from '../forms/BehaviourFormModal';
 import { Stat } from '../ui/Stat';
 import { ApprovalCenter } from './ApprovalCenter';
+import { ReversalHistoryPanel } from '../reversals/ReversalHistoryPanel';
 
 const joinRequestProcessingKey = (request: { id: string; uid: string }) => `join:${request.id}:${request.uid}`;
 
@@ -178,6 +179,7 @@ export function ParentDashboard() {
       )}
 
       <ApprovalCenter />
+      <ReversalHistoryPanel />
 
       {/* Child Summaries */}
       {children.length > 0 && (
