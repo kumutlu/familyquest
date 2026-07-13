@@ -10,8 +10,25 @@ lerna-debug.log*
 node_modules
 dist
 dist-ssr
+coverage
+.firebase/
 *.local
 family-data-exports/
+
+# Local configuration and credentials
+.env
+.env.*
+!.env.example
+
+# Generated rule/debug evidence
+*_output.txt
+diff_output*.txt
+part[0-9]*.txt
+firestore.rules.backup
+firestore.rules.bak*
+firestore.rules.recovered
+ruleset_name
+latest_ruleset_name
 
 # Editor directories and files
 .vscode/*
