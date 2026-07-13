@@ -118,16 +118,19 @@ export const requestToJoinFamily = async (uid: string, name: string, inviteCode:
   return familyId;
 };
 
-export const approveJoinRequest = async (familyId: string, uid: string, role: 'parent' | 'child', displayName: string) => {
+export const approveJoinRequest = async (familyId: string, requestId: string, role: 'parent' | 'child') => {
   const reviewerUid = auth.currentUser?.uid;
   if (!reviewerUid) throw new Error('Not authenticated');
   await runTransaction(db, async (transaction) => {
-    const userRef = doc(db, 'users', uid);
-    const requestRef = doc(db, `families/${familyId}/join_requests`, uid);
+    const requestRef = doc(db, `families/${familyId}/join_requests`, requestId);
     const reviewerRef = doc(db, 'users', reviewerUid);
     const [requestDoc, reviewerDoc] = await Promise.all([transaction.get(requestRef), transaction.get(reviewerRef)]);
     if (!requestDoc.exists() || requestDoc.data().status !== 'pending') throw new Error('Join request is not pending');
     if (!reviewerDoc.exists() || reviewerDoc.data().familyId !== familyId || reviewerDoc.data().role !== 'owner') throw new Error('Only the family owner can review join requests');
+    const uid = requestDoc.data().uid;
+    const displayName = requestDoc.data().displayName;
+    if (typeof uid !== 'string' || typeof displayName !== 'string' || !displayName.trim()) throw new Error('Join request identity is invalid');
+    const userRef = doc(db, 'users', uid);
 
     if (role === 'child') {
       transaction.set(doc(db, `families/${familyId}/wallets`, uid), {
@@ -136,6 +139,7 @@ export const approveJoinRequest = async (familyId: string, uid: string, role: 'p
     }
     transaction.set(userRef, {
       uid,
+      joinRequestId: requestId,
       familyId,
       role,
       displayName,
@@ -151,14 +155,15 @@ export const approveJoinRequest = async (familyId: string, uid: string, role: 'p
       status: 'approved', assignedRole: role,
       ...reviewerFields(reviewerUid, reviewerDoc.data().displayName || 'Owner', serverTimestamp()),
     });
-    transaction.set(doc(collection(db, `families/${familyId}/feed`)), {
+    transaction.set(doc(db, `families/${familyId}/feed`, `join_${requestId}`), {
       actorId: reviewerUid, type: 'custom',
       text: `${displayName} has joined the family as a ${role}!`, timestamp: serverTimestamp(),
     });
   });
 };
 
-export const rejectJoinRequest = async (familyId: string, uid: string) => {
+export const rejectJoinRequest = async (familyId: string, uid: string, rejectionReason: string) => {
+  if (!rejectionReason.trim()) throw new Error('Rejection reason is required');
   const reviewerUid = auth.currentUser?.uid;
   if (!reviewerUid) throw new Error('Not authenticated');
   await runTransaction(db, async transaction => {
@@ -168,7 +173,8 @@ export const rejectJoinRequest = async (familyId: string, uid: string) => {
     if (!requestDoc.exists() || requestDoc.data().status !== 'pending') throw new Error('Join request is not pending');
     if (!reviewerDoc.exists() || reviewerDoc.data().familyId !== familyId || reviewerDoc.data().role !== 'owner') throw new Error('Only the family owner can review join requests');
     transaction.update(requestRef, {
-      status: 'rejected', ...reviewerFields(reviewerUid, reviewerDoc.data().displayName || 'Owner', serverTimestamp()),
+      status: 'rejected', rejectionReason: rejectionReason.trim(),
+      ...reviewerFields(reviewerUid, reviewerDoc.data().displayName || 'Owner', serverTimestamp()),
     });
   });
 };
@@ -249,69 +255,6 @@ export const submitClaimRequest = async (uid: string, displayName: string, claim
   });
 
   return familyId;
-};
-
-export const approveClaimRequest = async (familyId: string, uid: string, role: 'parent' | 'child', displayName: string, claimUserId: string, claimCode: string) => {
-  // We must do a massive migration here. Since it involves multiple queries, we cannot do it all in a single transaction if it exceeds limits, but a batch is better.
-  const batch = writeBatch(db);
-
-  // 1. Read old user data
-  const oldUserDoc = await getDoc(doc(db, 'users', claimUserId));
-  if (!oldUserDoc.exists()) throw new Error('Managed user not found');
-  const oldUserData = oldUserDoc.data();
-
-  // 2. Set new user data
-  batch.set(doc(db, 'users', uid), {
-    uid,
-    familyId,
-    role,
-    displayName,
-    avatarUrl: oldUserData.avatarUrl,
-    rewardPoints: oldUserData.rewardPoints || 0,
-    lifetimeXP: oldUserData.lifetimeXP || 0,
-    currentStreak: oldUserData.currentStreak || 0,
-    longestStreak: oldUserData.longestStreak || 0,
-    lastActiveDate: serverTimestamp()
-  }, { merge: true });
-
-  // 3. Migrate task_completions
-  const completionsQ = query(collection(db, `families/${familyId}/task_completions`), where('assigneeId', '==', claimUserId));
-  const completionsSnap = await getDocs(completionsQ);
-  completionsSnap.forEach(d => batch.update(d.ref, { assigneeId: uid }));
-
-  // 4. Migrate wallet_transactions
-  const txQ = query(collection(db, `families/${familyId}/wallet_transactions`), where('userId', '==', claimUserId));
-  const txSnap = await getDocs(txQ);
-  txSnap.forEach(d => batch.update(d.ref, { userId: uid }));
-
-  // 5. Migrate savings_goals
-  const goalsQ = query(collection(db, `families/${familyId}/savings_goals`), where('userId', '==', claimUserId));
-  const goalsSnap = await getDocs(goalsQ);
-  goalsSnap.forEach(d => batch.update(d.ref, { userId: uid }));
-
-  // 6. Migrate feed
-  const feedQ = query(collection(db, `families/${familyId}/feed`), where('actorId', '==', claimUserId));
-  const feedSnap = await getDocs(feedQ);
-  feedSnap.forEach(d => batch.update(d.ref, { actorId: uid }));
-
-  // 7. Migrate behaviour_events
-  const eventsQ = query(collection(db, `families/${familyId}/behaviour_events`), where('userId', '==', claimUserId));
-  const eventsSnap = await getDocs(eventsQ);
-  eventsSnap.forEach(d => batch.update(d.ref, { userId: uid }));
-
-  // 8. Delete old user, claim code, and join request
-  batch.delete(doc(db, 'users', claimUserId));
-  batch.delete(doc(db, `claim_codes`, claimCode));
-  batch.delete(doc(db, `families/${familyId}/join_requests`, uid));
-
-  // 9. Add feed event
-  batch.set(doc(collection(db, `families/${familyId}/feed`)), {
-    actorId: 'system',
-    text: `${displayName} has fully joined the family!`,
-    timestamp: serverTimestamp()
-  });
-
-  await batch.commit();
 };
 
 // ---------------------------
@@ -448,16 +391,15 @@ export const approveTaskCompletion = async (familyId: string, completionId: stri
       ...reviewerFields(currentUserUid, reviewerDoc.data().displayName || 'Parent', serverTimestamp()),
     });
 
-    if (points > 0) {
-      const currentPoints = userDoc.data().rewardPoints || 0;
-      const currentXP = userDoc.data().lifetimeXP || 0;
-      transaction.update(userRef, {
-        rewardPoints: currentPoints + points,
-        lifetimeXP: currentXP + points
-      });
-    }
+    const currentPoints = userDoc.data().rewardPoints || 0;
+    const currentXP = userDoc.data().lifetimeXP || 0;
+    transaction.update(userRef, {
+      rewardPoints: currentPoints + points,
+      lifetimeXP: currentXP + points,
+      lastTaskCompletionId: completionId,
+    });
 
-    const feedRef = doc(collection(db, `families/${familyId}/feed`));
+    const feedRef = doc(db, `families/${familyId}/feed`, `task_approval_${completionId}`);
     transaction.set(feedRef, {
       actorId: currentUserUid,
       type: 'custom',
@@ -468,6 +410,7 @@ export const approveTaskCompletion = async (familyId: string, completionId: stri
 };
 
 export const rejectTaskCompletion = async (familyId: string, completionId: string, comment: string) => {
+  if (!comment.trim()) throw new Error('Rejection reason is required');
   const completionRef = doc(db, `families/${familyId}/task_completions`, completionId);
   const currentUserUid = auth.currentUser?.uid;
   if (!currentUserUid) throw new Error('Not authenticated');
@@ -552,9 +495,9 @@ export async function addBehaviourEvent(
     );
 
     if (input.type === 'positive') {
-      transaction.update(childRef, { rewardPoints: effect.rewardPoints, lifetimeXP: effect.lifetimeXP });
+      transaction.update(childRef, { rewardPoints: effect.rewardPoints, lifetimeXP: effect.lifetimeXP, lastBehaviourEventId: eventRef.id });
     } else if (input.type === 'negative') {
-      transaction.update(childRef, { rewardPoints: effect.rewardPoints });
+      transaction.update(childRef, { rewardPoints: effect.rewardPoints, lastBehaviourEventId: eventRef.id });
     } else {
       transaction.update(walletRef, { balance: effect.walletBalance });
     }
@@ -962,7 +905,7 @@ export const addFundExpense = async (
     const currentBalance = fundDoc.data().balance || 0;
     if (currentBalance < expenseData.amount) throw new Error('Insufficient fund balance');
 
-    transaction.update(fundRef, { balance: currentBalance - expenseData.amount });
+    transaction.update(fundRef, { balance: currentBalance - expenseData.amount, lastFundTxId: txRef.id });
     transaction.set(txRef, {
       fundId,
       type: "expense",
@@ -1053,33 +996,17 @@ export const approvePetBoxDonation = async (familyId: string, requestId: string)
 
     const currentFundBalance = fundDoc.data().balance || 0;
 
-    console.log('[petbox-approve] writing to user wallet:', userWalletRef.path, {
-      balance: currentWallet - reqData.amountPence,
-      lastTransferTxId: approvalTxId
-    });
     transaction.set(userWalletRef, {
       balance: currentWallet - reqData.amountPence,
-      lastTransferTxId: approvalTxId
+      lastTransferTxId: approvalTxId,
+      lastTransferReqId: requestId,
     }, { merge: true });
 
-    console.log('[petbox-approve] writing to user:', userRef.path, { lastFundTxId: txRef.id });
-    transaction.update(userRef, { lastFundTxId: txRef.id });
-
-    console.log('[petbox-approve] writing to fund:', fundRef.path, {
-      balance: currentFundBalance + reqData.amountPence,
-      lastFundTxId: txRef.id
-    });
     transaction.update(fundRef, {
       balance: currentFundBalance + reqData.amountPence,
       lastFundTxId: txRef.id
     });
 
-    console.log('[petbox-approve] writing to fund_transactions:', txRef.path, {
-      fundId: reqData.fundId,
-      type: "contribution",
-      amount: reqData.amountPence,
-      fromUserId: reqData.childId
-    });
     transaction.set(txRef, {
       fundId: reqData.fundId,
       type: "contribution",
@@ -1093,13 +1020,6 @@ export const approvePetBoxDonation = async (familyId: string, requestId: string)
       createdAt: serverTimestamp()
     });
 
-    console.log('[petbox-approve] writing to wallet_transactions:', walletTxRef.path, {
-      type: 'petbox_donation',
-      childId: reqData.childId,
-      amountPence: -reqData.amountPence,
-      amount: -reqData.amountPence,
-      note: `Donated to ${reqData.fundName}`
-    });
     transaction.set(walletTxRef, {
       type: 'petbox_donation',
       childId: reqData.childId,
@@ -1115,10 +1035,6 @@ export const approvePetBoxDonation = async (familyId: string, requestId: string)
       timestamp: serverTimestamp()
     });
 
-    console.log('[petbox-approve] writing to petbox_requests:', reqRef.path, {
-      status: 'approved',
-      reviewedBy: currentUserUid
-    });
     transaction.update(reqRef, {
       status: 'approved',
       reviewedAt: serverTimestamp(),
@@ -1139,7 +1055,8 @@ export const approvePetBoxDonation = async (familyId: string, requestId: string)
   });
 };
 
-export const rejectPetBoxDonation = async (familyId: string, requestId: string) => {
+export const rejectPetBoxDonation = async (familyId: string, requestId: string, rejectionReason: string) => {
+  if (!rejectionReason.trim()) throw new Error('Rejection reason is required');
   const reqRef = doc(db, `families/${familyId}/petbox_requests`, requestId);
   const currentUserUid = auth.currentUser?.uid;
   if (!currentUserUid) throw new Error("Not authenticated");
@@ -1152,7 +1069,8 @@ export const rejectPetBoxDonation = async (familyId: string, requestId: string) 
     transaction.update(reqRef, {
       status: 'rejected',
       reviewedAt: serverTimestamp(),
-      reviewedBy: currentUserUid
+      reviewedBy: currentUserUid,
+      rejectionReason: rejectionReason.trim()
     });
 
     const feedRef = doc(collection(db, `families/${familyId}/feed`));
@@ -1229,7 +1147,6 @@ export const approveTransferRequest = async (familyId: string, requestId: string
   const currentUserRef = doc(db, 'users', currentUserUid);
 
   await runTransaction(db, async (transaction) => {
-    console.log('[transfer-approve] step: request read');
     const reqDoc = await transaction.get(reqRef);
     if (!reqDoc.exists()) throw new Error("Request not found");
 
@@ -1241,7 +1158,6 @@ export const approveTransferRequest = async (familyId: string, requestId: string
     const senderRef = doc(db, 'users', requestData.fromChildId);
     const recipientRef = doc(db, 'users', requestData.toChildId);
 
-    console.log('[transfer-approve] step: reviewer/sender/recipient read');
     const [userDoc, senderDoc, recipientDoc] = await Promise.all([
       transaction.get(currentUserRef),
       transaction.get(senderRef),
@@ -1263,30 +1179,25 @@ export const approveTransferRequest = async (familyId: string, requestId: string
     const fromWalletRef = doc(db, `families/${familyId}/wallets`, requestData.fromChildId);
     const toWalletRef = doc(db, `families/${familyId}/wallets`, requestData.toChildId);
 
-    console.log('[transfer-approve] step: sender wallet read/ensure');
     const fromBalance = await ensureWalletDocument(transaction, familyId, requestData.fromChildId, senderDoc);
-    console.log('[transfer-approve] step: recipient wallet read/ensure');
     const toBalance = await ensureWalletDocument(transaction, familyId, requestData.toChildId, recipientDoc);
 
     if (fromBalance < requestData.amountPence) {
       throw new Error("Sender no longer has sufficient funds.");
     }
 
-    console.log('[transfer-approve] step: sender wallet write');
     transaction.set(fromWalletRef, {
       balance: fromBalance - requestData.amountPence,
       lastTransferTxId: txOutRef.id,
       lastTransferReqId: requestId
     }, { merge: true });
 
-    console.log('[transfer-approve] step: recipient wallet write');
     transaction.set(toWalletRef, {
       balance: toBalance + requestData.amountPence,
       lastTransferTxId: txInRef.id,
       lastTransferReqId: requestId
     }, { merge: true });
 
-    console.log('[transfer-approve] step: request approved write');
     transaction.update(reqRef, {
       ...transferApprovalRequestUpdate(approvalTxId, currentUserUid, userData.displayName || 'Parent', serverTimestamp()),
       effectSnapshot: effectSnapshot({ entityType: 'transfer_request', familyId, actorId: currentUserUid, childId: requestData.fromChildId, counterpartyChildId: requestData.toChildId, sourceRequestId: requestId, walletDeltaPence: -requestData.amountPence, counterpartyWalletDeltaPence: requestData.amountPence }),
@@ -1305,7 +1216,6 @@ export const approveTransferRequest = async (familyId: string, requestId: string
       actorId: currentUserUid,
     };
 
-    console.log('[transfer-approve] step: transfer_out write');
     transaction.set(txOutRef, {
       ...commonTxData,
       type: 'transfer_out',
@@ -1315,7 +1225,6 @@ export const approveTransferRequest = async (familyId: string, requestId: string
       effectSnapshot: effectSnapshot({ entityType: 'transfer_request', familyId, actorId: currentUserUid, childId: requestData.fromChildId, counterpartyChildId: requestData.toChildId, sourceRequestId: requestId, walletDeltaPence: -requestData.amountPence, counterpartyWalletDeltaPence: requestData.amountPence })
     });
 
-    console.log('[transfer-approve] step: transfer_in write');
     transaction.set(txInRef, {
       ...commonTxData,
       type: 'transfer_in',
@@ -1325,7 +1234,6 @@ export const approveTransferRequest = async (familyId: string, requestId: string
       effectSnapshot: effectSnapshot({ entityType: 'transfer_request', familyId, actorId: currentUserUid, childId: requestData.fromChildId, counterpartyChildId: requestData.toChildId, sourceRequestId: requestId, walletDeltaPence: -requestData.amountPence, counterpartyWalletDeltaPence: requestData.amountPence })
     });
 
-    console.log('[transfer-approve] step: feed write');
     transaction.set(feedRef, {
       actorId: currentUserUid,
       type: 'custom',
@@ -1336,7 +1244,8 @@ export const approveTransferRequest = async (familyId: string, requestId: string
   });
 };
 
-export const rejectTransferRequest = async (familyId: string, requestId: string) => {
+export const rejectTransferRequest = async (familyId: string, requestId: string, rejectionReason: string) => {
+  if (!rejectionReason.trim()) throw new Error('Rejection reason is required');
   const reqRef = doc(db, `families/${familyId}/transfer_requests`, requestId);
   const feedRef = doc(collection(db, `families/${familyId}/feed`));
   const currentUserUid = auth.currentUser?.uid;
@@ -1358,7 +1267,8 @@ export const rejectTransferRequest = async (familyId: string, requestId: string)
       status: 'rejected',
       reviewedAt: serverTimestamp(),
       reviewedBy: currentUserUid,
-      reviewedByName: userData.displayName
+      reviewedByName: userData.displayName,
+      rejectionReason: rejectionReason.trim()
     });
 
     transaction.set(feedRef, {
@@ -1605,7 +1515,8 @@ export const approveMoneyRequest = async (familyId: string, requestId: string) =
   });
 };
 
-export const rejectMoneyRequest = async (familyId: string, requestId: string) => {
+export const rejectMoneyRequest = async (familyId: string, requestId: string, rejectionReason: string) => {
+  if (!rejectionReason.trim()) throw new Error('Rejection reason is required');
   const reqRef = doc(db, `families/${familyId}/money_requests`, requestId);
   const currentUserUid = auth.currentUser?.uid;
   if (!currentUserUid) throw new Error("Not authenticated");
@@ -1626,7 +1537,8 @@ export const rejectMoneyRequest = async (familyId: string, requestId: string) =>
       status: 'rejected',
       reviewedAt: serverTimestamp(),
       reviewedBy: currentUserUid,
-      reviewedByName: userData?.displayName || 'Parent'
+      reviewedByName: userData?.displayName || 'Parent',
+      rejectionReason: rejectionReason.trim()
     });
 
     const feedRef = doc(collection(db, `families/${familyId}/feed`));

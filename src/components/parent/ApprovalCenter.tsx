@@ -22,7 +22,7 @@ export function ApprovalCenter() {
   const { currentUser, tasks, familyMembers, taskCompletions, transferRequests, moneyRequests, petboxRequests } = useStore();
 
   const [activeTab, setActiveTab] = useState<'pending' | 'history'>('pending');
-  const [processing, setProcessing] = useState<{ key: string, action: 'approve' | 'reject' } | null>(null);
+  const [processing, setProcessing] = useState<Record<string, 'approve' | 'reject'>>({});
   const inFlightKeys = useRef(new Set<string>());
   const [optimisticallyRemovedIds, setOptimisticallyRemovedIds] = useState<Set<string>>(new Set());
   const [error, setError] = useState('');
@@ -85,15 +85,13 @@ export function ApprovalCenter() {
     const key = itemKey(item);
     if (inFlightKeys.current.has(key)) return;
     inFlightKeys.current.add(key);
-    setProcessing({ key, action: 'approve' });
+    setProcessing(previous => ({ ...previous, [key]: 'approve' }));
     setError('');
     try {
       if (item.category === 'task') {
         await approveTaskCompletion(currentUser.familyId, item.id, '');
       } else if (item.category === 'transfer') {
-        console.log('[transfer-approve] start', { familyId: currentUser.familyId, requestId: item.id });
         await approveTransferRequest(currentUser.familyId, item.id);
-        console.log('[transfer-approve] success', item.id);
       } else if (item.category === 'money_request') {
         await approveMoneyRequest(currentUser.familyId, item.id);
       } else if (item.category === 'petbox') {
@@ -101,13 +99,10 @@ export function ApprovalCenter() {
       }
       setOptimisticallyRemovedIds(prev => new Set(prev).add(key));
     } catch (err: any) {
-      console.error('[transfer-approve] full error', err);
-      console.error('[transfer-approve] code', err?.code);
-      console.error('[transfer-approve] message', err?.message);
       setError(errorText(err));
     } finally {
       inFlightKeys.current.delete(key);
-      setProcessing(null);
+      setProcessing(previous => { const next = { ...previous }; delete next[key]; return next; });
     }
   };
 
@@ -115,25 +110,27 @@ export function ApprovalCenter() {
     if (!currentUser) return;
     const key = itemKey(item);
     if (inFlightKeys.current.has(key)) return;
+    const rejectionReason = window.prompt('Enter a rejection reason')?.trim();
+    if (!rejectionReason) return;
     inFlightKeys.current.add(key);
-    setProcessing({ key, action: 'reject' });
+    setProcessing(previous => ({ ...previous, [key]: 'reject' }));
     setError('');
     try {
       if (item.category === 'task') {
-        await rejectTaskCompletion(currentUser.familyId, item.id, 'Rejected by parent');
+        await rejectTaskCompletion(currentUser.familyId, item.id, rejectionReason);
       } else if (item.category === 'transfer') {
-        await rejectTransferRequest(currentUser.familyId, item.id);
+        await rejectTransferRequest(currentUser.familyId, item.id, rejectionReason);
       } else if (item.category === 'money_request') {
-        await rejectMoneyRequest(currentUser.familyId, item.id);
+        await rejectMoneyRequest(currentUser.familyId, item.id, rejectionReason);
       } else if (item.category === 'petbox') {
-        await rejectPetBoxDonation(currentUser.familyId, item.id);
+        await rejectPetBoxDonation(currentUser.familyId, item.id, rejectionReason);
       }
       setOptimisticallyRemovedIds(prev => new Set(prev).add(key));
     } catch (err: any) {
       setError(errorText(err));
     } finally {
       inFlightKeys.current.delete(key);
-      setProcessing(null);
+      setProcessing(previous => { const next = { ...previous }; delete next[key]; return next; });
     }
   };
 
@@ -163,7 +160,8 @@ export function ApprovalCenter() {
       avatarSrc = fromChild?.avatarUrl || '';
       fallback = fromChild?.displayName[0] || '?';
     } else if (item.category === 'money_request') {
-      const isFromParent = item.requestedFromId === currentUser?.id || item.requestedFromId === currentUser?.familyId || item.requestedFromId === 'parent';
+      const requestedFrom = familyMembers.find(member => member.id === item.requestedFromId);
+      const isFromParent = requestedFrom?.role === 'parent' || requestedFrom?.role === 'owner';
       title = isFromParent ? 'Money Request' : 'Sibling Money Request';
 
       if (isFromParent) {
@@ -204,11 +202,11 @@ export function ApprovalCenter() {
           <div className="flex gap-2 shrink-0 self-end md:self-center">
             {item.isPending ? (
               <>
-                <Button size="sm" variant="danger" disabled={processing?.key === itemKey(item)} onClick={() => handleReject(item)}>
-                  {processing?.key === itemKey(item) && processing.action === 'reject' ? 'Rejecting…' : 'Reject'}
+                <Button size="sm" variant="danger" disabled={itemKey(item) in processing} onClick={() => handleReject(item)}>
+                  {processing[itemKey(item)] === 'reject' ? 'Rejecting…' : 'Reject'}
                 </Button>
-                <Button size="sm" className="bg-success-500 hover:bg-success-600 text-white" disabled={processing?.key === itemKey(item)} onClick={() => handleApprove(item)}>
-                  {processing?.key === itemKey(item) && processing.action === 'approve' ? 'Approving…' : 'Approve'}
+                <Button size="sm" className="bg-success-500 hover:bg-success-600 text-white" disabled={itemKey(item) in processing} onClick={() => handleApprove(item)}>
+                  {processing[itemKey(item)] === 'approve' ? 'Approving…' : 'Approve'}
                 </Button>
               </>
             ) : (

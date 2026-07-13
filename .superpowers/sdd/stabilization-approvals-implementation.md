@@ -99,3 +99,16 @@ The build retains pre-existing advisory warnings about ineffective dynamic impor
 Implementation commit: `4bd91ad` (`fix: stabilize approval center transactions`). This coordinated aggregate was approved by the root stabilization task. Because `firestore.rules`, `src/lib/api.ts`, and `ParentDashboard.tsx` already contained prerequisite uncommitted behaviour/onboarding work, the aggregate includes their matching behaviour tests plus the directly imported form, currency/stat, template, and onboarding dependencies. It excludes `.env`, Firebase caches, generated output, repair scripts, backups, unrelated pages/assets, and other audit streams. Verification ran from a detached temporary worktree created from the exact staged tree (`0ea2be85360ab9d3c4f9bf2cf120b4ad32c9000b`), not from the broader dirty working directory.
 
 Remaining architectural concern: parent updates to child user point fields are still broadly allowed by the pre-existing user rule because behaviour/task/reward features share that write path. Task approval itself is now replay-safe and rule-transition-safe, but fully proving point-ledger atomicity against a malicious parent client requires a typed user-point mutation ledger across all point-producing features, which is broader than Approval Center scope.
+
+## Independent review remediation
+
+The Critical/Important findings from `stabilization-approvals-review.md` were remediated in a second TDD pass:
+
+- Task approval now requires the stored task reward, stored assignee, exact points/XP mutation, typed user pointer, canonical effect snapshot, and deterministic feed write in one transaction. Broad parent/owner child-profile counter writes were removed and replaced by typed task, redemption, and behaviour mutations.
+- Reward redemption requires the stored reward and exact cost, exact atomic user deduction/pointer, canonical signed snapshot, sufficient points, and immutable terminal history.
+- Transfer, child/parent money, and Pet Box ledgers require the same transaction's approved request and canonical transaction ID. Wallet/fund mutations and terminal request validators retain inverse linkage, so standalone partial effects fail.
+- Wallet creation accepts exact legacy/zero initialization or a linked terminal manual/transfer/money/Pet operation. Parent-funded money works for existing, zero-new, and integer-legacy wallets with exact post-state assertions.
+- Claim approval was removed from the shipped action path and the unsupported mutation API was deleted. Normal join approval derives UID/display name from the stored request and atomically binds request, profile, optional zero wallet, and deterministic feed. Terminal join deletion is denied.
+- Approval processing state is keyed per card, concurrent cards remain independently loading, and every rejection collects and persists a non-empty reason. Approval diagnostic logs were removed.
+
+Remediation evidence: 104/104 Firestore rule tests, 18 focused API/UI tests, scoped lint, and production build all passed.

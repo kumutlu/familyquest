@@ -96,7 +96,7 @@ describe('addBehaviourEvent transaction contract', () => {
       type: 'negative', reason: 'Late home', pointsDelta: -25, walletDelta: 0,
     })
 
-    expect(transaction.update).toHaveBeenCalledWith(expect.objectContaining({ path: 'users/child-1' }), { rewardPoints: 0 })
+    expect(transaction.update).toHaveBeenCalledWith(expect.objectContaining({ path: 'users/child-1' }), { rewardPoints: 0, lastBehaviourEventId: 'generated-1' })
     const eventWrite = transaction.set.mock.calls.find(([ref]) => ref.path.includes('/behaviour_events/'))?.[1]
     expect(eventWrite).toMatchObject({ pointsDelta: -10, walletDelta: 0 })
     expect(transaction.set.mock.calls.some(([ref]) => ref.path.includes('/wallet_transactions/'))).toBe(false)

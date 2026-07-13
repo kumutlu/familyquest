@@ -45,8 +45,12 @@ export function ParentDashboard() {
     setJoinProcessing({ key, action });
     setJoinError('');
     try {
-      if (action === 'approve') await approveJoinRequest(currentUser.familyId, request.uid, 'child', request.displayName);
-      else await rejectJoinRequest(currentUser.familyId, request.uid);
+      if (action === 'approve') await approveJoinRequest(currentUser.familyId, request.id, 'child');
+      else {
+        const reason = window.prompt('Enter a rejection reason')?.trim();
+        if (!reason) return;
+        await rejectJoinRequest(currentUser.familyId, request.id, reason);
+      }
     } catch (error: any) {
       setJoinError(`${error?.code ? `${error.code}: ` : ''}${error?.message || 'Join review failed.'}`);
     } finally {
@@ -152,17 +156,7 @@ export function ParentDashboard() {
                     <Button size="sm" variant="secondary" disabled={joinProcessing?.key === `join:${req.uid}`} onClick={() => reviewJoin(req, 'reject')}>
                       {joinProcessing?.key === `join:${req.uid}` && joinProcessing.action === 'reject' ? 'Rejecting…' : 'Reject'}
                     </Button>
-                    {req.claimCode ? (
-                      <Button size="sm" onClick={async () => {
-                        const { approveClaimRequest } = await import('../../lib/api');
-                        const role = prompt(`Assign role for ${req.displayName} (type 'parent' or 'child')`, 'child') as 'parent' | 'child';
-                        if (role === 'parent' || role === 'child') {
-                          await approveClaimRequest(currentUser.familyId, req.uid, role, req.displayName, req.claimUserId, req.claimCode);
-                        }
-                      }}>
-                        Approve Claim
-                      </Button>
-                    ) : (
+                    {!req.claimCode && (
                       <Button size="sm" disabled={joinProcessing?.key === `join:${req.uid}`} onClick={() => reviewJoin(req, 'approve')}>
                         {joinProcessing?.key === `join:${req.uid}` && joinProcessing.action === 'approve' ? 'Approving…' : 'Approve as Child'}
                       </Button>

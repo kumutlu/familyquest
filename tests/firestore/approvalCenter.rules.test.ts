@@ -77,7 +77,7 @@ beforeEach(async () => {
     });
     await setDoc(doc(db, `families/${familyId}/task_completions`, 'comp1'), {
       taskId: 'task1',
-      childId: childId,
+      assigneeId: childId,
       status: 'pending_approval'
     });
 
@@ -140,10 +140,133 @@ describe('Approval Center Actions', () => {
     }));
   });
 
+  it('denies arbitrary parent child-profile counters and free reward history', async () => {
+    const parentDb = testEnv.authenticatedContext(parentId).firestore();
+    await assertFails(updateDoc(doc(parentDb, 'users', childId), { rewardPoints: 999, lifetimeXP: 999 }));
+
+    const childDb = testEnv.authenticatedContext(childId).firestore();
+    await assertFails(setDoc(doc(childDb, `families/${familyId}/redemptions/free-reward`), {
+      rewardId: 'missing-reward', userId: childId, costPaid: 1, redeemedAt: serverTimestamp(), createdAt: serverTimestamp(), status: 'completed',
+      familyId, sourceId: 'free-reward', actorId: childId,
+      effectSnapshot: { schemaVersion: 1, entityType: 'reward_redemption', familyId, actorId: childId, childId, rewardId: 'missing-reward', pointsDelta: -1, xpAdjustment: 0 },
+    }));
+  });
+
+  it('denies arbitrary standalone migrated wallet balances', async () => {
+    await testEnv.withSecurityRulesDisabled(async (context: any) => {
+      await setDoc(doc(context.firestore(), 'users', 'new-child'), { familyId, role: 'child', walletBalance: 25 });
+    });
+    const db = testEnv.authenticatedContext(parentId).firestore();
+    await assertFails(setDoc(doc(db, `families/${familyId}/wallets/new-child`), {
+      balance: 999, createdAt: serverTimestamp(), migratedFromLegacy: true,
+    }));
+  });
+
+  it('denies standalone fabricated fund ledger history', async () => {
+    const db = testEnv.authenticatedContext(childId).firestore();
+    await assertFails(setDoc(doc(db, `families/${familyId}/fund_transactions/fake`), {
+      fundId: 'fund1', type: 'contribution', amount: 100, fromUserId: childId, createdAt: serverTimestamp(),
+    }));
+  });
+
+  it('denies terminal join transition without its profile, wallet, and feed', async () => {
+    const db = testEnv.authenticatedContext('owner123').firestore();
+    await assertFails(updateDoc(doc(db, `families/${familyId}/join_requests/joiner1`), {
+      status: 'approved', assignedRole: 'child', reviewedBy: 'owner123', reviewedByName: 'Owner', reviewedAt: serverTimestamp(),
+    }));
+  });
+
+  it('denies standalone partial transfer and Pet Box financial effects', async () => {
+    const db = testEnv.authenticatedContext(parentId).firestore();
+    const transferBatch = writeBatch(db);
+    transferBatch.update(doc(db, `families/${familyId}/wallets`, childId), {
+      balance: 400, lastTransferTxId: 'partial_out', lastTransferReqId: 'trans1',
+    });
+    transferBatch.set(doc(db, `families/${familyId}/wallet_transactions/partial_out`), {
+      type: 'transfer_out', childId, counterpartyChildId: siblingId, amountPence: -100,
+      transferRequestId: 'trans1', approvalTxId: 'partial', createdAt: serverTimestamp(), parentRef: parentId, note: '',
+    });
+    await assertFails(transferBatch.commit());
+
+    const petBatch = writeBatch(db);
+    petBatch.update(doc(db, `families/${familyId}/wallets`, childId), {
+      balance: 400, lastTransferTxId: 'partial_pet', lastTransferReqId: 'pet1',
+    });
+    petBatch.set(doc(db, `families/${familyId}/wallet_transactions/partial_pet`), {
+      type: 'petbox_donation', childId, amountPence: -100, amount: -100, note: 'partial', sourceId: 'pet1',
+      createdAt: serverTimestamp(), timestamp: serverTimestamp(),
+    });
+    await assertFails(petBatch.commit());
+  });
+
+  it('approves a parent-funded money request into an existing wallet', async () => {
+    await testEnv.withSecurityRulesDisabled(async (context: any) => {
+      await setDoc(doc(context.firestore(), `families/${familyId}/money_requests/money-parent`), {
+        requesterId: siblingId, requestedFromId: parentId, amountPence: 100, status: 'pending',
+      });
+    });
+    const db = testEnv.authenticatedContext(parentId).firestore();
+    const batch = writeBatch(db);
+    batch.update(doc(db, `families/${familyId}/wallets`, siblingId), {
+      balance: 200, lastTransferTxId: 'parent_pay_in', lastTransferReqId: 'money-parent',
+    });
+    batch.set(doc(db, `families/${familyId}/wallet_transactions/parent_pay_in`), {
+      type: 'request_payment', childId: siblingId, amount: 100, amountPence: 100,
+      moneyRequestId: 'money-parent', approvalTxId: 'parent_pay', note: 'Money Requested', parentRef: parentId,
+      createdAt: serverTimestamp(), timestamp: serverTimestamp(),
+    });
+    batch.update(doc(db, `families/${familyId}/money_requests/money-parent`), {
+      status: 'approved', reviewedAt: serverTimestamp(), reviewedBy: parentId, reviewedByName: 'Kemal', paymentTransferId: 'parent_pay',
+    });
+    await assertSucceeds(batch.commit());
+  });
+
+  it.each([['zero-new', 0], ['integer-legacy', 35]])('approves parent-funded money into a %s wallet', async (suffix, legacyBalance) => {
+    const target = `money-child-${suffix}`;
+    const requestId = `money-${suffix}`;
+    await testEnv.withSecurityRulesDisabled(async (context: any) => {
+      await setDoc(doc(context.firestore(), 'users', target), { familyId, role: 'child', rewardPoints: 0, lifetimeXP: 0, ...(legacyBalance ? { walletBalance: legacyBalance } : {}) });
+      await setDoc(doc(context.firestore(), `families/${familyId}/money_requests/${requestId}`), {
+        requesterId: target, requestedFromId: parentId, amountPence: 100, status: 'pending',
+      });
+    });
+    const db = testEnv.authenticatedContext(parentId).firestore();
+    const batch = writeBatch(db);
+    const approvalId = `pay-${suffix}`;
+    batch.set(doc(db, `families/${familyId}/wallets/${target}`), {
+      balance: legacyBalance + 100, createdAt: serverTimestamp(), migratedFromLegacy: true,
+      lastTransferTxId: `${approvalId}_in`, lastTransferReqId: requestId,
+    });
+    batch.set(doc(db, `families/${familyId}/wallet_transactions/${approvalId}_in`), {
+      type: 'request_payment', childId: target, amount: 100, amountPence: 100, moneyRequestId: requestId,
+      approvalTxId: approvalId, note: 'Money Requested', parentRef: parentId, createdAt: serverTimestamp(), timestamp: serverTimestamp(),
+    });
+    batch.update(doc(db, `families/${familyId}/money_requests/${requestId}`), {
+      status: 'approved', reviewedAt: serverTimestamp(), reviewedBy: parentId, reviewedByName: 'Kemal', paymentTransferId: approvalId,
+    });
+    await assertSucceeds(batch.commit());
+  });
+
+  it('atomically redeems the stored reward cost and makes terminal history immutable', async () => {
+    await testEnv.withSecurityRulesDisabled(async (context: any) => {
+      await setDoc(doc(context.firestore(), `families/${familyId}/rewards/reward-1`), { title: 'Movie', cost: 25 });
+    });
+    const db = testEnv.authenticatedContext(childId).firestore();
+    const batch = writeBatch(db);
+    batch.update(doc(db, 'users', childId), { rewardPoints: 75, lastRedemptionId: 'redemption-1' });
+    batch.set(doc(db, `families/${familyId}/redemptions/redemption-1`), {
+      rewardId: 'reward-1', userId: childId, costPaid: 25, redeemedAt: serverTimestamp(), createdAt: serverTimestamp(), status: 'completed',
+      familyId, sourceId: 'redemption-1', actorId: childId,
+      effectSnapshot: { schemaVersion: 1, entityType: 'reward_redemption', familyId, actorId: childId, childId, rewardId: 'reward-1', pointsDelta: -25, xpAdjustment: 0 },
+    });
+    await assertSucceeds(batch.commit());
+    await assertFails(updateDoc(doc(db, `families/${familyId}/redemptions/redemption-1`), { status: 'changed' }));
+  });
+
   it('owner can reject a pending task completion', async () => {
     const db = testEnv.authenticatedContext('owner123').firestore();
     await assertSucceeds(setDoc(doc(db, `families/${familyId}/task_completions`, 'comp1'), {
-      taskId: 'task1', childId, status: 'rejected', parentComment: 'Retry',
+      taskId: 'task1', assigneeId: childId, status: 'rejected', parentComment: 'Retry',
       rejectedAt: serverTimestamp(), reviewedAt: serverTimestamp(), reviewedBy: 'owner123', reviewedByName: 'Owner',
     }));
   });
@@ -151,7 +274,7 @@ describe('Approval Center Actions', () => {
   it('child, wrong-family reviewer, forged reviewer and extra fields are denied', async () => {
     const childDb = testEnv.authenticatedContext(childId).firestore();
     await assertFails(setDoc(doc(childDb, `families/${familyId}/task_completions`, 'comp1'), {
-      taskId: 'task1', childId, status: 'rejected', parentComment: 'forged', rejectedAt: serverTimestamp(),
+      taskId: 'task1', assigneeId: childId, status: 'rejected', parentComment: 'forged', rejectedAt: serverTimestamp(),
       reviewedAt: serverTimestamp(), reviewedBy: childId, reviewedByName: 'Child',
     }));
 
@@ -176,7 +299,7 @@ describe('Approval Center Actions', () => {
     const db = testEnv.authenticatedContext('owner123').firestore();
     const batch = writeBatch(db);
     batch.set(doc(db, 'users', 'joiner1'), {
-      uid: 'joiner1', familyId, role: 'child', displayName: 'New Child', avatarUrl: 'avatar',
+      uid: 'joiner1', joinRequestId: 'joiner1', familyId, role: 'child', displayName: 'New Child', avatarUrl: 'avatar',
       rewardPoints: 0, lifetimeXP: 0, currentStreak: 0, longestStreak: 0, lastActiveDate: serverTimestamp(),
     }, { merge: true });
     batch.set(doc(db, `families/${familyId}/wallets`, 'joiner1'), {
@@ -185,7 +308,7 @@ describe('Approval Center Actions', () => {
     batch.update(doc(db, `families/${familyId}/join_requests`, 'joiner1'), {
       status: 'approved', assignedRole: 'child', reviewedBy: 'owner123', reviewedByName: 'Owner', reviewedAt: serverTimestamp(),
     });
-    batch.set(doc(db, `families/${familyId}/feed`, 'join-feed'), {
+    batch.set(doc(db, `families/${familyId}/feed`, 'join_joiner1'), {
       actorId: 'owner123', type: 'custom', text: 'New Child has joined the family as a child!', timestamp: serverTimestamp(),
     });
     await assertSucceeds(batch.commit());
@@ -200,6 +323,7 @@ describe('Approval Center Actions', () => {
       parentComment: null,
       approvedAt: serverTimestamp(),
       awardedPoints: 50,
+      effectSnapshot: { schemaVersion: 1, entityType: 'task_completion', familyId, actorId: parentId, childId, pointsDelta: 50, xpAdjustment: 0 },
       reviewedBy: parentId,
       reviewedByName: 'Kemal',
       reviewedAt: serverTimestamp()
@@ -207,10 +331,11 @@ describe('Approval Center Actions', () => {
 
     batch.update(doc(db, 'users', childId), {
       rewardPoints: 150,
-      lifetimeXP: 150
+      lifetimeXP: 150,
+      lastTaskCompletionId: 'comp1'
     });
 
-    batch.set(doc(db, `families/${familyId}/feed`, 'feed_approve_task'), {
+    batch.set(doc(db, `families/${familyId}/feed`, 'task_approval_comp1'), {
       actorId: parentId,
       actorName: 'Kemal',
       type: 'custom',
@@ -304,7 +429,8 @@ describe('Approval Center Actions', () => {
       status: 'rejected',
       reviewedAt: serverTimestamp(),
       reviewedBy: parentId,
-      reviewedByName: 'Kemal'
+      reviewedByName: 'Kemal',
+      rejectionReason: 'Not allowed'
     });
 
     batch.set(doc(db, `families/${familyId}/feed`, 'feed_rej_trans'), {
@@ -388,7 +514,8 @@ describe('Approval Center Actions', () => {
       status: 'rejected',
       reviewedAt: serverTimestamp(),
       reviewedBy: parentId,
-      reviewedByName: 'Kemal'
+      reviewedByName: 'Kemal',
+      rejectionReason: 'Not allowed'
     });
 
     batch.set(doc(db, `families/${familyId}/feed`, 'feed_rej_money'), {
@@ -411,11 +538,8 @@ describe('Approval Center Actions', () => {
 
     batch.update(doc(db, `families/${familyId}/wallets`, childId), {
       balance: 400,
-      lastTransferTxId: txOutId
-    });
-
-    batch.update(doc(db, 'users', childId), {
-      lastFundTxId: txFundId
+      lastTransferTxId: txOutId,
+      lastTransferReqId: 'pet1'
     });
 
     batch.update(doc(db, `families/${familyId}/funds`, 'fund1'), {
@@ -428,6 +552,7 @@ describe('Approval Center Actions', () => {
       type: "contribution",
       amount: 100,
       fromUserId: childId,
+      sourceId: 'pet1',
       createdAt: serverTimestamp()
     });
 
@@ -437,6 +562,7 @@ describe('Approval Center Actions', () => {
       amountPence: -100,
       amount: -100,
       note: `Donated to Cat Shelter`,
+      sourceId: 'pet1',
       createdAt: serverTimestamp(),
       timestamp: serverTimestamp()
     });
@@ -468,7 +594,8 @@ describe('Approval Center Actions', () => {
     batch.update(doc(db, `families/${familyId}/petbox_requests`, 'pet1'), {
       status: 'rejected',
       reviewedAt: serverTimestamp(),
-      reviewedBy: parentId
+      reviewedBy: parentId,
+      rejectionReason: 'Not allowed'
     });
 
     batch.set(doc(db, `families/${familyId}/feed`, 'feed_rej_petbox'), {

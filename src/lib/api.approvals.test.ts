@@ -21,7 +21,7 @@ vi.mock('firebase/auth', () => ({
 }))
 vi.mock('./firebase', () => ({ db: { name: 'db' }, auth: authState, googleProvider: {} }))
 
-import { approveTaskCompletion, rejectTaskCompletion } from './api'
+import { approveJoinRequest, approveMoneyRequest, approveTaskCompletion, rejectTaskCompletion } from './api'
 
 function snapshot(data?: Record<string, any>) { return { exists: () => data !== undefined, data: () => data } }
 function transactionWith(docs: Record<string, Record<string, any> | undefined>) {
@@ -49,7 +49,7 @@ describe('approval API transaction contracts', () => {
     expect(tx.update).toHaveBeenCalledWith(expect.objectContaining({ path: 'families/family-1/task_completions/completion-1' }), expect.objectContaining({
       status: 'approved', parentComment: 'Great work', reviewedBy: 'owner-1', reviewedByName: 'Kemal', awardedPoints: 10,
     }))
-    expect(tx.update).toHaveBeenCalledWith(expect.objectContaining({ path: 'users/child-1' }), { rewardPoints: 15, lifetimeXP: 30 })
+    expect(tx.update).toHaveBeenCalledWith(expect.objectContaining({ path: 'users/child-1' }), { rewardPoints: 15, lifetimeXP: 30, lastTaskCompletionId: 'completion-1' })
   })
 
   it('rejects replay before any write', async () => {
@@ -70,5 +70,33 @@ describe('approval API transaction contracts', () => {
     await rejectTaskCompletion('family-1', 'completion-1', 'Please retry')
     expect(tx.update).toHaveBeenCalledTimes(1)
     expect(tx.update).toHaveBeenCalledWith(expect.anything(), expect.objectContaining({ status: 'rejected', reviewedBy: 'owner-1' }))
+  })
+
+  it('derives join target identity and display name from the pending request', async () => {
+    const tx = transactionWith({
+      'families/family-1/join_requests/request-1': { uid: 'target-1', displayName: 'Stored Name', status: 'pending' },
+      'users/owner-1': { familyId: 'family-1', role: 'owner', displayName: 'Owner' },
+    })
+    await approveJoinRequest('family-1', 'request-1', 'child')
+    expect(tx.set).toHaveBeenCalledWith(expect.objectContaining({ path: 'users/target-1' }), expect.objectContaining({
+      uid: 'target-1', displayName: 'Stored Name', role: 'child', familyId: 'family-1',
+    }), { merge: true })
+  })
+
+  it('uses the production parent-funded money path for an existing wallet', async () => {
+    const tx = transactionWith({
+      'families/family-1/money_requests/money-1': { requesterId: 'child-1', requestedFromId: 'parent-source', amountPence: 100, status: 'pending', message: 'Lunch' },
+      'users/owner-1': { familyId: 'family-1', role: 'owner', displayName: 'Owner' },
+      'users/parent-source': { familyId: 'family-1', role: 'parent' },
+      'users/child-1': { familyId: 'family-1', role: 'child' },
+      'families/family-1/wallets/child-1': { balance: 250 },
+    })
+    await approveMoneyRequest('family-1', 'money-1')
+    expect(tx.set).toHaveBeenCalledWith(expect.objectContaining({ path: 'families/family-1/wallets/child-1' }), {
+      balance: 350, lastTransferTxId: 'generated-1_in', lastTransferReqId: 'money-1',
+    }, { merge: true })
+    expect(tx.set).toHaveBeenCalledWith(expect.objectContaining({ path: 'families/family-1/wallet_transactions/generated-1_in' }), expect.objectContaining({
+      type: 'request_payment', childId: 'child-1', amountPence: 100, moneyRequestId: 'money-1', approvalTxId: 'generated-1', parentRef: 'owner-1',
+    }))
   })
 })
