@@ -30,7 +30,7 @@ describe('HistoryActionControl', () => {
   it('routes a real child-created pending request through parent cancellation and updates immediately', async () => {
     api.cancelPendingApproval.mockResolvedValue(undefined);
     render(<HistoryActionControl sourceKind="transfer_request" source={{ id: 'request-1', status: 'pending', fromChildId: 'child-1' }} />);
-    fireEvent.click(screen.getByRole('button', { name: 'Undo' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Cancel request' }));
     await waitFor(() => expect(api.cancelPendingApproval).toHaveBeenCalledWith('family-1', 'transfer', 'request-1'));
     expect(screen.getByText('Cancelled')).toBeInTheDocument();
   });

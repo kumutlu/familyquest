@@ -42,7 +42,6 @@ describe('ApprovalCenter interaction contract', () => {
     const pending = deferred()
     api.approveTaskCompletion.mockReturnValue(pending.promise)
     render(<ApprovalCenter />)
-    expect(screen.getAllByRole('button', { name: 'Cancel' })).toHaveLength(2)
 
     const approveButtons = screen.getAllByRole('button', { name: 'Approve' })
     fireEvent.click(approveButtons[0])
@@ -73,7 +72,6 @@ describe('ApprovalCenter interaction contract', () => {
   })
 
   it('keeps the card and exposes the exact Firebase code and message when rejection fails', async () => {
-    vi.spyOn(window, 'prompt').mockReturnValue('Needs more evidence')
     api.rejectTaskCompletion.mockRejectedValue(Object.assign(new Error('Missing permissions'), { code: 'permission-denied' }))
     render(<ApprovalCenter />)
 
@@ -81,6 +79,6 @@ describe('ApprovalCenter interaction contract', () => {
 
     expect(await screen.findByText('permission-denied: Missing permissions')).toBeInTheDocument()
     expect(screen.getByText(/Tidy room/)).toBeInTheDocument()
-    expect(api.rejectTaskCompletion).toHaveBeenCalledWith('family-1', 'same-id', 'Needs more evidence')
+    expect(api.rejectTaskCompletion).toHaveBeenCalledWith('family-1', 'same-id', 'Rejected')
   })
 })

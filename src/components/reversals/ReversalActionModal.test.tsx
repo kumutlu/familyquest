@@ -9,7 +9,7 @@ import { ReversalActionModal } from './ReversalActionModal';
 
 const action: HistoryAction = {
   sourceKind: 'wallet_transaction', sourceId: 'tx-1', source: {}, summary: 'Pocket money',
-  action: 'reverse', actionLabel: 'Reverse', targets: [{ id: 'child-1', label: 'Alex wallet', originalDelta: 300, predictedBalance: 200, unit: 'money' }],
+  action: 'reverse', actionLabel: 'Undo', targets: [{ id: 'child-1', label: 'Alex wallet', originalDelta: 300, predictedBalance: 200, unit: 'money' }],
 };
 
 describe('ReversalActionModal', () => {
@@ -26,7 +26,7 @@ describe('ReversalActionModal', () => {
   it('requires a trimmed reason of at least three characters', async () => {
     render(<ReversalActionModal open familyId="family-1" historyAction={action} onClose={vi.fn()} />);
     fireEvent.change(screen.getByLabelText('Reason'), { target: { value: ' x ' } });
-    fireEvent.click(screen.getByRole('button', { name: 'Reverse' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Undo' }));
     expect(await screen.findByText('Reason must be at least 3 characters.')).toBeInTheDocument();
     expect(api.reverseTransaction).not.toHaveBeenCalled();
   });
@@ -37,11 +37,11 @@ describe('ReversalActionModal', () => {
     const onClose = vi.fn();
     render(<ReversalActionModal open familyId="family-1" historyAction={action} onClose={onClose} />);
     fireEvent.change(screen.getByLabelText('Reason'), { target: { value: 'Duplicate' } });
-    const submit = screen.getByRole('button', { name: 'Reverse' });
+    const submit = screen.getByRole('button', { name: 'Undo' });
     fireEvent.click(submit);
     fireEvent.click(submit);
     expect(api.reverseTransaction).toHaveBeenCalledTimes(1);
-    expect(screen.getByRole('button', { name: 'Reversing…' })).toBeDisabled();
+    expect(screen.getByRole('button', { name: 'Undoing…' })).toBeDisabled();
     resolve({ status: 'completed' });
     await waitFor(() => expect(onClose).toHaveBeenCalledOnce());
   });
@@ -51,7 +51,7 @@ describe('ReversalActionModal', () => {
     const onClose = vi.fn();
     render(<ReversalActionModal open familyId="family-1" historyAction={action} onClose={onClose} />);
     fireEvent.change(screen.getByLabelText('Reason'), { target: { value: 'Duplicate' } });
-    fireEvent.click(screen.getByRole('button', { name: 'Reverse' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Undo' }));
     expect(await screen.findByText('failed-precondition: Insufficient fund balance to reverse')).toBeInTheDocument();
     expect(screen.getByLabelText('Reason')).toHaveValue('Duplicate');
     expect(onClose).not.toHaveBeenCalled();

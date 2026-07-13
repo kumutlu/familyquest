@@ -10,7 +10,7 @@ describe('reversal history normalization', () => {
       sourceKind: 'wallet_transaction', source: { id: 'tx-1', type: 'deposit', status: 'completed', note: 'Pocket money', effectSnapshot: effectSnapshot({ entityType: 'wallet_transaction', familyId: 'family-1', actorId: 'parent-1', childId: 'child-1', walletDeltaPence: 300 }) },
       actor: parent, reversals: [], balances: { wallets: { 'child-1': 500 } }, names: { 'child-1': 'Alex' },
     });
-    expect(action).toMatchObject({ sourceId: 'tx-1', action: 'reverse', actionLabel: 'Reverse', summary: 'Pocket money' });
+    expect(action).toMatchObject({ sourceId: 'tx-1', action: 'reverse', actionLabel: 'Undo', summary: 'Pocket money' });
     expect(action.targets).toEqual([{ id: 'child-1', label: 'Alex wallet', originalDelta: 300, predictedBalance: 200, unit: 'money' }]);
   });
 
@@ -90,7 +90,7 @@ describe('reversal history normalization', () => {
     ['petbox_request', { id: 'pet-pending', status: 'pending', childId: 'child-1' }],
   ] as const)('offers parent cancellation for a real child-created %s', (sourceKind, source) => {
     expect(normalizeHistoryAction({ sourceKind, source, actor: parent, reversals: [], balances: {}, names: {} }))
-      .toMatchObject({ action: 'cancel', actionLabel: 'Undo' });
+      .toMatchObject({ action: 'cancel', actionLabel: 'Cancel request' });
   });
 
   it.each([

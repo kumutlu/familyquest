@@ -62,7 +62,7 @@ export function ReversalActionModal({ open, familyId, historyAction, onClose, on
   };
 
   const loadingLabel = historyAction.actionLabel === 'Refund' ? 'Refunding…'
-    : historyAction.actionLabel === 'Undo' ? 'Undoing…' : 'Reversing…';
+    : historyAction.actionLabel === 'Cancel request' ? 'Cancelling…' : 'Undoing…';
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-gray-900/40 p-4 backdrop-blur-sm" role="dialog" aria-modal="true">

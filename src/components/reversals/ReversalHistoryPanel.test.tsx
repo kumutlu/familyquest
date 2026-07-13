@@ -21,9 +21,9 @@ describe('ReversalHistoryPanel', () => {
 
   it('updates a completed action to Reversed immediately with audit metadata', async () => {
     render(<ReversalHistoryPanel />);
-    fireEvent.click(screen.getByRole('button', { name: 'Reverse' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Undo' }));
     fireEvent.change(screen.getByLabelText('Reason'), { target: { value: 'Duplicate entry' } });
-    fireEvent.click(within(screen.getByRole('dialog')).getByRole('button', { name: 'Reverse' }));
+    fireEvent.click(within(screen.getByRole('dialog')).getByRole('button', { name: 'Undo' }));
     await waitFor(() => expect(screen.getByText('Reversed')).toBeInTheDocument());
     expect(screen.getByText('Duplicate entry')).toBeInTheDocument();
     expect(screen.getByText(/by Parent/)).toBeInTheDocument();
