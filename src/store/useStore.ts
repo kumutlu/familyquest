@@ -1,15 +1,19 @@
 import { create } from 'zustand';
 import {
+  collection,
   doc,
   getDocFromServer,
   getDocsFromServer,
   onSnapshot,
+  orderBy,
+  query,
 } from 'firebase/firestore';
 import { onAuthStateChanged } from 'firebase/auth';
 import { auth, db } from '../lib/firebase';
 import {
   bootstrapResources,
   bootstrapResourcesForRole,
+  criticalBootstrapResources,
   createBootstrapQueryPlan,
   type BootstrapResource,
   type BootstrapRole,
@@ -83,6 +87,7 @@ interface AppState {
   appReady: boolean;
   loading: boolean;
   bootstrapError: string | null;
+  featureErrors: Record<string, string | null>;
   bootstrapStatus: Record<BootstrapResource, BootstrapStatus>;
   activeFamilyId: string | null;
 
@@ -113,12 +118,19 @@ interface AppState {
   initAuth: () => void;
   loadFamilyData: (uid: string, familyId: string) => void;
   retryBootstrap: () => void;
+  loadReversals: () => void;
+  retryFeature: (name: string) => void;
   cleanup: () => void;
 }
 
 let authUnsubscribe: (() => void) | null = null;
 let profileUnsubscribe: (() => void) | null = null;
-let familyUnsubscribes: (() => void)[] = [];
+type ListenerRegistration = {
+  critical: boolean;
+  unsubscribe: () => void;
+};
+
+let familyListeners = new Map<string, ListenerRegistration>();
 let authGeneration = 0;
 let familyGeneration = 0;
 
@@ -129,9 +141,16 @@ const stopProfileListener = () => {
 
 const stopFamilyListeners = () => {
   familyGeneration += 1;
-  const subscriptions = familyUnsubscribes;
-  familyUnsubscribes = [];
-  subscriptions.forEach(unsubscribe => unsubscribe());
+  const subscriptions = [...familyListeners.values()];
+  familyListeners.clear();
+  subscriptions.forEach(({ unsubscribe }) => unsubscribe());
+};
+
+const stopFamilyListener = (name: string) => {
+  const registration = familyListeners.get(name);
+  if (!registration) return;
+  familyListeners.delete(name);
+  registration.unsubscribe();
 };
 
 const errorText = (context: string, error: any) =>
@@ -145,6 +164,7 @@ export const useStore = create<AppState>((set, get) => ({
   appReady: false,
   loading: true,
   bootstrapError: null,
+  featureErrors: {},
   bootstrapStatus: createBootstrapStatus('idle'),
   activeFamilyId: null,
 
@@ -172,6 +192,7 @@ export const useStore = create<AppState>((set, get) => ({
           ...emptyFamilyState(),
           bootstrapStatus: createBootstrapStatus('idle'),
           bootstrapError: null,
+          featureErrors: {},
           error: null,
           activeFamilyId: null,
           appReady: true,
@@ -190,6 +211,7 @@ export const useStore = create<AppState>((set, get) => ({
         ...emptyFamilyState(),
         bootstrapStatus: createBootstrapStatus('idle'),
         bootstrapError: null,
+        featureErrors: {},
         error: null,
         activeFamilyId: null,
         appReady: false,
@@ -325,14 +347,15 @@ export const useStore = create<AppState>((set, get) => ({
 
     familyId = safeFamilyId;
 
-    if (state.activeFamilyId === familyId && familyUnsubscribes.length > 0) return;
+    if (state.activeFamilyId === familyId && familyListeners.size > 0) return;
 
     stopFamilyListeners();
     const generation = familyGeneration;
     const owningAuthGeneration = authGeneration;
 
     const role = state.currentUser.role as BootstrapRole;
-    const requiredResources = bootstrapResourcesForRole(role);
+    const roleResources = bootstrapResourcesForRole(role);
+    const requiredResources = criticalBootstrapResources.filter(resource => roleResources.includes(resource));
     const queryPlan = createBootstrapQueryPlan(db, {
       familyId,
       userId: state.currentUser.id,
@@ -348,6 +371,7 @@ export const useStore = create<AppState>((set, get) => ({
       ...emptyFamilyState(),
       bootstrapStatus: createBootstrapStatus('loading', requiredResources),
       bootstrapError: null,
+      featureErrors: {},
       error: null,
       activeFamilyId: familyId,
       familyLoading: true,
@@ -372,7 +396,7 @@ export const useStore = create<AppState>((set, get) => ({
       }
     };
 
-    const fail = (resource: BootstrapResource, context: string, error: any) => {
+    const handleCriticalListenerError = (resource: BootstrapResource, context: string, error: any) => {
       if (!isCurrent()) return;
       stopFamilyListeners();
       set(current => ({
@@ -385,12 +409,23 @@ export const useStore = create<AppState>((set, get) => ({
       }));
     };
 
+    const handleOptionalListenerError = (name: string, resource: BootstrapResource, context: string, error: any) => {
+      if (!isCurrent()) return;
+      stopFamilyListener(name);
+      set(current => ({
+        bootstrapStatus: { ...current.bootstrapStatus, [resource]: 'error' },
+        featureErrors: { ...current.featureErrors, [name]: errorText(context, error) },
+      }));
+    };
+
     const subscribe = (
       resource: BootstrapResource,
       context: string,
       target: any,
       serverRead: (target: any) => Promise<any>,
       applySnapshot: (snapshot: any) => void,
+      listenerName = resource,
+      critical = requiredResources.includes(resource),
     ) => {
       const acceptSnapshot = (snapshot: any) => {
         if (!isCurrent()) return;
@@ -405,15 +440,21 @@ export const useStore = create<AppState>((set, get) => ({
           if (snapshot.metadata?.fromCache) return;
           acceptSnapshot(snapshot);
         },
-        error => fail(resource, context, error),
+        error => critical
+          ? handleCriticalListenerError(resource, context, error)
+          : handleOptionalListenerError(listenerName, resource, context, error),
       );
-      familyUnsubscribes.push(unsubscribe);
+      stopFamilyListener(listenerName);
+      familyListeners.set(listenerName, { critical, unsubscribe });
       void serverRead(target)
         .then(snapshot => {
           if (get().bootstrapStatus[resource] !== 'ready') acceptSnapshot(snapshot);
         })
         .catch(error => {
-          if (get().bootstrapStatus[resource] !== 'ready') fail(resource, context, error);
+          if (get().bootstrapStatus[resource] !== 'ready') {
+            if (critical) handleCriticalListenerError(resource, context, error);
+            else handleOptionalListenerError(listenerName, resource, context, error);
+          }
         });
     };
 
@@ -431,13 +472,14 @@ export const useStore = create<AppState>((set, get) => ({
         entry.target,
         entry.kind === 'document' ? getDocFromServer : getDocsFromServer,
         applySnapshot,
+        key,
       );
     };
 
     try {
       subscribePlanned('family', 'Family', snapshot => {
         if (!snapshot.exists()) {
-          fail('family', 'Family', { code: 'not-found', message: 'Family document does not exist' });
+          handleCriticalListenerError('family', 'Family', { code: 'not-found', message: 'Family document does not exist' });
           return;
         }
         set({ familyData: { id: snapshot.id, ...snapshot.data() } });
@@ -445,7 +487,6 @@ export const useStore = create<AppState>((set, get) => ({
 
       subscribePlanned('tasks', 'Tasks', snapshot => set({ tasks: docs(snapshot) }));
       subscribePlanned('rewards', 'Rewards', snapshot => set({ rewards: docs(snapshot) }));
-      subscribePlanned('reversals', 'Reversals', snapshot => set({ reversals: docs(snapshot) }));
 
       const currentUser = state.currentUser;
       if (currentUser?.role === 'parent' || currentUser?.role === 'owner') {
@@ -505,15 +546,17 @@ export const useStore = create<AppState>((set, get) => ({
             snapshot => {
               if (!snapshot.metadata?.fromCache) acceptMoneySnapshot(index, snapshot);
             },
-            error => fail('moneyRequests', 'Money requests', error),
+            error => handleOptionalListenerError(`moneyRequests:${index}`, 'moneyRequests', 'Money requests', error),
           );
-          familyUnsubscribes.push(unsubscribe);
+          const listenerName = `moneyRequests:${index}`;
+          stopFamilyListener(listenerName);
+          familyListeners.set(listenerName, { critical: false, unsubscribe });
           void getDocsFromServer(moneyQuery)
             .then(snapshot => {
               if (!moneyRequestReady[index]) acceptMoneySnapshot(index, snapshot);
             })
             .catch(error => {
-              if (!moneyRequestReady[index]) fail('moneyRequests', 'Money requests', error);
+              if (!moneyRequestReady[index]) handleOptionalListenerError(listenerName, 'moneyRequests', 'Money requests', error);
             });
         });
       }
@@ -524,8 +567,52 @@ export const useStore = create<AppState>((set, get) => ({
       subscribePlanned('funds', 'Funds', snapshot => set({ funds: docs(snapshot) }));
       subscribePlanned('fundTransactions', 'Fund transactions', snapshot => set({ fundTransactions: docs(snapshot) }));
     } catch (error: any) {
-      fail('family', 'Bootstrap', error);
+      handleCriticalListenerError('family', 'Bootstrap', error);
     }
+  },
+
+  loadReversals: () => {
+    const { activeFamilyId, currentUser } = get();
+    if (
+      !activeFamilyId ||
+      currentUser?.familyId !== activeFamilyId ||
+      (currentUser?.role !== 'parent' && currentUser?.role !== 'owner') ||
+      familyListeners.has('reversals')
+    ) return;
+
+    const generation = familyGeneration;
+    const userId = currentUser.id;
+    const isCurrent = () =>
+      familyGeneration === generation &&
+      get().activeFamilyId === activeFamilyId &&
+      get().currentUser?.id === userId &&
+      get().currentUser?.familyId === activeFamilyId;
+    const target = query(
+      collection(db, `families/${activeFamilyId}/reversals`),
+      orderBy('completedAt', 'desc'),
+    );
+    set(current => ({ featureErrors: { ...current.featureErrors, reversals: null } }));
+    const unsubscribe = onSnapshot(
+      target,
+      snapshot => {
+        if (!isCurrent()) return;
+        set({ reversals: snapshot.docs.map(item => ({ id: item.id, ...item.data() })) });
+      },
+      error => {
+        if (!isCurrent()) return;
+        stopFamilyListener('reversals');
+        set(current => ({
+          featureErrors: { ...current.featureErrors, reversals: errorText('Reversals', error) },
+        }));
+      },
+    );
+    familyListeners.set('reversals', { critical: false, unsubscribe });
+  },
+
+  retryFeature: name => {
+    if (name !== 'reversals') return;
+    stopFamilyListener(name);
+    get().loadReversals();
   },
 
   retryBootstrap: () => {
@@ -549,6 +636,7 @@ export const useStore = create<AppState>((set, get) => ({
       authUser: undefined,
       currentUser: null,
       bootstrapError: null,
+      featureErrors: {},
       appReady: false,
       loading: true,
     });
@@ -571,6 +659,7 @@ export const useStore = create<AppState>((set, get) => ({
       ...emptyFamilyState(),
       bootstrapStatus: createBootstrapStatus('idle'),
       bootstrapError: null,
+      featureErrors: {},
       error: null,
       activeFamilyId: null,
       appReady: false,

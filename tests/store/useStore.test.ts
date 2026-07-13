@@ -82,7 +82,6 @@ const familyResources = [
   'families/fam1/transfer_requests',
   'families/fam1/money_requests',
   'families/fam1/petbox_requests',
-  'families/fam1/reversals',
 ] as const;
 
 const childFamilyResources = familyResources
@@ -278,15 +277,59 @@ describe('bootstrap/auth/listener state machine', () => {
     expect(transferQuery?.constraints.some(constraint => constraint.type === 'where')).toBe(false);
   });
 
-  it('subscribes to immutable reversals and applies snapshots immediately', () => {
+  it('does not subscribe to reversals during initial bootstrap', () => {
     authenticatedState();
     useStore.getState().loadFamilyData('user1', 'fam1');
-    listener('families/fam1/reversals').next(collectionSnapshot([{ id: 'wallet_transaction__tx-1', sourceKind: 'wallet_transaction', sourceId: 'tx-1', reason: 'Duplicate' }]));
-    expect(useStore.getState().reversals).toEqual([
-      { id: 'wallet_transaction__tx-1', sourceKind: 'wallet_transaction', sourceId: 'tx-1', reason: 'Duplicate' },
-    ]);
-    useStore.getState().cleanup();
-    expect(useStore.getState().reversals).toEqual([]);
+    expect(listeners.some(item => item.target === 'families/fam1/reversals')).toBe(false);
+  });
+
+  it.each(['parent', 'owner'])('contains a reversals permission error to the optional feature for %s', role => {
+    authenticatedState('fam1', role);
+    useStore.getState().loadFamilyData('user1', 'fam1');
+    emitAllFamilySnapshots({
+      'families/fam1/tasks': [{ id: 'task-1', title: 'Core task' }],
+      'families/fam1/rewards': [{ id: 'reward-1', title: 'Core reward' }],
+      'families/fam1/wallets': [{ id: 'child-1', balance: 500 }],
+    });
+    expect(useStore.getState().appReady).toBe(true);
+
+    useStore.getState().loadReversals();
+    const reversalListener = listener('families/fam1/reversals');
+    reversalListener.error({ code: 'permission-denied', message: 'Missing or insufficient permissions' });
+
+    expect(useStore.getState()).toMatchObject({
+      appReady: true,
+      bootstrapError: null,
+      featureErrors: { reversals: '[Reversals] permission-denied: Missing or insufficient permissions' },
+    });
+    expect(useStore.getState().tasks).toEqual([{ id: 'task-1', title: 'Core task' }]);
+    expect(useStore.getState().rewards).toEqual([{ id: 'reward-1', title: 'Core reward' }]);
+    expect(useStore.getState().childWallets).toEqual([{ id: 'child-1', balance: 500 }]);
+    expect(reversalListener.unsubscribe).toHaveBeenCalledTimes(1);
+    expect(listener('families/fam1/tasks').unsubscribe).not.toHaveBeenCalled();
+  });
+
+  it('does not attach feature-scoped reversals for a child or a different family', () => {
+    authenticatedState('fam1', 'child');
+    useStore.getState().loadFamilyData('user1', 'fam1');
+    useStore.getState().loadReversals();
+    expect(listeners.some(item => item.target === 'families/fam1/reversals')).toBe(false);
+
+    useStore.setState({ currentUser: { id: 'user1', familyId: 'fam2', role: 'parent' } });
+    useStore.getState().loadReversals();
+    expect(listeners.some(item => item.target === 'families/fam1/reversals')).toBe(false);
+  });
+
+  it('retries only the failed optional reversals listener without duplicating healthy listeners', () => {
+    authenticatedState();
+    useStore.getState().loadFamilyData('user1', 'fam1');
+    emitAllFamilySnapshots();
+    useStore.getState().loadReversals();
+    listener('families/fam1/reversals').error({ code: 'permission-denied', message: 'denied' });
+
+    useStore.getState().retryFeature('reversals');
+    expect(listeners.filter(item => item.target === 'families/fam1/reversals')).toHaveLength(2);
+    expect(listeners.filter(item => item.target === 'families/fam1/tasks')).toHaveLength(1);
   });
 
   it('uses least-privilege child queries and excludes parent-only join requests from readiness', () => {
@@ -345,13 +388,31 @@ describe('bootstrap/auth/listener state machine', () => {
     ]);
   });
 
-  it('9. prevents readiness when any listener fails', () => {
+  it('9. contains an optional bootstrap listener failure without tearing down critical data', () => {
     authenticatedState();
     useStore.getState().loadFamilyData('user1', 'fam1');
+    emitAllFamilySnapshots();
     listener('families/fam1/transfer_requests').error({ code: 'permission-denied', message: 'denied' });
-    expect(useStore.getState()).toMatchObject({ appReady: false, loading: false, activeFamilyId: null });
+    expect(useStore.getState()).toMatchObject({ appReady: true, loading: false, activeFamilyId: 'fam1' });
     expect(useStore.getState().bootstrapStatus.transferRequests).toBe('error');
-    expect(useStore.getState().bootstrapError).toContain('permission-denied');
+    expect(useStore.getState().bootstrapError).toBeNull();
+    expect(useStore.getState().featureErrors.transferRequests).toContain('permission-denied');
+    expect(listener('families/fam1/tasks').unsubscribe).not.toHaveBeenCalled();
+  });
+
+  it('ignores queued reversal callbacks after the active family changes', async () => {
+    authenticatedState();
+    useStore.getState().loadFamilyData('user1', 'fam1');
+    useStore.getState().loadReversals();
+    const oldReversals = listener('families/fam1/reversals');
+
+    useStore.setState({ currentUser: { id: 'user1', familyId: 'fam2', role: 'parent' } });
+    useStore.getState().loadFamilyData('user1', 'fam2');
+    oldReversals.next(collectionSnapshot([{ id: 'stale-reversal' }]));
+    oldReversals.error({ code: 'permission-denied', message: 'stale denial' });
+
+    expect(useStore.getState().reversals).toEqual([]);
+    expect(useStore.getState().featureErrors.reversals).toBeUndefined();
   });
 
   it('10. retry creates a fresh subscription generation', () => {
@@ -477,6 +538,19 @@ describe('bootstrap/auth/listener state machine', () => {
     listener('families/fam1').next(familySnapshot(false));
     expect(useStore.getState()).toMatchObject({ appReady: false, loading: false, familyData: null, activeFamilyId: null });
     expect(useStore.getState().bootstrapError).toContain('Family');
+  });
+
+  it('treats a family permission error as a critical whole-app bootstrap failure', () => {
+    authenticatedState();
+    useStore.getState().loadFamilyData('user1', 'fam1');
+    listener('families/fam1').error({ code: 'permission-denied', message: 'Missing or insufficient permissions' });
+
+    expect(useStore.getState()).toMatchObject({
+      appReady: false,
+      loading: false,
+      activeFamilyId: null,
+      bootstrapError: '[Family] permission-denied: Missing or insufficient permissions',
+    });
   });
 
   it('routes a resolved profile without familyId to onboarding-ready state and clears old data', async () => {

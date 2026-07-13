@@ -66,6 +66,7 @@ describe('rendered bootstrap boundary', () => {
       appReady: false,
       loading: false,
       bootstrapError: null,
+      featureErrors: {},
     });
   });
 
@@ -145,6 +146,18 @@ describe('rendered bootstrap boundary', () => {
     renderApp();
     expect(screen.getByText('Connection Error')).toBeInTheDocument();
     expect(screen.queryByText('Setting up...')).not.toBeInTheDocument();
+  });
+
+  it('shows the whole-app connection error for a critical family listener failure', () => {
+    useStore.setState({
+      bootstrapError: '[Family] permission-denied: Missing or insufficient permissions',
+      appReady: false,
+    });
+    renderApp();
+
+    expect(screen.getByText('Connection Error')).toBeInTheDocument();
+    expect(screen.getByText(/\[Family\] permission-denied/)).toBeInTheDocument();
+    expect(screen.queryByText('Parent Console')).not.toBeInTheDocument();
   });
 
   it('shows an auth observer error instead of unresolved auth loading', () => {

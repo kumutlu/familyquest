@@ -82,7 +82,6 @@ beforeEach(async () => {
       setDoc(doc(db, `families/${familyId}/challenges/challenge`), { createdAt: now }),
       setDoc(doc(db, `families/${familyId}/funds/fund`), { balance: 0 }),
       setDoc(doc(db, `families/${familyId}/fund_transactions/transaction`), { createdAt: now }),
-      setDoc(doc(db, `families/${familyId}/reversals/completed`), { completedAt: now }),
     ])
   })
 })
@@ -117,7 +116,13 @@ describe('production bootstrap query plan against Firestore rules', () => {
     ]))
     expect(results.get('walletTransactions')).toEqual(expect.arrayContaining(['own-legacy', 'own-v2', 'sibling']))
     expect(results.get('behaviourEvents')).toEqual(expect.arrayContaining(['legacy', 'v2']))
-    expect(results.get('reversals')).toEqual(['completed'])
+  })
+
+  it.each([
+    ['parent', parentId],
+    ['owner', ownerId],
+  ] as const)('supports legacy %s role membership for family-scoped data', async (role, userId) => {
+    await executePlan(testEnv.authenticatedContext(userId).firestore(), userId, role)
   })
 
   it('resolves every required child query while keeping private resources scoped', async () => {
