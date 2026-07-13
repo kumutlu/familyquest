@@ -141,6 +141,23 @@ describe('rendered bootstrap boundary', () => {
     expect(screen.queryByText('Pending (0)')).not.toBeInTheDocument();
   });
 
+  it('renders the owner app shell and parent dashboard without invoking the reversals loader', async () => {
+    const loadReversals = vi.fn();
+    useStore.setState({
+      currentUser: { id: 'owner1', familyId: 'fam1', role: 'owner', displayName: 'Owner' },
+      appReady: true,
+      loading: false,
+      familyData: { id: 'fam1', currency: '£' },
+      loadReversals,
+    });
+
+    renderApp();
+
+    expect(await screen.findByText('Parent Console')).toBeInTheDocument();
+    expect(loadReversals).not.toHaveBeenCalled();
+    expect(bootstrapListeners.some(listener => listener.target === 'families/fam1/reversals')).toBe(false);
+  });
+
   it('shows a bootstrap error before the authenticated missing-profile placeholder', () => {
     useStore.setState({ currentUser: null, bootstrapError: '[Profile] permission-denied', appReady: false });
     renderApp();

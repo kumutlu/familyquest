@@ -2,8 +2,16 @@ import react from '@vitejs/plugin-react'
 import tailwindcss from '@tailwindcss/vite'
 import { VitePWA } from 'vite-plugin-pwa'
 import { defineConfig } from 'vitest/config'
+import { execFileSync } from 'node:child_process'
+
+const buildSha = execFileSync('git', ['rev-parse', 'HEAD'], { encoding: 'utf8' }).trim()
+const builtAt = new Date().toISOString()
 
 export default defineConfig({
+  define: {
+    __FAMILYQUEST_BUILD_SHA__: JSON.stringify(buildSha),
+    __FAMILYQUEST_BUILT_AT__: JSON.stringify(builtAt),
+  },
   test: {
     environment: 'jsdom',
     globals: true,
@@ -37,6 +45,9 @@ export default defineConfig({
         ]
       },
       workbox: {
+        skipWaiting: true,
+        clientsClaim: true,
+        cleanupOutdatedCaches: true,
         globPatterns: ['**/*.{js,css,html,ico,png,svg,woff2}'],
         runtimeCaching: [
           {
