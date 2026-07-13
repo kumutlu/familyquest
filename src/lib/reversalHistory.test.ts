@@ -89,7 +89,8 @@ describe('reversal history normalization', () => {
     ['money_request', { id: 'money-pending', status: 'pending', requesterId: 'child-1' }],
     ['petbox_request', { id: 'pet-pending', status: 'pending', childId: 'child-1' }],
   ] as const)('offers parent cancellation for a real child-created %s', (sourceKind, source) => {
-    expect(normalizeHistoryAction({ sourceKind, source, actor: parent, reversals: [], balances: {}, names: {} })).toMatchObject({ action: 'cancel', actionLabel: 'Cancel' });
+    expect(normalizeHistoryAction({ sourceKind, source, actor: parent, reversals: [], balances: {}, names: {} }))
+      .toMatchObject({ action: 'cancel', actionLabel: 'Undo' });
   });
 
   it.each([

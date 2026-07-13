@@ -35,6 +35,7 @@ export function HistoryActionControl({ sourceKind, source }: { sourceKind: Rever
     const kind = cancelKinds[historyAction.sourceKind];
     if (!kind) throw new Error('Cancellation is not supported for this action');
     await cancelPendingApproval(state.currentUser.familyId, kind, historyAction.sourceId);
+    setCancelled(true);
   };
 
   return (
@@ -46,7 +47,15 @@ export function HistoryActionControl({ sourceKind, source }: { sourceKind: Rever
           <p>by {action.reversal.actorName} · {auditDate(action.reversal.occurredAt)}</p>
         </div>
       ) : action.action ? (
-        <Button size="sm" variant={action.action === 'cancel' ? 'danger' : 'secondary'} onClick={() => setSelected(action)}>{action.actionLabel}</Button>
+        <Button size="sm" variant={action.action === 'cancel' ? 'danger' : 'secondary'} onClick={() => {
+          if (action.action === 'cancel') {
+            cancel(action);
+          } else {
+            setSelected(action);
+          }
+        }}>
+          {action.actionLabel}
+        </Button>
       ) : null}
       <ReversalActionModal
         open={!!selected}

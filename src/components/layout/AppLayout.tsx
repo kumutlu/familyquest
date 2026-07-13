@@ -76,6 +76,7 @@ export function AppLayout() {
     { name: 'Tasks', path: '/tasks', icon: CheckSquare },
     { name: 'Family', path: '/family', icon: Users },
     { name: 'Rewards', path: '/rewards', icon: Gift },
+    { name: 'Pet Box', path: '/pet-box', icon: () => <span className="text-lg">🐾</span> },
     { name: 'Settings', path: '/settings', icon: Settings },
   ];
 
@@ -96,7 +97,7 @@ export function AppLayout() {
             <nav className="hidden md:flex ml-8 space-x-6">
               {navItems.map((item) => {
                 const isActive = location.pathname === item.path;
-                const Icon = item.icon;
+                const IconComp = item.icon as any;
                 return (
                   <Link 
                     key={item.name} 
@@ -106,7 +107,7 @@ export function AppLayout() {
                       isActive ? "text-primary-600" : "text-gray-500 hover:text-gray-900"
                     )}
                   >
-                    <Icon size={16} />
+                    {typeof item.icon === 'function' ? <IconComp /> : <IconComp size={16} />}
                     <span>{item.name}</span>
                   </Link>
                 );
@@ -163,7 +164,7 @@ export function AppLayout() {
         <div className="flex justify-around items-center h-16">
           {navItems.map((item) => {
             const isActive = location.pathname === item.path;
-            const Icon = item.icon;
+            const IconComp = item.icon as any;
             
             return (
               <Link
@@ -178,7 +179,7 @@ export function AppLayout() {
                   "p-1 rounded-xl transition-all duration-200",
                   isActive ? "bg-primary-50 scale-110" : ""
                 )}>
-                  <Icon size={22} strokeWidth={isActive ? 2.5 : 2} />
+                  {typeof item.icon === 'function' ? <IconComp /> : <IconComp size={22} strokeWidth={isActive ? 2.5 : 2} />}
                 </div>
                 <span className="text-[10px] font-semibold">{item.name}</span>
               </Link>

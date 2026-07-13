@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const api = vi.hoisted(() => ({ reverseTransaction: vi.fn(), cancelPendingApproval: vi.fn() }));
@@ -30,9 +30,7 @@ describe('HistoryActionControl', () => {
   it('routes a real child-created pending request through parent cancellation and updates immediately', async () => {
     api.cancelPendingApproval.mockResolvedValue(undefined);
     render(<HistoryActionControl sourceKind="transfer_request" source={{ id: 'request-1', status: 'pending', fromChildId: 'child-1' }} />);
-    fireEvent.click(screen.getByRole('button', { name: 'Cancel' }));
-    fireEvent.change(screen.getByLabelText('Reason'), { target: { value: 'Created twice' } });
-    fireEvent.click(within(screen.getByRole('dialog')).getByRole('button', { name: 'Cancel' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Undo' }));
     await waitFor(() => expect(api.cancelPendingApproval).toHaveBeenCalledWith('family-1', 'transfer', 'request-1'));
     expect(screen.getByText('Cancelled')).toBeInTheDocument();
   });

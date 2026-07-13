@@ -51,9 +51,7 @@ export function ParentDashboard() {
     try {
       if (action === 'approve') await approveJoinRequest(currentUser.familyId, request.id, 'child');
       else {
-        const reason = window.prompt('Enter a rejection reason')?.trim();
-        if (!reason) return;
-        await rejectJoinRequest(currentUser.familyId, request.id, reason);
+        await rejectJoinRequest(currentUser.familyId, request.id, 'Rejected');
       }
     } catch (error: any) {
       setJoinError(`${error?.code ? `${error.code}: ` : ''}${error?.message || 'Join review failed.'}`);

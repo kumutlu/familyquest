@@ -17,7 +17,7 @@ export interface HistoryAction {
   sourceId: string;
   summary: string;
   action?: HistoryActionType;
-  actionLabel: 'Cancel' | 'Reverse' | 'Refund';
+  actionLabel: 'Undo' | 'Reverse' | 'Refund';
   targets: HistoryActionTarget[];
   reversal?: any;
   source: any;
@@ -108,7 +108,7 @@ export function normalizeHistoryAction(input: NormalizeHistoryActionInput): Hist
 
   if (source.status === 'pending' || source.status === 'pending_acceptance' || source.status === 'pending_approval') {
     if (['task_completion', 'transfer_request', 'money_request', 'petbox_request'].includes(sourceKind)) {
-      return { ...normalized, action: 'cancel', actionLabel: 'Cancel' };
+      return { ...normalized, action: 'cancel', actionLabel: 'Undo' };
     }
     return normalized;
   }

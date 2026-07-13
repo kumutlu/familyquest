@@ -112,8 +112,7 @@ export function ApprovalCenter() {
     if (!currentUser) return;
     const key = itemKey(item);
     if (inFlightKeys.current.has(key)) return;
-    const rejectionReason = window.prompt('Enter a rejection reason')?.trim();
-    if (!rejectionReason) return;
+    const rejectionReason = 'Rejected';
     inFlightKeys.current.add(key);
     setProcessing(previous => ({ ...previous, [key]: 'reject' }));
     setError('');
@@ -205,7 +204,6 @@ export function ApprovalCenter() {
           <div className="flex gap-2 shrink-0 self-end md:self-center">
             {item.isPending ? (
               <>
-                <HistoryActionControl sourceKind={sourceKind} source={item} />
                 <Button size="sm" variant="danger" disabled={itemKey(item) in processing} onClick={() => handleReject(item)}>
                   {processing[itemKey(item)] === 'reject' ? 'Rejecting…' : 'Reject'}
                 </Button>
