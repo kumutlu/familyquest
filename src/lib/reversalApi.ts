@@ -2,6 +2,7 @@ import { doc, runTransaction, serverTimestamp } from 'firebase/firestore'
 import { auth, db } from './firebase'
 import { assertTraceableSource, effectSnapshot, type EffectSnapshot } from './reversalContracts'
 import { planReversal, reversalRecordId } from './reversalDomain'
+import { buildReversalPayloads } from './reversalPayloads'
 
 export type ReversalSourceKind =
   | 'wallet_transaction' | 'fund_transaction' | 'behaviour_event' | 'task_completion'
@@ -100,40 +101,29 @@ export async function reverseTransaction(input: ReverseTransactionInput): Promis
       points: pointsUserDoc?.exists() ? pointsUserDoc.data().rewardPoints : undefined,
     }, familyDoc.data().debtLimitPence ?? -5000)
     const inverse = inverseSnapshot(snapshot, actorId, plan)
+    const timestamp = serverTimestamp()
+    const payloads = buildReversalPayloads({
+      familyId: input.familyId, sourceKind: input.sourceKind, sourceId: input.sourceId, reversalId,
+      actorId, actorName: actorDoc.data().displayName || 'Parent', reason, original: snapshot, inverse, timestamp,
+    })
 
     if (childWalletRef) transaction.update(childWalletRef, { balance: plan.childWalletPence, lastReversalId: reversalId })
     if (counterpartyWalletRef) transaction.update(counterpartyWalletRef, { balance: plan.counterpartyWalletPence, lastReversalId: reversalId })
     if (fundRef) transaction.update(fundRef, { balance: plan.fundPence, lastReversalId: reversalId })
-    if (pointsUserRef) transaction.update(pointsUserRef, { rewardPoints: plan.points })
+    if (pointsUserRef) transaction.update(pointsUserRef, { rewardPoints: plan.points, lastReversalId: reversalId })
 
     if (plan.inverseWalletDeltaPence !== undefined) {
-      transaction.set(doc(db, `families/${input.familyId}/wallet_transactions`, `${reversalId}__wallet`), {
-        type: 'reversal', familyId: input.familyId, childId: snapshot.childId, amountPence: plan.inverseWalletDeltaPence,
-        sourceKind: input.sourceKind, sourceId: input.sourceId, reversalId, actorId, effectSnapshot: inverse, createdAt: serverTimestamp(),
-      })
+      transaction.set(doc(db, `families/${input.familyId}/wallet_transactions`, `${reversalId}__wallet`), payloads.wallet(snapshot.childId!, plan.inverseWalletDeltaPence))
     }
     if (plan.inverseCounterpartyWalletDeltaPence !== undefined) {
-      transaction.set(doc(db, `families/${input.familyId}/wallet_transactions`, `${reversalId}__counterparty`), {
-        type: 'reversal', familyId: input.familyId, childId: snapshot.counterpartyChildId, amountPence: plan.inverseCounterpartyWalletDeltaPence,
-        sourceKind: input.sourceKind, sourceId: input.sourceId, reversalId, actorId, effectSnapshot: inverse, createdAt: serverTimestamp(),
-      })
+      transaction.set(doc(db, `families/${input.familyId}/wallet_transactions`, `${reversalId}__counterparty`), payloads.wallet(snapshot.counterpartyChildId!, plan.inverseCounterpartyWalletDeltaPence))
     }
     if (plan.inverseFundDeltaPence !== undefined) {
-      transaction.set(doc(db, `families/${input.familyId}/fund_transactions`, `${reversalId}__fund`), {
-        type: 'reversal', familyId: input.familyId, fundId: snapshot.fundId, amount: plan.inverseFundDeltaPence,
-        sourceKind: input.sourceKind, sourceId: input.sourceId, reversalId, actorId, effectSnapshot: inverse, createdAt: serverTimestamp(),
-      })
+      transaction.set(doc(db, `families/${input.familyId}/fund_transactions`, `${reversalId}__fund`), payloads.fund(snapshot.fundId!, plan.inverseFundDeltaPence))
     }
 
-    transaction.set(doc(db, `families/${input.familyId}/reversal_events`, reversalId), {
-      reversalId, sourceKind: input.sourceKind, sourceId: input.sourceId, actorId, reason,
-      effectSnapshot: inverse, xpAdjustment: 0, xpReversed: false, createdAt: serverTimestamp(),
-    })
-    transaction.set(reversalRef, {
-      reversalId, familyId: input.familyId, sourceKind: input.sourceKind, sourceId: input.sourceId,
-      actorId, reason, status: 'completed', originalEffectSnapshot: snapshot, inverseEffectSnapshot: inverse,
-      xpAdjustment: 0, xpReversed: false, completedAt: serverTimestamp(),
-    })
+    transaction.set(doc(db, `families/${input.familyId}/reversal_events`, reversalId), payloads.event)
+    transaction.set(reversalRef, payloads.record)
     return { reversalId, status: 'completed' as const }
   })
 }

@@ -425,6 +425,156 @@ service cloud.firestore {
         );
     }
 
+    function hasValidReversalActor(data, familyId) {
+      let actor = get(/databases/$(database)/documents/users/$(request.auth.uid));
+      return isParent(familyId) && actor != null
+        && data.actorId == request.auth.uid
+        && data.actorName == actor.data.displayName;
+    }
+
+    function sourceSnapshotMatches(familyId, kind, sourceId, snapshot) {
+      return (kind == 'wallet_transaction'
+          && exists(/databases/$(database)/documents/families/$(familyId)/wallet_transactions/$(sourceId))
+          && get(/databases/$(database)/documents/families/$(familyId)/wallet_transactions/$(sourceId)).data.get('effectSnapshot', null) == snapshot)
+        || (kind == 'fund_transaction'
+          && exists(/databases/$(database)/documents/families/$(familyId)/fund_transactions/$(sourceId))
+          && get(/databases/$(database)/documents/families/$(familyId)/fund_transactions/$(sourceId)).data.get('effectSnapshot', null) == snapshot)
+        || (kind == 'behaviour_event'
+          && exists(/databases/$(database)/documents/families/$(familyId)/behaviour_events/$(sourceId))
+          && get(/databases/$(database)/documents/families/$(familyId)/behaviour_events/$(sourceId)).data.get('effectSnapshot', null) == snapshot)
+        || (kind == 'task_completion'
+          && exists(/databases/$(database)/documents/families/$(familyId)/task_completions/$(sourceId))
+          && get(/databases/$(database)/documents/families/$(familyId)/task_completions/$(sourceId)).data.get('effectSnapshot', null) == snapshot)
+        || (kind == 'reward_redemption'
+          && exists(/databases/$(database)/documents/families/$(familyId)/redemptions/$(sourceId))
+          && get(/databases/$(database)/documents/families/$(familyId)/redemptions/$(sourceId)).data.get('effectSnapshot', null) == snapshot)
+        || (kind == 'transfer_request'
+          && exists(/databases/$(database)/documents/families/$(familyId)/transfer_requests/$(sourceId))
+          && get(/databases/$(database)/documents/families/$(familyId)/transfer_requests/$(sourceId)).data.get('effectSnapshot', null) == snapshot)
+        || (kind == 'money_request'
+          && exists(/databases/$(database)/documents/families/$(familyId)/money_requests/$(sourceId))
+          && get(/databases/$(database)/documents/families/$(familyId)/money_requests/$(sourceId)).data.get('effectSnapshot', null) == snapshot)
+        || (kind == 'petbox_request'
+          && exists(/databases/$(database)/documents/families/$(familyId)/petbox_requests/$(sourceId))
+          && get(/databases/$(database)/documents/families/$(familyId)/petbox_requests/$(sourceId)).data.get('effectSnapshot', null) == snapshot);
+    }
+
+    function isExactInverse(original, inverse, familyId, actorId) {
+      return inverse.keys().hasOnly(['schemaVersion', 'entityType', 'familyId', 'actorId', 'childId', 'counterpartyChildId', 'fundId', 'walletDeltaPence', 'counterpartyWalletDeltaPence', 'fundDeltaPence', 'pointsDelta', 'xpAdjustment'])
+        && inverse.schemaVersion == 1 && inverse.entityType == 'reversal'
+        && inverse.familyId == familyId && inverse.actorId == actorId && inverse.xpAdjustment == 0
+        && inverse.get('childId', '') == original.get('childId', '')
+        && inverse.get('counterpartyChildId', '') == original.get('counterpartyChildId', '')
+        && inverse.get('fundId', '') == original.get('fundId', '')
+        && inverse.get('walletDeltaPence', 0) == (0 - original.get('walletDeltaPence', 0))
+        && inverse.get('counterpartyWalletDeltaPence', 0) == (0 - original.get('counterpartyWalletDeltaPence', 0))
+        && inverse.get('fundDeltaPence', 0) == (0 - original.get('fundDeltaPence', 0))
+        && inverse.get('pointsDelta', 0) == (0 - original.get('pointsDelta', 0));
+    }
+
+    function isValidReversalRecord(familyId, reversalId) {
+      let data = request.resource.data;
+      return data.keys().hasOnly(['familyId', 'sourceKind', 'sourceId', 'reversalId', 'actorId', 'actorName', 'reason', 'status', 'originalEffectSnapshot', 'inverseEffectSnapshot', 'xpAdjustment', 'xpReversed', 'completedAt'])
+        && data.keys().hasAll(['familyId', 'sourceKind', 'sourceId', 'reversalId', 'actorId', 'actorName', 'reason', 'status', 'originalEffectSnapshot', 'inverseEffectSnapshot', 'xpAdjustment', 'xpReversed', 'completedAt'])
+        && data.familyId == familyId && data.reversalId == reversalId
+        && reversalId == data.sourceKind + '__' + data.sourceId
+        && data.sourceKind in ['wallet_transaction', 'fund_transaction', 'behaviour_event', 'task_completion', 'reward_redemption', 'transfer_request', 'money_request', 'petbox_request']
+        && hasValidReversalActor(data, familyId)
+        && data.reason is string && data.reason.trim().size() > 0
+        && data.status == 'completed' && data.xpAdjustment == 0 && data.xpReversed == false
+        && data.completedAt == request.time
+        && data.originalEffectSnapshot is map && data.inverseEffectSnapshot is map
+        && data.originalEffectSnapshot.familyId == familyId && data.originalEffectSnapshot.schemaVersion == 1
+        && data.originalEffectSnapshot.xpAdjustment == 0
+        && sourceSnapshotMatches(familyId, data.sourceKind, data.sourceId, data.originalEffectSnapshot)
+        && isExactInverse(data.originalEffectSnapshot, data.inverseEffectSnapshot, familyId, request.auth.uid);
+    }
+
+    function isValidReversalEvent(familyId, reversalId) {
+      let data = request.resource.data;
+      let reversal = getAfter(/databases/$(database)/documents/families/$(familyId)/reversals/$(reversalId));
+      return reversal != null
+        && data.keys().hasOnly(['familyId', 'sourceKind', 'sourceId', 'reversalId', 'actorId', 'actorName', 'reason', 'effectSnapshot', 'xpAdjustment', 'xpReversed', 'createdAt'])
+        && data.familyId == familyId && data.reversalId == reversalId
+        && data.sourceKind == reversal.data.sourceKind && data.sourceId == reversal.data.sourceId
+        && data.actorId == request.auth.uid && data.actorName == reversal.data.actorName
+        && data.reason == reversal.data.reason && data.effectSnapshot == reversal.data.inverseEffectSnapshot
+        && data.xpAdjustment == 0 && data.xpReversed == false && data.createdAt == request.time;
+    }
+
+    function isValidReversalWalletUpdate(familyId, childId) {
+      let data = request.resource.data;
+      let oldData = resource.data;
+      let reversalId = data.get('lastReversalId', 'null');
+      let reversal = getAfter(/databases/$(database)/documents/families/$(familyId)/reversals/$(reversalId));
+      let original = reversal == null ? {} : reversal.data.originalEffectSnapshot;
+      let inverse = reversal == null ? {} : reversal.data.inverseEffectSnapshot;
+      let isPrimary = original.get('childId', '') == childId && 'walletDeltaPence' in original;
+      let suffix = isPrimary ? '__wallet' : '__counterparty';
+      let expected = isPrimary ? inverse.get('walletDeltaPence', 0) : inverse.get('counterpartyWalletDeltaPence', 0);
+      return reversal != null && reversal.data.actorId == request.auth.uid
+        && data.diff(oldData).affectedKeys().hasOnly(['balance', 'lastReversalId'])
+        && ((isPrimary) || (original.get('counterpartyChildId', '') == childId && 'counterpartyWalletDeltaPence' in original))
+        && data.balance == oldData.balance + expected
+        && data.balance >= get(/databases/$(database)/documents/families/$(familyId)).data.get('debtLimitPence', -5000)
+        && existsAfter(/databases/$(database)/documents/families/$(familyId)/wallet_transactions/$(reversalId + suffix));
+    }
+
+    function isValidReversalWalletLedger(familyId, txId) {
+      let data = request.resource.data;
+      let reversal = getAfter(/databases/$(database)/documents/families/$(familyId)/reversals/$(data.get('reversalId', 'null')));
+      let original = reversal == null ? {} : reversal.data.originalEffectSnapshot;
+      let inverse = reversal == null ? {} : reversal.data.inverseEffectSnapshot;
+      let primary = txId == data.reversalId + '__wallet' && data.childId == original.get('childId', '') && data.amountPence == inverse.get('walletDeltaPence', 0);
+      let counterparty = txId == data.reversalId + '__counterparty' && data.childId == original.get('counterpartyChildId', '') && data.amountPence == inverse.get('counterpartyWalletDeltaPence', 0);
+      return reversal != null && data.keys().hasOnly(['type', 'familyId', 'sourceKind', 'sourceId', 'reversalId', 'actorId', 'actorName', 'childId', 'amountPence', 'effectSnapshot', 'createdAt'])
+        && data.type == 'reversal' && data.familyId == familyId
+        && data.sourceKind == reversal.data.sourceKind && data.sourceId == reversal.data.sourceId
+        && data.actorId == request.auth.uid && data.actorName == reversal.data.actorName
+        && data.effectSnapshot == reversal.data.inverseEffectSnapshot && data.createdAt == request.time
+        && (primary || counterparty);
+    }
+
+    function isValidReversalFundUpdate(familyId, fundId) {
+      let data = request.resource.data;
+      let oldData = resource.data;
+      let reversalId = data.get('lastReversalId', 'null');
+      let reversal = getAfter(/databases/$(database)/documents/families/$(familyId)/reversals/$(reversalId));
+      return reversal != null && reversal.data.actorId == request.auth.uid
+        && reversal.data.originalEffectSnapshot.get('fundId', '') == fundId
+        && data.diff(oldData).affectedKeys().hasOnly(['balance', 'lastReversalId'])
+        && data.balance == oldData.balance + reversal.data.inverseEffectSnapshot.get('fundDeltaPence', 0)
+        && data.balance >= 0
+        && existsAfter(/databases/$(database)/documents/families/$(familyId)/fund_transactions/$(reversalId + '__fund'));
+    }
+
+    function isValidReversalFundLedger(familyId, txId) {
+      let data = request.resource.data;
+      let reversal = getAfter(/databases/$(database)/documents/families/$(familyId)/reversals/$(data.get('reversalId', 'null')));
+      return reversal != null && txId == data.reversalId + '__fund'
+        && data.keys().hasOnly(['type', 'familyId', 'sourceKind', 'sourceId', 'reversalId', 'actorId', 'actorName', 'fundId', 'amount', 'effectSnapshot', 'createdAt'])
+        && data.type == 'reversal' && data.familyId == familyId
+        && data.fundId == reversal.data.originalEffectSnapshot.get('fundId', '')
+        && data.amount == reversal.data.inverseEffectSnapshot.get('fundDeltaPence', 0)
+        && data.sourceKind == reversal.data.sourceKind && data.sourceId == reversal.data.sourceId
+        && data.actorId == request.auth.uid && data.actorName == reversal.data.actorName
+        && data.effectSnapshot == reversal.data.inverseEffectSnapshot && data.createdAt == request.time;
+    }
+
+    function isValidReversalPointsUpdate(uid) {
+      let data = request.resource.data;
+      let oldData = resource.data;
+      let familyId = oldData.get('familyId', 'null');
+      let reversalId = data.get('lastReversalId', 'null');
+      let reversal = getAfter(/databases/$(database)/documents/families/$(familyId)/reversals/$(reversalId));
+      return reversal != null && reversal.data.actorId == request.auth.uid
+        && reversal.data.originalEffectSnapshot.get('childId', '') == uid
+        && 'pointsDelta' in reversal.data.originalEffectSnapshot
+        && data.diff(oldData).affectedKeys().hasOnly(['rewardPoints', 'lastReversalId'])
+        && data.rewardPoints == oldData.rewardPoints + reversal.data.inverseEffectSnapshot.get('pointsDelta', 0)
+        && data.rewardPoints >= 0;
+    }
+
     function isValidSelfSignup(uid) {
       let data = request.resource.data;
       return request.auth.uid == uid
@@ -666,6 +816,7 @@ service cloud.firestore {
       allow read: if isAuthenticated() && (request.auth.uid == uid || get(/databases/$(database)/documents/users/$(request.auth.uid)).data.familyId == resource.data.familyId);
 
       allow update: if isAuthenticated() && (
+        isValidReversalPointsUpdate(uid) ||
         (request.auth.uid == uid && !request.resource.data.diff(resource.data).affectedKeys().hasAny([
           'role', 'familyId', 'rewardPoints', 'lifetimeXP', 'walletBalance', 'balance', 'lastFundTxId'
         ])) ||
@@ -761,6 +912,7 @@ service cloud.firestore {
         allow read: if isParent(familyId) || (isAuthenticated() && request.auth.uid == childId);
         allow create: if isValidWalletCreate(familyId, childId);
         allow update: if isValidDepositCredit(familyId, childId)
+          || isValidReversalWalletUpdate(familyId, childId)
           || isValidWithdrawalDeduction(familyId, childId)
           || isValidParentTransferDeduction(familyId, childId)
           || isValidParentTransferCredit(familyId, childId)
@@ -771,7 +923,7 @@ service cloud.firestore {
 
       match /wallet_transactions/{txId} {
         allow read: if isParent(familyId) || (isAuthenticated() && resource.data.childId == request.auth.uid);
-        allow create: if isBehaviourManager(familyId) && (
+        allow create: if (request.resource.data.type == 'reversal' && isValidReversalWalletLedger(familyId, txId)) || (isBehaviourManager(familyId) && (
           (request.resource.data.type == 'financial_penalty' && isValidFinancialPenalty(familyId)) ||
           (request.resource.data.type == 'deposit' && request.resource.data.amount > 0 && request.resource.data.amount is int && isChildInFamily(familyId, request.resource.data.childId) && request.resource.data.parentRef == request.auth.uid && request.resource.data.createdAt == request.time) ||
           (request.resource.data.type == 'withdrawal' && request.resource.data.amount > 0 && request.resource.data.amount is int && isChildInFamily(familyId, request.resource.data.childId) && request.resource.data.parentRef == request.auth.uid && request.resource.data.createdAt == request.time) ||
@@ -780,7 +932,7 @@ service cloud.firestore {
           (request.resource.data.type == 'transfer_in' && ('transferRequestId' in request.resource.data ? isValidTransferInLedger(familyId) : isValidMoneyRequestInLedger(familyId))) ||
           (request.resource.data.type == 'request_payment' && isValidMoneyRequestPaymentLedger(familyId)) ||
           (request.resource.data.type == 'petbox_donation' && request.resource.data.keys().hasAll(['type', 'childId', 'amountPence', 'amount', 'note', 'createdAt', 'timestamp']) && request.resource.data.keys().hasOnly(['type', 'childId', 'amountPence', 'amount', 'note', 'createdAt', 'timestamp', 'sourceId', 'familyId', 'actorId', 'status', 'effectSnapshot']) && request.resource.data.amountPence < 0 && request.resource.data.amountPence is int && request.resource.data.amount == request.resource.data.amountPence && isChildInFamily(familyId, request.resource.data.childId) && request.resource.data.createdAt == request.time)
-        );
+        ));
         allow update, delete: if false;
       }
 
@@ -813,13 +965,25 @@ service cloud.firestore {
       match /funds/{fundId} {
         allow read: if isFamilyMember(familyId);
         allow create: if isParent(familyId) && request.resource.data.balance == 0;
-        allow update: if isValidFundExpenseUpdate(familyId, fundId) || isValidFundDonationInjection(familyId, fundId);
+        allow update: if isValidReversalFundUpdate(familyId, fundId) || isValidFundExpenseUpdate(familyId, fundId) || isValidFundDonationInjection(familyId, fundId);
         allow delete: if isParent(familyId);
       }
 
       match /fund_transactions/{txId} {
         allow read: if isFamilyMember(familyId);
-        allow create: if isValidFundTransactionCreate(familyId, txId);
+        allow create: if (request.resource.data.type == 'reversal' && isValidReversalFundLedger(familyId, txId)) || isValidFundTransactionCreate(familyId, txId);
+        allow update, delete: if false;
+      }
+
+      match /reversal_events/{reversalId} {
+        allow read: if isFamilyMember(familyId);
+        allow create: if isValidReversalEvent(familyId, reversalId);
+        allow update, delete: if false;
+      }
+
+      match /reversals/{reversalId} {
+        allow read: if isFamilyMember(familyId);
+        allow create: if isValidReversalRecord(familyId, reversalId);
         allow update, delete: if false;
       }
 

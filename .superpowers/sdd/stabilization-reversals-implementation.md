@@ -37,3 +37,20 @@ Task B evidence:
 - Non-emulator unit/component suite: 117 passed.
 - Scoped Oxlint: passed.
 - Production build: passed.
+
+## Task C — strict Firestore reversal authorization
+
+- Extracted `buildReversalPayloads` as the single production/test contract for deterministic reversal records, events, wallet ledgers, and fund ledgers. Every artifact now snapshots both authenticated actor UID and stored actor display name.
+- Reversal records accept only same-family parent/owner creates, exact keys, request-time timestamps, deterministic `<sourceKind>__<sourceId>` linkage, supported source kinds, the stored immutable source snapshot, and the mathematically exact inverse snapshot.
+- Reversal records, events, and inverse ledgers are append-only. Reusing a deterministic record ID is denied, making duplicate financial application impossible at the rules boundary.
+- Wallet, counter-wallet, fund, and point mutations require the matching after-state reversal record and deterministic inverse ledger. Wallet balances enforce the family debt limit; funds and points cannot become negative. Lifetime XP is excluded from the allowed point mutation and both evidence documents retain `xpAdjustment: 0` / `xpReversed: false`.
+- Rule dependencies are intentionally one-directional: effect subwrites read the terminal reversal record, while the record validates the immutable original and inverse contract without reading subwrites. This avoids circular `getAfter` evaluation and remained below Firestore access/expression limits in the complete suite.
+- Emulator coverage exercises exact production payloads for wallet transactions, fund transactions, behaviour events, task completions, reward redemptions, transfer requests, money requests, and Pet Box requests. Negative coverage includes child/wrong-family actors, forged UID/name, altered amount, extra keys, wrong timestamp/source, duplicates, immutable artifacts, legacy missing snapshots, wallet debt, and fund insufficiency.
+
+Task C evidence:
+
+- Focused reversal rules: 20 passed.
+- Full Firestore rules suite on JDK 21: 124 passed.
+- Non-emulator unit/component suite: 121 passed.
+- Scoped Oxlint: passed.
+- Production build: passed.
