@@ -10,7 +10,7 @@ export function Dashboard() {
 
   if (loading || !currentUser) return <div className="p-8 text-center text-gray-500 animate-pulse">Loading Dashboard...</div>;
 
-  if (currentUser.role === 'parent') {
+  if (currentUser.role === 'parent' || currentUser.role === 'owner') {
     return <ParentDashboard />;
   }
 
