@@ -10,6 +10,9 @@ export function AppLayout() {
   const authUser = useStore(state => state.authUser);
   const currentUser = useStore(state => state.currentUser);
   const feed = useStore(state => state.feed);
+  const appReady = useStore(state => state.appReady);
+  const bootstrapError = useStore(state => state.bootstrapError);
+  const retryBootstrap = useStore(state => state.retryBootstrap);
   const [isNotificationsOpen, setIsNotificationsOpen] = useState(false);
   const notifRef = useRef<HTMLDivElement>(null);
 
@@ -34,6 +37,26 @@ export function AppLayout() {
     return <Navigate to="/login" replace />;
   }
 
+  if (bootstrapError) {
+    return (
+      <div className="min-h-screen bg-gray-50 flex flex-col items-center justify-center p-4">
+        <div className="bg-white p-6 rounded-2xl shadow-xl max-w-md w-full text-center border border-red-100">
+          <div className="w-12 h-12 bg-red-100 text-red-600 rounded-full flex items-center justify-center mx-auto mb-4">
+            <span className="text-2xl font-bold">!</span>
+          </div>
+          <h2 className="text-xl font-bold text-gray-900 mb-2">Connection Error</h2>
+          <p className="text-gray-500 mb-6 text-sm">{bootstrapError}</p>
+          <button
+            onClick={retryBootstrap}
+            className="w-full bg-primary-600 hover:bg-primary-700 text-white font-bold py-3 rounded-xl transition-colors"
+          >
+            Retry Connection
+          </button>
+        </div>
+      </div>
+    );
+  }
+
   // Logged in but no user doc yet (takes a moment to sync)
   if (authUser && currentUser === null) {
     return <div className="min-h-screen bg-gray-50 flex items-center justify-center">Setting up...</div>;
@@ -42,6 +65,10 @@ export function AppLayout() {
   // Logged in, user doc exists, but no familyId -> Onboarding (unless already there)
   if (currentUser && !currentUser.familyId && location.pathname !== '/onboarding') {
     return <Navigate to="/onboarding" replace />;
+  }
+
+  if (currentUser?.familyId && !appReady) {
+    return <div className="min-h-screen bg-gray-50 flex items-center justify-center animate-pulse">Loading Dashboard...</div>;
   }
 
   const navItems = [
