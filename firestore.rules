@@ -277,9 +277,10 @@ service cloud.firestore {
         && 'lastRedemptionId' in data
         && diff.hasOnly(['rewardPoints', 'lastRedemptionId'])
         && tx != null
-        && tx.data.costPaid == (oldData.rewardPoints - data.rewardPoints)
+        && tx.data.costPaid == (oldData.get('rewardPoints', 0) - data.get('rewardPoints', 0))
         && tx.data.costPaid > 0
         && tx.data.costPaid is int
+        && data.get('rewardPoints', 0) >= 0
         && tx.data.userId == uid
         && tx.data.createdAt == request.time
         && !exists(/databases/$(database)/documents/families/$(oldData.get('familyId', 'null'))/redemptions/$(txId));
@@ -299,8 +300,8 @@ service cloud.firestore {
         && oldCompletion != null && oldCompletion.data.status == 'pending_approval'
         && completion != null && completion.data.status == 'approved' && completion.data.assigneeId == uid
         && task != null && completion.data.awardedPoints == task.data.pointsReward
-        && data.rewardPoints == oldData.rewardPoints + task.data.pointsReward
-        && data.lifetimeXP == oldData.lifetimeXP + task.data.pointsReward;
+        && data.get('rewardPoints', 0) == oldData.get('rewardPoints', 0) + task.data.pointsReward
+        && data.get('lifetimeXP', 0) == oldData.get('lifetimeXP', 0) + task.data.pointsReward;
     }
 
     function hasValidTaskApprovalEffect(familyId, completionId, oldData, data) {
@@ -315,8 +316,8 @@ service cloud.firestore {
         && data.effectSnapshot.childId == oldData.assigneeId && data.effectSnapshot.pointsDelta == task.data.pointsReward
         && data.effectSnapshot.xpAdjustment == 0
         && user.data.lastTaskCompletionId == completionId
-        && user.data.rewardPoints == oldUser.data.rewardPoints + task.data.pointsReward
-        && user.data.lifetimeXP == oldUser.data.lifetimeXP + task.data.pointsReward
+        && user.data.rewardPoints == oldUser.data.get('rewardPoints', 0) + task.data.pointsReward
+        && user.data.lifetimeXP == oldUser.data.get('lifetimeXP', 0) + task.data.pointsReward
         && feed != null && feed.data.actorId == request.auth.uid;
     }
 
@@ -329,11 +330,11 @@ service cloud.firestore {
       return isParent(familyId) && event != null && event.data.childId == uid
         && event.data.createdBy == request.auth.uid && event.data.createdAt == request.time
         && !exists(/databases/$(database)/documents/families/$(familyId)/behaviour_events/$(eventId))
-        && data.rewardPoints == oldData.rewardPoints + event.data.pointsDelta
+        && data.get('rewardPoints', 0) == oldData.get('rewardPoints', 0) + event.data.pointsDelta
         && (
           (event.data.type == 'positive'
             && data.diff(oldData).affectedKeys().hasOnly(['rewardPoints', 'lifetimeXP', 'lastBehaviourEventId'])
-            && data.lifetimeXP == oldData.lifetimeXP + event.data.pointsDelta)
+            && data.get('lifetimeXP', 0) == oldData.get('lifetimeXP', 0) + event.data.pointsDelta)
           || (event.data.type == 'negative'
             && data.diff(oldData).affectedKeys().hasOnly(['rewardPoints', 'lastBehaviourEventId']))
         );
@@ -624,8 +625,8 @@ service cloud.firestore {
         && reversal.data.originalEffectSnapshot.get('childId', '') == uid
         && 'pointsDelta' in reversal.data.originalEffectSnapshot
         && data.diff(oldData).affectedKeys().hasOnly(['rewardPoints', 'lastReversalId'])
-        && data.rewardPoints == oldData.rewardPoints + reversal.data.inverseEffectSnapshot.get('pointsDelta', 0)
-        && data.rewardPoints >= 0;
+        && data.get('rewardPoints', 0) == oldData.get('rewardPoints', 0) + reversal.data.inverseEffectSnapshot.get('pointsDelta', 0)
+        && data.get('rewardPoints', 0) >= 0;
     }
 
     function isValidSelfSignup(uid) {

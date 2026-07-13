@@ -8,6 +8,7 @@ import {
 } from '@firebase/rules-unit-testing';
 import {
   deleteDoc,
+  deleteField,
   doc,
   getDoc,
   serverTimestamp,
@@ -131,6 +132,52 @@ describe('behaviour event rules', () => {
   test('child and cross-family parent cannot create events', async () => {
     await assertFails(setDoc(doc(user(CHILD_ID), `families/${FAMILY_ID}/behaviour_events/child`), validEvent({ createdBy: CHILD_ID, createdByName: 'Casey Child' })));
     await assertFails(setDoc(doc(user('parent-two'), `families/${FAMILY_ID}/behaviour_events/other`), validEvent({ createdBy: 'parent-two', createdByName: 'Other Parent' })));
+  });
+
+  test('regression: parent can log a positive event (batch)', async () => {
+    const db = user(PARENT_ID);
+    const batch = writeBatch(db);
+    
+    // 1. users/{childId}
+    const childRef = doc(db, 'users', CHILD_ID);
+    // Remove lifetimeXP from the initial user to simulate a legacy user
+    await testEnv.withSecurityRulesDisabled(async (context) => {
+      const adminDb = context.firestore();
+      await updateDoc(doc(adminDb, 'users', CHILD_ID), { lifetimeXP: deleteField() });
+    });
+
+    batch.update(childRef, { rewardPoints: 20 + 10, lifetimeXP: 10, lastBehaviourEventId: 'evt-1' });
+
+    // 2. behaviour_events
+    const eventRef = doc(db, `families/${FAMILY_ID}/behaviour_events/evt-1`);
+    batch.set(eventRef, validEvent({ 
+      effectSnapshot: { 
+        entityType: 'behaviour_event', 
+        familyId: FAMILY_ID, 
+        actorId: PARENT_ID, 
+        childId: CHILD_ID, 
+        pointsDelta: 10, 
+        walletDeltaPence: 0 
+      } 
+    }));
+
+    // 3. feed
+    const feedRef = doc(db, `families/${FAMILY_ID}/feed/feed-1`);
+    const ts = serverTimestamp();
+    batch.set(feedRef, {
+      type: 'behaviour',
+      behaviourType: 'positive',
+      reason: 'Helped tidy the kitchen',
+      pointsDelta: 10,
+      walletDelta: 0,
+      childId: CHILD_ID,
+      actorId: PARENT_ID,
+      text: 'Logged behaviour for Casey Child: Helped tidy the kitchen (+10 pts)',
+      createdAt: ts,
+      timestamp: ts,
+    });
+
+    await assertSucceeds(batch.commit());
   });
 
   test.each([
