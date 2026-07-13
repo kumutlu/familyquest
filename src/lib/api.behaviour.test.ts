@@ -17,6 +17,7 @@ const firestore = vi.hoisted(() => {
     resetIds: () => { generatedId = 0 },
   }
 })
+const authState = vi.hoisted(() => ({ currentUser: { uid: 'owner-1' } as any }))
 
 vi.mock('firebase/firestore', () => ({
   ...firestore,
@@ -26,7 +27,7 @@ vi.mock('firebase/firestore', () => ({
 vi.mock('firebase/auth', () => ({
   createUserWithEmailAndPassword: vi.fn(), signInWithEmailAndPassword: vi.fn(), signInWithPopup: vi.fn(), signOut: vi.fn(),
 }))
-vi.mock('./firebase', () => ({ db: { name: 'db' }, auth: {}, googleProvider: {} }))
+vi.mock('./firebase', () => ({ db: { name: 'db' }, auth: authState, googleProvider: {} }))
 
 import { addBehaviourEvent, updateDebtLimit } from './api'
 
@@ -50,6 +51,7 @@ describe('addBehaviourEvent transaction contract', () => {
   beforeEach(() => {
     vi.clearAllMocks()
     firestore.resetIds()
+    authState.currentUser = { uid: 'owner-1' }
   })
 
   const baseDocs = {
@@ -74,7 +76,7 @@ describe('addBehaviourEvent transaction contract', () => {
       pointsDelta: 0, walletDelta: -500, createdBy: 'owner-1', createdByName: 'Kemal',
     })
     expect(ledgerWrite).toMatchObject({
-      type: 'financial_penalty', behaviourEventId: eventId, childId: 'child-1', amount: 500,
+      type: 'financial_penalty', eventId, childId: 'child-1', amount: 500,
       reason: 'Broken headphones', createdBy: 'owner-1', createdByName: 'Kemal',
     })
     expect(eventId).toBe('generated-1')
@@ -153,6 +155,7 @@ describe('addBehaviourEvent transaction contract', () => {
     const transaction = installTransaction(docs)
 
     // Parent
+    authState.currentUser = { uid: 'parent-1' }
     await addBehaviourEvent('family-1', 'child-1', 'parent-1', {
       type: 'positive', reason: 'Good', pointsDelta: 10, walletDelta: 0
     })
@@ -161,6 +164,7 @@ describe('addBehaviourEvent transaction contract', () => {
     vi.clearAllMocks()
 
     // Owner
+    authState.currentUser = { uid: 'owner-1' }
     await addBehaviourEvent('family-1', 'child-1', 'owner-1', {
       type: 'positive', reason: 'Good', pointsDelta: 10, walletDelta: 0
     })

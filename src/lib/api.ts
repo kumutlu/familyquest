@@ -12,6 +12,7 @@ import { db, auth, googleProvider } from './firebase';
 import { calculateBehaviourEffect, DEFAULT_DEBT_LIMIT_PENCE } from './behaviour';
 import type { BehaviourEventInput } from './behaviour';
 import { reviewerFields, transferApprovalRequestUpdate } from './approvalContracts';
+import { effectSnapshot, manualWalletEffectSnapshot } from './reversalContracts';
 
 // ---------------------------
 // 0. AUTHENTICATION
@@ -332,6 +333,9 @@ export const createTask = async (familyId: string, taskData: any) => {
 };
 
 export const completeTask = async (familyId: string, taskId: string, userId: string, requiresApproval: boolean) => {
+  const actorId = auth.currentUser?.uid;
+  if (!actorId) throw new Error('Not authenticated');
+  if (actorId !== userId) throw new Error('Cannot complete a task for another user');
   await runTransaction(db, async (transaction) => {
     // 1. Evaluate user streak
     const userRef = doc(db, 'users', userId);
@@ -440,6 +444,7 @@ export const approveTaskCompletion = async (familyId: string, completionId: stri
       parentComment: comment || null,
       approvedAt: serverTimestamp(),
       awardedPoints: points,
+      effectSnapshot: effectSnapshot({ entityType: 'task_completion', familyId, actorId: currentUserUid, childId: completion.assigneeId, pointsDelta: points }),
       ...reviewerFields(currentUserUid, reviewerDoc.data().displayName || 'Parent', serverTimestamp()),
     });
 
@@ -502,12 +507,14 @@ export const rejectTaskCompletion = async (familyId: string, completionId: strin
 export async function addBehaviourEvent(
   familyId: string,
   childId: string,
-  createdBy: string,
+  _createdBy: string,
   input: BehaviourEventInput,
 ): Promise<string> {
+  const actorId = auth.currentUser?.uid;
+  if (!actorId) throw new Error('Not authenticated');
   const familyRef = doc(db, 'families', familyId);
   const childRef = doc(db, 'users', childId);
-  const creatorRef = doc(db, 'users', createdBy);
+  const creatorRef = doc(db, 'users', actorId);
   const eventRef = doc(collection(db, `families/${familyId}/behaviour_events`));
   const ledgerRef = input.type === 'financial'
     ? doc(collection(db, `families/${familyId}/wallet_transactions`))
@@ -559,21 +566,26 @@ export async function addBehaviourEvent(
       reason: input.reason.trim(),
       pointsDelta: effect.pointsDelta,
       walletDelta: effect.walletDelta,
-      createdBy,
+      createdBy: actorId,
       createdByName: creator.displayName,
       createdAt: serverTimestamp(),
+      effectSnapshot: effectSnapshot({ entityType: 'behaviour_event', familyId, actorId, childId, pointsDelta: effect.pointsDelta, walletDeltaPence: effect.walletDelta }),
     });
 
     if (ledgerRef) {
       transaction.set(ledgerRef, {
         type: 'financial_penalty',
-        behaviourEventId: eventRef.id,
+        eventId: eventRef.id,
+        sourceId: eventRef.id,
+        familyId,
+        status: 'completed',
         childId,
         amount: -effect.walletDelta,
         reason: input.reason.trim(),
-        createdBy,
+        createdBy: actorId,
         createdByName: creator.displayName,
         createdAt: serverTimestamp(),
+        effectSnapshot: effectSnapshot({ entityType: 'behaviour_event', familyId, actorId, childId, walletDeltaPence: effect.walletDelta }),
       });
     }
 
@@ -588,7 +600,7 @@ export async function addBehaviourEvent(
       pointsDelta: effect.pointsDelta,
       walletDelta: effect.walletDelta,
       childId: childId,
-      actorId: createdBy,
+      actorId,
       text: `Logged behaviour for ${child.displayName}: ${input.reason.trim()} (${deltaText})`,
       createdAt: feedTimestamp,
       timestamp: feedTimestamp,
@@ -666,6 +678,9 @@ export const claimChallenge = async (familyId: string, challengeId: string, rewa
 // ---------------------------
 
 export const redeemReward = async (familyId: string, userId: string, rewardId: string) => {
+  const actorId = auth.currentUser?.uid;
+  if (!actorId) throw new Error('Not authenticated');
+  if (actorId !== userId) throw new Error('Cannot redeem a reward for another user');
   const rewardRef = doc(db, `families/${familyId}/rewards`, rewardId);
   const userRef = doc(db, 'users', userId);
   const redemptionRef = doc(collection(db, `families/${familyId}/redemptions`));
@@ -697,6 +712,10 @@ export const redeemReward = async (familyId: string, userId: string, rewardId: s
       redeemedAt: serverTimestamp(),
       createdAt: serverTimestamp(),
       status: 'completed',
+      familyId,
+      sourceId: redemptionRef.id,
+      actorId: userId,
+      effectSnapshot: effectSnapshot({ entityType: 'reward_redemption', familyId, actorId: userId, childId: userId, rewardId, pointsDelta: -cost }),
     });
 
     transaction.set(feedRef, {
@@ -791,7 +810,9 @@ export const ensureWalletDocument = async (
   return legacyBalance;
 };
 
-export const depositToWallet = async (familyId: string, childId: string, parentId: string, amount: number, note: string) => {
+export const depositToWallet = async (familyId: string, childId: string, _parentId: string, amount: number, note: string) => {
+  const actorId = auth.currentUser?.uid;
+  if (!actorId) throw new Error('Not authenticated');
   const childWalletRef = doc(db, `families/${familyId}/wallets`, childId);
   const txRef = doc(collection(db, `families/${familyId}/wallet_transactions`));
 
@@ -808,14 +829,20 @@ export const depositToWallet = async (familyId: string, childId: string, parentI
       childId,
       amount,
       note,
-      parentRef: parentId,
+      familyId,
+      sourceId: txRef.id,
+      status: 'completed',
+      parentRef: actorId,
+      effectSnapshot: manualWalletEffectSnapshot('deposit', familyId, childId, amount, actorId),
       timestamp: serverTimestamp(),
       createdAt: serverTimestamp()
     });
   });
 };
 
-export const withdrawFromWallet = async (familyId: string, childId: string, parentId: string, amount: number, note: string) => {
+export const withdrawFromWallet = async (familyId: string, childId: string, _parentId: string, amount: number, note: string) => {
+  const actorId = auth.currentUser?.uid;
+  if (!actorId) throw new Error('Not authenticated');
   const childWalletRef = doc(db, `families/${familyId}/wallets`, childId);
   const txRef = doc(collection(db, `families/${familyId}/wallet_transactions`));
 
@@ -834,14 +861,20 @@ export const withdrawFromWallet = async (familyId: string, childId: string, pare
       childId,
       amount,
       note,
-      parentRef: parentId,
+      familyId,
+      sourceId: txRef.id,
+      status: 'completed',
+      parentRef: actorId,
+      effectSnapshot: manualWalletEffectSnapshot('withdrawal', familyId, childId, amount, actorId),
       timestamp: serverTimestamp(),
       createdAt: serverTimestamp()
     });
   });
 };
 
-export const transferWalletFunds = async (familyId: string, fromChildId: string, toChildId: string, parentId: string, amount: number, note: string) => {
+export const transferWalletFunds = async (familyId: string, fromChildId: string, toChildId: string, _parentId: string, amount: number, note: string) => {
+  const actorId = auth.currentUser?.uid;
+  if (!actorId) throw new Error('Not authenticated');
   const fromWalletRef = doc(db, `families/${familyId}/wallets`, fromChildId);
   const toWalletRef = doc(db, `families/${familyId}/wallets`, toChildId);
   const txRef = doc(collection(db, `families/${familyId}/wallet_transactions`));
@@ -866,7 +899,11 @@ export const transferWalletFunds = async (familyId: string, fromChildId: string,
       fromChildId,
       amount,
       note,
-      parentRef: parentId,
+      familyId,
+      sourceId: txRef.id,
+      status: 'completed',
+      parentRef: actorId,
+      effectSnapshot: effectSnapshot({ entityType: 'wallet_transfer', familyId, actorId, childId: fromChildId, counterpartyChildId: toChildId, walletDeltaPence: -amount, counterpartyWalletDeltaPence: amount }),
       timestamp: serverTimestamp(),
       createdAt: serverTimestamp()
     });
@@ -912,6 +949,8 @@ export const addFundExpense = async (
   fundId: string,
   expenseData: { amount: number, category: string, description: string, fundName: string }
 ) => {
+  const actorId = auth.currentUser?.uid;
+  if (!actorId) throw new Error('Not authenticated');
   const fundRef = doc(db, `families/${familyId}/funds`, fundId);
   const txRef = doc(collection(db, `families/${familyId}/fund_transactions`));
   const feedRef = doc(collection(db, `families/${familyId}/feed`));
@@ -921,6 +960,7 @@ export const addFundExpense = async (
     if (!fundDoc.exists()) throw new Error("Fund not found");
 
     const currentBalance = fundDoc.data().balance || 0;
+    if (currentBalance < expenseData.amount) throw new Error('Insufficient fund balance');
 
     transaction.update(fundRef, { balance: currentBalance - expenseData.amount });
     transaction.set(txRef, {
@@ -929,10 +969,17 @@ export const addFundExpense = async (
       amount: expenseData.amount,
       category: expenseData.category,
       description: expenseData.description,
+      familyId,
+      sourceId: txRef.id,
+      actorId,
+      status: 'completed',
+      effectSnapshot: effectSnapshot({ entityType: 'fund_transaction', familyId, actorId, fundId, fundDeltaPence: -expenseData.amount }),
       createdAt: serverTimestamp()
     });
 
     transaction.set(feedRef, {
+      actorId,
+      type: 'custom',
       text: `Added £${(expenseData.amount/100).toFixed(2)} expense for ${expenseData.fundName}: ${expenseData.description}`,
       timestamp: serverTimestamp()
     });
@@ -947,6 +994,9 @@ export const contributeToFund = async (
   fundName: string,
   userName: string
 ) => {
+  const actorId = auth.currentUser?.uid;
+  if (!actorId) throw new Error('Not authenticated');
+  if (actorId !== userId) throw new Error('Cannot create a contribution for another user');
   const reqRef = doc(collection(db, `families/${familyId}/petbox_requests`));
   const feedRef = doc(collection(db, `families/${familyId}/feed`));
 
@@ -955,7 +1005,7 @@ export const contributeToFund = async (
       familyId,
       fundId,
       fundName,
-      childId: userId,
+      childId: actorId,
       childName: userName,
       amountPence: amount,
       status: 'pending',
@@ -963,7 +1013,7 @@ export const contributeToFund = async (
     });
 
     transaction.set(feedRef, {
-      actorId: userId,
+      actorId,
       text: `${userName} wants to donate £${(amount/100).toFixed(2)} to ${fundName}. Awaiting parent approval.`,
       timestamp: serverTimestamp()
     });
@@ -1035,6 +1085,11 @@ export const approvePetBoxDonation = async (familyId: string, requestId: string)
       type: "contribution",
       amount: reqData.amountPence,
       fromUserId: reqData.childId,
+      sourceId: requestId,
+      familyId,
+      actorId: currentUserUid,
+      status: 'completed',
+      effectSnapshot: effectSnapshot({ entityType: 'petbox_donation', familyId, actorId: currentUserUid, childId: reqData.childId, fundId: reqData.fundId, sourceRequestId: requestId, fundDeltaPence: reqData.amountPence, walletDeltaPence: -reqData.amountPence }),
       createdAt: serverTimestamp()
     });
 
@@ -1051,6 +1106,11 @@ export const approvePetBoxDonation = async (familyId: string, requestId: string)
       amountPence: -reqData.amountPence,
       amount: -reqData.amountPence,
       note: `Donated to ${reqData.fundName}`,
+      sourceId: requestId,
+      familyId,
+      actorId: currentUserUid,
+      status: 'completed',
+      effectSnapshot: effectSnapshot({ entityType: 'petbox_donation', familyId, actorId: currentUserUid, childId: reqData.childId, fundId: reqData.fundId, sourceRequestId: requestId, fundDeltaPence: reqData.amountPence, walletDeltaPence: -reqData.amountPence }),
       createdAt: serverTimestamp(),
       timestamp: serverTimestamp()
     });
@@ -1065,6 +1125,7 @@ export const approvePetBoxDonation = async (familyId: string, requestId: string)
       reviewedBy: currentUserUid,
       approvalTxId,
       fundTransactionId: txRef.id,
+      effectSnapshot: effectSnapshot({ entityType: 'petbox_donation', familyId, actorId: currentUserUid, childId: reqData.childId, fundId: reqData.fundId, sourceRequestId: requestId, fundDeltaPence: reqData.amountPence, walletDeltaPence: -reqData.amountPence }),
     });
 
     const feedRef = doc(collection(db, `families/${familyId}/feed`));
@@ -1226,7 +1287,10 @@ export const approveTransferRequest = async (familyId: string, requestId: string
     }, { merge: true });
 
     console.log('[transfer-approve] step: request approved write');
-    transaction.update(reqRef, transferApprovalRequestUpdate(approvalTxId, currentUserUid, userData.displayName || 'Parent', serverTimestamp()));
+    transaction.update(reqRef, {
+      ...transferApprovalRequestUpdate(approvalTxId, currentUserUid, userData.displayName || 'Parent', serverTimestamp()),
+      effectSnapshot: effectSnapshot({ entityType: 'transfer_request', familyId, actorId: currentUserUid, childId: requestData.fromChildId, counterpartyChildId: requestData.toChildId, sourceRequestId: requestId, walletDeltaPence: -requestData.amountPence, counterpartyWalletDeltaPence: requestData.amountPence }),
+    });
 
     const commonTxData = {
       amountPence: requestData.amountPence,
@@ -1234,7 +1298,11 @@ export const approveTransferRequest = async (familyId: string, requestId: string
       approvalTxId: approvalTxId,
       createdAt: serverTimestamp(),
       parentRef: currentUserUid,
-      note: requestData.message || ""
+      note: requestData.message || "",
+      familyId,
+      sourceId: requestId,
+      status: 'completed',
+      actorId: currentUserUid,
     };
 
     console.log('[transfer-approve] step: transfer_out write');
@@ -1243,7 +1311,8 @@ export const approveTransferRequest = async (familyId: string, requestId: string
       type: 'transfer_out',
       childId: requestData.fromChildId,
       counterpartyChildId: requestData.toChildId,
-      amountPence: -requestData.amountPence
+      amountPence: -requestData.amountPence,
+      effectSnapshot: effectSnapshot({ entityType: 'transfer_request', familyId, actorId: currentUserUid, childId: requestData.fromChildId, counterpartyChildId: requestData.toChildId, sourceRequestId: requestId, walletDeltaPence: -requestData.amountPence, counterpartyWalletDeltaPence: requestData.amountPence })
     });
 
     console.log('[transfer-approve] step: transfer_in write');
@@ -1252,7 +1321,8 @@ export const approveTransferRequest = async (familyId: string, requestId: string
       type: 'transfer_in',
       childId: requestData.toChildId,
       counterpartyChildId: requestData.fromChildId,
-      amountPence: requestData.amountPence
+      amountPence: requestData.amountPence,
+      effectSnapshot: effectSnapshot({ entityType: 'transfer_request', familyId, actorId: currentUserUid, childId: requestData.fromChildId, counterpartyChildId: requestData.toChildId, sourceRequestId: requestId, walletDeltaPence: -requestData.amountPence, counterpartyWalletDeltaPence: requestData.amountPence })
     });
 
     console.log('[transfer-approve] step: feed write');
@@ -1430,6 +1500,9 @@ export const approveMoneyRequest = async (familyId: string, requestId: string) =
     const requestedFromRef = doc(db, 'users', reqData.requestedFromId);
     const requestedFromDoc = await transaction.get(requestedFromRef);
     const isFromParent = requestedFromDoc.data()?.role === 'parent' || requestedFromDoc.data()?.role === 'owner';
+    const requestEffect = isFromParent
+      ? effectSnapshot({ entityType: 'money_request', familyId, actorId: currentUserUid, childId: reqData.requesterId, sourceRequestId: requestId, walletDeltaPence: reqData.amountPence })
+      : effectSnapshot({ entityType: 'money_request', familyId, actorId: currentUserUid, childId: reqData.requestedFromId, counterpartyChildId: reqData.requesterId, sourceRequestId: requestId, walletDeltaPence: -reqData.amountPence, counterpartyWalletDeltaPence: reqData.amountPence });
 
     const requesterUserRef = doc(db, 'users', reqData.requesterId);
     const requesterUserDoc = await transaction.get(requesterUserRef);
@@ -1452,6 +1525,11 @@ export const approveMoneyRequest = async (familyId: string, requestId: string) =
         approvalTxId,
         note: reqData.message || 'Money Requested',
         parentRef: currentUserUid,
+        familyId,
+        sourceId: requestId,
+        actorId: currentUserUid,
+        status: 'completed',
+        effectSnapshot: requestEffect,
         timestamp: serverTimestamp(),
         createdAt: serverTimestamp()
       });
@@ -1481,7 +1559,11 @@ export const approveMoneyRequest = async (familyId: string, requestId: string) =
         createdAt: serverTimestamp(),
         timestamp: serverTimestamp(),
         parentRef: currentUserUid,
-        note: reqData.message || ""
+        note: reqData.message || "",
+        familyId,
+        sourceId: requestId,
+        actorId: currentUserUid,
+        status: 'completed',
       };
 
       transaction.set(txOutRef, {
@@ -1489,7 +1571,8 @@ export const approveMoneyRequest = async (familyId: string, requestId: string) =
         type: 'transfer_out',
         childId: reqData.requestedFromId,
         counterpartyChildId: reqData.requesterId,
-        amountPence: -reqData.amountPence
+        amountPence: -reqData.amountPence,
+        effectSnapshot: requestEffect
       });
 
       transaction.set(txInRef, {
@@ -1497,7 +1580,8 @@ export const approveMoneyRequest = async (familyId: string, requestId: string) =
         type: 'transfer_in',
         childId: reqData.requesterId,
         counterpartyChildId: reqData.requestedFromId,
-        amountPence: reqData.amountPence
+        amountPence: reqData.amountPence,
+        effectSnapshot: requestEffect
       });
     }
 
@@ -1506,7 +1590,8 @@ export const approveMoneyRequest = async (familyId: string, requestId: string) =
       reviewedAt: serverTimestamp(),
       reviewedBy: currentUserUid,
       reviewedByName: userData?.displayName || 'Parent',
-      paymentTransferId: approvalTxId
+      paymentTransferId: approvalTxId,
+      effectSnapshot: requestEffect
     });
 
     const feedRef = doc(collection(db, `families/${familyId}/feed`));
@@ -1552,5 +1637,31 @@ export const rejectMoneyRequest = async (familyId: string, requestId: string) =>
       visibleTo: [reqDoc.data().requesterId, reqDoc.data().requestedFromId],
       timestamp: serverTimestamp()
     });
+  });
+};
+
+export type PendingApprovalKind = 'task' | 'transfer' | 'money_request' | 'petbox';
+
+const pendingApprovalContract: Record<PendingApprovalKind, { collectionName: string; pendingStatuses: string[]; actorField: string }> = {
+  task: { collectionName: 'task_completions', pendingStatuses: ['pending_approval'], actorField: 'assigneeId' },
+  transfer: { collectionName: 'transfer_requests', pendingStatuses: ['pending'], actorField: 'fromChildId' },
+  money_request: { collectionName: 'money_requests', pendingStatuses: ['pending', 'pending_acceptance'], actorField: 'requesterId' },
+  petbox: { collectionName: 'petbox_requests', pendingStatuses: ['pending'], actorField: 'childId' },
+};
+
+/** Cancel an uneffected request. This transition deliberately performs no balance write. */
+export const cancelPendingApproval = async (familyId: string, kind: PendingApprovalKind, requestId: string) => {
+  const actorId = auth.currentUser?.uid;
+  if (!actorId) throw new Error('Not authenticated');
+  const contract = pendingApprovalContract[kind];
+  const requestRef = doc(db, `families/${familyId}/${contract.collectionName}`, requestId);
+
+  await runTransaction(db, async (transaction) => {
+    const requestDoc = await transaction.get(requestRef);
+    if (!requestDoc.exists()) throw new Error('Request not found');
+    const request = requestDoc.data();
+    if (!contract.pendingStatuses.includes(request.status)) throw new Error('Request is not pending');
+    if (request[contract.actorField] !== actorId) throw new Error('Only the request originator can cancel it');
+    transaction.update(requestRef, { status: 'cancelled', cancelledBy: actorId, cancelledAt: serverTimestamp() });
   });
 };

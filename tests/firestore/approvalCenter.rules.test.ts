@@ -1,5 +1,5 @@
 import { initializeTestEnvironment, assertFails, assertSucceeds } from '@firebase/rules-unit-testing';
-import { doc, setDoc, writeBatch, serverTimestamp } from 'firebase/firestore';
+import { doc, getDoc, setDoc, updateDoc, writeBatch, serverTimestamp } from 'firebase/firestore';
 import { readFileSync } from 'fs';
 import { describe, it, beforeAll, afterAll, beforeEach } from 'vitest';
 
@@ -116,6 +116,29 @@ afterAll(async () => {
 });
 
 describe('Approval Center Actions', () => {
+
+  it('originator can cancel a pending transfer without moving balances', async () => {
+    const db = testEnv.authenticatedContext(childId).firestore();
+    await assertSucceeds(updateDoc(doc(db, `families/${familyId}/transfer_requests`, 'trans1'), {
+      status: 'cancelled', cancelledBy: childId, cancelledAt: serverTimestamp(),
+    }));
+
+    await testEnv.withSecurityRulesDisabled(async (context: any) => {
+      const adminDb = context.firestore();
+      const [sender, recipient] = await Promise.all([
+        getDoc(doc(adminDb, `families/${familyId}/wallets`, childId)),
+        getDoc(doc(adminDb, `families/${familyId}/wallets`, siblingId)),
+      ]);
+      if (sender.data()?.balance !== 500 || recipient.data()?.balance !== 100) throw new Error('Cancellation moved a balance');
+    });
+  });
+
+  it('sibling cannot cancel another child’s pending transfer', async () => {
+    const db = testEnv.authenticatedContext(siblingId).firestore();
+    await assertFails(updateDoc(doc(db, `families/${familyId}/transfer_requests`, 'trans1'), {
+      status: 'cancelled', cancelledBy: siblingId, cancelledAt: serverTimestamp(),
+    }));
+  });
 
   it('owner can reject a pending task completion', async () => {
     const db = testEnv.authenticatedContext('owner123').firestore();
