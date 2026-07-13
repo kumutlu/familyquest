@@ -33,6 +33,57 @@ describe('reversal history normalization', () => {
   });
 
   it.each([
+    ['wallet_transaction', 'transfer_request', 'transfer-ledger'],
+    ['wallet_transaction', 'money_request', 'money-ledger'],
+    ['wallet_transaction', 'petbox_donation', 'pet-wallet-ledger'],
+    ['fund_transaction', 'petbox_donation', 'pet-fund-ledger'],
+  ] as const)('hides derived %s ledger legs for canonical %s requests', (sourceKind, entityType, sourceId) => {
+    const source = {
+      id: sourceId,
+      effectSnapshot: effectSnapshot({
+        entityType,
+        familyId: 'family-1',
+        actorId: 'parent-1',
+        childId: 'child-1',
+        sourceRequestId: 'request-1',
+        walletDeltaPence: -100,
+      }),
+    };
+    const result = normalizeHistoryAction({
+      sourceKind,
+      source,
+      actor: parent,
+      reversals: [],
+      balances: { wallets: { 'child-1': 500 }, funds: { 'fund-1': 500 } },
+      names: {},
+    });
+    expect(result.action).toBeUndefined();
+  });
+
+  it('keeps an ordinary manual wallet transfer reversible', () => {
+    const source = {
+      id: 'manual-transfer',
+      effectSnapshot: effectSnapshot({
+        entityType: 'wallet_transfer',
+        familyId: 'family-1',
+        actorId: 'parent-1',
+        childId: 'child-1',
+        counterpartyChildId: 'child-2',
+        walletDeltaPence: -100,
+        counterpartyWalletDeltaPence: 100,
+      }),
+    };
+    expect(normalizeHistoryAction({
+      sourceKind: 'wallet_transaction',
+      source,
+      actor: parent,
+      reversals: [],
+      balances: { wallets: { 'child-1': 500, 'child-2': 200 } },
+      names: {},
+    }).action).toBe('reverse');
+  });
+
+  it.each([
     ['task_completion', { id: 'task-pending', status: 'pending_approval', assigneeId: 'child-1' }],
     ['transfer_request', { id: 'transfer-pending', status: 'pending', fromChildId: 'child-1' }],
     ['money_request', { id: 'money-pending', status: 'pending', requesterId: 'child-1' }],

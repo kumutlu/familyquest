@@ -68,6 +68,17 @@ const summaryFor = (sourceKind: ReversalSourceKind, source: any, names: Record<s
   return source.type?.replaceAll('_', ' ') || 'Recorded action';
 };
 
+const canonicalEntityTypes: Record<ReversalSourceKind, readonly string[]> = {
+  wallet_transaction: ['wallet_transaction', 'wallet_transfer'],
+  fund_transaction: ['fund_transaction'],
+  behaviour_event: ['behaviour_event'],
+  task_completion: ['task_completion'],
+  reward_redemption: ['reward_redemption'],
+  transfer_request: ['transfer_request'],
+  money_request: ['money_request'],
+  petbox_request: ['petbox_donation'],
+};
+
 function targetsFor(snapshot: EffectSnapshot | undefined, balances: NormalizeHistoryActionInput['balances'], names: Record<string, string>): HistoryActionTarget[] {
   if (!snapshot) return [];
   const targets: HistoryActionTarget[] = [];
@@ -103,7 +114,10 @@ export function normalizeHistoryAction(input: NormalizeHistoryActionInput): Hist
   }
 
   const hasEveryBalance = targets.length > 0 && targets.every(target => target.predictedBalance !== undefined);
-  if (!reversal && source.type !== 'reversal' && snapshot?.schemaVersion === 1 && snapshot.entityType !== 'reversal' && hasEveryBalance) {
+  const isCanonicalSource = snapshot?.schemaVersion === 1
+    && canonicalEntityTypes[sourceKind].includes(snapshot.entityType)
+    && (!snapshot.sourceRequestId || snapshot.sourceRequestId === source.id);
+  if (!reversal && source.type !== 'reversal' && isCanonicalSource && hasEveryBalance) {
     return { ...normalized, action: 'reverse' };
   }
   return normalized;

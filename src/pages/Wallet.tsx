@@ -1,10 +1,13 @@
+import { useState } from 'react';
 import { Card, CardContent } from '../components/ui/Card';
 import { Stat } from '../components/ui/Stat';
 import { ArrowDownRight, ArrowUpRight, Wallet as WalletIcon, Target } from 'lucide-react';
 import { useStore } from '../store/useStore';
+import { TransactionDetailsModal } from '../components/wallet/TransactionDetailsModal';
 
 export function Wallet() {
   const { currentUser, walletTransactions, loading } = useStore();
+  const [selectedTransaction, setSelectedTransaction] = useState<any>(null);
 
   if (loading || !currentUser) return <div className="p-8 text-center text-gray-500 animate-pulse">Loading Wallet...</div>;
 
@@ -48,7 +51,11 @@ export function Wallet() {
                   const isCredit = tx.type === 'credit';
                   const date = tx.timestamp?.toDate ? tx.timestamp.toDate() : new Date();
                   return (
-                    <div key={tx.id} className="p-3 flex items-center justify-between">
+                    <div
+                      key={tx.id}
+                      onClick={() => setSelectedTransaction(tx)}
+                      className="p-3 flex cursor-pointer items-center justify-between transition-colors hover:bg-gray-50"
+                    >
                       <div className="flex items-center gap-3">
                         <div className={`w-10 h-10 rounded-full flex items-center justify-center shrink-0 ${isCredit ? 'bg-success-50 text-success-600' : 'bg-gray-100 text-gray-600'}`}>
                           {isCredit ? <ArrowUpRight size={20} /> : <ArrowDownRight size={20} />}
@@ -69,6 +76,11 @@ export function Wallet() {
           </Card>
         )}
       </section>
+      <TransactionDetailsModal
+        isOpen={!!selectedTransaction}
+        onClose={() => setSelectedTransaction(null)}
+        transaction={selectedTransaction}
+      />
     </div>
   );
 }

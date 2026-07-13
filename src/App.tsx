@@ -10,6 +10,7 @@ import { Settings } from './pages/Settings';
 import { Login } from './pages/Login';
 import { Signup } from './pages/Signup';
 import { Onboarding } from './pages/Onboarding';
+import { FundsDashboard } from './pages/FundsDashboard';
 import { useStore } from './store/useStore';
 import { useEffect } from 'react';
 
@@ -33,6 +34,7 @@ function App() {
           <Route path="family/:id" element={<MemberProfile />} />
           <Route path="tasks" element={<Tasks />} />
           <Route path="rewards" element={<Rewards />} />
+          <Route path="pet-box" element={<FundsDashboard />} />
           <Route path="wallet" element={<Wallet />} />
           <Route path="settings" element={<Settings />} />
         </Route>

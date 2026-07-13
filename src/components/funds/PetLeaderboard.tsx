@@ -1,0 +1,52 @@
+import { Card, CardContent } from '../ui/Card';
+import { Avatar } from '../ui/Avatar';
+
+export function PetLeaderboard({ fundTransactions, familyMembers, currencySymbol }: { fundTransactions: any[], familyMembers: any[], currencySymbol: string }) {
+  // Aggregate contributions by user
+  const contributions: Record<string, number> = {};
+
+  fundTransactions.forEach(tx => {
+    if (tx.type === 'contribution' && tx.fromUserId) {
+      contributions[tx.fromUserId] = (contributions[tx.fromUserId] || 0) + tx.amount;
+    }
+  });
+
+  // Sort children by contribution amount
+  const sortedHelpers = familyMembers
+    .filter(m => m.role === 'child' && contributions[m.id] > 0)
+    .map(m => ({ ...m, totalContributed: contributions[m.id] }))
+    .sort((a, b) => b.totalContributed - a.totalContributed);
+
+  if (sortedHelpers.length === 0) {
+    return (
+      <Card>
+        <CardContent className="p-8 text-center text-gray-500 font-medium">
+          No contributions yet. Start helping out to appear on the leaderboard!
+        </CardContent>
+      </Card>
+    );
+  }
+
+  const medals = ['🥇', '🥈', '🥉'];
+
+  return (
+    <Card>
+      <CardContent className="p-4 space-y-4">
+        {sortedHelpers.slice(0, 5).map((helper, idx) => (
+          <div key={helper.id} className="flex items-center justify-between p-3 bg-gray-50 rounded-xl">
+            <div className="flex items-center gap-3">
+              <div className="w-8 h-8 flex items-center justify-center text-xl">
+                {idx < 3 ? medals[idx] : <span className="text-gray-400 font-bold">{idx + 1}</span>}
+              </div>
+              <Avatar src={helper.avatarUrl} fallback={helper.displayName[0]} size="sm" />
+              <span className="font-bold text-gray-900">{helper.displayName}</span>
+            </div>
+            <div className="text-right">
+              <span className="font-extrabold text-reward-600">{currencySymbol}{(helper.totalContributed / 100).toFixed(2)}</span>
+            </div>
+          </div>
+        ))}
+      </CardContent>
+    </Card>
+  );
+}

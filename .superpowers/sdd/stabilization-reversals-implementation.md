@@ -60,8 +60,11 @@ Task C evidence:
 - Added a single normalized `HistoryAction` resolver for wallet transactions, fund transactions, behaviour events, task completions, reward redemptions, transfer requests, money requests, and Pet Box requests. It joins deterministic reversal records, derives signed original effects and predicted post-action balances from live state, and hides controls for children, legacy/missing snapshots, insufficient balance linkage, reversal ledgers, unsupported sources, and already-reversed records.
 - Added `reversals` to the role-aware bootstrap query plan and Zustand family state. All family members receive immutable reversal snapshots, cleanup clears them, and the parent history reconciles without a refresh.
 - Added parent/owner controls to the existing Parent Console wallet history, wallet transaction details, fund history, member behaviour history, Approval Center pending/history cards, and reward redemption history, plus a consolidated `Reversible history` panel. Canonical request/event sources suppress duplicate approval wallet/fund-leg controls.
+- Hardened canonical-source normalization so derived behaviour, transfer, money-request, and Pet Box wallet/fund ledger legs never expose a second reversal control. A request-linked snapshot is actionable only on its canonical request ID, while ordinary manual wallet transfers remain reversible.
+- Mounted wallet transaction details from the wallet history and mounted the fund cards through the `/pet-box` dashboard route, with integration tests covering both consumers.
 - Added a reusable confirmation modal with source summary, affected targets, signed original effect, predicted balance/points, a trimmed three-character reason, synchronous duplicate-submit protection, action-specific loading, exact errors without closing, success reconciliation, and the exact warning: “This creates a linked reversal record. The original action will remain in history.”
 - Successful submission immediately replaces the control with a `Reversed` badge plus reason, actor name, and time while the Firestore listener reconciles the immutable stored record. Persisted audit time is normalized from `completedAt` (with `createdAt` compatibility). Failure retains both modal and reason; reopening a different action resets stale modal state.
+- The live reversal query orders by the persisted `completedAt` field, so completed reversal records are included in listener results and reconcile without refresh.
 - Parent/owner cancellation is now authorized by both the production API and exact pending-only Firestore transitions, while the existing originator cancellation remains valid. Cancellation performs no balance mutation and reconciles to `Cancelled` immediately.
 
 Task D action matrix:
@@ -82,8 +85,8 @@ Task D action matrix:
 
 Task D evidence:
 
-- Focused normalization/store/modal/control/surface/API tests: 70 passed across 12 files.
-- Non-emulator unit/component suite: 149 passed across 21 files.
+- Focused final security and route integration regression tests: 22 passed across 5 files.
+- Non-emulator unit/component suite: 158 passed across 24 files.
 - Full Firestore rules suite on JDK 21: 128 passed across 6 files.
-- Scoped Oxlint: passed.
+- Repository-wide Oxlint: passed (warnings only in unrelated utility scripts).
 - Production build: passed with the existing advisory dynamic-import and chunk-size warnings.
