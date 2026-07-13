@@ -161,3 +161,27 @@ src/lib/reversalApi.test.ts(13,57): error TS2307: Cannot find module './reversal
 ```
 
 The missing reversal module is outside this bootstrap change. Build verification will be rerun once that concurrent RED cycle turns green.
+
+### Final settled-tree verification
+
+After reversal and approval remediation committed through `d9ef637`, all requested verification was rerun against one settled tree:
+
+```text
+npx vitest run tests/store/useStore.test.ts tests/components/bootstrap.test.tsx --reporter=verbose
+Test Files: 2 passed
+Tests: 34 passed
+
+npx firebase emulators:exec --only firestore "npx vitest run tests/firestore/bootstrapQueries.rules.test.ts --reporter=verbose"
+Test Files: 1 passed
+Tests: 3 passed
+
+tracked_tests=(${(f)"$(git ls-files '*test.ts' '*test.tsx' | rg -v '^tests/firestore/')"}); npx vitest run ${tracked_tests[@]} --reporter=dot
+Test Files: 13 passed
+Tests: 120 passed
+
+npm run build
+Exit: 0
+Vite: 1845 modules transformed; PWA service worker generated
+```
+
+The tracked non-rules run emitted existing React `act(...)` warnings from the concurrently added Approval Center interaction test; it had zero test failures. The production build emitted only its existing dynamic-import and large-chunk advisories.
