@@ -5,7 +5,7 @@ Implementation commit: `575165f` (`feat: add safe family data reset tools`)
 
 ## Status
 
-Implemented family-scoped export and reset tooling without changing `package.json` and without running an actual reset.
+Implemented family-scoped export and reset tooling without running an actual reset. The review-remediation commit also adds the required package scripts.
 
 Files:
 
@@ -167,6 +167,8 @@ npx vitest run <all non-firestore test files>
 Test Files  9 passed (9)
 Tests       98 passed (98)
 ```
+
+A later broad rerun during concurrent bootstrap work reported 100/101 passing, with the unrelated `tests/store/useStore.test.ts` retry-subscription assertion failing. The requested `npm run build` was also retried and currently stops in the concurrently added `src/lib/reversalContracts.test.ts` because its fixture includes a `type` property not accepted by the in-progress contract type. Neither failure is in the data-tool files; focused data-tool TypeScript verification remains green.
 
 No real reset command, destructive mode, Firebase write, or production-data mutation was executed. Tests of execute-mode planning use only the in-memory fake store.
 
