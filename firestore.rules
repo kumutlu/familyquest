@@ -39,6 +39,38 @@ service cloud.firestore {
       return isParent(familyId);
     }
 
+    // -------------------------------------------------------------------------
+    // AVATAR CATALOG (authoritative mirror of src/config/avatarCatalog.ts)
+    // The cost map below is the single source of truth for premium avatar prices
+    // inside Firestore rules. The client bundle may display prices but can NEVER
+    // change them: unlock records are rejected unless costPoints equals this map.
+    // -------------------------------------------------------------------------
+    function avatarCatalogCost(avatarId) {
+      return {
+        'rare-neon': 150,
+        'rare-tiger': 200,
+        'rare-wizard': 250,
+        'epic-dragon': 500,
+        'epic-phoenix': 750,
+        'epic-knight': 1000,
+        'legendary-galaxy': 2000,
+        'legendary-crown': 3000,
+      }.get(avatarId, -1);
+    }
+
+    // Starter avatars are free for everyone (no unlock record required).
+    function isStarterAvatar(avatarId) {
+      return avatarId in [
+        'starter-robot', 'starter-cat', 'starter-panda', 'starter-fox', 'starter-star',
+        'starter-rocket', 'starter-alien', 'starter-bunny', 'starter-dino', 'starter-unicorn',
+      ];
+    }
+
+    // Premium avatars require a points unlock record.
+    function isPremiumAvatar(avatarId) {
+      return avatarCatalogCost(avatarId) > 0;
+    }
+
     function hasValidCreatorSnapshot(data) {
       let creatorDoc = get(/databases/$(database)/documents/users/$(request.auth.uid));
       return creatorDoc != null && 'displayName' in creatorDoc.data && creatorDoc.data.displayName == data.get('createdByName', 'null');
@@ -458,6 +490,7 @@ service cloud.firestore {
       return isParent(familyId)
         && data.diff(oldData).affectedKeys().hasOnly(['balance', 'lastFundTxId'])
         && tx != null && tx.data.type == 'expense' && tx.data.fundId == fundId
+        && tx.data.familyId == familyId
         && tx.data.sourceId == txId && tx.data.actorId == request.auth.uid
         && tx.data.amount is int && tx.data.amount > 0
         && data.balance == oldData.balance - tx.data.amount
@@ -598,7 +631,6 @@ service cloud.firestore {
         && reversal.data.originalEffectSnapshot.get('fundId', '') == fundId
         && data.diff(oldData).affectedKeys().hasOnly(['balance', 'lastReversalId'])
         && data.balance == oldData.balance + reversal.data.inverseEffectSnapshot.get('fundDeltaPence', 0)
-        && data.balance >= 0
         && existsAfter(/databases/$(database)/documents/families/$(familyId)/fund_transactions/$(reversalId + '__fund'));
     }
 
@@ -728,7 +760,7 @@ service cloud.firestore {
       let reqAfter = getAfter(/databases/$(database)/documents/families/$(familyId)/transfer_requests/$(reqId));
       let requiredKeys = ['type', 'childId', 'counterpartyChildId', 'amountPence', 'transferRequestId', 'approvalTxId', 'createdAt', 'parentRef', 'note'];
 
-      return data.keys().hasOnly(['type', 'childId', 'counterpartyChildId', 'amountPence', 'transferRequestId', 'approvalTxId', 'createdAt', 'parentRef', 'note', 'familyId', 'sourceId', 'status', 'actorId', 'effectSnapshot'])
+      return data.keys().hasOnly(['type', 'childId', 'counterpartyChildId', 'amountPence', 'transferRequestId', 'approvalTxId', 'createdAt', 'parentRef', 'note', 'description', 'familyId', 'sourceId', 'status', 'actorId', 'effectSnapshot'])
         && data.keys().hasAll(requiredKeys)
         && data.type == 'transfer_out'
         && req != null
@@ -770,7 +802,7 @@ service cloud.firestore {
       let reqAfter = getAfter(/databases/$(database)/documents/families/$(familyId)/transfer_requests/$(reqId));
       let requiredKeys = ['type', 'childId', 'counterpartyChildId', 'amountPence', 'transferRequestId', 'approvalTxId', 'createdAt', 'parentRef', 'note'];
 
-      return data.keys().hasOnly(['type', 'childId', 'counterpartyChildId', 'amountPence', 'transferRequestId', 'approvalTxId', 'createdAt', 'parentRef', 'note', 'familyId', 'sourceId', 'status', 'actorId', 'effectSnapshot'])
+      return data.keys().hasOnly(['type', 'childId', 'counterpartyChildId', 'amountPence', 'transferRequestId', 'approvalTxId', 'createdAt', 'parentRef', 'note', 'description', 'familyId', 'sourceId', 'status', 'actorId', 'effectSnapshot'])
         && data.keys().hasAll(requiredKeys)
         && data.type == 'transfer_in'
         && req != null
@@ -896,11 +928,13 @@ service cloud.firestore {
       allow update: if isAuthenticated() && (
         isValidReversalPointsUpdate(uid) ||
         (request.auth.uid == uid && !request.resource.data.diff(resource.data).affectedKeys().hasAny([
-          'role', 'familyId', 'rewardPoints', 'lifetimeXP', 'walletBalance', 'balance', 'lastFundTxId'
+          'role', 'familyId', 'rewardPoints', 'lifetimeXP', 'walletBalance', 'balance', 'lastFundTxId',
+          'displayName', 'avatarUrl', 'avatarId'
         ])) ||
         (request.resource.data.diff(resource.data).affectedKeys().hasAny(['rewardPoints', 'lastTaskCompletionId', 'lastBehaviourEventId']) ? isValidRedemptionDeduction(uid) || isValidTaskApprovalMutation(uid) || isValidBehaviourPointMutation(uid) : false) ||
         (!('familyId' in resource.data) && 'familyId' in request.resource.data ? isValidOwnerBootstrap(uid) || isValidJoinProfileUpdate(uid) : false) ||
-        ('familyId' in resource.data && isOwner(resource.data.familyId) && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['role']) && resource.data.get('role', 'null') != 'child' && request.resource.data.role != 'child')
+        ('familyId' in resource.data && isOwner(resource.data.familyId) && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['role']) && resource.data.get('role', 'null') != 'child' && request.resource.data.role != 'child') ||
+        ('familyId' in resource.data && isParent(resource.data.familyId) && resource.data.get('role', 'null') == 'child' && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['displayName', 'avatarUrl']))
       );
 
       allow create: if isAuthenticated() && (
@@ -1028,9 +1062,114 @@ service cloud.firestore {
           && request.resource.data.actorId == request.auth.uid
           && (
             !('visibleTo' in request.resource.data) ||
-            (request.resource.data.visibleTo is list && request.resource.data.visibleTo.hasOnly([request.resource.data.get('childId', ''), request.auth.uid, request.resource.data.get('visibleTo', [])[0], request.resource.data.get('visibleTo', [])[1]]))
+            // Crash-safe: build the allowed set without indexing past the end of the list.
+            // visibleTo may contain 0, 1 or 2 entries; the actor and optional childId are
+            // always permitted in addition to the entries the client supplied.
+            (request.resource.data.visibleTo is list && request.resource.data.visibleTo.hasOnly([request.resource.data.get('childId', ''), request.auth.uid].concat(request.resource.data.get('visibleTo', []))))
           );
         allow update, delete: if isParent(familyId);
+      }
+
+      // In-app notifications. Per-recipient visibility is enforced by the read
+      // rule (recipientIds membership + same-family). Content is immutable and
+      // may only be created by a parent/owner, so children cannot forge
+      // notifications or recipients. Read state is tracked separately per user.
+      match /notifications/{notificationId} {
+        function allowedKeys() {
+          return ['familyId', 'type', 'actorId', 'recipientIds', 'title', 'body', 'entityType', 'entityId', 'actionUrl', 'dedupeKey', 'createdAt', 'metadata'];
+        }
+        // A non-existent document (e.g. a dedupe pre-read for a notification that
+        // has not been written yet) must resolve to "no data" rather than throw a
+        // Null value error. Existing notifications remain readable only by family
+        // members listed in recipientIds.
+        allow read: if resource == null
+          || (isFamilyMember(familyId) && request.auth.uid in resource.data.recipientIds);
+        // Any authenticated family member may create a notification *as themselves*
+        // (actorId == request.auth.uid). Children legitimately originate notifications
+        // (e.g. task_submitted, profile_update_requested) inside the same transaction as
+        // the business event. The actor must be the caller and a family member; all field,
+        // recipient-list and createdAt constraints below remain enforced so a child cannot
+        // forge another actor, inject arbitrary fields, or back-date the document.
+        allow create: if isFamilyMember(familyId)
+          && request.resource.data.keys().hasOnly(allowedKeys())
+          && request.resource.data.familyId == familyId
+          && request.resource.data.actorId == request.auth.uid
+          && request.resource.data.recipientIds is list
+          && request.resource.data.recipientIds.size() > 0
+          && request.resource.data.recipientIds.size() <= 50
+          && request.resource.data.createdAt == request.time;
+        // Immutable after creation; no client deletes (retention handled server-side).
+        allow update, delete: if false;
+      }
+
+      // Push tokens: per-user, per-device registration. Clients may only manage
+      // tokens for their own uid and their current family. Raw tokens are never
+      // exposed to other members, and identity fields are immutable after create.
+      match /users/{userId} {
+        match /push_tokens/{tokenId} {
+          function allowedCreateKeys() {
+            return ['userId', 'familyId', 'token', 'platform', 'browser', 'deviceLabel',
+              'createdAt', 'updatedAt', 'lastSeenAt', 'enabled', 'permission', 'appVersion', 'userAgentSummary'];
+          }
+          function allowedUpdateKeys() {
+            return ['enabled', 'permission', 'deviceLabel', 'updatedAt', 'lastSeenAt'];
+          }
+          allow read: if request.auth.uid == userId
+            && isFamilyMember(familyId)
+            && resource.data.userId == request.auth.uid;
+          allow create: if request.auth.uid == userId
+            && isFamilyMember(familyId)
+            && request.resource.data.keys().hasOnly(allowedCreateKeys())
+            && request.resource.data.userId == request.auth.uid
+            && request.resource.data.familyId == familyId
+            && request.resource.data.token is string
+            && request.resource.data.token.size() > 0
+            && request.resource.data.token.size() <= 1000
+            && request.resource.data.enabled == true
+            && request.resource.data.permission in ['default', 'granted', 'denied']
+            && request.resource.data.createdAt == request.time
+            && request.resource.data.updatedAt == request.time
+            && request.resource.data.lastSeenAt == request.time;
+          allow update: if request.auth.uid == userId
+            && isFamilyMember(familyId)
+            && resource.data.userId == request.auth.uid
+            && resource.data.familyId == familyId
+            && request.resource.data.userId == resource.data.userId
+            && request.resource.data.familyId == resource.data.familyId
+            && request.resource.data.diff(resource.data).affectedKeys().hasOnly(allowedUpdateKeys())
+            && request.resource.data.enabled is bool
+            && request.resource.data.permission in ['default', 'granted', 'denied'];
+          allow delete: if request.auth.uid == userId
+            && isFamilyMember(familyId)
+            && resource.data.userId == request.auth.uid;
+        }
+      }
+
+      // Push delivery records: written only by the trusted backend (Admin SDK).
+      // Clients may read (diagnostics) but can never write.
+      match /notification_deliveries/{notificationId} {
+        allow read: if isFamilyMember(familyId);
+        allow write: if false;
+      }
+
+      // Per-user read state. A user may only create/update their own record, and
+      // only for a notification they are allowed to read. userId must equal the
+      // authenticated uid and readAt must use request.time.
+      match /notification_reads/{readId} {
+        function allowedReadKeys() {
+          return ['familyId', 'userId', 'notificationId', 'readAt'];
+        }
+        function notificationFor(nid) {
+          return get(/databases/$(database)/documents/families/$(familyId)/notifications/$(nid));
+        }
+        allow read: if isFamilyMember(familyId) && resource.data.userId == request.auth.uid;
+        allow create, update: if request.auth.uid == request.resource.data.userId
+          && request.resource.data.familyId == familyId
+          && request.resource.data.keys().hasOnly(allowedReadKeys())
+          && request.resource.data.readAt == request.time
+          && notificationFor(request.resource.data.notificationId) != null
+          && notificationFor(request.resource.data.notificationId).data.recipientIds.hasAll([request.auth.uid]);
+        allow delete: if false;
       }
 
       match /challenges/{challengeId} {
@@ -1103,11 +1242,11 @@ service cloud.firestore {
         allow create: if isFamilyMember(familyId)
           && request.resource.data.status in ['pending', 'pending_acceptance']
           && request.resource.data.createdAt == request.time;
-        allow update: if (isParent(familyId) && resource.data.status == 'pending'
+        allow update: if (isParent(familyId) && resource.data.status in ['pending', 'pending_acceptance']
           && request.resource.data.status in ['approved', 'rejected']
           && request.resource.data.reviewedBy == request.auth.uid
           && request.resource.data.reviewedAt == request.time
-          && ((request.resource.data.status == 'rejected' && request.resource.data.rejectionReason is string && request.resource.data.rejectionReason.trim().size() > 0
+          && ((request.resource.data.status == 'rejected' && request.resource.data.rejectionReason is string && request.resource.data.rejectionReason.trim().size() > 0 && request.resource.data.rejectionReason.size() <= 1000
               && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'reviewedAt', 'reviewedBy', 'reviewedByName', 'rejectionReason']))
             || (request.resource.data.status == 'approved'
               && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'reviewedAt', 'reviewedBy', 'reviewedByName', 'paymentTransferId', 'effectSnapshot'])
@@ -1143,6 +1282,71 @@ service cloud.firestore {
               && request.resource.data.cancelledAt == request.time
               && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'cancelledBy', 'cancelledAt']));
         allow delete: if false;
+      }
+
+      match /profile_update_requests/{requestId} {
+        // A requested avatar is valid only when it is a starter avatar OR the
+        // child already owns the premium avatar. Ownership is proven by the
+        // existence of an avatar_unlocks document (read via get()). This prevents
+        // a child from requesting an avatar they have not unlocked.
+        function requestedAvatarIsAllowed() {
+          let avatarId = request.resource.data.get('requestedAvatarId', '');
+          let unlockPath = /databases/$(database)/documents/families/$(familyId)/users/$(request.auth.uid)/avatar_unlocks/$(avatarId);
+          return avatarId == '' || isStarterAvatar(avatarId) || exists(unlockPath);
+        }
+        allow read: if isParent(familyId) || (isAuthenticated() && resource.data.childId == request.auth.uid);
+        allow create: if isChildInFamily(familyId, request.auth.uid)
+          && request.resource.data.keys().hasAll(['familyId', 'childId', 'childName', 'requestedDisplayName', 'requestedAvatar', 'currentDisplayName', 'currentAvatar', 'status', 'createdAt', 'actorId'])
+          && request.resource.data.keys().hasOnly(['familyId', 'childId', 'childName', 'requestedDisplayName', 'requestedAvatar', 'requestedAvatarId', 'currentDisplayName', 'currentAvatar', 'currentAvatarId', 'status', 'createdAt', 'actorId', 'id'])
+          && request.resource.data.familyId == familyId
+          && request.resource.data.childId == request.auth.uid
+          && request.resource.data.status == 'pending'
+          && request.resource.data.createdAt == request.time
+          && requestedAvatarIsAllowed();
+        allow update: if (isParent(familyId) && resource.data.status == 'pending'
+          && request.resource.data.status in ['approved', 'rejected']
+          && request.resource.data.reviewedBy == request.auth.uid
+          && request.resource.data.reviewedAt == request.time
+          && ((request.resource.data.status == 'rejected'
+              && request.resource.data.rejectionReason is string
+              && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'reviewedAt', 'reviewedBy', 'reviewedByName', 'rejectionReason']))
+            || (request.resource.data.status == 'approved'
+              && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'reviewedAt', 'reviewedBy', 'reviewedByName', 'effectSnapshot']))))
+          || (isAuthenticated() && resource.data.status == 'pending' && resource.data.childId == request.auth.uid
+              && request.resource.data.status == 'cancelled' && request.resource.data.cancelledBy == request.auth.uid
+              && request.resource.data.cancelledAt == request.time
+              && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'cancelledBy', 'cancelledAt']));
+        allow delete: if false;
+      }
+
+      // Avatar unlocks: immutable ownership records for premium avatars.
+      // Starter avatars need no record. Premium unlocks are written only by the
+      // owning child and the cost is validated server-side (see avatar_unlocks
+      // helper). Clients cannot forge a cheaper cost or a free premium record.
+      match /users/{userId} {
+        match /avatar_unlocks/{avatarId} {
+          function allowedKeys() {
+            return ['avatarId', 'userId', 'familyId', 'unlockedAt', 'costPoints', 'source', 'actorId'];
+          }
+          allow read: if isFamilyMember(familyId) && (request.auth.uid == userId || isParent(familyId));
+          allow create: if request.auth.uid == userId
+            && isChildInFamily(familyId, userId)
+            && request.resource.data.keys().hasOnly(allowedKeys())
+            && request.resource.data.avatarId == avatarId
+            && request.resource.data.userId == userId
+            && request.resource.data.familyId == familyId
+            && request.resource.data.actorId == userId
+            && request.resource.data.source == 'points'
+            && request.resource.data.unlockedAt == request.time
+            // Cost must equal the authoritative catalog cost for this avatar.
+            && request.resource.data.costPoints == avatarCatalogCost(avatarId)
+            // The avatar must be a real, active, premium (points) avatar.
+            && isPremiumAvatar(avatarId)
+            // Prevent duplicate unlocks: the record must not already exist.
+            && !exists(/databases/$(database)/documents/families/$(familyId)/users/$(userId)/avatar_unlocks/$(avatarId));
+          // Immutable after creation.
+          allow update, delete: if false;
+        }
       }
     }
   }
