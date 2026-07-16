@@ -931,6 +931,10 @@ service cloud.firestore {
           'role', 'familyId', 'rewardPoints', 'lifetimeXP', 'walletBalance', 'balance', 'lastFundTxId',
           'displayName', 'avatarUrl', 'avatarId'
         ])) ||
+        // Owner/parent may self-edit only their own benign profile fields.
+        // Children are not isParent, so they remain routed through the approval flow.
+        (isParent(resource.data.familyId) && request.auth.uid == uid
+          && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['displayName', 'avatarUrl', 'avatarId'])) ||
         (request.resource.data.diff(resource.data).affectedKeys().hasAny(['rewardPoints', 'lastTaskCompletionId', 'lastBehaviourEventId']) ? isValidRedemptionDeduction(uid) || isValidTaskApprovalMutation(uid) || isValidBehaviourPointMutation(uid) : false) ||
         (!('familyId' in resource.data) && 'familyId' in request.resource.data ? isValidOwnerBootstrap(uid) || isValidJoinProfileUpdate(uid) : false) ||
         ('familyId' in resource.data && isOwner(resource.data.familyId) && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['role']) && resource.data.get('role', 'null') != 'child' && request.resource.data.role != 'child') ||
@@ -1254,7 +1258,10 @@ service cloud.firestore {
           || (isAuthenticated() && resource.data.status in ['pending', 'pending_acceptance'] && (resource.data.requesterId == request.auth.uid || isParent(familyId))
               && request.resource.data.status == 'cancelled' && request.resource.data.cancelledBy == request.auth.uid
               && request.resource.data.cancelledAt == request.time
-              && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'cancelledBy', 'cancelledAt']));
+              && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'cancelledBy', 'cancelledAt']))
+          || (isAuthenticated() && resource.data.status == 'pending_acceptance' && resource.data.requestedFromId == request.auth.uid
+              && request.resource.data.status == 'pending'
+              && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status']));
         allow delete: if false;
       }
 
@@ -1291,8 +1298,11 @@ service cloud.firestore {
         // a child from requesting an avatar they have not unlocked.
         function requestedAvatarIsAllowed() {
           let avatarId = request.resource.data.get('requestedAvatarId', '');
-          let unlockPath = /databases/$(database)/documents/families/$(familyId)/users/$(request.auth.uid)/avatar_unlocks/$(avatarId);
-          return avatarId == '' || isStarterAvatar(avatarId) || exists(unlockPath);
+          // requestedAvatarId may be explicitly null (display-name-only change).
+          // Coerce null to '' and only call exists() for a non-empty id, otherwise
+          // exists() with a null document id throws and denies the entire create.
+          return avatarId == null || avatarId == '' || isStarterAvatar(avatarId)
+            || (avatarId != null && exists(/databases/$(database)/documents/families/$(familyId)/users/$(request.auth.uid)/avatar_unlocks/$(avatarId)));
         }
         allow read: if isParent(familyId) || (isAuthenticated() && resource.data.childId == request.auth.uid);
         allow create: if isChildInFamily(familyId, request.auth.uid)
