@@ -60,10 +60,13 @@ export interface ResolvedToken {
 export interface DeliveryContext {
   db: Firestore;
   messaging: Messaging;
+
   /** Returns a server-timestamp placeholder for records. */
   serverTimestamp: () => unknown;
+
   /** Structured observability sink. Never logs raw tokens or full bodies. */
   logger?: (entry: Record<string, unknown>) => void;
+
   /** When true, no real FCM send occurs (emulator / tests). */
   dryRun?: boolean;
 }
@@ -95,21 +98,34 @@ export interface DeliveryResult {
 // ---------------------------------------------------------------------------
 
 /** Deduplicate and drop empty recipient ids. */
-export function resolveRecipientIds(input: PushNotificationInput): string[] {
+export function resolveRecipientIds(
+  input: PushNotificationInput,
+): string[] {
   const seen = new Set<string>();
   const out: string[] = [];
-  for (const r of input.recipientIds ?? []) {
-    if (typeof r === 'string' && r.length > 0 && !seen.has(r)) {
-      seen.add(r);
-      out.push(r);
+
+  for (const recipientId of input.recipientIds ?? []) {
+    if (
+      typeof recipientId === 'string' &&
+      recipientId.length > 0 &&
+      !seen.has(recipientId)
+    ) {
+      seen.add(recipientId);
+      out.push(recipientId);
     }
   }
+
   return out;
 }
 
 /** Quiet (in-app only) vs pushable event classification. */
-export function classifyDelivery(input: PushNotificationInput): 'send' | 'skip_quiet' {
-  if (PUSH_DISABLED_TYPES.has(input.type)) return 'skip_quiet';
+export function classifyDelivery(
+  input: PushNotificationInput,
+): 'send' | 'skip_quiet' {
+  if (PUSH_DISABLED_TYPES.has(input.type)) {
+    return 'skip_quiet';
+  }
+
   return 'send';
 }
 
@@ -119,24 +135,49 @@ export function classifyDelivery(input: PushNotificationInput): 'send' | 'skip_q
  * we forward that rather than recomputing or duplicating routing logic.
  */
 export function resolveRoute(input: PushNotificationInput): string {
-  if (typeof input.actionUrl === 'string' && input.actionUrl.startsWith('/')) {
+  if (
+    typeof input.actionUrl === 'string' &&
+    input.actionUrl.startsWith('/')
+  ) {
     return input.actionUrl;
   }
+
   return '/';
 }
 
 /**
- * Build the minimal push payload. The deterministic tag uses the notification
- * dedupe key (or id) so the browser collapses retries into a single card.
+ * Build the minimal push payload.
+ *
+ * Important:
+ * The common FCM `notification` object only supports shared fields such as
+ * title and body. Platform-specific `tag` values must remain under Android
+ * and WebPush notification objects.
+ *
+ * The deterministic tag uses the notification dedupe key (or id) so the
+ * browser collapses retries into a single card.
  */
 export function buildPushMessage(input: PushNotificationInput): {
-  notification: { title: string; body: string; tag: string };
+  notification: {
+    title: string;
+    body: string;
+  };
   data: Record<string, string>;
-  android: { notification: { tag: string } };
-  webpush: { notification: { tag: string; icon: string; badge: string } };
+  android: {
+    notification: {
+      tag: string;
+    };
+  };
+  webpush: {
+    notification: {
+      tag: string;
+      icon: string;
+      badge: string;
+    };
+  };
 } {
   const tag = input.dedupeKey || input.id;
   const route = resolveRoute(input);
+
   const data: Record<string, string> = {
     notificationId: input.id,
     familyId: input.familyId,
@@ -145,19 +186,37 @@ export function buildPushMessage(input: PushNotificationInput): {
     title: input.title,
     body: input.body,
   };
+
   return {
-    notification: { title: input.title, body: input.body, tag },
+    notification: {
+      title: input.title,
+      body: input.body,
+    },
+
     data,
-    android: { notification: { tag } },
+
+    android: {
+      notification: {
+        tag,
+      },
+    },
+
     webpush: {
-      notification: { tag, icon: '/pwa-192x192.png', badge: '/pwa-192x192.png' },
+      notification: {
+        tag,
+        icon: '/pwa-192x192.png',
+        badge: '/pwa-192x192.png',
+      },
     },
   };
 }
 
 /** Token errors that mean the registration is dead and should be removed. */
 export function isInvalidTokenError(code: unknown): boolean {
-  if (typeof code !== 'string') return false;
+  if (typeof code !== 'string') {
+    return false;
+  }
+
   return (
     code === 'messaging/registration-token-not-registered' ||
     code === 'messaging/invalid-registration-token'
@@ -174,21 +233,35 @@ export async function loadEnabledTokens(
   familyId: string,
   recipientIds: string[],
 ): Promise<ResolvedToken[]> {
-  if (recipientIds.length === 0) return [];
-  const snap = await (ctx.db
-    .collectionGroup('push_tokens')
-    .where('familyId', '==', familyId)
-    .where('userId', 'in', recipientIds)
-    .where('enabled', '==', true) as Query)
-    .get();
-  return snap.docs.map((d) => ({
-    id: d.id,
-    userId: (d.data() as { userId: string }).userId,
-    familyId: (d.data() as { familyId: string }).familyId,
-    token: (d.data() as { token: string }).token,
-    enabled: (d.data() as { enabled: boolean }).enabled,
-    delete: () => d.ref.delete(),
-  }));
+  if (recipientIds.length === 0) {
+    return [];
+  }
+
+  const snap = await (
+    ctx.db
+      .collectionGroup('push_tokens')
+      .where('familyId', '==', familyId)
+      .where('userId', 'in', recipientIds)
+      .where('enabled', '==', true) as Query
+  ).get();
+
+  return snap.docs.map((document) => {
+    const data = document.data() as {
+      userId: string;
+      familyId: string;
+      token: string;
+      enabled: boolean;
+    };
+
+    return {
+      id: document.id,
+      userId: data.userId,
+      familyId: data.familyId,
+      token: data.token,
+      enabled: data.enabled,
+      delete: () => document.ref.delete(),
+    };
+  });
 }
 
 /** Send to a list of tokens in FCM-bounded batches. */
@@ -196,20 +269,41 @@ export async function sendToTokens(
   ctx: DeliveryContext,
   message: ReturnType<typeof buildPushMessage>,
   tokens: ResolvedToken[],
-): Promise<{ successCount: number; failureCount: number; invalid: ResolvedToken[] }> {
+): Promise<{
+  successCount: number;
+  failureCount: number;
+  invalid: ResolvedToken[];
+}> {
   const log = ctx.logger ?? (() => {});
-  if (tokens.length === 0) return { successCount: 0, failureCount: 0, invalid: [] };
+
+  if (tokens.length === 0) {
+    return {
+      successCount: 0,
+      failureCount: 0,
+      invalid: [],
+    };
+  }
+
   let successCount = 0;
   let failureCount = 0;
   const invalid: ResolvedToken[] = [];
 
   for (let i = 0; i < tokens.length; i += PUSH_BATCH_SIZE) {
     const batch = tokens.slice(i, i + PUSH_BATCH_SIZE);
-    const batchTokens = batch.map((t) => t.token);
-    let responses: Array<{ success: boolean; error?: { code?: string; message?: string } }>;
+    const batchTokens = batch.map((tokenRecord) => tokenRecord.token);
+
+    let responses: Array<{
+      success: boolean;
+      error?: {
+        code?: string;
+        message?: string;
+      };
+    }>;
 
     if (ctx.dryRun) {
-      responses = batchTokens.map(() => ({ success: true }));
+      responses = batchTokens.map(() => ({
+        success: true,
+      }));
     } else {
       const result = await ctx.messaging.sendEachForMulticast({
         tokens: batchTokens,
@@ -218,37 +312,51 @@ export async function sendToTokens(
         android: message.android,
         webpush: message.webpush,
       });
+
       responses = result.responses as Array<{
         success: boolean;
-        error?: { code?: string; message?: string };
+        error?: {
+          code?: string;
+          message?: string;
+        };
       }>;
     }
 
-    responses.forEach((r, idx) => {
-      // FCM returns responses in the same order as the tokens array, so the
-      // absolute index (i + idx) maps to tokens[i + idx] and the batch-relative
-      // index (idx) maps to batch[idx]. We log the recipient userId, never the
-      // raw FCM token.
-      const absoluteIndex = i + idx;
-      const recipient = batch[idx];
-      if (r.success) {
+    responses.forEach((response, batchIndex) => {
+      const responseIndex = i + batchIndex;
+      const recipient = batch[batchIndex];
+
+      if (response.success) {
         successCount++;
-      } else {
-        failureCount++;
-        log({
-          event: 'push_send_failure',
-          responseIndex: absoluteIndex,
-          batchIndex: idx,
-          userId: recipient?.userId,
-          tokenId: recipient?.id,
-          errorCode: r.error?.code,
-          errorMessage: r.error?.message,
-        });
-        if (isInvalidTokenError(r.error?.code)) invalid.push(recipient);
+        return;
+      }
+
+      failureCount++;
+
+      log({
+        event: 'push_send_failure',
+        responseIndex,
+        batchIndex,
+        userId: recipient?.userId,
+        tokenId: recipient?.id,
+        errorCode: response.error?.code,
+        errorMessage: response.error?.message,
+      });
+
+      if (
+        recipient &&
+        isInvalidTokenError(response.error?.code)
+      ) {
+        invalid.push(recipient);
       }
     });
   }
-  return { successCount, failureCount, invalid };
+
+  return {
+    successCount,
+    failureCount,
+    invalid,
+  };
 }
 
 /** True when a delivery record already completed (idempotency guard). */
@@ -262,8 +370,13 @@ export async function isDeliveryComplete(
     .doc(familyId)
     .collection('notification_deliveries')
     .doc(notificationId);
+
   const snap = await ref.get();
-  return snap.exists && (snap.data() as { status?: string } | undefined)?.status === 'completed';
+
+  return (
+    snap.exists &&
+    (snap.data() as { status?: string } | undefined)?.status === 'completed'
+  );
 }
 
 /** Write (merge) the delivery record. Backend-only path. */
@@ -278,7 +391,10 @@ export async function recordDelivery(
     .doc(familyId)
     .collection('notification_deliveries')
     .doc(input.id);
-  await ref.set(record, { merge: true });
+
+  await ref.set(record, {
+    merge: true,
+  });
 }
 
 // ---------------------------------------------------------------------------
@@ -303,7 +419,11 @@ export async function deliverNotification(
     typeof input.type !== 'string' ||
     !Array.isArray(input.recipientIds)
   ) {
-    log({ event: 'push_validation_failed', notificationId: input?.id });
+    log({
+      event: 'push_validation_failed',
+      notificationId: input?.id,
+    });
+
     return {
       status: 'noop',
       tokenCount: 0,
@@ -316,7 +436,11 @@ export async function deliverNotification(
 
   // 2. Idempotency: never re-send a completed delivery.
   if (await isDeliveryComplete(ctx, input.familyId, input.id)) {
-    log({ event: 'push_skipped_complete', notificationId: input.id });
+    log({
+      event: 'push_skipped_complete',
+      notificationId: input.id,
+    });
+
     return {
       status: 'noop',
       tokenCount: 0,
@@ -338,7 +462,13 @@ export async function deliverNotification(
       failureCount: 0,
       deliveryVersion: DELIVERY_VERSION,
     });
-    log({ event: 'push_skipped_quiet', notificationId: input.id, type: input.type });
+
+    log({
+      event: 'push_skipped_quiet',
+      notificationId: input.id,
+      type: input.type,
+    });
+
     return {
       status: 'skipped',
       tokenCount: 0,
@@ -350,13 +480,16 @@ export async function deliverNotification(
 
   // 4. Resolve recipients and load their enabled tokens.
   const recipients = resolveRecipientIds(input);
-  const tokens = await loadEnabledTokens(ctx, input.familyId, recipients);
+  const tokens = await loadEnabledTokens(
+    ctx,
+    input.familyId,
+    recipients,
+  );
 
   // 5. Build content and send (batched, emulator-safe).
   const message = buildPushMessage(input);
-  // Diagnostic: log the final WebPush message structure (no tokens, no raw
-  // bodies beyond the already-canonical notification/data fields) so we can
-  // confirm what was actually sent without leaking sensitive registration data.
+
+  // Temporary diagnostic log. No token values are included.
   log({
     event: 'push_message_structure',
     notification: message.notification,
@@ -364,12 +497,23 @@ export async function deliverNotification(
     android: message.android,
     webpush: message.webpush,
   });
-  const sendResult = await sendToTokens(ctx, message, tokens);
+
+  const sendResult = await sendToTokens(
+    ctx,
+    message,
+    tokens,
+  );
 
   // 6. Remove invalid / unregistered tokens so they stop targeting the user.
   let invalidRemoved = 0;
+
   if (sendResult.invalid.length > 0) {
-    await Promise.all(sendResult.invalid.map((t) => t.delete().catch(() => undefined)));
+    await Promise.all(
+      sendResult.invalid.map((tokenRecord) =>
+        tokenRecord.delete().catch(() => undefined),
+      ),
+    );
+
     invalidRemoved = sendResult.invalid.length;
   }
 
@@ -417,7 +561,14 @@ export async function removeAllUserTokens(
     .collectionGroup('push_tokens')
     .where('userId', '==', userId)
     .get();
-  if (snap.empty) return 0;
-  await Promise.all(snap.docs.map((d) => d.ref.delete()));
+
+  if (snap.empty) {
+    return 0;
+  }
+
+  await Promise.all(
+    snap.docs.map((document) => document.ref.delete()),
+  );
+
   return snap.size;
 }

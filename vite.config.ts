@@ -30,25 +30,38 @@ export default defineConfig({
     VitePWA({
       selfDestroying: true,
       registerType: 'autoUpdate',
-      includeAssets: ['favicon.ico', 'apple-touch-icon.png', 'mask-icon.svg'],
+      includeAssets: [
+        'favicon.ico',
+        'favicon-16x16.png',
+        'favicon-32x32.png',
+        'apple-touch-icon.png',
+        'mask-icon.svg',
+      ],
       manifest: {
         name: 'FamilyQuest',
         short_name: 'FamilyQuest',
         description: 'Gamify your family chores and routines',
-        theme_color: '#f97316',
-        background_color: '#ffffff',
+        theme_color: '#0f766e',
+        background_color: '#0f766e',
         display: 'standalone',
         icons: [
           {
             src: 'pwa-192x192.png',
             sizes: '192x192',
-            type: 'image/png'
+            type: 'image/png',
+            purpose: 'any'
           },
           {
             src: 'pwa-512x512.png',
             sizes: '512x512',
             type: 'image/png',
-            purpose: 'any maskable'
+            purpose: 'any'
+          },
+          {
+            src: 'pwa-512x512.png',
+            sizes: '512x512',
+            type: 'image/png',
+            purpose: 'maskable'
           }
         ]
       },
