@@ -17,13 +17,15 @@ import {
   approvePetBoxDonation,
   rejectPetBoxDonation,
   approveProfileUpdateRequest,
-  rejectProfileUpdateRequest
+  rejectProfileUpdateRequest,
+  approveGoalWithdrawal,
+  rejectGoalWithdrawal,
 } from '../../lib/api';
 import { HistoryActionControl } from '../reversals/HistoryActionControl';
 import type { ReversalSourceKind } from '../../lib/reversalApi';
 
 export function ApprovalCenter() {
-  const { currentUser, tasks, familyMembers, taskCompletions, transferRequests, moneyRequests, petboxRequests, profileUpdateRequests } = useStore();
+  const { currentUser, tasks, familyMembers, taskCompletions, transferRequests, moneyRequests, petboxRequests, profileUpdateRequests, goalRequests, savingsGoals } = useStore();
 
   const [activeTab, setActiveTab] = useState<'pending' | 'history'>('pending');
   const [processing, setProcessing] = useState<Record<string, 'approve' | 'reject'>>({});
@@ -74,9 +76,21 @@ export function ApprovalCenter() {
       isPending: r.status === 'pending'
     })));
 
+    // 6. Goal Requests (contribution approvals + withdrawal requests)
+    items.push(...(goalRequests || []).map(r => {
+      const goal = savingsGoals.find(g => g.id === r.goalId || g.goalId === r.goalId);
+      return {
+        ...r,
+        category: 'goal',
+        goalTitle: goal?.title ?? 'goal',
+        sortDate: r.createdAt?.toDate ? r.createdAt.toDate() : new Date(),
+        isPending: r.status === 'pending',
+      };
+    }));
+
     items.sort((a, b) => b.sortDate.getTime() - a.sortDate.getTime());
     return items;
-  }, [taskCompletions, transferRequests, moneyRequests, petboxRequests, profileUpdateRequests]);
+  }, [taskCompletions, transferRequests, moneyRequests, petboxRequests, profileUpdateRequests, goalRequests, savingsGoals]);
 
   const itemKey = (item: any) => approvalKey(item.category as ApprovalType, item.id);
   const pendingApprovals = timeline.filter(item => item.isPending && !optimisticallyRemovedIds.has(itemKey(item)));
@@ -110,6 +124,10 @@ export function ApprovalCenter() {
         await approvePetBoxDonation(currentUser.familyId, item.id);
       } else if (item.category === 'profile_update') {
         await approveProfileUpdateRequest(currentUser.familyId, item.id);
+      } else if (item.category === 'goal') {
+        // Only withdrawal requests require parent approval; contribution
+        // requests are also surfaced here when approvalRequired was set.
+        await approveGoalWithdrawal(currentUser.familyId, item.id, `${Date.now()}-${item.id}`);
       }
       setOptimisticallyRemovedIds(prev => new Set(prev).add(key));
     } catch (err: any) {
@@ -139,6 +157,8 @@ export function ApprovalCenter() {
         await rejectPetBoxDonation(currentUser.familyId, item.id, rejectionReason);
       } else if (item.category === 'profile_update') {
         await rejectProfileUpdateRequest(currentUser.familyId, item.id, rejectionReason);
+      } else if (item.category === 'goal') {
+        await rejectGoalWithdrawal(currentUser.familyId, item.id, rejectionReason);
       }
       setOptimisticallyRemovedIds(prev => new Set(prev).add(key));
     } catch (err: any) {
@@ -161,6 +181,7 @@ export function ApprovalCenter() {
       transfer: 'transfer_request',
       money_request: 'money_request',
       petbox: 'petbox_request',
+      goal: 'goal_request',
     };
     const sourceKind = sourceKindMap[item.category];
 
@@ -214,6 +235,16 @@ export function ApprovalCenter() {
       description = `${item.childName || child?.displayName || 'A child'} wants to update their profile${changes.length ? ` (${changes.join(', ')})` : ''}.`;
       avatarSrc = item.requestedAvatar || child?.avatarUrl || '';
       fallback = (item.childName || child?.displayName || '?')[0] || '?';
+    } else if (item.category === 'goal') {
+      const child = familyMembers.find(c => c.id === item.childId);
+      const isWithdrawal = item.requestType === 'withdrawal';
+      title = isWithdrawal ? 'Goal Withdrawal' : 'Goal Contribution';
+      description = isWithdrawal
+        ? `${child?.displayName ?? 'A child'} wants to withdraw from "${item.goalTitle}".`
+        : `${child?.displayName ?? 'A child'} wants to contribute to "${item.goalTitle}".`;
+      amount = item.amountPence;
+      avatarSrc = child?.avatarUrl || '';
+      fallback = (child?.displayName ?? '?')[0] || '?';
     }
 
     return (

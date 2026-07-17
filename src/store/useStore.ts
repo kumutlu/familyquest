@@ -66,6 +66,7 @@ const emptyFamilyState = () => ({
   feed: [] as any[],
   walletTransactions: [] as any[],
   savingsGoals: [] as any[],
+  goalRequests: [] as any[],
   behaviourEvents: [] as any[],
   challenges: [] as any[],
   funds: [] as any[],
@@ -110,6 +111,7 @@ interface AppState {
   feed: any[];
   walletTransactions: any[];
   savingsGoals: any[];
+  goalRequests: any[];
   behaviourEvents: any[];
   challenges: any[];
   funds: any[];
@@ -582,6 +584,7 @@ export const useStore = create<AppState>((set, get) => ({
         subscribePlanned('redemptions', 'Redemptions', snapshot => set({ redemptions: docs(snapshot) }));
         subscribePlanned('walletTransactions', 'Wallet transactions', snapshot => set({ walletTransactions: normalizeHistory(docs(snapshot)) }));
         subscribePlanned('savingsGoals', 'Savings goals', snapshot => set({ savingsGoals: docs(snapshot) }));
+        subscribePlanned('goalRequests', 'Goal requests', snapshot => set({ goalRequests: docs(snapshot) }));
         subscribePlanned('transferRequests', 'Transfer requests', snapshot => set({ transferRequests: docs(snapshot) }));
         subscribePlanned('moneyRequests', 'Money requests', snapshot => set({ moneyRequests: docs(snapshot) }));
         subscribePlanned('petboxRequests', 'Pet Box requests', snapshot => set({ petboxRequests: docs(snapshot) }));
@@ -593,6 +596,7 @@ export const useStore = create<AppState>((set, get) => ({
         subscribePlanned('redemptions', 'Redemptions', snapshot => set({ redemptions: docs(snapshot) }));
         subscribePlanned('walletTransactions', 'Wallet transactions', snapshot => set({ walletTransactions: normalizeHistory(docs(snapshot)) }));
         subscribePlanned('savingsGoals', 'Savings goals', snapshot => set({ savingsGoals: docs(snapshot) }));
+        subscribePlanned('goalRequests', 'Goal requests', snapshot => set({ goalRequests: docs(snapshot) }));
         subscribePlanned('transferRequests', 'Transfer requests', snapshot => set({ transferRequests: docs(snapshot) }));
         subscribePlanned('petboxRequests', 'Pet Box requests', snapshot => set({ petboxRequests: docs(snapshot) }));
         subscribePlanned('profileUpdateRequests', 'Profile update requests', snapshot => set({ profileUpdateRequests: docs(snapshot) }));

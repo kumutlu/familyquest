@@ -67,6 +67,7 @@ const summaryFor = (sourceKind: ReversalSourceKind, source: any, names: Record<s
   if (sourceKind === 'money_request') return `${names[source.requesterId] || 'Child'} requested money from ${names[source.requestedFromId] || 'family'}`;
   if (sourceKind === 'petbox_request') return `${names[source.childId] || 'Child'} donated to ${names[source.fundId] || 'fund'}`;
   if (sourceKind === 'profile_update') return `${names[source.childId] || 'Child'} requested a profile update`;
+  if (sourceKind === 'goal_request') return `${names[source.childId] || 'Child'} ${source.requestType === 'withdrawal' ? 'withdrawal' : 'contribution'} for goal`;
   return source.type?.replaceAll('_', ' ') || 'Recorded action';
 };
 
@@ -80,6 +81,7 @@ const canonicalEntityTypes: Record<ReversalSourceKind, readonly string[]> = {
   money_request: ['money_request'],
   petbox_request: ['petbox_donation'],
   profile_update: [],
+  goal_request: ['goal_contribution_request', 'goal_withdrawal_request'],
 };
 
 function targetsFor(snapshot: EffectSnapshot | undefined, balances: NormalizeHistoryActionInput['balances'], names: Record<string, string>): HistoryActionTarget[] {

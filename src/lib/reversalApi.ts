@@ -7,7 +7,7 @@ import { buildReversalPayloads } from './reversalPayloads'
 export type ReversalSourceKind =
   | 'wallet_transaction' | 'fund_transaction' | 'behaviour_event' | 'task_completion'
   | 'reward_redemption' | 'transfer_request' | 'money_request' | 'petbox_request'
-  | 'profile_update'
+  | 'profile_update' | 'goal_request'
 
 const sourceCollections: Record<ReversalSourceKind, string> = {
   wallet_transaction: 'wallet_transactions',
@@ -19,6 +19,7 @@ const sourceCollections: Record<ReversalSourceKind, string> = {
   money_request: 'money_requests',
   petbox_request: 'petbox_requests',
   profile_update: 'profile_update_requests',
+  goal_request: 'goal_requests',
 }
 
 export function sourceCollectionFor(kind: string): string {

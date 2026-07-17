@@ -1,5 +1,5 @@
 import { Link, Outlet, useLocation, Navigate } from 'react-router-dom';
-import { Home, Users, CheckSquare, Gift, Wallet } from 'lucide-react';
+import { Home, Users, CheckSquare, Gift, Wallet, Target } from 'lucide-react';
 import { isParentRole } from '../../lib/roles';
 import { cn } from '../../lib/utils';
 import { useStore } from '../../store/useStore';
@@ -68,6 +68,7 @@ export function AppLayout() {
     { name: 'Home', path: '/', icon: Home },
     { name: 'Tasks', path: '/tasks', icon: CheckSquare },
     { name: 'Rewards', path: '/rewards', icon: Gift },
+    { name: 'Goals', path: '/goals', icon: Target },
     { name: 'Pet Box', path: '/pet-box', icon: () => <span className="text-lg">🐾</span> },
   ];
 

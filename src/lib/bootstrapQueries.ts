@@ -22,6 +22,7 @@ export type BootstrapResource =
   | 'feed'
   | 'walletTransactions'
   | 'savingsGoals'
+  | 'goalRequests'
   | 'behaviourEvents'
   | 'challenges'
   | 'funds'
@@ -119,6 +120,7 @@ export const bootstrapResources: BootstrapResource[] = [
   'feed',
   'walletTransactions',
   'savingsGoals',
+  'goalRequests',
   'behaviourEvents',
   'challenges',
   'funds',
@@ -180,6 +182,7 @@ export function createBootstrapQueryPlan(
       { resource: 'redemptions', key: 'redemptions', kind: 'query', target: collection(db, `${familyPath}/redemptions`) },
       { resource: 'walletTransactions', key: 'walletTransactions', kind: 'query', target: collection(db, `${familyPath}/wallet_transactions`) },
       { resource: 'savingsGoals', key: 'savingsGoals', kind: 'query', target: collection(db, `${familyPath}/savings_goals`) },
+      { resource: 'goalRequests', key: 'goalRequests', kind: 'query', target: query(collection(db, `${familyPath}/goal_requests`), orderBy('createdAt', 'desc')) },
       { resource: 'transferRequests', key: 'transferRequests', kind: 'query', target: query(collection(db, `${familyPath}/transfer_requests`), orderBy('createdAt', 'desc')) },
       { resource: 'moneyRequests', key: 'moneyRequests', kind: 'query', target: query(collection(db, `${familyPath}/money_requests`), orderBy('createdAt', 'desc')) },
       { resource: 'petboxRequests', key: 'petboxRequests', kind: 'query', target: query(collection(db, `${familyPath}/petbox_requests`), orderBy('createdAt', 'desc')) },
@@ -192,6 +195,7 @@ export function createBootstrapQueryPlan(
       { resource: 'redemptions', key: 'redemptions', kind: 'query', target: query(collection(db, `${familyPath}/redemptions`), where('userId', '==', userId)) },
       { resource: 'walletTransactions', key: 'walletTransactions', kind: 'query', target: query(collection(db, `${familyPath}/wallet_transactions`), where('childId', '==', userId)) },
       { resource: 'savingsGoals', key: 'savingsGoals', kind: 'query', target: query(collection(db, `${familyPath}/savings_goals`), where('childId', '==', userId)) },
+      { resource: 'goalRequests', key: 'goalRequests', kind: 'query', target: query(collection(db, `${familyPath}/goal_requests`), where('childId', '==', userId), orderBy('createdAt', 'desc')) },
       // NOTE: intentionally NO orderBy here. A `where('fromChildId','==',uid)
       // plus `orderBy('createdAt','desc')` requires the composite index
       // `fromChildId ASC, createdAt DESC`. If that index is missing or still

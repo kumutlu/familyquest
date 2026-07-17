@@ -130,6 +130,37 @@ export async function seedTestFamily() {
     createdAt: Timestamp.now()
   });
 
+  // Goals (Phase 3): a family goal and a child goal, with a contributions
+  // ledger and a pending goal withdrawal request so the UI flows are exercised.
+  batch.set(db.doc(`families/${familyId}/savings_goals/goal-family`), {
+    goalId: 'goal-family', title: 'Family Holiday', kind: 'family',
+    targetAmountPence: 100000, currentAmountPence: 40000, currency: 'GBP',
+    status: 'active', matching: { mode: 'none', perX: 0, matchY: 0 }, version: 1,
+    createdAt: Timestamp.now(),
+  });
+  batch.set(db.doc(`families/${familyId}/savings_goals/goal-child`), {
+    goalId: 'goal-child', title: 'Leo’s Bike', kind: 'child', childId: 'child1',
+    targetAmountPence: 50000, currentAmountPence: 50000, currency: 'GBP',
+    status: 'reached', matching: { mode: 'auto', perX: 1000, matchY: 500 }, version: 1,
+    createdAt: Timestamp.now(),
+  });
+  // Contributions ledger for the child goal (ownership source of truth).
+  batch.set(db.doc(`families/${familyId}/savings_goals/goal-child/contributions/c1`), {
+    contribId: 'c1', goalId: 'goal-child', type: 'child_contribution',
+    ownerType: 'child', ownerId: 'child1', amountPence: 40000, status: 'applied',
+    createdAt: Timestamp.now(),
+  });
+  batch.set(db.doc(`families/${familyId}/savings_goals/goal-child/contributions/c2`), {
+    contribId: 'c2', goalId: 'goal-child', type: 'auto_match',
+    ownerType: 'parent', ownerId: 'parent1', amountPence: 10000, status: 'applied',
+    createdAt: Timestamp.now(),
+  });
+  // Pending goal withdrawal request (child1 wants to withdraw from their bike goal).
+  batch.set(db.doc(`families/${familyId}/goal_requests/gr1`), {
+    requestType: 'withdrawal', goalId: 'goal-child', childId: 'child1',
+    amountPence: 10000, status: 'pending', createdAt: Timestamp.now(),
+  });
+
   await batch.commit();
 }
 

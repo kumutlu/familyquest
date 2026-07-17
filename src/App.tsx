@@ -12,6 +12,8 @@ import { Login } from './pages/Login';
 import { Signup } from './pages/Signup';
 import { Onboarding } from './pages/Onboarding';
 import { FundsDashboard } from './pages/FundsDashboard';
+import { Goals } from './pages/Goals';
+import { GoalDetail } from './pages/GoalDetail';
 import { useStore } from './store/useStore';
 import { initForegroundMessaging } from './lib/pushNotifications';
 import { RequestDetailProvider } from './components/requests/RequestDetailContext';
@@ -48,6 +50,8 @@ function App() {
             <Route path="pet-box" element={<FundsDashboard />} />
             <Route path="wallet" element={<Wallet />} />
             <Route path="wallets" element={<Wallets />} />
+            <Route path="goals" element={<Goals />} />
+            <Route path="goals/:goalId" element={<GoalDetail />} />
             <Route path="settings" element={<Settings />} />
           </Route>
         </Routes>
