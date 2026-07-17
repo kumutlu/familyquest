@@ -2,31 +2,48 @@ import { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { Button } from '../components/ui/Button';
 import { signIn, signInWithGoogle } from '../lib/api';
+import { useStore } from '../store/useStore';
 
 
 export function Login() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
+  const [signingIn, setSigningIn] = useState(false);
   const navigate = useNavigate();
+  const authStatus = useStore(state => state.authStatus);
+
+  // Once Firebase Auth reports the user as authenticated, the AppLayout route
+  // guard performs the redirect to the correct protected route. We must NOT
+  // navigate ourselves with a fixed timeout — that races the async
+  // onAuthStateChanged listener and can land the user back on /login.
+  if (authStatus === 'authenticated') {
+    navigate('/', { replace: true });
+    return null;
+  }
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
+    setSigningIn(true);
+    setError('');
     try {
       await signIn(email, password);
-      // Wait for auth listener to catch up, route guard handles redirect
-      setTimeout(() => navigate('/'), 500); 
+      // Do not navigate here. The route guard redirects once auth is ready.
     } catch (err: any) {
       setError(err.message);
+      setSigningIn(false);
     }
   };
 
   const handleGoogleLogin = async () => {
+    setSigningIn(true);
+    setError('');
     try {
       await signInWithGoogle();
-      setTimeout(() => navigate('/'), 500); 
+      // Do not navigate here. The route guard redirects once auth is ready.
     } catch (err: any) {
       setError(err.message);
+      setSigningIn(false);
     }
   };
 
@@ -56,7 +73,9 @@ export function Login() {
 
             {error && <div className="text-red-500 text-sm">{error}</div>}
 
-            <Button type="submit" fullWidth>Sign in</Button>
+            <Button type="submit" fullWidth disabled={signingIn}>
+              {signingIn ? 'Signing in…' : 'Sign in'}
+            </Button>
           </form>
 
           <div className="mt-6">
@@ -72,7 +91,8 @@ export function Login() {
             <div className="mt-6">
               <button
                 onClick={handleGoogleLogin}
-                className="w-full flex items-center justify-center gap-3 px-4 py-2 border border-gray-300 shadow-sm text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary-500"
+                disabled={signingIn}
+                className="w-full flex items-center justify-center gap-3 px-4 py-2 border border-gray-300 shadow-sm text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary-500 disabled:opacity-60"
               >
                 <svg className="h-5 w-5" viewBox="0 0 24 24">
                   <path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" fill="#4285F4"/>

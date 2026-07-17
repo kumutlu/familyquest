@@ -51,6 +51,7 @@ describe('rendered bootstrap boundary', () => {
     bootstrapListeners.length = 0;
     componentAuthNext = undefined;
     useStore.setState({
+      authStatus: 'authenticated',
       authInitialized: true,
       authUser: { uid: 'parent1' },
       currentUser: { id: 'parent1', familyId: 'fam1', role: 'parent', displayName: 'Parent' },
@@ -159,7 +160,7 @@ describe('rendered bootstrap boundary', () => {
   });
 
   it('shows a bootstrap error before the authenticated missing-profile placeholder', () => {
-    useStore.setState({ currentUser: null, bootstrapError: '[Profile] permission-denied', appReady: false });
+    useStore.setState({ authStatus: 'authenticated', currentUser: null, bootstrapError: '[Profile] permission-denied', appReady: false });
     renderApp();
     expect(screen.getByText('Connection Error')).toBeInTheDocument();
     expect(screen.queryByText('Setting up...')).not.toBeInTheDocument();
@@ -167,6 +168,7 @@ describe('rendered bootstrap boundary', () => {
 
   it('shows the whole-app connection error for a critical family listener failure', () => {
     useStore.setState({
+      authStatus: 'authenticated',
       bootstrapError: '[Family] permission-denied: Missing or insufficient permissions',
       appReady: false,
     });
@@ -178,14 +180,14 @@ describe('rendered bootstrap boundary', () => {
   });
 
   it('shows an auth observer error instead of unresolved auth loading', () => {
-    useStore.setState({ authUser: undefined, currentUser: null, bootstrapError: '[Auth observer] network-request-failed', appReady: false });
+    useStore.setState({ authStatus: 'unauthenticated', authUser: undefined, currentUser: null, bootstrapError: '[Auth observer] network-request-failed', appReady: false });
     renderApp();
     expect(screen.getByText('Connection Error')).toBeInTheDocument();
     expect(screen.queryByText('Loading...')).not.toBeInTheDocument();
   });
 
   it('routes an authenticated resolved profile without familyId to onboarding', async () => {
-    useStore.setState({ currentUser: { id: 'parent1', role: 'parent', displayName: 'Parent' }, appReady: true, loading: false });
+    useStore.setState({ authStatus: 'authenticated', currentUser: { id: 'parent1', role: 'parent', displayName: 'Parent' }, appReady: true, loading: false });
     renderApp();
     expect(await screen.findByText('Onboarding Screen')).toBeInTheDocument();
   });

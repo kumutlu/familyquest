@@ -82,6 +82,12 @@ const emptyFamilyState = () => ({
 });
 
 interface AppState {
+  // Distinct auth initialization state. `initializing` means Firebase Auth has
+  // not yet resolved the first auth state; `authenticated`/`unauthenticated`
+  // are only set once the first onAuthStateChanged callback has fired. This
+  // removes the ambiguity of using `authUser === undefined` to mean both
+  // "not yet checked" and "signed out".
+  authStatus: 'initializing' | 'authenticated' | 'unauthenticated';
   authInitialized: boolean;
   authLoading: boolean;
   profileLoading: boolean;
@@ -174,7 +180,18 @@ const logDevError = (context: string, error: any, queryShape?: unknown) => {
   });
 };
 
+// Temporary development-only trace logging for the auth/bootstrap startup flow.
+// Timestamps every key step so we can diagnose redirect/loading races. No
+// tokens, credentials, or sensitive user data are ever logged. Remove once the
+// auth bootstrap bugs are confirmed fixed in production.
+const logAuthTrace = (event: string, detail?: Record<string, unknown>) => {
+  if (import.meta.env?.PROD) return;
+  // eslint-disable-next-line no-console
+  console.info(`[auth-trace] ${new Date().toISOString()} ${event}`, detail ?? {});
+};
+
 export const useStore = create<AppState>((set, get) => ({
+  authStatus: 'initializing',
   authInitialized: false,
   authLoading: true,
   profileLoading: false,
@@ -193,14 +210,17 @@ export const useStore = create<AppState>((set, get) => ({
 
   initAuth: () => {
     if (authUnsubscribe) return;
+    logAuthTrace('auth-listener-registered');
 
     authUnsubscribe = onAuthStateChanged(auth, async user => {
       const generation = ++authGeneration;
       stopProfileListener();
       stopFamilyListeners();
+      logAuthTrace('auth-listener-fired', { signedIn: Boolean(user), generation });
 
       if (!user) {
         set({
+          authStatus: 'unauthenticated',
           authUser: null,
           authInitialized: true,
           authLoading: false,
@@ -216,10 +236,12 @@ export const useStore = create<AppState>((set, get) => ({
           appReady: true,
           loading: false,
         });
+        logAuthTrace('auth-status-changed', { authStatus: 'unauthenticated' });
         return;
       }
 
       set({
+        authStatus: 'authenticated',
         authUser: user,
         authInitialized: true,
         authLoading: false,
@@ -235,6 +257,7 @@ export const useStore = create<AppState>((set, get) => ({
         appReady: false,
         loading: true,
       });
+      logAuthTrace('auth-status-changed', { authStatus: 'authenticated', uid: user.uid });
 
       try {
         await user.getIdToken();
@@ -275,6 +298,7 @@ export const useStore = create<AppState>((set, get) => ({
           profileResolved = true;
           const validatedProfile = { ...profile, ...(familyId ? { familyId } : { familyId: undefined }) };
           set({ currentUser: validatedProfile, profileLoading: false, bootstrapError: null });
+          logAuthTrace('profile-request-completed', { hasFamilyId: Boolean(familyId) });
 
           if (!familyId) {
             stopFamilyListeners();
@@ -298,11 +322,17 @@ export const useStore = create<AppState>((set, get) => ({
           { includeMetadataChanges: true },
           profileSnapshot => {
             if (generation !== authGeneration || get().authUser?.uid !== user.uid) return;
+            // Cached snapshots are ignored for the authoritative resolve, but we
+            // must NOT leave loading stuck if the only event we ever receive is a
+            // cached one — the getDocFromServer fallback below guarantees a
+            // server-resolution path. We still skip fromCache here to avoid
+            // flashing stale data.
             if (profileSnapshot.metadata?.fromCache) return;
             handleProfileSnapshot(profileSnapshot);
           },
           error => {
             if (generation !== authGeneration) return;
+            logAuthTrace('profile-request-failed', { code: error?.code });
             set({
               profileLoading: false,
               bootstrapError: errorText('Profile', error),
@@ -312,21 +342,40 @@ export const useStore = create<AppState>((set, get) => ({
           },
         );
 
+        logAuthTrace('profile-request-started', { uid: user.uid });
         void getDocFromServer(profileReference)
           .then(snapshot => {
             if (!profileResolved) handleProfileSnapshot(snapshot);
           })
           .catch(error => {
             if (generation !== authGeneration || profileResolved) return;
+            logAuthTrace('profile-request-failed', { code: error?.code });
             set({
               profileLoading: false,
               bootstrapError: errorText('Profile', error),
               appReady: false,
               loading: false,
             });
+          })
+          .finally(() => {
+            // Guarantee loading is cleared even if both the snapshot listener and
+            // the server read are somehow discarded by a generation bump. Without
+            // this, profileLoading/loading could remain true indefinitely. Only
+            // apply the not-found fallback if no authoritative error was already
+            // recorded by the .catch above.
+            const alreadyErrored = Boolean(get().bootstrapError);
+            if (generation === authGeneration && get().authUser?.uid === user.uid && !profileResolved && !alreadyErrored) {
+              set({
+                profileLoading: false,
+                bootstrapError: '[Profile] not-found: User profile is not available yet',
+                appReady: false,
+                loading: false,
+              });
+            }
           });
       } catch (error: any) {
         if (generation !== authGeneration) return;
+        logAuthTrace('auth-token-failed', { code: error?.code });
         set({
           profileLoading: false,
           bootstrapError: errorText('Auth', error),
@@ -335,7 +384,9 @@ export const useStore = create<AppState>((set, get) => ({
         });
       }
     }, error => {
+      logAuthTrace('auth-observer-failed', { code: (error as any)?.code });
       set({
+        authStatus: 'unauthenticated',
         authInitialized: true,
         authLoading: false,
         profileLoading: false,
@@ -655,6 +706,7 @@ export const useStore = create<AppState>((set, get) => ({
     authUnsubscribe?.();
     authUnsubscribe = null;
     set({
+      authStatus: 'initializing',
       authInitialized: false,
       authLoading: true,
       profileLoading: false,
@@ -675,6 +727,7 @@ export const useStore = create<AppState>((set, get) => ({
     authUnsubscribe?.();
     authUnsubscribe = null;
     set({
+      authStatus: 'initializing',
       authInitialized: false,
       authLoading: true,
       profileLoading: false,

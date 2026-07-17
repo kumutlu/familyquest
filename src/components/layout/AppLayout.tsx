@@ -8,22 +8,23 @@ import { NotificationCenter } from './NotificationCenter';
 
 export function AppLayout() {
   const location = useLocation();
+  const authStatus = useStore(state => state.authStatus);
   const authUser = useStore(state => state.authUser);
   const currentUser = useStore(state => state.currentUser);
   const appReady = useStore(state => state.appReady);
   const bootstrapError = useStore(state => state.bootstrapError);
   const retryBootstrap = useStore(state => state.retryBootstrap);
 
-  // Still loading auth state
-  if (authUser === undefined && !bootstrapError) {
+  // Firebase Auth is still initializing - never redirect to /login while the
+  // first auth state has not resolved. This prevents the temporary redirect to
+  // /login that forced users to close & reopen the PWA.
+  if (authStatus === 'initializing') {
     return <div className="min-h-screen bg-gray-50 flex items-center justify-center">Loading...</div>;
   }
 
-  // Not logged in -> Login
-  if (authUser === null) {
-    return <Navigate to="/login" replace />;
-  }
-
+  // A recoverable bootstrap/auth error takes precedence over the login
+  // redirect (matches the previous contract where an error screen was shown
+  // even when authUser was null).
   if (bootstrapError) {
     return (
       <div className="min-h-screen bg-gray-50 flex flex-col items-center justify-center p-4">
@@ -42,6 +43,11 @@ export function AppLayout() {
         </div>
       </div>
     );
+  }
+
+  // Not logged in -> Login
+  if (authStatus === 'unauthenticated' || authUser === null) {
+    return <Navigate to="/login" replace />;
   }
 
   // Logged in but no user doc yet (takes a moment to sync)
