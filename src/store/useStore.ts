@@ -67,6 +67,9 @@ const emptyFamilyState = () => ({
   walletTransactions: [] as any[],
   savingsGoals: [] as any[],
   goalRequests: [] as any[],
+  goalContributions: [] as any[],
+  goalLedger: [] as any[],
+  goalMatchProposals: [] as any[],
   behaviourEvents: [] as any[],
   challenges: [] as any[],
   funds: [] as any[],
@@ -112,6 +115,9 @@ interface AppState {
   walletTransactions: any[];
   savingsGoals: any[];
   goalRequests: any[];
+  goalContributions: any[];
+  goalLedger: any[];
+  goalMatchProposals: any[];
   behaviourEvents: any[];
   challenges: any[];
   funds: any[];
@@ -549,6 +555,56 @@ export const useStore = create<AppState>((set, get) => ({
         key,
       );
     };
+  
+    // Goals reuse the `savings_goals` collection (design §13). Each goal owns
+    // nested subcollections (`contributions`, `goal_ledger`, `match_proposals`)
+    // that cannot be read with a single top-level bootstrap query. We subscribe
+    // to each goal's subcollections and aggregate the results into the three
+    // store arrays. These are optional (non-critical) listeners: a goal with no
+    // activity simply contributes no rows, and a listener error is surfaced as a
+    // feature error rather than blocking bootstrap.
+    const GOAL_COLLECTION = 'savings_goals';
+    const goalFamilyPath = `families/${familyId}`;
+    const goalSubBuffers: Record<string, Record<string, any[]>> = {
+      goalContributions: {},
+      goalLedger: {},
+      goalMatchProposals: {},
+    };
+    const flushGoalSubs = () => {
+      if (!isCurrent()) return;
+      set({
+        goalContributions: Object.values(goalSubBuffers.goalContributions).flat(),
+        goalLedger: Object.values(goalSubBuffers.goalLedger).flat(),
+        goalMatchProposals: Object.values(goalSubBuffers.goalMatchProposals).flat(),
+      });
+      markReady('goalContributions');
+      markReady('goalLedger');
+      markReady('goalMatchProposals');
+    };
+    const subscribeGoalSubcollection = (goalId: string, sub: 'goalContributions' | 'goalLedger' | 'goalMatchProposals', subPath: string) => {
+      const target = collection(db, `${goalFamilyPath}/${GOAL_COLLECTION}/${goalId}/${subPath}`);
+      const listenerName = `${sub}:${goalId}`;
+      const apply = (snapshot: any) => {
+        goalSubBuffers[sub][goalId] = docs(snapshot);
+        flushGoalSubs();
+      };
+      subscribe(
+        sub,
+        `Goal ${sub}`,
+        target,
+        getDocsFromServer,
+        apply,
+        listenerName,
+        false,
+      );
+    };
+    const subscribeGoalSubcollections = (goalIds: string[]) => {
+      for (const goalId of goalIds) {
+        subscribeGoalSubcollection(goalId, 'goalContributions', 'contributions');
+        subscribeGoalSubcollection(goalId, 'goalLedger', 'goal_ledger');
+        subscribeGoalSubcollection(goalId, 'goalMatchProposals', 'match_proposals');
+      }
+    };
 
     try {
       subscribePlanned('family', 'Family', snapshot => {
@@ -583,7 +639,11 @@ export const useStore = create<AppState>((set, get) => ({
         subscribePlanned('taskCompletions', 'Task completions', snapshot => set({ taskCompletions: docs(snapshot) }));
         subscribePlanned('redemptions', 'Redemptions', snapshot => set({ redemptions: docs(snapshot) }));
         subscribePlanned('walletTransactions', 'Wallet transactions', snapshot => set({ walletTransactions: normalizeHistory(docs(snapshot)) }));
-        subscribePlanned('savingsGoals', 'Savings goals', snapshot => set({ savingsGoals: docs(snapshot) }));
+        subscribePlanned('savingsGoals', 'Savings goals', snapshot => {
+          const goals = docs(snapshot);
+          set({ savingsGoals: goals });
+          subscribeGoalSubcollections(goals.map(goal => goal.id));
+        });
         subscribePlanned('goalRequests', 'Goal requests', snapshot => set({ goalRequests: docs(snapshot) }));
         subscribePlanned('transferRequests', 'Transfer requests', snapshot => set({ transferRequests: docs(snapshot) }));
         subscribePlanned('moneyRequests', 'Money requests', snapshot => set({ moneyRequests: docs(snapshot) }));
@@ -595,7 +655,11 @@ export const useStore = create<AppState>((set, get) => ({
         subscribePlanned('taskCompletions', 'Task completions', snapshot => set({ taskCompletions: docs(snapshot) }));
         subscribePlanned('redemptions', 'Redemptions', snapshot => set({ redemptions: docs(snapshot) }));
         subscribePlanned('walletTransactions', 'Wallet transactions', snapshot => set({ walletTransactions: normalizeHistory(docs(snapshot)) }));
-        subscribePlanned('savingsGoals', 'Savings goals', snapshot => set({ savingsGoals: docs(snapshot) }));
+        subscribePlanned('savingsGoals', 'Savings goals', snapshot => {
+          const goals = docs(snapshot);
+          set({ savingsGoals: goals });
+          subscribeGoalSubcollections(goals.map(goal => goal.id));
+        });
         subscribePlanned('goalRequests', 'Goal requests', snapshot => set({ goalRequests: docs(snapshot) }));
         subscribePlanned('transferRequests', 'Transfer requests', snapshot => set({ transferRequests: docs(snapshot) }));
         subscribePlanned('petboxRequests', 'Pet Box requests', snapshot => set({ petboxRequests: docs(snapshot) }));
@@ -749,3 +813,35 @@ export const useStore = create<AppState>((set, get) => ({
     });
   },
 }));
+
+// Derives the per-goal contributor breakdown from the immutable goal ledger
+// (`goalContributions`), NOT from `wallet_transactions`. Groups entries by
+// `type` and `ownerId` and sums `amountPence`, mirroring the ContributionType
+// taxonomy in goalContracts.ts. Parent and match funds are kept distinct from
+// child contributions so the UI can never present them as child wallet money.
+export interface GoalContributionGroup {
+  type: string;
+  ownerId: string | null;
+  ownerType: string | null;
+  totalPence: number;
+  count: number;
+}
+
+export function goalContributionBreakdown(contributions: any[]): GoalContributionGroup[] {
+  const groups = new Map<string, GoalContributionGroup>();
+  for (const entry of contributions ?? []) {
+    const type = entry?.type ?? 'unknown';
+    const ownerId = entry?.ownerId ?? null;
+    const ownerType = entry?.ownerType ?? null;
+    const key = `${type}::${ownerId ?? ''}`;
+    const amount = typeof entry?.amountPence === 'number' ? entry.amountPence : 0;
+    const existing = groups.get(key);
+    if (existing) {
+      existing.totalPence += amount;
+      existing.count += 1;
+    } else {
+      groups.set(key, { type, ownerId, ownerType, totalPence: amount, count: 1 });
+    }
+  }
+  return [...groups.values()];
+}

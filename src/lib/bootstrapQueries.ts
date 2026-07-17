@@ -23,6 +23,9 @@ export type BootstrapResource =
   | 'walletTransactions'
   | 'savingsGoals'
   | 'goalRequests'
+  | 'goalContributions'
+  | 'goalLedger'
+  | 'goalMatchProposals'
   | 'behaviourEvents'
   | 'challenges'
   | 'funds'
@@ -121,6 +124,9 @@ export const bootstrapResources: BootstrapResource[] = [
   'walletTransactions',
   'savingsGoals',
   'goalRequests',
+  'goalContributions',
+  'goalLedger',
+  'goalMatchProposals',
   'behaviourEvents',
   'challenges',
   'funds',
