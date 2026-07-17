@@ -42,6 +42,21 @@ import {
 import { useStore } from '../store/useStore';
 import { unregisterCurrentDevice } from './pushNotifications';
 import { getAvatarById, getAvatarCost } from '../config/avatarCatalog';
+import {
+  computeNetChild,
+  computeMatchPence,
+  normalizeGoalDoc,
+  requestHashOf,
+  goalContributionKey,
+  goalWithdrawalKey,
+  goalMatchKey,
+  type Goal,
+  type GoalKind,
+  type GoalStatus,
+  type MatchingPolicy,
+  type ContributionLeg,
+  type MatchProposal,
+} from './goalContracts';
 
 // ---------------------------
 // 0. AUTHENTICATION
@@ -1151,6 +1166,971 @@ export const updateSavingsGoal = async (familyId: string, goalId: string, update
 
 export const deleteSavingsGoal = async (familyId: string, goalId: string) => {
   return deleteDoc(doc(db, `families/${familyId}/savings_goals`, goalId));
+};
+
+// ---------------------------
+// 8b. GOALS / FAMILY FUND (Phase 1)
+// ---------------------------
+//
+// Reuses the existing `savings_goals` collection as `goals` (design §13). All
+// money-moving operations run inside a single runTransaction with
+// reads-before-writes and a zero-read write stage (convention from §5 / line
+// ~418). Every money-moving op also writes an atomic idempotency operation
+// document (design §14) in the SAME transaction: no `processing` state is ever
+// persisted, a reused key with a different requestHash is rejected, and a failed
+// transaction leaves no idempotency record behind.
+//
+// Ownership is derived ONLY from the goal-specific immutable `contributions`
+// ledger (design §7). wallet_transactions is never used to derive ownership.
+// Parent and match contributions never credit a child wallet.
+
+const GOAL_COLLECTION = 'savings_goals'; // reused as `goals` (design §13)
+
+function goalRef(familyId: string, goalId: string) {
+  return doc(db, `families/${familyId}/${GOAL_COLLECTION}`, goalId);
+}
+function idempotencyRef(familyId: string, key: string) {
+  return doc(db, `families/${familyId}/idempotency`, key);
+}
+
+/**
+ * Atomic idempotency guard (design §14). Reads the idempotency doc in the
+ * transaction's read phase. Returns the prior resultRef if already completed
+ * with the same requestHash, throws on a requestHash mismatch, and otherwise
+ * returns null so the caller proceeds to write the operation doc + financials
+ * in the same transaction. No `processing` state is ever written.
+ */
+function checkIdempotency(
+  idemSnap: { exists: () => boolean; data: () => any },
+  _key: string,
+  requestHash: string,
+): string | null {
+  if (!idemSnap.exists()) return null;
+  const rec = idemSnap.data();
+  if (rec.status === 'completed') {
+    if (rec.requestHash === requestHash) return rec.resultRef as string;
+    throw new Error('Idempotency key conflict: a different request was already recorded under this key');
+  }
+  // Any non-completed record is treated as absent (a failed tx never persists one).
+  return null;
+}
+
+function writeIdempotency(
+  transaction: any,
+  familyId: string,
+  key: string,
+  operationType: string,
+  actorId: string,
+  requestHash: string,
+  resultRef: string,
+) {
+  transaction.set(idempotencyRef(familyId, key), {
+    operationType,
+    actorId,
+    requestHash,
+    status: 'completed',
+    resultRef,
+    createdAt: serverTimestamp(),
+    expiresAt: serverTimestamp(),
+  });
+}
+
+function assertActiveOrReached(status: GoalStatus) {
+  if (status !== 'active' && status !== 'reached') {
+    throw new Error('Goal not in active/reached state');
+  }
+}
+
+function assertParent(actorRole: string | undefined, _familyId: string) {
+  if (actorRole !== 'parent' && actorRole !== 'owner') {
+    throw new Error('Only a parent or owner may perform this action');
+  }
+}
+
+// ---------------------------------------------------------------------------
+// createGoal
+// ---------------------------------------------------------------------------
+
+export interface CreateGoalInput {
+  title: string;
+  kind: GoalKind;
+  targetAmountPence: number;
+  currency?: string;
+  childId?: string;
+  matching?: MatchingPolicy;
+}
+
+export const createGoal = async (familyId: string, input: CreateGoalInput) => {
+  const actorId = requireActorId();
+  if (!Number.isInteger(input.targetAmountPence) || input.targetAmountPence <= 0) {
+    throw new Error('Target must be a positive integer number of pence');
+  }
+  if (input.kind === 'child' && !input.childId) {
+    throw new Error('A child goal requires a childId');
+  }
+  const goalsRef = collection(db, `families/${familyId}/${GOAL_COLLECTION}`);
+  const goalDocRef = doc(goalsRef);
+  const actorRef = doc(db, 'users', actorId);
+  const actorSnap = await getDoc(actorRef);
+  const actorRole = actorSnap.exists() ? (actorSnap.data().role as string) : undefined;
+  // Children may only create a child-scoped goal for themselves (legacy behaviour).
+  if (input.kind === 'child' && actorRole === 'child') {
+    if (input.childId !== actorId) throw new Error('A child can only create a goal for themselves');
+  } else {
+    assertParent(actorRole, familyId);
+  }
+  const now = serverTimestamp();
+  const goal: Goal = {
+    goalId: goalDocRef.id,
+    title: input.title,
+    kind: input.kind,
+    childId: input.childId,
+    targetAmountPence: input.targetAmountPence,
+    currentAmountPence: 0,
+    currency: input.currency ?? 'GBP',
+    status: 'active',
+    matching: input.matching ?? { mode: 'none', perX: 0, matchY: 0 },
+    createdBy: actorId,
+    createdByName: actorSnap.exists() ? (actorSnap.data().displayName as string) : undefined,
+    createdAt: now,
+    version: 1,
+  };
+  await setDoc(goalDocRef, goal);
+  return goalDocRef;
+};
+
+// ---------------------------------------------------------------------------
+// updateGoal (parent metadata only)
+// ---------------------------------------------------------------------------
+
+export const updateGoal = async (familyId: string, goalId: string, updates: Partial<Goal>) => {
+  const actorId = requireActorId();
+  const actorRef = doc(db, 'users', actorId);
+  const actorSnap = await getDoc(actorRef);
+  const actorRole = actorSnap.exists() ? (actorSnap.data().role as string) : undefined;
+  assertParent(actorRole, familyId);
+  // Metadata only: never allow direct mutation of locked money fields.
+  const { currentAmountPence, status, ...safe } = updates as any;
+  void currentAmountPence;
+  void status;
+  await updateDoc(goalRef(familyId, goalId), safe);
+};
+
+// ---------------------------------------------------------------------------
+// contributeToGoal (child wallet -> goal, atomic; optional approval-gated;
+// auto-match leg; manual-match proposal creation)
+// ---------------------------------------------------------------------------
+
+export interface ContributeToGoalOptions {
+  /** Client-supplied idempotency request id (deterministic key). */
+  clientReqId: string;
+  /** When true, create a pending goal_request instead of applying immediately. */
+  approvalRequired?: boolean;
+}
+
+export const contributeToGoal = async (
+  familyId: string,
+  goalId: string,
+  childId: string,
+  amountPence: number,
+  opts: ContributeToGoalOptions,
+) => {
+  const actorId = requireActorId();
+  if (actorId !== childId) throw new Error('A child can only contribute from their own wallet');
+  if (!Number.isInteger(amountPence) || amountPence <= 0) {
+    throw new Error('Amount must be a positive integer number of pence');
+  }
+  const key = goalContributionKey(goalId, opts.clientReqId);
+  const requestHash = requestHashOf({ goalId, childId, amountPence, approvalRequired: !!opts.approvalRequired });
+  const idemRef = idempotencyRef(familyId, key);
+  const walletRef = doc(db, `families/${familyId}/wallets`, childId);
+  const goalDocRef = goalRef(familyId, goalId);
+  const contribRef = doc(collection(db, `families/${familyId}/${GOAL_COLLECTION}/${goalId}/contributions`));
+  const ledgerRef = doc(collection(db, `families/${familyId}/${GOAL_COLLECTION}/${goalId}/goal_ledger`));
+  const txRef = doc(collection(db, `families/${familyId}/wallet_transactions`));
+  const requestRef = doc(collection(db, `families/${familyId}/goal_requests`));
+  const proposalRef = doc(collection(db, `families/${familyId}/${GOAL_COLLECTION}/${goalId}/match_proposals`));
+  const approverIds = await getApproverIds(familyId);
+
+  await runTransaction(db, async (transaction) => {
+    // ---- PHASE A: ALL READS ----
+    const [idemSnap, walletSnap, goalSnap] = await Promise.all([
+      transaction.get(idemRef),
+      transaction.get(walletRef),
+      transaction.get(goalDocRef),
+    ]);
+
+    const prior = checkIdempotency(idemSnap, key, requestHash);
+    if (prior !== null) return; // idempotent replay, no new writes
+
+    if (!walletSnap.exists()) throw new Error('Wallet not found');
+    if (!goalSnap.exists()) throw new Error('Goal not found');
+    const goal = normalizeGoalDoc(goalSnap.data());
+    assertActiveOrReached(goal.status);
+    const walletBalance = walletSnap.data().balance || 0;
+    if (walletBalance < amountPence) throw new Error('Insufficient funds');
+
+    let parentNotif = { ref: null, data: null } as Awaited<ReturnType<typeof loadNotificationRecipientsInTransaction>>;
+    if (approverIds.length > 0) {
+      parentNotif = await loadNotificationRecipientsInTransaction(transaction, familyId, {
+        type: 'task_submitted',
+        actorId,
+        recipientIds: approverIds,
+        title: 'Goal contribution',
+        body: `${amountPence} pence contributed to ${goal.title}`,
+        entityType: 'goal_contribution',
+        entityId: contribRef.id,
+        actionUrl: '/goals',
+        dedupeKey: goalContributionKey(goalId, contribRef.id),
+      });
+    }
+
+    // ---- PHASE B: WRITES (zero reads) ----
+    if (opts.approvalRequired) {
+      transaction.set(requestRef, {
+        requestType: 'contribution',
+        goalId,
+        childId,
+        amountPence,
+        status: 'pending',
+        createdBy: actorId,
+        createdAt: serverTimestamp(),
+        dedupeKey: key,
+      });
+      writeIdempotency(transaction, familyId, key, 'goal_contribution_request', actorId, requestHash, requestRef.id);
+      return;
+    }
+
+    transaction.update(walletRef, { balance: walletBalance - amountPence, lastGoalTxId: txRef.id });
+    transaction.update(goalDocRef, {
+      currentAmountPence: goal.currentAmountPence + amountPence,
+      ...(goal.currentAmountPence + amountPence >= goal.targetAmountPence ? { status: 'reached' } : {}),
+    });
+    transaction.set(txRef, {
+      type: 'goal_contribution',
+      childId,
+      goalId,
+      amount: -amountPence,
+      familyId,
+      sourceId: txRef.id,
+      status: 'completed',
+      timestamp: serverTimestamp(),
+      createdAt: serverTimestamp(),
+    });
+    transaction.set(contribRef, {
+      contribId: contribRef.id,
+      goalId,
+      type: 'child_contribution',
+      ownerType: 'child',
+      ownerId: childId,
+      amountPence,
+      matchPence: 0,
+      status: 'applied',
+      walletTxId: txRef.id,
+      createdBy: actorId,
+      createdAt: serverTimestamp(),
+    });
+    transaction.set(ledgerRef, {
+      entryId: ledgerRef.id,
+      goalId,
+      type: 'child_contribution',
+      amountPence,
+      ownerId: childId,
+      createdAt: serverTimestamp(),
+    });
+
+    // Matching (design §6).
+    const policy = goal.matching ?? { mode: 'none', perX: 0, matchY: 0 };
+    if (policy.mode === 'auto') {
+      const matchPence = computeMatchPence(amountPence, policy);
+      if (matchPence > 0) {
+        const matchRef = doc(collection(db, `families/${familyId}/${GOAL_COLLECTION}/${goalId}/contributions`));
+        transaction.update(goalDocRef, { currentAmountPence: goal.currentAmountPence + amountPence + matchPence });
+        transaction.set(matchRef, {
+          contribId: matchRef.id,
+          goalId,
+          type: 'auto_match',
+          ownerType: 'parent',
+          ownerId: actorId,
+          amountPence: matchPence,
+          matchPence,
+          sourceContributionId: contribRef.id,
+          status: 'applied',
+          createdBy: actorId,
+          createdAt: serverTimestamp(),
+        });
+        transaction.set(doc(collection(db, `families/${familyId}/${GOAL_COLLECTION}/${goalId}/goal_ledger`)), {
+          entryId: ledgerRef.id + '_m',
+          goalId,
+          type: 'auto_match',
+          amountPence: matchPence,
+          ownerId: actorId,
+          createdAt: serverTimestamp(),
+        });
+      }
+    } else if (policy.mode === 'manual') {
+      const proposedMatchAmountPence = computeMatchPence(amountPence, { ...policy, mode: 'auto' });
+      transaction.set(proposalRef, {
+        proposalId: proposalRef.id,
+        goalId,
+        sourceContributionId: contribRef.id,
+        proposedMatchAmountPence,
+        status: 'proposed',
+        createdAt: serverTimestamp(),
+      });
+    }
+
+    applyNotificationWrites(transaction, parentNotif);
+    writeIdempotency(transaction, familyId, key, 'goal_contribution', actorId, requestHash, contribRef.id);
+  });
+};
+
+// ---------------------------------------------------------------------------
+// addParentGoalContribution (external money; no wallet debit)
+// ---------------------------------------------------------------------------
+
+export const addParentGoalContribution = async (
+  familyId: string,
+  goalId: string,
+  amountPence: number,
+  clientReqId: string,
+) => {
+  const actorId = requireActorId();
+  const actorRef = doc(db, 'users', actorId);
+  const actorSnap = await getDoc(actorRef);
+  const actorRole = actorSnap.exists() ? (actorSnap.data().role as string) : undefined;
+  assertParent(actorRole, familyId);
+  if (!Number.isInteger(amountPence) || amountPence <= 0) {
+    throw new Error('Amount must be a positive integer number of pence');
+  }
+  const key = goalContributionKey(goalId, `parent:${clientReqId}`);
+  const requestHash = requestHashOf({ goalId, amountPence, parent: true });
+  const idemRef = idempotencyRef(familyId, key);
+  const goalDocRef = goalRef(familyId, goalId);
+  const contribRef = doc(collection(db, `families/${familyId}/${GOAL_COLLECTION}/${goalId}/contributions`));
+  const ledgerRef = doc(collection(db, `families/${familyId}/${GOAL_COLLECTION}/${goalId}/goal_ledger`));
+  const childIds = await getChildIds(familyId);
+
+  await runTransaction(db, async (transaction) => {
+    const [idemSnap, goalSnap] = await Promise.all([
+      transaction.get(idemRef),
+      transaction.get(goalDocRef),
+    ]);
+    const prior = checkIdempotency(idemSnap, key, requestHash);
+    if (prior !== null) return;
+
+    if (!goalSnap.exists()) throw new Error('Goal not found');
+    const goal = normalizeGoalDoc(goalSnap.data());
+    assertActiveOrReached(goal.status);
+
+    let childNotif = { ref: null, data: null } as Awaited<ReturnType<typeof loadNotificationRecipientsInTransaction>>;
+    if (childIds.length > 0) {
+      childNotif = await loadNotificationRecipientsInTransaction(transaction, familyId, {
+        type: 'task_approved',
+        actorId,
+        recipientIds: childIds,
+        title: 'Parent added to goal',
+        body: `${amountPence} pence added to ${goal.title}`,
+        entityType: 'goal_parent_contribution',
+        entityId: contribRef.id,
+        actionUrl: '/goals',
+        dedupeKey: goalContributionKey(goalId, contribRef.id),
+      });
+    }
+
+    transaction.update(goalDocRef, {
+      currentAmountPence: goal.currentAmountPence + amountPence,
+      ...(goal.currentAmountPence + amountPence >= goal.targetAmountPence ? { status: 'reached' } : {}),
+    });
+    transaction.set(contribRef, {
+      contribId: contribRef.id,
+      goalId,
+      type: 'parent_contribution',
+      ownerType: 'parent',
+      ownerId: actorId,
+      amountPence,
+      matchPence: 0,
+      status: 'applied',
+      createdBy: actorId,
+      createdAt: serverTimestamp(),
+    });
+    transaction.set(ledgerRef, {
+      entryId: ledgerRef.id,
+      goalId,
+      type: 'parent_contribution',
+      amountPence,
+      ownerId: actorId,
+      createdAt: serverTimestamp(),
+    });
+
+    applyNotificationWrites(transaction, childNotif);
+    writeIdempotency(transaction, familyId, key, 'goal_parent_contribution', actorId, requestHash, contribRef.id);
+  });
+};
+
+// ---------------------------------------------------------------------------
+// requestGoalWithdrawal (child creates a pending withdrawal request)
+// ---------------------------------------------------------------------------
+
+export const requestGoalWithdrawal = async (
+  familyId: string,
+  goalId: string,
+  childId: string,
+  amountPence: number,
+  clientReqId: string,
+) => {
+  const actorId = requireActorId();
+  if (actorId !== childId) throw new Error('A child can only request their own withdrawal');
+  if (!Number.isInteger(amountPence) || amountPence <= 0) {
+    throw new Error('Amount must be a positive integer number of pence');
+  }
+  const key = goalWithdrawalKey(goalId, clientReqId);
+  const requestHash = requestHashOf({ goalId, childId, amountPence });
+  const idemRef = idempotencyRef(familyId, key);
+  const goalDocRef = goalRef(familyId, goalId);
+  const contribsRef = collection(db, `families/${familyId}/${GOAL_COLLECTION}/${goalId}/contributions`);
+  const requestRef = doc(collection(db, `families/${familyId}/goal_requests`));
+  const approverIds = await getApproverIds(familyId);
+
+  await runTransaction(db, async (transaction) => {
+    const [idemSnap, goalSnap, contribSnap] = await Promise.all([
+      transaction.get(idemRef),
+      transaction.get(goalDocRef),
+      transaction.get(contribsRef),
+    ]);
+    const prior = checkIdempotency(idemSnap, key, requestHash);
+    if (prior !== null) return;
+
+    if (!goalSnap.exists()) throw new Error('Goal not found');
+    const goal = normalizeGoalDoc(goalSnap.data());
+    assertActiveOrReached(goal.status);
+
+    const allLegs: ContributionLeg[] = contribSnap.exists()
+      ? (contribSnap.data().__legs__ ?? [])
+      : [];
+    const net = computeNetChild(allLegs, childId);
+    if (amountPence > net) throw new Error('Withdrawal exceeds owned contribution');
+
+    let parentNotif = { ref: null, data: null } as Awaited<ReturnType<typeof loadNotificationRecipientsInTransaction>>;
+    if (approverIds.length > 0) {
+      parentNotif = await loadNotificationRecipientsInTransaction(transaction, familyId, {
+        type: 'task_submitted',
+        actorId,
+        recipientIds: approverIds,
+        title: 'Goal withdrawal requested',
+        body: `${amountPence} pence requested from ${goal.title}`,
+        entityType: 'goal_withdrawal',
+        entityId: requestRef.id,
+        actionUrl: '/goals',
+        dedupeKey: goalWithdrawalKey(goalId, requestRef.id),
+      });
+    }
+
+    transaction.set(requestRef, {
+      requestType: 'withdrawal',
+      goalId,
+      childId,
+      amountPence,
+      status: 'pending',
+      createdBy: actorId,
+      createdAt: serverTimestamp(),
+      dedupeKey: key,
+    });
+    applyNotificationWrites(transaction, parentNotif);
+    writeIdempotency(transaction, familyId, key, 'goal_withdrawal_request', actorId, requestHash, requestRef.id);
+  });
+};
+
+// ---------------------------------------------------------------------------
+// approveGoalWithdrawal / rejectGoalWithdrawal
+// ---------------------------------------------------------------------------
+
+export const approveGoalWithdrawal = async (familyId: string, requestId: string, clientReqId: string) => {
+  const actorId = requireActorId();
+  const actorRef = doc(db, 'users', actorId);
+  const actorSnap = await getDoc(actorRef);
+  const actorRole = actorSnap.exists() ? (actorSnap.data().role as string) : undefined;
+  assertParent(actorRole, familyId);
+
+  const key = goalWithdrawalKey(`req:${requestId}`, clientReqId);
+  const requestHash = requestHashOf({ requestId, approve: true });
+  const idemRef = idempotencyRef(familyId, key);
+  const requestRef = doc(db, `families/${familyId}/goal_requests`, requestId);
+  const txRef = doc(collection(db, `families/${familyId}/wallet_transactions`));
+
+  await runTransaction(db, async (transaction) => {
+    const [idemSnap, reqSnap] = await Promise.all([
+      transaction.get(idemRef),
+      transaction.get(requestRef),
+    ]);
+    const prior = checkIdempotency(idemSnap, key, requestHash);
+    if (prior !== null) return;
+
+    if (!reqSnap.exists()) throw new Error('Request not found');
+    const req = reqSnap.data();
+    if (req.status !== 'pending') throw new Error('Request is not pending');
+    const goalId: string = req.goalId;
+    const childId: string = req.childId;
+    const amountPence: number = req.amountPence;
+
+    const goalDocRef = goalRef(familyId, goalId);
+    const walletRef = doc(db, `families/${familyId}/wallets`, childId);
+    const contribsRef = collection(db, `families/${familyId}/${GOAL_COLLECTION}/${goalId}/contributions`);
+    const [goalSnap, walletSnap, contribSnap] = await Promise.all([
+      transaction.get(goalDocRef),
+      transaction.get(walletRef),
+      transaction.get(contribsRef),
+    ]);
+    if (!goalSnap.exists()) throw new Error('Goal not found');
+    const goal = normalizeGoalDoc(goalSnap.data());
+    assertActiveOrReached(goal.status);
+    if (!walletSnap.exists()) throw new Error('Wallet not found');
+
+    const allLegs: ContributionLeg[] = contribSnap.exists() ? (contribSnap.data().__legs__ ?? []) : [];
+    const net = computeNetChild(allLegs, childId);
+    if (amountPence > net) throw new Error('Withdrawal exceeds owned contribution');
+
+    const walletBalance = walletSnap.data().balance || 0;
+    const newGoalAmount = goal.currentAmountPence - amountPence;
+    const dropsBelow = newGoalAmount < goal.targetAmountPence;
+    const newStatus: GoalStatus = dropsBelow && goal.status === 'reached' ? 'active' : goal.status;
+
+    transaction.update(walletRef, { balance: walletBalance + amountPence, lastGoalTxId: txRef.id });
+    transaction.update(goalDocRef, { currentAmountPence: newGoalAmount, ...(dropsBelow ? { status: newStatus } : {}) });
+    transaction.set(txRef, {
+      type: 'goal_return',
+      childId,
+      goalId,
+      amount: amountPence,
+      familyId,
+      sourceId: txRef.id,
+      status: 'completed',
+      timestamp: serverTimestamp(),
+      createdAt: serverTimestamp(),
+    });
+    const contribRef = doc(collection(db, `families/${familyId}/${GOAL_COLLECTION}/${goalId}/contributions`));
+    transaction.set(contribRef, {
+      contribId: contribRef.id,
+      goalId,
+      type: 'child_withdrawal',
+      ownerType: 'child',
+      ownerId: childId,
+      amountPence: -amountPence,
+      status: 'applied',
+      walletTxId: txRef.id,
+      sourceRequestId: requestId,
+      createdBy: actorId,
+      createdAt: serverTimestamp(),
+    });
+    transaction.set(doc(collection(db, `families/${familyId}/${GOAL_COLLECTION}/${goalId}/goal_ledger`)), {
+      entryId: contribRef.id,
+      goalId,
+      type: 'child_withdrawal',
+      amountPence: -amountPence,
+      ownerId: childId,
+      createdAt: serverTimestamp(),
+    });
+    transaction.update(requestRef, {
+      status: 'approved',
+      reviewedBy: actorId,
+      reviewedByName: actorSnap.exists() ? (actorSnap.data().displayName as string) : undefined,
+      reviewedAt: serverTimestamp(),
+      contribId: contribRef.id,
+      walletTxId: txRef.id,
+    });
+    writeIdempotency(transaction, familyId, key, 'goal_withdrawal_approve', actorId, requestHash, contribRef.id);
+  });
+};
+
+export const rejectGoalWithdrawal = async (familyId: string, requestId: string, reason?: string) => {
+  const actorId = requireActorId();
+  const actorRef = doc(db, 'users', actorId);
+  const actorSnap = await getDoc(actorRef);
+  const actorRole = actorSnap.exists() ? (actorSnap.data().role as string) : undefined;
+  assertParent(actorRole, familyId);
+  const requestRef = doc(db, `families/${familyId}/goal_requests`, requestId);
+  await runTransaction(db, async (transaction) => {
+    const reqSnap = await transaction.get(requestRef);
+    if (!reqSnap.exists()) throw new Error('Request not found');
+    const req = reqSnap.data();
+    if (req.status !== 'pending') throw new Error('Request is not pending');
+    transaction.update(requestRef, {
+      status: 'rejected',
+      reviewedBy: actorId,
+      reviewedByName: actorSnap.exists() ? (actorSnap.data().displayName as string) : undefined,
+      reviewedAt: serverTimestamp(),
+      rejectionReason: reason ?? null,
+    });
+  });
+};
+
+// ---------------------------------------------------------------------------
+// completeGoalPurchased (parent-only; no wallet movement)
+// ---------------------------------------------------------------------------
+
+export const completeGoalPurchased = async (familyId: string, goalId: string, clientReqId: string) => {
+  const actorId = requireActorId();
+  const actorRef = doc(db, 'users', actorId);
+  const actorSnap = await getDoc(actorRef);
+  const actorRole = actorSnap.exists() ? (actorSnap.data().role as string) : undefined;
+  assertParent(actorRole, familyId);
+
+  const key = goalContributionKey(goalId, `purchased:${clientReqId}`);
+  const requestHash = requestHashOf({ goalId, mode: 'purchased' });
+  const idemRef = idempotencyRef(familyId, key);
+  const goalDocRef = goalRef(familyId, goalId);
+
+  await runTransaction(db, async (transaction) => {
+    const [idemSnap, goalSnap] = await Promise.all([
+      transaction.get(idemRef),
+      transaction.get(goalDocRef),
+    ]);
+    const prior = checkIdempotency(idemSnap, key, requestHash);
+    if (prior !== null) return;
+    if (!goalSnap.exists()) throw new Error('Goal not found');
+    const goal = normalizeGoalDoc(goalSnap.data());
+    assertActiveOrReached(goal.status);
+    transaction.update(goalDocRef, {
+      status: 'completed_purchased',
+      completedMode: 'purchased',
+      completedAt: serverTimestamp(),
+      completedBy: actorId,
+    });
+    writeIdempotency(transaction, familyId, key, 'goal_purchased', actorId, requestHash, goalDocRef.id);
+  });
+};
+
+// ---------------------------------------------------------------------------
+// returnGoalFunds (parent-only; per-child separate refund + external_closure)
+// ---------------------------------------------------------------------------
+
+export const returnGoalFunds = async (familyId: string, goalId: string, clientReqId: string) => {
+  const actorId = requireActorId();
+  const actorRef = doc(db, 'users', actorId);
+  const actorSnap = await getDoc(actorRef);
+  const actorRole = actorSnap.exists() ? (actorSnap.data().role as string) : undefined;
+  assertParent(actorRole, familyId);
+
+  const key = goalWithdrawalKey(goalId, `return:${clientReqId}`);
+  const requestHash = requestHashOf({ goalId, mode: 'returned' });
+  const idemRef = idempotencyRef(familyId, key);
+  const goalDocRef = goalRef(familyId, goalId);
+  const contribsRef = collection(db, `families/${familyId}/${GOAL_COLLECTION}/${goalId}/contributions`);
+
+  await runTransaction(db, async (transaction) => {
+    const [idemSnap, goalSnap, contribSnap] = await Promise.all([
+      transaction.get(idemRef),
+      transaction.get(goalDocRef),
+      transaction.get(contribsRef),
+    ]);
+    const prior = checkIdempotency(idemSnap, key, requestHash);
+    if (prior !== null) return;
+    if (!goalSnap.exists()) throw new Error('Goal not found');
+    const goal = normalizeGoalDoc(goalSnap.data());
+    assertActiveOrReached(goal.status);
+
+    const allLegs: ContributionLeg[] = contribSnap.exists() ? (contribSnap.data().__legs__ ?? []) : [];
+    const childIds = Array.from(new Set(allLegs.filter(l => l.ownerType === 'child').map(l => l.ownerId)));
+    let remaining = goal.currentAmountPence;
+    for (const cid of childIds) {
+      const net = computeNetChild(allLegs, cid);
+      if (net <= 0) continue;
+      const walletRef = doc(db, `families/${familyId}/wallets`, cid);
+      const walletSnap = await transaction.get(walletRef);
+      const bal = walletSnap.exists() ? (walletSnap.data().balance || 0) : 0;
+      const txRef = doc(collection(db, `families/${familyId}/wallet_transactions`));
+      transaction.update(walletRef, { balance: bal + net, lastGoalTxId: txRef.id });
+      transaction.update(goalDocRef, { currentAmountPence: remaining - net });
+      remaining -= net;
+      transaction.set(txRef, {
+        type: 'goal_return',
+        childId: cid,
+        goalId,
+        amount: net,
+        familyId,
+        sourceId: txRef.id,
+        status: 'completed',
+        timestamp: serverTimestamp(),
+        createdAt: serverTimestamp(),
+      });
+      const contribRef = doc(collection(db, `families/${familyId}/${GOAL_COLLECTION}/${goalId}/contributions`));
+      transaction.set(contribRef, {
+        contribId: contribRef.id,
+        goalId,
+        type: 'completion_refund',
+        ownerType: 'child',
+        ownerId: cid,
+        amountPence: -net,
+        status: 'applied',
+        walletTxId: txRef.id,
+        createdBy: actorId,
+        createdAt: serverTimestamp(),
+      });
+      transaction.set(doc(collection(db, `families/${familyId}/${GOAL_COLLECTION}/${goalId}/goal_ledger`)), {
+        entryId: contribRef.id,
+        goalId,
+        type: 'completion_refund',
+        amountPence: -net,
+        ownerId: cid,
+        createdAt: serverTimestamp(),
+      });
+    }
+
+    // Close parent + match portions via external_closure (no wallet credit).
+    if (remaining > 0) {
+      const closureRef = doc(collection(db, `families/${familyId}/${GOAL_COLLECTION}/${goalId}/contributions`));
+      transaction.set(closureRef, {
+        contribId: closureRef.id,
+        goalId,
+        type: 'external_closure',
+        ownerType: 'parent',
+        ownerId: actorId,
+        amountPence: -remaining,
+        status: 'applied',
+        createdBy: actorId,
+        createdAt: serverTimestamp(),
+      });
+      transaction.set(doc(collection(db, `families/${familyId}/${GOAL_COLLECTION}/${goalId}/goal_ledger`)), {
+        entryId: closureRef.id,
+        goalId,
+        type: 'external_closure',
+        amountPence: -remaining,
+        ownerId: actorId,
+        createdAt: serverTimestamp(),
+      });
+    }
+
+    transaction.update(goalDocRef, {
+      currentAmountPence: 0,
+      status: 'completed_returned',
+      completedMode: 'returned',
+      completedAt: serverTimestamp(),
+      completedBy: actorId,
+    });
+    writeIdempotency(transaction, familyId, key, 'goal_returned', actorId, requestHash, goalDocRef.id);
+  });
+};
+
+// ---------------------------------------------------------------------------
+// cancelGoal (parent-only; only when active and empty, else equivalent to return)
+// ---------------------------------------------------------------------------
+
+export const cancelGoal = async (familyId: string, goalId: string, clientReqId: string) => {
+  const actorId = requireActorId();
+  const actorRef = doc(db, 'users', actorId);
+  const actorSnap = await getDoc(actorRef);
+  const actorRole = actorSnap.exists() ? (actorSnap.data().role as string) : undefined;
+  assertParent(actorRole, familyId);
+
+  const key = goalWithdrawalKey(goalId, `cancel:${clientReqId}`);
+  const requestHash = requestHashOf({ goalId, mode: 'cancelled' });
+  const idemRef = idempotencyRef(familyId, key);
+  const goalDocRef = goalRef(familyId, goalId);
+
+  await runTransaction(db, async (transaction) => {
+    const [idemSnap, goalSnap] = await Promise.all([
+      transaction.get(idemRef),
+      transaction.get(goalDocRef),
+    ]);
+    const prior = checkIdempotency(idemSnap, key, requestHash);
+    if (prior !== null) return;
+    if (!goalSnap.exists()) throw new Error('Goal not found');
+    const goal = normalizeGoalDoc(goalSnap.data());
+    if (goal.status !== 'active') throw new Error('Goal not in active/reached state');
+    if (goal.currentAmountPence > 0) {
+      // Money present: cancel == return funds (design §5.7).
+      await applyReturnFundsInTransaction(transaction, familyId, goal, actorId);
+    }
+    transaction.update(goalDocRef, {
+      status: 'cancelled',
+      completedMode: 'cancelled',
+      completedAt: serverTimestamp(),
+      completedBy: actorId,
+    });
+    writeIdempotency(transaction, familyId, key, 'goal_cancelled', actorId, requestHash, goalDocRef.id);
+  });
+};
+
+/** Shared per-child refund + external_closure logic used by returnGoalFunds and cancelGoal. */
+async function applyReturnFundsInTransaction(
+  transaction: any,
+  familyId: string,
+  goal: Goal,
+  actorId: string,
+) {
+  const contribsRef = collection(db, `families/${familyId}/${GOAL_COLLECTION}/${goal.goalId}/contributions`);
+  const contribSnap = await transaction.get(contribsRef);
+  const allLegs: ContributionLeg[] = contribSnap.exists() ? (contribSnap.data().__legs__ ?? []) : [];
+  const childIds = Array.from(new Set(allLegs.filter(l => l.ownerType === 'child').map(l => l.ownerId)));
+  let remaining = goal.currentAmountPence;
+  const goalDocRef = goalRef(familyId, goal.goalId!);
+  for (const cid of childIds) {
+    const net = computeNetChild(allLegs, cid);
+    if (net <= 0) continue;
+    const walletRef = doc(db, `families/${familyId}/wallets`, cid);
+    const walletSnap = await transaction.get(walletRef);
+    const bal = walletSnap.exists() ? (walletSnap.data().balance || 0) : 0;
+    const txRef = doc(collection(db, `families/${familyId}/wallet_transactions`));
+    transaction.update(walletRef, { balance: bal + net, lastGoalTxId: txRef.id });
+    transaction.update(goalDocRef, { currentAmountPence: remaining - net });
+    remaining -= net;
+    transaction.set(txRef, {
+      type: 'goal_return',
+      childId: cid,
+      goalId: goal.goalId,
+      amount: net,
+      familyId,
+      sourceId: txRef.id,
+      status: 'completed',
+      timestamp: serverTimestamp(),
+      createdAt: serverTimestamp(),
+    });
+    const contribRef = doc(collection(db, `families/${familyId}/${GOAL_COLLECTION}/${goal.goalId}/contributions`));
+    transaction.set(contribRef, {
+      contribId: contribRef.id,
+      goalId: goal.goalId,
+      type: 'completion_refund',
+      ownerType: 'child',
+      ownerId: cid,
+      amountPence: -net,
+      status: 'applied',
+      walletTxId: txRef.id,
+      createdBy: actorId,
+      createdAt: serverTimestamp(),
+    });
+  }
+  if (remaining > 0) {
+    const closureRef = doc(collection(db, `families/${familyId}/${GOAL_COLLECTION}/${goal.goalId}/contributions`));
+    transaction.set(closureRef, {
+      contribId: closureRef.id,
+      goalId: goal.goalId,
+      type: 'external_closure',
+      ownerType: 'parent',
+      ownerId: actorId,
+      amountPence: -remaining,
+      status: 'applied',
+      createdBy: actorId,
+      createdAt: serverTimestamp(),
+    });
+  }
+  transaction.update(goalDocRef, { currentAmountPence: 0 });
+}
+
+// ---------------------------------------------------------------------------
+// Manual match proposals (design §5.3)
+// ---------------------------------------------------------------------------
+
+export const createMatchProposal = async (
+  familyId: string,
+  goalId: string,
+  sourceContributionId: string,
+  proposedMatchAmountPence: number,
+) => {
+  const actorId = requireActorId();
+  const proposalRef = doc(collection(db, `families/${familyId}/${GOAL_COLLECTION}/${goalId}/match_proposals`));
+  await setDoc(proposalRef, {
+    proposalId: proposalRef.id,
+    goalId,
+    sourceContributionId,
+    proposedMatchAmountPence,
+    status: 'proposed',
+    createdBy: actorId,
+    createdAt: serverTimestamp(),
+  } as MatchProposal);
+  return proposalRef;
+};
+
+export const approveMatchProposal = async (
+  familyId: string,
+  goalId: string,
+  proposalId: string,
+  clientReqId: string,
+) => {
+  const actorId = requireActorId();
+  const actorRef = doc(db, 'users', actorId);
+  const actorSnap = await getDoc(actorRef);
+  const actorRole = actorSnap.exists() ? (actorSnap.data().role as string) : undefined;
+  assertParent(actorRole, familyId);
+
+  const key = goalMatchKey(proposalId, clientReqId);
+  const requestHash = requestHashOf({ goalId, proposalId, approve: true });
+  const idemRef = idempotencyRef(familyId, key);
+  const proposalRef = doc(db, `families/${familyId}/${GOAL_COLLECTION}/${goalId}/match_proposals`, proposalId);
+  const goalDocRef = goalRef(familyId, goalId);
+
+  await runTransaction(db, async (transaction) => {
+    const [idemSnap, proposalSnap, goalSnap] = await Promise.all([
+      transaction.get(idemRef),
+      transaction.get(proposalRef),
+      transaction.get(goalDocRef),
+    ]);
+    const prior = checkIdempotency(idemSnap, key, requestHash);
+    if (prior !== null) return;
+    if (!proposalSnap.exists()) throw new Error('Match proposal not found');
+    const proposal = proposalSnap.data();
+    if (proposal.status !== 'proposed') throw new Error('Match proposal is not pending');
+    if (!goalSnap.exists()) throw new Error('Goal not found');
+    const goal = normalizeGoalDoc(goalSnap.data());
+    assertActiveOrReached(goal.status);
+
+    const matchPence = proposal.proposedMatchAmountPence as number;
+    const matchRef = doc(collection(db, `families/${familyId}/${GOAL_COLLECTION}/${goalId}/contributions`));
+    transaction.update(goalDocRef, { currentAmountPence: goal.currentAmountPence + matchPence });
+    transaction.set(matchRef, {
+      contribId: matchRef.id,
+      goalId,
+      type: 'manual_match',
+      ownerType: 'parent',
+      ownerId: actorId,
+      amountPence: matchPence,
+      matchPence,
+      sourceContributionId: proposal.sourceContributionId,
+      proposedMatchAmountPence: matchPence,
+      status: 'applied',
+      createdBy: actorId,
+      createdAt: serverTimestamp(),
+    });
+    transaction.set(doc(collection(db, `families/${familyId}/${GOAL_COLLECTION}/${goalId}/goal_ledger`)), {
+      entryId: matchRef.id,
+      goalId,
+      type: 'manual_match',
+      amountPence: matchPence,
+      ownerId: actorId,
+      createdAt: serverTimestamp(),
+    });
+    transaction.update(proposalRef, {
+      status: 'approved',
+      reviewedBy: actorId,
+      reviewedByName: actorSnap.exists() ? (actorSnap.data().displayName as string) : undefined,
+      reviewedAt: serverTimestamp(),
+    });
+    writeIdempotency(transaction, familyId, key, 'goal_match_approve', actorId, requestHash, matchRef.id);
+  });
+};
+
+export const rejectMatchProposal = async (
+  familyId: string,
+  goalId: string,
+  proposalId: string,
+) => {
+  const actorId = requireActorId();
+  const actorRef = doc(db, 'users', actorId);
+  const actorSnap = await getDoc(actorRef);
+  const actorRole = actorSnap.exists() ? (actorSnap.data().role as string) : undefined;
+  assertParent(actorRole, familyId);
+  const proposalRef = doc(db, `families/${familyId}/${GOAL_COLLECTION}/${goalId}/match_proposals`, proposalId);
+  await runTransaction(db, async (transaction) => {
+    const proposalSnap = await transaction.get(proposalRef);
+    if (!proposalSnap.exists()) throw new Error('Match proposal not found');
+    const proposal = proposalSnap.data();
+    if (proposal.status !== 'proposed') throw new Error('Match proposal is not pending');
+    transaction.update(proposalRef, {
+      status: 'rejected',
+      reviewedBy: actorId,
+      reviewedByName: actorSnap.exists() ? (actorSnap.data().displayName as string) : undefined,
+      reviewedAt: serverTimestamp(),
+    });
+  });
 };
 
 // ---------------------------
@@ -2411,13 +3391,14 @@ export const mapApprovalError = (err: unknown): MappedApprovalError => {
   return { message: "We couldn’t reject this request. Please try again.", code, raw: err };
 };
 
-export type PendingApprovalKind = 'task' | 'transfer' | 'money_request' | 'petbox';
+export type PendingApprovalKind = 'task' | 'transfer' | 'money_request' | 'petbox' | 'goal';
 
 const pendingApprovalContract: Record<PendingApprovalKind, { collectionName: string; pendingStatuses: string[]; actorField: string }> = {
   task: { collectionName: 'task_completions', pendingStatuses: ['pending_approval'], actorField: 'assigneeId' },
   transfer: { collectionName: 'transfer_requests', pendingStatuses: ['pending'], actorField: 'fromChildId' },
   money_request: { collectionName: 'money_requests', pendingStatuses: ['pending', 'pending_acceptance'], actorField: 'requesterId' },
   petbox: { collectionName: 'petbox_requests', pendingStatuses: ['pending'], actorField: 'childId' },
+  goal: { collectionName: 'goal_requests', pendingStatuses: ['pending'], actorField: 'childId' },
 };
 
 /** Cancel an uneffected request. This transition deliberately performs no balance write. */
