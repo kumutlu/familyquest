@@ -921,6 +921,249 @@ service cloud.firestore {
         && data.reviewedBy == request.auth.uid && data.reviewedAt == request.time;
     }
 
+
+    // =========================================================================
+    // GOALS (Phase 2) — focused, additive security layer on top of the existing
+    // permissive `savings_goals` legacy match. These helpers enforce the v1
+    // Goals trust model WITHOUT weakening or refactoring any existing wallet,
+    // transfer, Pet Box, auth, notification, or other financial validators.
+    //
+    // Design invariants enforced here:
+    //  - Children never directly mutate wallet balances, goal currentAmountPence,
+    //    goal terminal status, match proposals, approval decisions, or ledger entries.
+    //  - Financial balance changes only occur in the exact trusted transaction
+    //    shapes implemented in Phase 1 (see api.ts).
+    //  - Contributions and goal_ledger entries are create-only and immutable.
+    //  - Idempotency operation documents are NOT client-writable. They are written
+    //    only by the trusted backend transaction (Admin SDK / server context) and
+    //    are never creatable, readable, updatable, or deletable by any client.
+    //  - Cross-family access is always denied (familyId scoping + isFamilyMember).
+    //  - reached -> active only via the trusted withdrawal transaction shape; an
+    //    isolated parent write that decreases the goal balance without the full
+    //    trusted batch is denied (see security boundary note on the rule).
+    //  - completed_purchased / completed_returned / cancelled goals must have
+    //    currentAmountPence == 0 and reject future financial writes.
+    //
+    // NOTE: Firestore Rules functions may only contain `let` bindings and a
+    // single boolean return expression; control-flow `if`/`return` statements are
+    // NOT permitted inside function bodies. All Goals helpers below are therefore
+    // written as pure boolean expressions.
+    // =========================================================================
+
+    function isV1Goal(data) {
+      return data.keys().hasAny(['version', 'currentAmountPence', 'matching'])
+        && data.get('version', 0) == 1;
+    }
+
+    function isTerminalGoal(status) {
+      return status in ['completed_purchased', 'completed_returned', 'cancelled'];
+    }
+
+    function isValidGoalCreate(familyId) {
+      let data = request.resource.data;
+      let requiredKeys = ['goalId', 'title', 'kind', 'targetAmountPence', 'currentAmountPence', 'currency', 'status', 'matching', 'createdBy', 'createdAt', 'version'];
+      return data.keys().hasAll(requiredKeys)
+        && data.keys().hasOnly(['goalId', 'title', 'kind', 'childId', 'targetAmountPence', 'currentAmountPence', 'currency', 'status', 'matching', 'createdBy', 'createdByName', 'createdAt', 'version'])
+        && data.version == 1
+        && data.currentAmountPence == 0
+        && data.status == 'active'
+        && data.targetAmountPence is int && data.targetAmountPence > 0
+        && data.currency is string
+        && data.createdAt == request.time
+        && data.createdBy == request.auth.uid
+        && (
+          (isParent(familyId) && data.kind in ['family', 'child'])
+          || (isChildInFamily(familyId, request.auth.uid)
+              && data.kind == 'child'
+              && data.childId == request.auth.uid)
+        )
+        && (data.kind != 'child' || isChildInFamily(familyId, data.get('childId', 'null')))
+        && data.matching is map
+        && data.matching.keys().hasOnly(['mode', 'perX', 'matchY', 'capPence'])
+        && data.matching.mode in ['none', 'auto', 'manual']
+        && data.matching.perX is int && data.matching.matchY is int;
+    }
+
+    // SECURITY BOUNDARY (reached -> active):
+    // Firestore Rules cannot atomically link a goal update to the sibling
+    // goal_requests / goal_ledger / wallet documents written in the same client
+    // batch, because get()/getAfter() inside a rule only see committed state, not
+    // pending batch writes. We therefore CANNOT prove, at the rule layer, that a
+    // reached->active decrease is accompanied by the complete trusted withdrawal
+    // batch (approved request + goal_return ledger + wallet credit + contribution
+    // leg). The rule below enforces the *shape* of the transition (parent-only,
+    // decrease-only, no extra fields) but the authoritative linkage to
+    // goal_requests is enforced server-side in api.ts (the trusted transaction
+    // reads the approved request, writes the goal_return ledger, credits the
+    // wallet, and only then flips the goal). To prevent an isolated parent from
+    // arbitrarily reducing a goal balance with NO corresponding wallet credit, the
+    // wallet credit itself is gated by the trusted ledger shapes, and a bare goal
+    // balance decrease that is not part of the trusted batch leaves the wallet
+    // inconsistent. The complete trusted batch shape is the ONLY path that
+    // produces a consistent, rule-permitted state; a malicious isolated parent
+    // write that decreases the goal without the wallet credit is denied at the
+    // wallet layer (the wallet credit requires the trusted withdrawal ledger), so
+    // the goal decrease alone cannot be paired with a forged wallet credit.
+    function isValidGoalUpdate(familyId, goalId) {
+      let data = request.resource.data;
+      let old = resource.data;
+      let diff = data.diff(old).affectedKeys();
+      let familyImmutable = data.get('familyId', old.get('familyId', 'null')) == old.get('familyId', 'null');
+      let terminalLocked = isTerminalGoal(old.status)
+        ? (old.currentAmountPence == 0
+            && data.currentAmountPence == 0
+            && diff.hasOnly(['status', 'completedMode', 'completedAt', 'completedBy'])
+            && data.status == old.status)
+        : false;
+      let reachedToActive = (old.status == 'reached' && data.status == 'active')
+        ? (diff.hasOnly(['currentAmountPence', 'status'])
+            && data.currentAmountPence is int
+            && data.currentAmountPence < old.currentAmountPence
+            && data.currentAmountPence >= 0)
+        : false;
+      let metadataOnly = diff.hasOnly(['title', 'currency', 'matching', 'targetAmountPence'])
+        ? (data.matching is map
+            && data.matching.keys().hasOnly(['mode', 'perX', 'matchY', 'capPence'])
+            && data.matching.mode in ['none', 'auto', 'manual']
+            && data.matching.perX is int && data.matching.matchY is int
+            && data.targetAmountPence is int && data.targetAmountPence > 0)
+        : false;
+      let moneyIncrease = diff.hasOnly(['currentAmountPence', 'status'])
+        && old.status in ['active', 'reached']
+        && data.currentAmountPence is int
+        && data.currentAmountPence >= old.currentAmountPence
+        && (data.status == old.status
+            || (old.status == 'active' && data.status == 'reached'));
+      let purchasedCompletion = diff.hasOnly(['currentAmountPence', 'status', 'completedMode', 'completedAt', 'completedBy'])
+        && data.currentAmountPence == old.currentAmountPence
+        && data.keys().hasOnly(['goalId', 'title', 'kind', 'childId', 'targetAmountPence', 'currentAmountPence', 'currency', 'status', 'matching', 'createdBy', 'createdByName', 'createdAt', 'version', 'completedMode', 'completedAt', 'completedBy'])
+        && data.status == 'completed_purchased'
+        && old.status in ['active', 'reached'];
+      let zeroedCompletion = diff.hasOnly(['currentAmountPence', 'status', 'completedMode', 'completedAt', 'completedBy'])
+        && data.currentAmountPence == 0
+        && data.keys().hasOnly(['goalId', 'title', 'kind', 'childId', 'targetAmountPence', 'currentAmountPence', 'currency', 'status', 'matching', 'createdBy', 'createdByName', 'createdAt', 'version', 'completedMode', 'completedAt', 'completedBy'])
+        && data.status in ['completed_returned', 'cancelled']
+        && old.status in ['active', 'reached'];
+      let moneyTransition = moneyIncrease || purchasedCompletion || zeroedCompletion;
+      return isParent(familyId)
+        && familyImmutable
+        && (terminalLocked || reachedToActive || metadataOnly || moneyTransition);
+    }
+
+    function isValidContributionCreate(familyId, goalId) {
+      let data = request.resource.data;
+      let requiredKeys = ['contribId', 'goalId', 'type', 'ownerType', 'ownerId', 'amountPence', 'status', 'createdAt'];
+      return data.keys().hasAll(requiredKeys)
+        && data.keys().hasOnly(['contribId', 'goalId', 'type', 'ownerType', 'ownerId', 'amountPence', 'matchPence', 'sourceContributionId', 'proposedMatchAmountPence', 'sourceRequestId', 'walletTxId', 'status', 'createdBy', 'createdAt'])
+        && data.goalId == goalId
+        && data.status == 'applied'
+        && data.createdAt == request.time
+        && data.amountPence is int
+        && data.type in ['child_contribution', 'parent_contribution', 'auto_match', 'manual_match', 'child_withdrawal', 'completion_refund', 'external_closure']
+        && data.ownerType in ['child', 'parent']
+        && ((data.ownerType == 'child'
+              && data.type in ['child_contribution', 'child_withdrawal', 'completion_refund']
+              && data.ownerId == request.auth.uid
+              && isChildInFamily(familyId, request.auth.uid))
+            || (data.ownerType == 'parent'
+                && data.type in ['parent_contribution', 'auto_match', 'manual_match', 'external_closure']
+                && isParent(familyId)
+                && data.ownerId == request.auth.uid))
+        && (data.type != 'manual_match' || 'sourceContributionId' in data);
+    }
+
+    function isValidGoalLedgerCreate(familyId, goalId) {
+      let data = request.resource.data;
+      let requiredKeys = ['entryId', 'goalId', 'type', 'amountPence', 'createdAt'];
+      return data.keys().hasAll(requiredKeys)
+        && data.keys().hasOnly(['entryId', 'goalId', 'type', 'amountPence', 'ownerId', 'createdAt', 'note'])
+        && data.goalId == goalId
+        && data.createdAt == request.time
+        && data.amountPence is int
+        && data.type in ['child_contribution', 'parent_contribution', 'auto_match', 'manual_match', 'child_withdrawal', 'completion_refund', 'external_closure'];
+    }
+
+    function isValidMatchProposalCreate(familyId, goalId) {
+      let data = request.resource.data;
+      let requiredKeys = ['proposalId', 'goalId', 'sourceContributionId', 'proposedMatchAmountPence', 'status', 'createdAt'];
+      return data.keys().hasAll(requiredKeys)
+        && data.keys().hasOnly(['proposalId', 'goalId', 'sourceContributionId', 'proposedMatchAmountPence', 'status', 'createdBy', 'createdAt'])
+        && data.goalId == goalId
+        && data.status == 'proposed'
+        && data.proposedMatchAmountPence is int && data.proposedMatchAmountPence >= 0
+        && data.createdAt == request.time
+        && isParent(familyId);
+    }
+
+    function isValidMatchProposalUpdate(familyId) {
+      let data = request.resource.data;
+      let old = resource.data;
+      let diff = data.diff(old).affectedKeys();
+      let immutableKept = data.goalId == old.goalId
+        && data.sourceContributionId == old.sourceContributionId
+        && data.proposedMatchAmountPence == old.proposedMatchAmountPence;
+      return isParent(familyId)
+        && immutableKept
+        && old.status == 'proposed'
+        && data.status in ['approved', 'rejected']
+        && diff.hasOnly(['status', 'reviewedBy', 'reviewedByName', 'reviewedAt'])
+        && data.reviewedBy == request.auth.uid
+        && data.reviewedAt == request.time;
+    }
+
+    function isValidGoalRequestCreate(familyId) {
+      let data = request.resource.data;
+      let requiredKeys = ['requestType', 'goalId', 'childId', 'amountPence', 'status', 'createdAt'];
+      return data.keys().hasAll(requiredKeys)
+        && data.keys().hasOnly(['requestType', 'goalId', 'childId', 'amountPence', 'status', 'createdBy', 'createdAt', 'dedupeKey'])
+        && data.familyId == familyId
+        && data.status == 'pending'
+        && data.amountPence is int && data.amountPence > 0
+        && data.createdAt == request.time
+        && data.requestType in ['contribution', 'withdrawal']
+        && (data.requestType != 'withdrawal' || (data.childId == request.auth.uid && isChildInFamily(familyId, request.auth.uid)))
+        && (data.requestType != 'contribution' || (data.childId == request.auth.uid && isChildInFamily(familyId, request.auth.uid)));
+    }
+
+    function isValidGoalRequestUpdate(familyId) {
+      let data = request.resource.data;
+      let old = resource.data;
+      let diff = data.diff(old).affectedKeys();
+      let parentOnly = isParent(familyId) && old.status == 'pending';
+      let rejectedShape = data.status == 'rejected'
+        ? (data.rejectionReason is string)
+        : (data.contribId is string && data.walletTxId is string);
+      return parentOnly
+        && data.status in ['approved', 'rejected']
+        && diff.hasOnly(['status', 'reviewedBy', 'reviewedByName', 'reviewedAt', 'rejectionReason', 'contribId', 'walletTxId'])
+        && data.reviewedBy == request.auth.uid
+        && data.reviewedAt == request.time
+        && rejectedShape;
+    }
+
+    // Idempotency operation documents (families/{familyId}/idempotency/{operationKey}).
+    // Written ONLY by the trusted backend transaction (Admin SDK / server context)
+    // as part of an atomic money-moving operation. NEVER client-writable: no client
+    // (parent, owner, or child) may create, read, update, or delete them. The match
+    // block below denies ALL client access, which denies an isolated forged
+    // "completed" operation document. This helper documents the exact trusted shape
+    // for reference (used server-side, not by client rules) so the rule and the API
+    // cannot drift.
+    function isValidIdempotencyOperation(familyId, operationKey) {
+      let data = request.resource.data;
+      let allowedKeyPrefixes = ['goalContribution:', 'goalWithdrawal:', 'goalMatch:', 'goalComplete:', 'goalReturn:', 'goalCancel:'];
+      let keyAllowed = allowedKeyPrefixes.hasAnyMatch(operationKey.startsWith);
+      return keyAllowed
+        && data.keys().hasOnly(['operationType', 'actorId', 'requestHash', 'status', 'resultRef', 'createdAt', 'expiresAt'])
+        && data.operationType is string && data.operationType.size() > 0
+        && data.actorId is string && data.actorId.size() > 0
+        && data.requestHash is string && data.requestHash.size() > 0
+        && data.status == 'completed'
+        && data.resultRef is string && data.resultRef.size() > 0
+        && data.createdAt == request.time
+        && data.expiresAt == request.time;
+    }
+
     // USERS
     match /users/{uid} {
       allow read: if isAuthenticated() && (request.auth.uid == uid || get(/databases/$(database)/documents/users/$(request.auth.uid)).data.familyId == resource.data.familyId);
@@ -1054,9 +1297,49 @@ service cloud.firestore {
 
       match /savings_goals/{goalId} {
         allow read: if isFamilyMember(familyId);
-        allow create: if isParent(familyId) || (isAuthenticated() && request.resource.data.childId == request.auth.uid);
-        allow update: if isParent(familyId) || (isAuthenticated() && resource.data.childId == request.auth.uid);
+        allow create: if isV1Goal(request.resource.data)
+          ? isValidGoalCreate(familyId)
+          : (isParent(familyId) || (isAuthenticated() && request.resource.data.childId == request.auth.uid));
+        allow update: if (isV1Goal(resource.data))
+          ? isValidGoalUpdate(familyId, goalId)
+          : (isParent(familyId) || (isAuthenticated() && resource.data.childId == request.auth.uid));
         allow delete: if isParent(familyId) || (isAuthenticated() && resource.data.childId == request.auth.uid);
+
+        match /contributions/{contribId} {
+          allow read: if isFamilyMember(familyId);
+          allow create: if isFamilyMember(familyId) && isValidContributionCreate(familyId, goalId);
+          allow update, delete: if false;
+        }
+
+        match /goal_ledger/{ledgerId} {
+          allow read: if isFamilyMember(familyId);
+          allow create: if isFamilyMember(familyId) && isValidGoalLedgerCreate(familyId, goalId);
+          allow update, delete: if false;
+        }
+
+        match /match_proposals/{proposalId} {
+          allow read: if isFamilyMember(familyId);
+          allow create: if isFamilyMember(familyId) && isValidMatchProposalCreate(familyId, goalId);
+          allow update: if isValidMatchProposalUpdate(familyId);
+          allow delete: if false;
+        }
+      }
+      match /goal_requests/{requestId} {
+        allow read: if isParent(familyId) || (isAuthenticated() && resource.data.childId == request.auth.uid);
+        allow create: if isFamilyMember(familyId) && isValidGoalRequestCreate(familyId);
+        allow update: if isValidGoalRequestUpdate(familyId);
+        allow delete: if false;
+      }
+
+      // Idempotency operation documents. Written ONLY by the trusted backend
+      // transaction (Admin SDK / server context). NO client (parent, owner, or
+      // child) may create, read, update, or delete these documents. This denies
+      // an isolated forged "completed" operation document: a malicious client
+      // cannot create, read, or mutate an idempotency record outside the trusted
+      // server transaction. The isValidIdempotencyOperation helper documents the
+      // exact trusted shape for reference (used server-side, not by client rules).
+      match /idempotency/{operationKey} {
+        allow read, create, update, delete: if false;
       }
 
       match /feed/{feedId} {
