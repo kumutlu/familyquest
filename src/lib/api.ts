@@ -1186,6 +1186,19 @@ export const deleteSavingsGoal = async (familyId: string, goalId: string) => {
 
 const GOAL_COLLECTION = 'savings_goals'; // reused as `goals` (design §13)
 
+/**
+ * v1 safety limit for multi-child refunds (design §5.7 / Phase 1 hardening).
+ *
+ * A single Return Funds / Cancel operation refunds each distinct child owner
+ * separately. This cap bounds the number of per-child refund legs that may be
+ * produced by one operation. It is a defensive guard against pathological or
+ * abusive goal documents (e.g. thousands of distinct child owners) that would
+ * otherwise fan out into an unbounded number of writes within a single
+ * transaction. The limit is validated in the READ phase, BEFORE any write is
+ * attempted, so exceeding it fails with zero financial writes.
+ */
+export const MAX_CHILD_REFUNDS_PER_GOAL = 20;
+
 function goalRef(familyId: string, goalId: string) {
   return doc(db, `families/${familyId}/${GOAL_COLLECTION}`, goalId);
 }
@@ -1195,24 +1208,35 @@ function idempotencyRef(familyId: string, key: string) {
 
 /**
  * Atomic idempotency guard (design §14). Reads the idempotency doc in the
- * transaction's read phase. Returns the prior resultRef if already completed
- * with the same requestHash, throws on a requestHash mismatch, and otherwise
- * returns null so the caller proceeds to write the operation doc + financials
- * in the same transaction. No `processing` state is ever written.
+ * transaction's read phase.
+ *
+ * Resolution rules (fail-closed):
+ *  - Missing operation document: proceed (return null).
+ *  - completed + same requestHash: return the original resultRef (idempotent replay).
+ *  - completed + different requestHash: reject (key conflict).
+ *  - Any existing record with an unexpected, malformed, or non-completed status:
+ *    fail closed. We NEVER treat an existing incomplete record as absent, because
+ *    a record that is present but not `completed` is an ambiguous/unsafe state
+ *    (e.g. a partial write, a future `processing` state, or a malformed doc) and
+ *    must not be silently overwritten or re-run.
  */
 function checkIdempotency(
   idemSnap: { exists: () => boolean; data: () => any },
-  _key: string,
+  key: string,
   requestHash: string,
 ): string | null {
   if (!idemSnap.exists()) return null;
   const rec = idemSnap.data();
+  // A record must be a well-formed object with a recognised status.
+  if (!rec || typeof rec !== 'object' || typeof rec.status !== 'string') {
+    throw new Error(`Idempotency record for key "${key}" is malformed; refusing to proceed`);
+  }
   if (rec.status === 'completed') {
     if (rec.requestHash === requestHash) return rec.resultRef as string;
     throw new Error('Idempotency key conflict: a different request was already recorded under this key');
   }
-  // Any non-completed record is treated as absent (a failed tx never persists one).
-  return null;
+  // Any non-completed / unexpected status fails closed.
+  throw new Error(`Idempotency record for key "${key}" has unexpected status "${rec.status}"; refusing to proceed`);
 }
 
 function writeIdempotency(
@@ -1831,13 +1855,21 @@ export const returnGoalFunds = async (familyId: string, goalId: string, clientRe
 
     const allLegs: ContributionLeg[] = contribSnap.exists() ? (contribSnap.data().__legs__ ?? []) : [];
     const childIds = Array.from(new Set(allLegs.filter(l => l.ownerType === 'child').map(l => l.ownerId)));
+    // v1 safety limit: bound the number of per-child refund legs before writing.
+    if (childIds.length > MAX_CHILD_REFUNDS_PER_GOAL) {
+      throw new Error(`Refund would affect ${childIds.length} child wallets; exceeds safety limit of ${MAX_CHILD_REFUNDS_PER_GOAL}`);
+    }
     let remaining = goal.currentAmountPence;
     for (const cid of childIds) {
       const net = computeNetChild(allLegs, cid);
       if (net <= 0) continue;
       const walletRef = doc(db, `families/${familyId}/wallets`, cid);
       const walletSnap = await transaction.get(walletRef);
-      const bal = walletSnap.exists() ? (walletSnap.data().balance || 0) : 0;
+      // A missing child wallet must fail the whole operation closed (atomic
+      // rollback): we must never credit a non-existent wallet or leave the goal
+      // partially refunded.
+      if (!walletSnap.exists()) throw new Error(`Wallet not found for child ${cid}`);
+      const bal = walletSnap.data().balance || 0;
       const txRef = doc(collection(db, `families/${familyId}/wallet_transactions`));
       transaction.update(walletRef, { balance: bal + net, lastGoalTxId: txRef.id });
       transaction.update(goalDocRef, { currentAmountPence: remaining - net });
@@ -1962,6 +1994,10 @@ async function applyReturnFundsInTransaction(
   const contribSnap = await transaction.get(contribsRef);
   const allLegs: ContributionLeg[] = contribSnap.exists() ? (contribSnap.data().__legs__ ?? []) : [];
   const childIds = Array.from(new Set(allLegs.filter(l => l.ownerType === 'child').map(l => l.ownerId)));
+  // v1 safety limit: bound the number of per-child refund legs before writing.
+  if (childIds.length > MAX_CHILD_REFUNDS_PER_GOAL) {
+    throw new Error(`Refund would affect ${childIds.length} child wallets; exceeds safety limit of ${MAX_CHILD_REFUNDS_PER_GOAL}`);
+  }
   let remaining = goal.currentAmountPence;
   const goalDocRef = goalRef(familyId, goal.goalId!);
   for (const cid of childIds) {
@@ -1969,7 +2005,11 @@ async function applyReturnFundsInTransaction(
     if (net <= 0) continue;
     const walletRef = doc(db, `families/${familyId}/wallets`, cid);
     const walletSnap = await transaction.get(walletRef);
-    const bal = walletSnap.exists() ? (walletSnap.data().balance || 0) : 0;
+    // A missing child wallet must fail the whole operation closed (atomic
+    // rollback): we must never credit a non-existent wallet or leave the goal
+    // partially refunded.
+    if (!walletSnap.exists()) throw new Error(`Wallet not found for child ${cid}`);
+    const bal = walletSnap.data().balance || 0;
     const txRef = doc(collection(db, `families/${familyId}/wallet_transactions`));
     transaction.update(walletRef, { balance: bal + net, lastGoalTxId: txRef.id });
     transaction.update(goalDocRef, { currentAmountPence: remaining - net });

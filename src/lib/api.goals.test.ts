@@ -210,7 +210,22 @@ describe('Goals — manual match proposal approval', () => {
     expect(updateCall(tx, GOAL_PATH).currentAmountPence).toBe(350)
   })
 
-  it('re-approval is idempotent (no second match)', async () => {
+  it('approves a manual match proposal exactly once (credits exactly once)', async () => {
+    const tx = transactionWith({
+      'users/parent-1': { familyId: 'family-1', role: 'parent', displayName: 'P' },
+      [GOAL_PATH]: { goalId: 'goal-1', title: 'Bike', kind: 'child', childId: 'child-1', targetAmountPence: 2000, currentAmountPence: 250, currency: 'GBP', status: 'active', matching: { mode: 'manual', perX: 100, matchY: 50 }, version: 1 },
+      'families/family-1/savings_goals/goal-1/match_proposals/prop-1': { proposalId: 'prop-1', goalId: 'goal-1', sourceContributionId: 'c1', proposedMatchAmountPence: 100, status: 'proposed' },
+      [CONTRIB_PATH]: withLegs([]),
+    })
+    await approveMatchProposal('family-1', 'goal-1', 'prop-1', 'r1')
+    // Exactly one manual_match credit is written on first approval.
+    const matchLegs = setCallsWhere(tx, (d) => d?.type === 'manual_match')
+    expect(matchLegs.length).toBe(1)
+    expect(matchLegs[0].amountPence).toBe(100)
+    expect(updateCall(tx, GOAL_PATH).currentAmountPence).toBe(350)
+  })
+
+  it('concurrent/double approval of one manual match proposal credits exactly once', async () => {
     const idemPath = 'families/family-1/idempotency/goalMatch:prop-1:r1'
     const tx = transactionWith({
       'users/parent-1': { familyId: 'family-1', role: 'parent', displayName: 'P' },
@@ -220,8 +235,10 @@ describe('Goals — manual match proposal approval', () => {
       [idemPath]: { operationType: 'goal_match_approve', actorId: 'parent-1', requestHash: requestHashOf({ goalId: 'goal-1', proposalId: 'prop-1', approve: true }), status: 'completed', resultRef: 'x' },
     })
     await approveMatchProposal('family-1', 'goal-1', 'prop-1', 'r1')
-    // No new manual_match written on idempotent replay.
+    // No new manual_match written on idempotent replay (concurrent double approval).
     expect(setCallsWhere(tx, (d) => d?.type === 'manual_match').length).toBe(0)
+    expect(tx.update).not.toHaveBeenCalled()
+    expect(tx.set).not.toHaveBeenCalled()
   })
 
   it('rejectMatchProposal leaves the child contribution unchanged', async () => {
@@ -272,6 +289,33 @@ describe('Goals — withdrawal approval', () => {
     expect(updateCall(tx, WALLET_C1).balance).toBe(500)
     expect(updateCall(tx, GOAL_PATH).currentAmountPence).toBe(1500)
   })
+
+  it('approves a withdrawal exactly once (credits exactly once)', async () => {
+    const tx = transactionWith(goalWithChildContrib(2000, [
+      { type: 'child_contribution', ownerType: 'child', ownerId: 'child-1', amountPence: 2000, status: 'applied' },
+    ]))
+    await approveGoalWithdrawal('family-1', 'req-1', 'r1')
+    // Exactly one wallet credit + one goal update on first approval.
+    expect(updateCall(tx, WALLET_C1).balance).toBe(500)
+    expect(updateCall(tx, GOAL_PATH).currentAmountPence).toBe(1500)
+    const withdrawLegs = setCallsWhere(tx, (d) => d?.type === 'child_withdrawal')
+    expect(withdrawLegs.length).toBe(1)
+  })
+
+  it('concurrent/double approval of one withdrawal credits exactly once (idempotent replay)', async () => {
+    const idemPath = 'families/family-1/idempotency/goalWithdrawal:req:req-1:r1'
+    const hash = requestHashOf({ requestId: 'req-1', approve: true })
+    const tx = transactionWith({
+      ...goalWithChildContrib(2000, [
+        { type: 'child_contribution', ownerType: 'child', ownerId: 'child-1', amountPence: 2000, status: 'applied' },
+      ]),
+      [idemPath]: { operationType: 'goal_withdrawal_approve', actorId: 'parent-1', requestHash: hash, status: 'completed', resultRef: 'x' },
+    })
+    await approveGoalWithdrawal('family-1', 'req-1', 'r1')
+    // No wallet/goal/ledger writes on idempotent replay (concurrent double approval).
+    expect(tx.update).not.toHaveBeenCalled()
+    expect(tx.set).not.toHaveBeenCalled()
+  })
 })
 
 describe('Goals — returnGoalFunds (per-child separate refund + external_closure)', () => {
@@ -298,6 +342,45 @@ describe('Goals — returnGoalFunds (per-child separate refund + external_closur
     expect(closures[0].amountPence).toBe(-500)
     expect(updateCall(tx, GOAL_PATH).currentAmountPence).toBe(0)
     expect(updateCall(tx, GOAL_PATH).status).toBe('completed_returned')
+  })
+
+  it('missing wallet during multi-child return fails closed (no idempotency record written)', async () => {
+    const tx = transactionWith({
+      'users/parent-1': { familyId: 'family-1', role: 'parent', displayName: 'P' },
+      [GOAL_PATH]: { goalId: 'goal-1', title: 'Trip', kind: 'family', targetAmountPence: 5000, currentAmountPence: 1500, currency: 'GBP', status: 'active', matching: { mode: 'none', perX: 0, matchY: 0 }, version: 1 },
+      [WALLET_C1]: { balance: 0 },
+      // child-2 wallet document intentionally missing -> operation must fail.
+      [CONTRIB_PATH]: withLegs([
+        { type: 'child_contribution', ownerType: 'child', ownerId: 'child-1', amountPence: 800, status: 'applied' },
+        { type: 'child_contribution', ownerType: 'child', ownerId: 'child-2', amountPence: 700, status: 'applied' },
+      ]),
+    })
+    await expect(returnGoalFunds('family-1', 'goal-1', 'r1')).rejects.toThrow(/Wallet not found/)
+    // The operation did not complete: no idempotency operation document was
+    // written (in a real Firestore transaction the partial wallet writes are
+    // rolled back atomically on the thrown error).
+    const idemWrites = tx.set.mock.calls.filter((c: any[]) => c[0]?.path?.includes('/idempotency/'))
+    expect(idemWrites.length).toBe(0)
+    // The goal was not marked completed_returned.
+    const goalUpdate = tx.update.mock.calls.find((c: any[]) => c[0]?.path === GOAL_PATH)?.[1]
+    expect(goalUpdate?.status).not.toBe('completed_returned')
+  })
+
+  it('refund-child limit is enforced with zero writes', async () => {
+    // Build 21 distinct child owners, exceeding MAX_CHILD_REFUNDS_PER_GOAL (20).
+    const legs: any[] = []
+    for (let i = 1; i <= 21; i++) {
+      legs.push({ type: 'child_contribution', ownerType: 'child', ownerId: `child-${i}`, amountPence: 10, status: 'applied' })
+    }
+    const tx = transactionWith({
+      'users/parent-1': { familyId: 'family-1', role: 'parent', displayName: 'P' },
+      [GOAL_PATH]: { goalId: 'goal-1', title: 'Trip', kind: 'family', targetAmountPence: 5000, currentAmountPence: 210, currency: 'GBP', status: 'active', matching: { mode: 'none', perX: 0, matchY: 0 }, version: 1 },
+      [CONTRIB_PATH]: withLegs(legs),
+    })
+    await expect(returnGoalFunds('family-1', 'goal-1', 'r1')).rejects.toThrow(/safety limit/i)
+    // Limit validated before the write stage: zero financial writes.
+    expect(tx.update).not.toHaveBeenCalled()
+    expect(tx.set).not.toHaveBeenCalled()
   })
 })
 
@@ -366,5 +449,43 @@ describe('Goals — atomic idempotency', () => {
       .rejects.toThrow(/Insufficient funds/)
     const idemWrites = tx.set.mock.calls.filter((c: any[]) => c[0]?.path?.includes('/idempotency/'))
     expect(idemWrites.length).toBe(0)
+  })
+
+  it('malformed existing idempotency record fails closed', async () => {
+    const idemPath = 'families/family-1/idempotency/goalContribution:goal-1:r1'
+    const tx = transactionWith({
+      ...baseDocs(),
+      // status is a number, not a string -> malformed record
+      [idemPath]: { operationType: 'goal_contribution', actorId: 'child-1', requestHash: 'abc', status: 123 },
+    })
+    await expect(contributeToGoal('family-1', 'goal-1', 'child-1', 500, { clientReqId: 'r1' }))
+      .rejects.toThrow(/malformed/i)
+    expect(tx.update).not.toHaveBeenCalled()
+    expect(tx.set).not.toHaveBeenCalled()
+  })
+
+  it('non-completed existing idempotency record fails closed', async () => {
+    const idemPath = 'families/family-1/idempotency/goalContribution:goal-1:r1'
+    const tx = transactionWith({
+      ...baseDocs(),
+      [idemPath]: { operationType: 'goal_contribution', actorId: 'child-1', requestHash: requestHashOf({ goalId: 'goal-1', childId: 'child-1', amountPence: 500, approvalRequired: false }), status: 'processing' },
+    })
+    await expect(contributeToGoal('family-1', 'goal-1', 'child-1', 500, { clientReqId: 'r1' }))
+      .rejects.toThrow(/unexpected status/i)
+    expect(tx.update).not.toHaveBeenCalled()
+    expect(tx.set).not.toHaveBeenCalled()
+  })
+
+  it('contribution racing with goal completion cannot modify a terminal goal', async () => {
+    // Goal already in a terminal state (completed_returned). A late contribution
+    // must be rejected and must not write anything.
+    const tx = transactionWith({
+      ...baseDocs(),
+      [GOAL_PATH]: { goalId: 'goal-1', title: 'Bike', kind: 'child', childId: 'child-1', targetAmountPence: 2000, currentAmountPence: 0, currency: 'GBP', status: 'completed_returned', matching: { mode: 'none', perX: 0, matchY: 0 }, version: 1 },
+    })
+    await expect(contributeToGoal('family-1', 'goal-1', 'child-1', 500, { clientReqId: 'r1' }))
+      .rejects.toThrow(/not in active\/reached/i)
+    expect(tx.update).not.toHaveBeenCalled()
+    expect(tx.set).not.toHaveBeenCalled()
   })
 })
