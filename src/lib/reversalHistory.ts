@@ -1,4 +1,4 @@
-import type { EffectSnapshot } from './reversalContracts';
+import { assertTraceableSource, type EffectSnapshot } from './reversalContracts';
 import type { ReversalSourceKind } from './reversalApi';
 
 export type HistoryActionType = 'cancel' | 'reverse';
@@ -21,6 +21,7 @@ export interface HistoryAction {
   targets: HistoryActionTarget[];
   reversal?: any;
   source: any;
+  isLegacy?: boolean;
 }
 
 interface NormalizeHistoryActionInput {
@@ -65,6 +66,7 @@ const summaryFor = (sourceKind: ReversalSourceKind, source: any, names: Record<s
   if (sourceKind === 'transfer_request') return `${names[source.fromChildId] || 'Child'} → ${names[source.toChildId] || 'Child'}`;
   if (sourceKind === 'money_request') return `${names[source.requesterId] || 'Child'} requested money from ${names[source.requestedFromId] || 'family'}`;
   if (sourceKind === 'petbox_request') return `${names[source.childId] || 'Child'} donated to ${names[source.fundId] || 'fund'}`;
+  if (sourceKind === 'profile_update') return `${names[source.childId] || 'Child'} requested a profile update`;
   return source.type?.replaceAll('_', ' ') || 'Recorded action';
 };
 
@@ -77,6 +79,7 @@ const canonicalEntityTypes: Record<ReversalSourceKind, readonly string[]> = {
   transfer_request: ['transfer_request'],
   money_request: ['money_request'],
   petbox_request: ['petbox_donation'],
+  profile_update: [],
 };
 
 function targetsFor(snapshot: EffectSnapshot | undefined, balances: NormalizeHistoryActionInput['balances'], names: Record<string, string>): HistoryActionTarget[] {
@@ -95,13 +98,24 @@ function targetsFor(snapshot: EffectSnapshot | undefined, balances: NormalizeHis
 
 export function normalizeHistoryAction(input: NormalizeHistoryActionInput): HistoryAction {
   const { sourceKind, source, actor, reversals, balances, names } = input;
-  const snapshot = source.effectSnapshot as EffectSnapshot | undefined;
+  let snapshot = source.effectSnapshot as EffectSnapshot | undefined;
+  let isLegacy = false;
+  if (!snapshot) {
+    try {
+      const synthesized = assertTraceableSource(source, sourceKind, source.id);
+      snapshot = synthesized.effectSnapshot;
+    } catch {
+      if (sourceKind === 'petbox_request' && source.status === 'approved') {
+        isLegacy = true;
+      }
+    }
+  }
   const storedReversal = findReversal(reversals, sourceKind, source.id);
   const reversal = storedReversal ? { ...storedReversal, occurredAt: storedReversal.completedAt ?? storedReversal.createdAt } : undefined;
   const targets = targetsFor(snapshot, balances, names);
   const refund = targets.some(target => target.originalDelta < 0);
   const normalized: HistoryAction = {
-    sourceKind, sourceId: source.id, source, targets, reversal,
+    sourceKind, sourceId: source.id, source, targets, reversal, isLegacy,
     summary: summaryFor(sourceKind, source, names), actionLabel: refund ? 'Refund' : 'Undo',
   };
   if (!actor || !['parent', 'owner'].includes(actor.role)) return normalized;

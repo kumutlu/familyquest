@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useStore } from '../../store/useStore';
 import { createTask, updateTask } from '../../lib/api';
 import { TASK_TEMPLATES } from '../../lib/templates';
@@ -19,6 +19,7 @@ export function TaskFormModal({ isOpen, onClose, taskToEdit }: TaskFormModalProp
   });
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const submittingRef = useRef(false);
 
   useEffect(() => {
     if (isOpen) {
@@ -28,6 +29,7 @@ export function TaskFormModal({ isOpen, onClose, taskToEdit }: TaskFormModalProp
         setFormData({ title: '', description: '', pointsReward: 10, type: 'daily', customDays: [], requiresApproval: true, assigneeId: '', isActive: true });
       }
       setError(null);
+      submittingRef.current = false;
     }
   }, [isOpen, taskToEdit]);
 
@@ -35,8 +37,15 @@ export function TaskFormModal({ isOpen, onClose, taskToEdit }: TaskFormModalProp
 
   const handleFormSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!currentUser) return;
+    // Prevent double submission: a synchronous ref guard that survives
+    // rapid repeated clicks before React re-renders the disabled button.
+    if (submittingRef.current) return;
+    if (!currentUser) {
+      setError('You must be signed in to save a task.');
+      return;
+    }
 
+    submittingRef.current = true;
     setIsSubmitting(true);
     setError(null);
     try {
@@ -56,11 +65,14 @@ export function TaskFormModal({ isOpen, onClose, taskToEdit }: TaskFormModalProp
       } else {
         await createTask(currentUser.familyId, dataToSave);
       }
+      // Only close/reset after the atomic write batch has committed.
       onClose();
     } catch (e: any) {
-      setError(e.message);
+      setError(e?.message || 'Failed to save task. Please try again.');
+    } finally {
+      submittingRef.current = false;
+      setIsSubmitting(false);
     }
-    setIsSubmitting(false);
   };
 
   return (

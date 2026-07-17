@@ -1,22 +1,59 @@
 import {
   collection, doc, setDoc, updateDoc,
-  addDoc, runTransaction, query, where, getDocs, getDoc, serverTimestamp, deleteDoc, writeBatch
+  addDoc, runTransaction, query, where, orderBy, getDocs, getDoc, serverTimestamp, deleteDoc, writeBatch
 } from 'firebase/firestore';
 import {
   createUserWithEmailAndPassword,
   signInWithEmailAndPassword,
   signInWithPopup,
-  signOut as firebaseSignOut
+  signOut as firebaseSignOut,
+  sendPasswordResetEmail as firebaseSendPasswordResetEmail
 } from 'firebase/auth';
 import { db, auth, googleProvider } from './firebase';
+import { FAMILYQUEST_BUILD } from '../buildInfo';
 import { calculateBehaviourEffect, DEFAULT_DEBT_LIMIT_PENCE } from './behaviour';
 import type { BehaviourEventInput } from './behaviour';
 import { reviewerFields, transferApprovalRequestUpdate } from './approvalContracts';
 import { effectSnapshot, manualWalletEffectSnapshot } from './reversalContracts';
+import {
+  loadNotificationRecipientsInTransaction,
+  applyNotificationWrites,
+  getApproverIds,
+  getChildIds,
+} from './notifications';
+import {
+  taskSubmittedKey,
+  taskApprovedKey,
+  taskRejectedKey,
+  rewardRequestedKey,
+  behaviourKey,
+  walletDepositKey,
+  walletWithdrawalKey,
+  petboxContributionKey,
+  petboxExpenseKey,
+  transferRequestedKey,
+  transferApprovedSenderKey,
+  transferApprovedRecipientKey,
+  transferRejectedKey,
+  profileUpdateRequestedKey,
+  profileUpdateApprovedKey,
+  profileUpdateRejectedKey,
+} from './notificationDedupe';
+import { useStore } from '../store/useStore';
+import { unregisterCurrentDevice } from './pushNotifications';
+import { getAvatarById, getAvatarCost } from '../config/avatarCatalog';
 
 // ---------------------------
 // 0. AUTHENTICATION
 // ---------------------------
+
+// Strict authenticated-user guard. Returns the caller UID or fails clearly
+// BEFORE any write is attempted. Never returns undefined.
+function requireActorId(): string {
+  const uid = auth.currentUser?.uid;
+  if (!uid) throw new Error('Authentication required');
+  return uid;
+}
 
 export const signUp = async (email: string, pass: string, name: string) => {
   const cred = await createUserWithEmailAndPassword(auth, email, pass);
@@ -64,15 +101,103 @@ export const signInWithGoogle = async () => {
   return cred.user;
 };
 
-export const signOut = () => firebaseSignOut(auth);
+export const signOut = async () => {
+  // Best-effort: stop the current device from receiving future pushes.
+  // Never blocks sign-out if push cleanup fails.
+  try {
+    const state = useStore.getState();
+    const user = state.currentUser;
+    const familyId = state.familyData?.id ?? user?.familyId;
+    if (user?.id && familyId) {
+      await unregisterCurrentDevice(familyId, user.id);
+    }
+  } catch {
+    // ignore — sign-out must always proceed
+  }
+  return firebaseSignOut(auth);
+};
+
+// ---------------------------
+// 0.1 ACCOUNT SECURITY HELPERS
+// ---------------------------
+
+export interface AuthProviderInfo {
+  /** True when the account has an email/password credential and can use password reset. */
+  isEmailPassword: boolean;
+  /** True when the account authenticates via a federated provider (Google, etc.). */
+  isOAuth: boolean;
+  /** Raw Firebase provider ids attached to the current user. */
+  providers: string[];
+  /** Human-readable primary provider label, e.g. "Google". */
+  primaryProviderLabel: string | null;
+}
+
+const PROVIDER_LABELS: Record<string, string> = {
+  'google.com': 'Google',
+  'facebook.com': 'Facebook',
+  'github.com': 'GitHub',
+  'apple.com': 'Apple',
+  'twitter.com': 'Twitter',
+  'microsoft.com': 'Microsoft',
+  password: 'Email & Password',
+};
+
+/**
+ * Inspects the signed-in user's auth providers so the UI can decide which
+ * security actions are genuinely supported (password reset vs. OAuth message).
+ */
+export function getAuthProviderInfo(): AuthProviderInfo {
+  const providers = (auth.currentUser?.providerData ?? []).map(p => p.providerId);
+  const isEmailPassword = providers.includes('password');
+  const isOAuth = providers.some(p => p !== 'password');
+  const primaryProviderLabel =
+    providers.map(p => PROVIDER_LABELS[p] ?? p).find(Boolean) ?? null;
+  return { isEmailPassword, isOAuth, providers, primaryProviderLabel };
+}
+
+/**
+ * Sends a Firebase password-reset email. Preferred over in-app password update
+ * because the app does not yet implement reauthentication.
+ */
+export const sendPasswordReset = async (email: string): Promise<void> => {
+  await firebaseSendPasswordResetEmail(auth, email);
+};
+
+/**
+ * Maps raw Firebase Auth errors to friendly, non-technical messages.
+ * Never surfaces raw error codes or server messages to the user.
+ */
+export function mapAuthErrorMessage(error: unknown): string {
+  const code = (error as { code?: string })?.code ?? '';
+  switch (code) {
+    case 'auth/invalid-email':
+      return 'That email address does not look valid. Please check and try again.';
+    case 'auth/user-not-found':
+    case 'auth/wrong-password':
+    case 'auth/invalid-credential':
+      return 'We could not find an account with those details.';
+    case 'auth/too-many-requests':
+      return 'Too many attempts. Please wait a moment and try again.';
+    case 'auth/network-request-failed':
+      return 'A network error occurred. Please check your connection and try again.';
+    case 'auth/requires-recent-login':
+      return 'For security, please sign out and sign back in before doing this.';
+    case 'auth/operation-not-allowed':
+      return 'This sign-in method is not enabled. Please contact support.';
+    case 'auth/missing-continue-uri':
+    case 'auth/invalid-continue-uri':
+      return 'We could not complete that request. Please try again.';
+    default:
+      return 'Something went wrong. Please try again.';
+  }
+}
 
 // ---------------------------
 // 1. FAMILIES & USERS
 // ---------------------------
 
-export const createFamilyAndParent = async (uid: string, name: string, familyName: string) => {
+export const createFamilyAndParent = async (_uid: string, _name: string, familyName: string) => {
   const familyRef = doc(collection(db, 'families'));
-  const userRef = doc(db, 'users', uid);
   const inviteCode = Math.random().toString(36).substring(2, 8).toUpperCase();
 
   await runTransaction(db, async (transaction) => {
@@ -82,19 +207,12 @@ export const createFamilyAndParent = async (uid: string, name: string, familyNam
       createdAt: serverTimestamp()
     });
 
-    transaction.set(doc(db, `families/${familyRef.id}/wallets`, uid), { balance: 0 });
-    transaction.set(userRef, {
-      uid,
-      familyId: familyRef.id,
-      role: 'owner',
-      displayName: name,
-      avatarUrl: `https://api.dicebear.com/7.x/avataaars/svg?seed=${name}`,
-      rewardPoints: 0,
-      lifetimeXP: 0,
-      currentStreak: 0,
-      longestStreak: 0,
-      lastActiveDate: serverTimestamp()
-    }, { merge: true });
+    // NOTE: The owner (parent) user doc is already created by signUp()/signInWithGoogle()
+    // with role 'parent' and NO familyId. Re-writing it here with merge:true would be an
+    // UPDATE (the doc already exists), which the users update rule denies because it touches
+    // protected fields (role, rewardPoints, ...). That denial produced the
+    // "Missing or insufficient permissions" error on Step 1. The owner has no wallet doc
+    // (only children do), so the only write needed is the family doc itself.
   });
 
   return { familyId: familyRef.id, inviteCode };
@@ -209,7 +327,6 @@ export const createManagedMember = async (familyId: string, role: 'parent' | 'ch
     lifetimeXP: 0,
     currentStreak: 0,
     longestStreak: 0,
-    walletBalance: 0,
     lastActiveDate: serverTimestamp()
   });
   await batch.commit();
@@ -262,37 +379,75 @@ export const submitClaimRequest = async (uid: string, displayName: string, claim
 // ---------------------------
 
 export const createTask = async (familyId: string, taskData: any) => {
-  const docRef = await addDoc(collection(db, `families/${familyId}/tasks`), {
+  const actorId = requireActorId();
+  const taskRef = doc(collection(db, `families/${familyId}/tasks`));
+  const feedRef = doc(collection(db, `families/${familyId}/feed`));
+  const batch = writeBatch(db);
+  batch.set(taskRef, {
     ...taskData,
     isActive: true,
     createdAt: serverTimestamp()
   });
-  await addDoc(collection(db, `families/${familyId}/feed`), {
-    actorId: 'system',
+  batch.set(feedRef, {
+    actorId,
     text: `New task added: ${taskData.title}`,
     timestamp: serverTimestamp()
   });
-  return docRef;
+  console.log('[createTask]', {
+    buildId: FAMILYQUEST_BUILD.sha,
+    actorId,
+    taskPath: `families/${familyId}/tasks`,
+    feedPath: `families/${familyId}/feed`,
+    mode: 'writeBatch'
+  });
+  try {
+    await batch.commit();
+    console.log('[createTask] batch commit success');
+  } catch (error) {
+    console.error('[createTask] batch commit failed', error);
+    throw error;
+  }
+  return taskRef;
 };
 
 export const completeTask = async (familyId: string, taskId: string, userId: string, requiresApproval: boolean) => {
   const actorId = auth.currentUser?.uid;
   if (!actorId) throw new Error('Not authenticated');
   if (actorId !== userId) throw new Error('Cannot complete a task for another user');
+  const approverIds = await getApproverIds(familyId);
   await runTransaction(db, async (transaction) => {
-    // 1. Evaluate user streak
+    // ---------------------------------------------------------------------
+    // PHASE A — ALL READS (no writes may occur before this phase completes)
+    // ---------------------------------------------------------------------
     const userRef = doc(db, 'users', userId);
+    const completionRef = doc(collection(db, `families/${familyId}/task_completions`));
     const userDoc = await transaction.get(userRef);
     if (!userDoc.exists()) throw new Error("User not found");
 
-    // READ task if auto-awarding
-    let taskSnap: any = null;
-    if (!requiresApproval) {
-      const taskRef = doc(db, `families/${familyId}/tasks`, taskId);
-      taskSnap = await transaction.get(taskRef);
-    }
+    // READ task (needed for auto-award and for the approval notification body)
+    const taskRef = doc(db, `families/${familyId}/tasks`, taskId);
+    const taskSnap = await transaction.get(taskRef);
 
     const userData = userDoc.data();
+
+    // Resolve the notification dedupe read up-front so the write phase never
+    // performs a transaction.get (Firestore requires reads-before-writes).
+    let notifPlan = { ref: null, data: null } as Awaited<
+      ReturnType<typeof loadNotificationRecipientsInTransaction>
+    >;
+    if (requiresApproval && approverIds.length > 0) {
+      notifPlan = await loadNotificationRecipientsInTransaction(transaction, familyId, {
+        type: 'task_submitted',
+        actorId: userId,
+        recipientIds: approverIds,
+        title: `${userData.displayName || 'A child'} completed a task`,
+        body: `Review “${taskSnap.exists() ? taskSnap.data().title : ''}”`,
+        entityType: 'task_completion',
+        entityId: completionRef.id,
+        actionUrl: '/',
+        dedupeKey: taskSubmittedKey(completionRef.id),
+      });
+    }
 
     const lastActiveTimestamp = userData.lastActiveDate;
     const lastActive = lastActiveTimestamp ? lastActiveTimestamp.toDate() : new Date(0);
@@ -324,7 +479,6 @@ export const completeTask = async (familyId: string, taskId: string, userId: str
     let finalLifetimeXP = userData.lifetimeXP || 0;
 
     // 2. Mark task completion
-    const completionRef = doc(collection(db, `families/${familyId}/task_completions`));
     const status = requiresApproval ? 'pending_approval' : 'approved';
     transaction.set(completionRef, {
       taskId,
@@ -357,6 +511,9 @@ export const completeTask = async (familyId: string, taskId: string, userId: str
       rewardPoints: finalRewardPoints,
       lifetimeXP: finalLifetimeXP
     });
+
+    // Write stage performs ZERO reads.
+    applyNotificationWrites(transaction, notifPlan);
   });
 };
 
@@ -382,6 +539,19 @@ export const approveTaskCompletion = async (familyId: string, completionId: stri
     if (!reviewerDoc.exists() || reviewerDoc.data().familyId !== familyId || !['parent', 'owner'].includes(reviewerDoc.data().role)) throw new Error('Reviewer is not a parent or owner in this family');
     const points = taskDoc.data().pointsReward || 0;
 
+    // Resolve the notification dedupe read up-front (reads-before-writes).
+    const notifPlan = await loadNotificationRecipientsInTransaction(transaction, familyId, {
+      type: 'task_approved',
+      actorId: currentUserUid,
+      recipientIds: [completion.assigneeId],
+      title: 'Task approved',
+      body: `“${taskDoc.data().title}” was approved. +${points} points`,
+      entityType: 'task_completion',
+      entityId: completionId,
+      actionUrl: '/tasks',
+      dedupeKey: taskApprovedKey(completionId),
+    });
+
     transaction.update(completionRef, {
       status: 'approved',
       parentComment: comment || null,
@@ -406,6 +576,9 @@ export const approveTaskCompletion = async (familyId: string, completionId: stri
       text: `Task approved: ${taskDoc.data().title} (+${points} pts)${comment ? ` - "${comment}"` : ''}`,
       timestamp: serverTimestamp()
     });
+
+    // Write stage performs ZERO reads.
+    applyNotificationWrites(transaction, notifPlan);
   });
 };
 
@@ -426,6 +599,19 @@ export const rejectTaskCompletion = async (familyId: string, completionId: strin
     if (!taskDoc.exists()) throw new Error("Task not found");
     if (!reviewerDoc.exists() || reviewerDoc.data().familyId !== familyId || !['parent', 'owner'].includes(reviewerDoc.data().role)) throw new Error('Reviewer is not a parent or owner in this family');
 
+    // Resolve the notification dedupe read up-front (reads-before-writes).
+    const notifPlan = await loadNotificationRecipientsInTransaction(transaction, familyId, {
+      type: 'task_rejected',
+      actorId: currentUserUid,
+      recipientIds: [completion.assigneeId],
+      title: 'Task needs attention',
+      body: `“${taskDoc.data().title}” needs attention: “${comment}”`,
+      entityType: 'task_completion',
+      entityId: completionId,
+      actionUrl: '/tasks',
+      dedupeKey: taskRejectedKey(completionId),
+    });
+
     transaction.update(completionRef, {
       status: 'rejected',
       parentComment: comment,
@@ -440,6 +626,9 @@ export const rejectTaskCompletion = async (familyId: string, completionId: strin
       text: `Task rejected: ${taskDoc.data().title} - "${comment}"`,
       timestamp: serverTimestamp()
     });
+
+    // Write stage performs ZERO reads.
+    applyNotificationWrites(transaction, notifPlan);
   });
 };
 
@@ -483,6 +672,19 @@ export async function addBehaviourEvent(
     if (creator.role !== 'parent' && creator.role !== 'owner') {
       throw new Error('Only a parent or owner can create behaviour events.');
     }
+
+    // Resolve the notification dedupe read up-front (reads-before-writes).
+    const notifPlan = await loadNotificationRecipientsInTransaction(transaction, familyId, {
+      type: input.type === 'positive' ? 'behaviour_positive' : 'behaviour_negative',
+      actorId,
+      recipientIds: [childId],
+      title: input.type === 'positive' ? 'Positive behaviour' : (input.type === 'financial' ? 'Behaviour noted' : 'Behaviour needs attention'),
+      body: input.reason.trim(),
+      entityType: 'behaviour_event',
+      entityId: eventRef.id,
+      actionUrl: `/family/${childId}`,
+      dedupeKey: behaviourKey(eventRef.id),
+    });
 
     const effect = calculateBehaviourEffect(
       input,
@@ -548,6 +750,9 @@ export async function addBehaviourEvent(
       createdAt: feedTimestamp,
       timestamp: feedTimestamp,
     });
+
+    // Write stage performs ZERO reads.
+    applyNotificationWrites(transaction, notifPlan);
   });
 
   return eventRef.id;
@@ -585,6 +790,7 @@ export const createChallenge = async (familyId: string, title: string, targetXP:
 };
 
 export const claimChallenge = async (familyId: string, challengeId: string, rewardPoints: number, childrenIds: string[], challengeTitle: string) => {
+  const actorId = requireActorId();
   const challengeRef = doc(db, `families/${familyId}/challenges`, challengeId);
 
   await runTransaction(db, async (transaction) => {
@@ -609,7 +815,7 @@ export const claimChallenge = async (familyId: string, challengeId: string, rewa
 
     const feedRef = doc(collection(db, `families/${familyId}/feed`));
     transaction.set(feedRef, {
-      actorId: 'system',
+      actorId,
       text: `Family Challenge Completed: ${challengeTitle}! Everyone got +${rewardPoints} pts!`,
       timestamp: serverTimestamp()
     });
@@ -628,6 +834,7 @@ export const redeemReward = async (familyId: string, userId: string, rewardId: s
   const userRef = doc(db, 'users', userId);
   const redemptionRef = doc(collection(db, `families/${familyId}/redemptions`));
   const feedRef = doc(collection(db, `families/${familyId}/feed`));
+  const approverIds = await getApproverIds(familyId);
 
   await runTransaction(db, async (transaction) => {
     const [rewardDoc, userDoc] = await Promise.all([
@@ -642,6 +849,24 @@ export const redeemReward = async (familyId: string, userId: string, rewardId: s
 
     if (currentPoints < cost) {
       throw new Error("Not enough points");
+    }
+
+    // Resolve the notification dedupe read up-front (reads-before-writes).
+    let notifPlan = { ref: null, data: null } as Awaited<
+      ReturnType<typeof loadNotificationRecipientsInTransaction>
+    >;
+    if (approverIds.length > 0) {
+      notifPlan = await loadNotificationRecipientsInTransaction(transaction, familyId, {
+        type: 'reward_requested',
+        actorId: userId,
+        recipientIds: approverIds,
+        title: 'Reward approval needed',
+        body: `${userDoc.data().displayName || 'A child'} requested “${rewardDoc.data().title}”`,
+        entityType: 'redemption',
+        entityId: redemptionRef.id,
+        actionUrl: '/',
+        dedupeKey: rewardRequestedKey(redemptionRef.id),
+      });
     }
     transaction.update(userRef, {
       rewardPoints: currentPoints - cost,
@@ -666,6 +891,9 @@ export const redeemReward = async (familyId: string, userId: string, rewardId: s
       text: `Redeemed reward: ${rewardDoc.data().title}`,
       timestamp: serverTimestamp()
     });
+
+    // Write stage performs ZERO reads.
+    applyNotificationWrites(transaction, notifPlan);
   });
 };
 
@@ -705,16 +933,34 @@ export const deleteTask = async (familyId: string, taskId: string) => {
 };
 
 export const createReward = async (familyId: string, data: any) => {
-  const docRef = await addDoc(collection(db, `families/${familyId}/rewards`), {
+  const actorId = requireActorId();
+  const rewardRef = doc(collection(db, `families/${familyId}/rewards`));
+  const feedRef = doc(collection(db, `families/${familyId}/feed`));
+  const batch = writeBatch(db);
+  batch.set(rewardRef, {
     ...data,
     createdAt: serverTimestamp()
   });
-  await addDoc(collection(db, `families/${familyId}/feed`), {
-    actorId: 'system',
+  batch.set(feedRef, {
+    actorId,
     text: `New reward added: ${data.title}`,
     timestamp: serverTimestamp()
   });
-  return docRef;
+  console.log('[createReward]', {
+    buildId: FAMILYQUEST_BUILD.sha,
+    actorId,
+    rewardPath: `families/${familyId}/rewards`,
+    feedPath: `families/${familyId}/feed`,
+    mode: 'writeBatch'
+  });
+  try {
+    await batch.commit();
+    console.log('[createReward] batch commit success');
+  } catch (error) {
+    console.error('[createReward] batch commit failed', error);
+    throw error;
+  }
+  return rewardRef;
 };
 
 export const updateReward = async (familyId: string, rewardId: string, data: any) => {
@@ -729,11 +975,16 @@ export const deleteReward = async (familyId: string, rewardId: string) => {
 // 6. WALLET & SAVINGS
 // ---------------------------
 
+// Ensures a canonical wallet document exists for a child and returns its balance.
+// NOTE: This no longer seeds from the legacy users.walletBalance profile field.
+// One-off legacy seeding now lives in scripts/migrate-wallet-balances.ts. If a
+// wallet is somehow missing at runtime (e.g. a deposit to a child without one),
+// we provision a zero-balance document rather than reading the legacy profile.
 export const ensureWalletDocument = async (
   transaction: any,
   familyId: string,
   childId: string,
-  userSnapshot: any,
+  _userSnapshot?: any,
   walletSnapshot?: any
 ): Promise<number> => {
   const walletRef = doc(db, `families/${familyId}/wallets`, childId);
@@ -743,15 +994,13 @@ export const ensureWalletDocument = async (
     return walletDoc.data().balance || 0;
   }
 
-  const userData = userSnapshot.data();
-  const legacyBalance = Number.isInteger(userData.walletBalance) ? userData.walletBalance : 0;
   transaction.set(walletRef, {
-    balance: legacyBalance,
+    balance: 0,
     createdAt: serverTimestamp(),
-    migratedFromLegacy: true
+    migratedFromLegacy: false,
   });
 
-  return legacyBalance;
+  return 0;
 };
 
 export const depositToWallet = async (familyId: string, childId: string, _parentId: string, amount: number, note: string) => {
@@ -765,6 +1014,19 @@ export const depositToWallet = async (familyId: string, childId: string, _parent
     const userDoc = await transaction.get(userRef);
     if (!userDoc.exists()) throw new Error("User not found");
     const currentBalance = await ensureWalletDocument(transaction, familyId, childId, userDoc);
+
+    // Resolve the notification dedupe read up-front (reads-before-writes).
+    const notifPlan = await loadNotificationRecipientsInTransaction(transaction, familyId, {
+      type: 'wallet_deposit',
+      actorId,
+      recipientIds: [childId],
+      title: 'Money added to your wallet',
+      body: `£${(amount / 100).toFixed(2)} was added to your wallet${note ? `: ${note}` : ''}`,
+      entityType: 'wallet_transaction',
+      entityId: txRef.id,
+      actionUrl: '/wallet',
+      dedupeKey: walletDepositKey(txRef.id),
+    });
 
     transaction.set(childWalletRef, { balance: currentBalance + amount, lastManualTxId: txRef.id }, { merge: true });
 
@@ -781,6 +1043,9 @@ export const depositToWallet = async (familyId: string, childId: string, _parent
       timestamp: serverTimestamp(),
       createdAt: serverTimestamp()
     });
+
+    // Write stage performs ZERO reads.
+    applyNotificationWrites(transaction, notifPlan);
   });
 };
 
@@ -798,6 +1063,19 @@ export const withdrawFromWallet = async (familyId: string, childId: string, _par
 
     if (currentBalance < amount) throw new Error("Insufficient funds");
 
+    // Resolve the notification dedupe read up-front (reads-before-writes).
+    const notifPlan = await loadNotificationRecipientsInTransaction(transaction, familyId, {
+      type: 'wallet_withdrawal',
+      actorId,
+      recipientIds: [childId],
+      title: 'Money taken from your wallet',
+      body: `£${(amount / 100).toFixed(2)} was taken from your wallet${note ? `: ${note}` : ''}`,
+      entityType: 'wallet_transaction',
+      entityId: txRef.id,
+      actionUrl: '/wallet',
+      dedupeKey: walletWithdrawalKey(txRef.id),
+    });
+
     transaction.set(childWalletRef, { balance: currentBalance - amount, lastManualTxId: txRef.id }, { merge: true });
 
     transaction.set(txRef, {
@@ -813,6 +1091,9 @@ export const withdrawFromWallet = async (familyId: string, childId: string, _par
       timestamp: serverTimestamp(),
       createdAt: serverTimestamp()
     });
+
+    // Write stage performs ZERO reads.
+    applyNotificationWrites(transaction, notifPlan);
   });
 };
 
@@ -895,16 +1176,41 @@ export const addFundExpense = async (
 ) => {
   const actorId = auth.currentUser?.uid;
   if (!actorId) throw new Error('Not authenticated');
+  // The canonical fund balance may legitimately go negative: parents pay real
+  // pet expenses from their own money, and children later contribute to cover
+  // the deficit. We therefore only validate the amount itself — never the
+  // resulting balance.
+  if (!Number.isInteger(expenseData.amount) || expenseData.amount <= 0) {
+    throw new Error('Amount must be a positive integer number of pence');
+  }
   const fundRef = doc(db, `families/${familyId}/funds`, fundId);
   const txRef = doc(collection(db, `families/${familyId}/fund_transactions`));
   const feedRef = doc(collection(db, `families/${familyId}/feed`));
+  const childIds = await getChildIds(familyId);
 
   await runTransaction(db, async (transaction) => {
     const fundDoc = await transaction.get(fundRef);
     if (!fundDoc.exists()) throw new Error("Fund not found");
 
     const currentBalance = fundDoc.data().balance || 0;
-    if (currentBalance < expenseData.amount) throw new Error('Insufficient fund balance');
+
+    // Resolve the notification dedupe read up-front (reads-before-writes).
+    let notifPlan = { ref: null, data: null } as Awaited<
+      ReturnType<typeof loadNotificationRecipientsInTransaction>
+    >;
+    if (childIds.length > 0) {
+      notifPlan = await loadNotificationRecipientsInTransaction(transaction, familyId, {
+        type: 'petbox_expense',
+        actorId,
+        recipientIds: childIds,
+        title: 'Pet Box update',
+        body: `£${(expenseData.amount/100).toFixed(2)} expense added to ${expenseData.fundName}`,
+        entityType: 'fund_transaction',
+        entityId: txRef.id,
+        actionUrl: '/pet-box',
+        dedupeKey: petboxExpenseKey(txRef.id),
+      });
+    }
 
     transaction.update(fundRef, { balance: currentBalance - expenseData.amount, lastFundTxId: txRef.id });
     transaction.set(txRef, {
@@ -927,6 +1233,9 @@ export const addFundExpense = async (
       text: `Added £${(expenseData.amount/100).toFixed(2)} expense for ${expenseData.fundName}: ${expenseData.description}`,
       timestamp: serverTimestamp()
     });
+
+    // Write stage performs ZERO reads.
+    applyNotificationWrites(transaction, notifPlan);
   });
 };
 
@@ -943,8 +1252,27 @@ export const contributeToFund = async (
   if (actorId !== userId) throw new Error('Cannot create a contribution for another user');
   const reqRef = doc(collection(db, `families/${familyId}/petbox_requests`));
   const feedRef = doc(collection(db, `families/${familyId}/feed`));
+  const approverIds = await getApproverIds(familyId);
 
   await runTransaction(db, async (transaction) => {
+    // Resolve the notification dedupe read up-front (reads-before-writes).
+    let notifPlan = { ref: null, data: null } as Awaited<
+      ReturnType<typeof loadNotificationRecipientsInTransaction>
+    >;
+    if (approverIds.length > 0) {
+      notifPlan = await loadNotificationRecipientsInTransaction(transaction, familyId, {
+        type: 'petbox_contribution',
+        actorId,
+        recipientIds: approverIds,
+        title: 'Pet Box contribution',
+        body: `${userName} wants to donate £${(amount/100).toFixed(2)} to ${fundName}`,
+        entityType: 'petbox_request',
+        entityId: reqRef.id,
+        actionUrl: '/pet-box',
+        dedupeKey: petboxContributionKey(reqRef.id),
+      });
+    }
+
     transaction.set(reqRef, {
       familyId,
       fundId,
@@ -961,6 +1289,9 @@ export const contributeToFund = async (
       text: `${userName} wants to donate £${(amount/100).toFixed(2)} to ${fundName}. Awaiting parent approval.`,
       timestamp: serverTimestamp()
     });
+
+    // Write stage performs ZERO reads.
+    applyNotificationWrites(transaction, notifPlan);
   });
 };
 
@@ -1086,8 +1417,392 @@ export const rejectPetBoxDonation = async (familyId: string, requestId: string, 
 };
 
 // ---------------------------
+// 8b. PROFILE UPDATE REQUESTS (child -> parent approval)
+// ---------------------------
+//
+// Children cannot edit their own display name / avatar directly. They submit a
+// `profile_update_requests` document that flows through the SAME Approval Center
+// workflow used by tasks, transfers, money and pet box requests. Owner/Parent
+// edits apply immediately elsewhere (EditMemberModal / ProfileEditorModal for
+// non-child roles); only children route through this request + approval path.
+
+export const PROFILE_DISPLAY_NAME_MAX = 40;
+
+/**
+ * Validates raw profile-edit input. Returns trimmed, safe values or throws a
+ * friendly, user-facing error (never a raw Firebase message). Shared by the
+ * client editor and the submit API so validation is identical in both places.
+ *
+ * Avatars are now selected from the curated catalog by `avatarId`. A raw URL is
+ * only accepted as a *legacy fallback* (an existing profile image); children
+ * can never submit an arbitrary new URL. `avatarId` must reference an active
+ * catalog entry that the child is allowed to use (starter or already owned).
+ */
+export function validateProfileUpdateInput(
+  displayName: string,
+  avatarId: string | null,
+  opts?: { ownedAvatarIds?: string[]; legacyAvatarUrl?: string | null },
+): { displayName: string; avatarId: string | null; legacyAvatarUrl: string | null } {
+  const name = (displayName ?? '').trim();
+  if (!name) throw new Error('Display name cannot be empty.');
+  if (name.length > PROFILE_DISPLAY_NAME_MAX) {
+    throw new Error(`Display name must be ${PROFILE_DISPLAY_NAME_MAX} characters or fewer.`);
+  }
+
+  const id = (avatarId ?? '').trim();
+  const legacy = opts?.legacyAvatarUrl ?? null;
+
+  if (id) {
+    const def = getAvatarById(id);
+    if (!def || !def.isActive) {
+      throw new Error('This avatar is no longer available. Please choose another.');
+    }
+    // Starter avatars are free for everyone. Premium avatars must be owned.
+    if (def.unlockType === 'points' && !(opts?.ownedAvatarIds ?? []).includes(id)) {
+      throw new Error('This avatar has not been unlocked yet.');
+    }
+    return { displayName: name, avatarId: id, legacyAvatarUrl: null };
+  }
+
+  // No catalog id: keep the legacy URL if one exists (never accept a new raw URL).
+  return { displayName: name, avatarId: null, legacyAvatarUrl: legacy };
+}
+
+/** True when the value is a valid http(s) URL. Empty string is allowed (keeps current avatar). */
+export function isValidAvatarUrl(value: string): boolean {
+  if (!value) return true;
+  try {
+    const url = new URL(value);
+    return url.protocol === 'http:' || url.protocol === 'https:';
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Child submits a profile update request. The child's `users/{childId}` document
+ * is NOT modified here — only the request is created. A pre-flight `getDocs`
+ * guard plus the disabled editor in the UI prevent multiple active requests;
+ * the transaction then creates the request atomically alongside the feed entry
+ * and the parent/owner notification.
+ */
+export const submitProfileUpdateRequest = async (
+  familyId: string,
+  requestedDisplayName: string,
+  requestedAvatarId: string | null,
+  opts?: { ownedAvatarIds?: string[]; legacyAvatarUrl?: string | null },
+) => {
+  const currentUserUid = requireActorId();
+  const { displayName, avatarId, legacyAvatarUrl } = validateProfileUpdateInput(
+    requestedDisplayName,
+    requestedAvatarId,
+    { ownedAvatarIds: opts?.ownedAvatarIds, legacyAvatarUrl: opts?.legacyAvatarUrl },
+  );
+
+  const userRef = doc(db, 'users', currentUserUid);
+  const reqRef = doc(collection(db, `families/${familyId}/profile_update_requests`));
+  const approverIds = await getApproverIds(familyId);
+
+  // Pre-flight guard: block a second active request before opening the transaction.
+  // Reuses the same (childId, createdAt) index as the child bootstrap query.
+  const pendingQuery = query(
+    collection(db, `families/${familyId}/profile_update_requests`),
+    where('childId', '==', currentUserUid),
+    orderBy('createdAt', 'desc'),
+  );
+  const existing = await getDocs(pendingQuery);
+  if (existing.docs.some(d => d.data().status === 'pending')) {
+    throw new Error('You already have a profile change waiting for approval.');
+  }
+
+  await runTransaction(db, async (transaction) => {
+    // ---------------------------------------------------------------------
+    // PHASE A — ALL READS (no writes may occur before this phase completes)
+    // ---------------------------------------------------------------------
+    const userDoc = await transaction.get(userRef);
+    if (!userDoc.exists()) throw new Error('User not found');
+    const userData = userDoc.data();
+
+    // Resolve the notification dedupe read up-front so the write phase never
+    // performs a transaction.get (Firestore requires reads-before-writes).
+    let notificationPlan = { ref: null, data: null } as Awaited<
+      ReturnType<typeof loadNotificationRecipientsInTransaction>
+    >;
+    if (approverIds.length > 0) {
+      notificationPlan = await loadNotificationRecipientsInTransaction(transaction, familyId, {
+        type: 'profile_update_requested',
+        actorId: currentUserUid,
+        recipientIds: approverIds,
+        title: 'Profile update approval needed',
+        body: `${userData.displayName} wants to update their profile.`,
+        entityType: 'profile_update_request',
+        entityId: reqRef.id,
+        dedupeKey: profileUpdateRequestedKey(reqRef.id),
+      });
+    }
+
+    // ---------------------------------------------------------------------
+    // PHASE B — PURE VALIDATION (no reads, no writes)
+    // ---------------------------------------------------------------------
+    if (userData.role !== 'child') throw new Error('Only children can request profile updates.');
+    if (userData.familyId !== familyId) throw new Error('Your family membership could not be verified.');
+
+    // Re-validate the requested avatar against the live profile to prevent forging.
+    const currentAvatarId = userData.avatarId || null;
+    const currentLegacyUrl = userData.avatarUrl || '';
+    if (avatarId && avatarId !== currentAvatarId) {
+      const def = getAvatarById(avatarId);
+      if (!def) throw new Error('This avatar is no longer available. Please choose another.');
+      if (def.unlockType === 'points' && !(opts?.ownedAvatarIds ?? []).includes(avatarId)) {
+        throw new Error('This avatar has not been unlocked yet.');
+      }
+    }
+
+    const requestedImage = avatarId
+      ? (getAvatarById(avatarId)?.imageUrl ?? '')
+      : (legacyAvatarUrl || currentLegacyUrl || '');
+
+    // ---------------------------------------------------------------------
+    // PHASE C — WRITES ONLY (no transaction.get may occur from here on)
+    // ---------------------------------------------------------------------
+    transaction.set(reqRef, {
+      id: reqRef.id,
+      familyId,
+      childId: currentUserUid,
+      childName: userData.displayName,
+      requestedDisplayName: displayName,
+      requestedAvatarId: avatarId,
+      requestedAvatar: requestedImage,
+      currentDisplayName: userData.displayName,
+      currentAvatarId: currentAvatarId,
+      currentAvatar: currentLegacyUrl,
+      status: 'pending',
+      createdAt: serverTimestamp(),
+      actorId: currentUserUid,
+    });
+
+    const feedRef = doc(collection(db, `families/${familyId}/feed`));
+    transaction.set(feedRef, {
+      actorId: currentUserUid,
+      type: 'custom',
+      text: `${userData.displayName} requested a profile update. Awaiting parent approval.`,
+      visibleTo: [currentUserUid, ...approverIds],
+      timestamp: serverTimestamp(),
+    });
+
+    // Write stage performs ZERO reads.
+    applyNotificationWrites(transaction, notificationPlan);
+  });
+};
+
+/**
+ * Securely unlock a premium avatar for the authenticated child.
+ *
+ * Atomic transaction guarantees (see Firestore rules for the write-side mirror):
+ *  1. The caller is the child (actorId == auth.uid).
+ *  2. The avatar exists and is active.
+ *  3. It is a premium (points) avatar.
+ *  4. The child does not already own it (duplicate unlock denied).
+ *  5. The cost is taken from the AUTHORITATIVE catalog, never the client.
+ *  6. The exact point cost is deducted from `rewardPoints`.
+ *  7. An immutable unlock record is written under
+ *     families/{familyId}/users/{userId}/avatar_unlocks/{avatarId}.
+ *  8. No partial writes — either the unlock + deduction both commit or neither.
+ *
+ * Selecting the avatar afterwards is a separate, free action (profile update).
+ */
+export const unlockAvatar = async (familyId: string, avatarId: string): Promise<number> => {
+  const currentUserUid = requireActorId();
+  const def = getAvatarById(avatarId);
+  if (!def || !def.isActive) throw new Error('This avatar is no longer available.');
+  if (def.unlockType !== 'points') throw new Error('This avatar is already free.');
+
+  // Authoritative cost — the client-supplied value is ignored entirely.
+  const cost = getAvatarCost(avatarId);
+  if (cost == null) throw new Error('This avatar is no longer available.');
+
+  const userRef = doc(db, 'users', currentUserUid);
+  const unlockRef = doc(db, `families/${familyId}/users/${currentUserUid}/avatar_unlocks/${avatarId}`);
+
+  await runTransaction(db, async (transaction) => {
+    const userDoc = await transaction.get(userRef);
+    if (!userDoc.exists()) throw new Error('User not found');
+    const userData = userDoc.data();
+    if (userData.role !== 'child') throw new Error('Only children can unlock avatars.');
+    if (userData.familyId !== familyId) throw new Error('Your family membership could not be verified.');
+
+    const unlockDoc = await transaction.get(unlockRef);
+    if (unlockDoc.exists()) throw new Error('You already own this avatar.');
+
+    const currentPoints = userData.rewardPoints || 0;
+    if (currentPoints < cost) {
+      throw new Error(`You need ${cost - currentPoints} more points to unlock this avatar.`);
+    }
+
+    transaction.update(userRef, { rewardPoints: currentPoints - cost });
+    transaction.set(unlockRef, {
+      avatarId,
+      userId: currentUserUid,
+      familyId,
+      unlockedAt: serverTimestamp(),
+      costPoints: cost,
+      source: 'points',
+      actorId: currentUserUid,
+    });
+  });
+
+  return cost;
+};
+
+/**
+ * Parent/Owner approves a profile update request. Atomic: validates the request,
+ * re-validates the child still belongs to the family, updates the profile, marks
+ * the request approved, writes a feed entry and notifies the child. No partial
+ * writes — every step shares the same transaction.
+ */
+export const approveProfileUpdateRequest = async (familyId: string, requestId: string) => {
+  const reqRef = doc(db, `families/${familyId}/profile_update_requests`, requestId);
+  const currentUserUid = requireActorId();
+
+  await runTransaction(db, async (transaction) => {
+    const reqDoc = await transaction.get(reqRef);
+    if (!reqDoc.exists()) throw new Error('Request not found');
+    const reqData = reqDoc.data();
+    if (reqData.status !== 'pending') throw new Error('Request is not pending approval');
+
+    const userRef = doc(db, 'users', reqData.childId);
+    const userDoc = await transaction.get(userRef);
+    if (!userDoc.exists()) throw new Error('Child not found');
+    const userData = userDoc.data();
+    if (userData.familyId !== familyId || userData.role !== 'child') {
+      throw new Error('Child is no longer in this family');
+    }
+
+    const reviewerRef = doc(db, 'users', currentUserUid);
+    const reviewerDoc = await transaction.get(reviewerRef);
+    const reviewerName = reviewerDoc.exists() ? (reviewerDoc.data().displayName || 'Parent') : 'Parent';
+
+    // Resolve the notification dedupe read up-front (reads-before-writes).
+    const notifPlan = await loadNotificationRecipientsInTransaction(transaction, familyId, {
+      type: 'profile_update_approved',
+      actorId: currentUserUid,
+      recipientIds: [reqData.childId],
+      title: 'Profile update approved',
+      body: `Your profile update was approved by ${reviewerName}.`,
+      entityType: 'profile_update_request',
+      entityId: requestId,
+      dedupeKey: profileUpdateApprovedKey(requestId),
+    });
+
+    // Apply the requested profile change. Resolve the avatar image from the
+    // catalog when an avatarId was requested; otherwise keep the current one.
+    const nextAvatarId = reqData.requestedAvatarId || userData.avatarId || null;
+    const nextAvatar = reqData.requestedAvatar
+      ? reqData.requestedAvatar
+      : (userData.avatarUrl || '');
+    const updateFields: Record<string, unknown> = { displayName: reqData.requestedDisplayName };
+    if (nextAvatarId) updateFields.avatarId = nextAvatarId;
+    if (nextAvatar) updateFields.avatarUrl = nextAvatar;
+    transaction.update(userRef, updateFields);
+
+    transaction.update(reqRef, {
+      status: 'approved',
+      reviewedAt: serverTimestamp(),
+      reviewedBy: currentUserUid,
+      reviewedByName: reviewerName,
+      effectSnapshot: effectSnapshot({
+        entityType: 'profile_update',
+        familyId,
+        actorId: currentUserUid,
+        childId: reqData.childId,
+        sourceRequestId: requestId,
+      }),
+    });
+
+    const feedRef = doc(collection(db, `families/${familyId}/feed`));
+    transaction.set(feedRef, {
+      actorId: currentUserUid,
+      type: 'custom',
+      text: `Profile update for ${reqData.childName} was approved.`,
+      visibleTo: [reqData.childId, currentUserUid],
+      timestamp: serverTimestamp(),
+    });
+
+    // Write stage performs ZERO reads.
+    applyNotificationWrites(transaction, notifPlan);
+  });
+};
+
+/**
+ * Parent/Owner rejects a profile update request. The child's profile is left
+ * untouched, the request is marked rejected (history preserved) and the child
+ * is notified. The optional comment is included when provided.
+ */
+export const rejectProfileUpdateRequest = async (familyId: string, requestId: string, rejectionReason = 'Rejected') => {
+  if (!rejectionReason.trim()) throw new Error('Rejection reason is required');
+  const reqRef = doc(db, `families/${familyId}/profile_update_requests`, requestId);
+  const currentUserUid = requireActorId();
+
+  await runTransaction(db, async (transaction) => {
+    const reqDoc = await transaction.get(reqRef);
+    if (!reqDoc.exists()) throw new Error('Request not found');
+    if (reqDoc.data().status !== 'pending') throw new Error('Request is not pending approval');
+
+    const reviewerRef = doc(db, 'users', currentUserUid);
+    const reviewerDoc = await transaction.get(reviewerRef);
+    const reviewerName = reviewerDoc.exists() ? (reviewerDoc.data().displayName || 'Parent') : 'Parent';
+
+    // Resolve the notification dedupe read up-front (reads-before-writes).
+    const notifPlan = await loadNotificationRecipientsInTransaction(transaction, familyId, {
+      type: 'profile_update_rejected',
+      actorId: currentUserUid,
+      recipientIds: [reqDoc.data().childId],
+      title: 'Profile update rejected',
+      body: `Your profile update was rejected by ${reviewerName}${rejectionReason.trim() ? `: ${rejectionReason.trim()}` : ''}.`,
+      entityType: 'profile_update_request',
+      entityId: requestId,
+      dedupeKey: profileUpdateRejectedKey(requestId),
+    });
+
+    transaction.update(reqRef, {
+      status: 'rejected',
+      reviewedAt: serverTimestamp(),
+      reviewedBy: currentUserUid,
+      reviewedByName: reviewerName,
+      rejectionReason: rejectionReason.trim(),
+    });
+
+    const feedRef = doc(collection(db, `families/${familyId}/feed`));
+    transaction.set(feedRef, {
+      actorId: currentUserUid,
+      type: 'custom',
+      text: `Profile update for ${reqDoc.data().childName} was rejected.`,
+      visibleTo: [reqDoc.data().childId, currentUserUid],
+      timestamp: serverTimestamp(),
+    });
+
+    // Write stage performs ZERO reads.
+    applyNotificationWrites(transaction, notifPlan);
+  });
+};
+
+// ---------------------------
 // 9. CHILD-TO-CHILD TRANSFERS
 // ---------------------------
+
+// Typed domain error used when a canonical wallet document is missing.
+// Transfers must never fall back to the legacy users.walletBalance profile field;
+// when the single source of truth (families/{familyId}/wallets/{childId}) is absent
+// we fail clearly instead of silently using a stale profile value.
+export class WalletNotFoundError extends Error {
+  readonly code = 'WALLET_NOT_FOUND' as const
+  readonly childId: string
+  constructor(childId: string) {
+    super(`Wallet not found for child "${childId}". Cannot process transfer without a canonical wallet document.`)
+    this.name = 'WalletNotFoundError'
+    this.childId = childId
+  }
+}
 
 export const createTransferRequest = async (familyId: string, toChildId: string, amountPence: number, message: string) => {
   const currentUserUid = auth.currentUser?.uid;
@@ -1097,11 +1812,14 @@ export const createTransferRequest = async (familyId: string, toChildId: string,
   const feedRef = doc(collection(db, `families/${familyId}/feed`));
   const fromUserRef = doc(db, 'users', currentUserUid);
   const toUserRef = doc(db, 'users', toChildId);
+  const fromWalletRef = doc(db, `families/${familyId}/wallets`, currentUserUid);
+  const approverIds = await getApproverIds(familyId);
 
   await runTransaction(db, async (transaction) => {
-    const [fromDoc, toDoc] = await Promise.all([
+    const [fromDoc, toDoc, fromWalletDoc] = await Promise.all([
       transaction.get(fromUserRef),
-      transaction.get(toUserRef)
+      transaction.get(toUserRef),
+      transaction.get(fromWalletRef)
     ]);
 
     if (!fromDoc.exists() || !toDoc.exists()) throw new Error("User does not exist");
@@ -1112,6 +1830,30 @@ export const createTransferRequest = async (familyId: string, toChildId: string,
     if (fromData.familyId !== familyId || toData.familyId !== familyId) throw new Error("Both participants must be in the same family");
     if (currentUserUid === toChildId) throw new Error("Sender and recipient must differ");
     if (!Number.isInteger(amountPence) || amountPence <= 0) throw new Error("Invalid amount");
+
+    // The canonical wallet document is the single source of truth for balances.
+    // Transfers must never fall back to the legacy users.walletBalance profile field.
+    if (!fromWalletDoc.exists()) throw new WalletNotFoundError(currentUserUid);
+    const fromBalance = fromWalletDoc.data().balance || 0;
+    if (fromBalance < amountPence) throw new Error("Insufficient funds");
+
+    // Resolve the notification dedupe read up-front (reads-before-writes).
+    let notifPlan = { ref: null, data: null } as Awaited<
+      ReturnType<typeof loadNotificationRecipientsInTransaction>
+    >;
+    if (approverIds.length > 0) {
+      notifPlan = await loadNotificationRecipientsInTransaction(transaction, familyId, {
+        type: 'transfer_requested',
+        actorId: currentUserUid,
+        recipientIds: approverIds,
+        title: 'Transfer approval needed',
+        body: `${fromData.displayName} wants to send £${(amountPence / 100).toFixed(2)} to ${toData.displayName}`,
+        entityType: 'transfer_request',
+        entityId: reqRef.id,
+        actionUrl: '/',
+        dedupeKey: transferRequestedKey(reqRef.id),
+      });
+    }
 
     transaction.set(reqRef, {
       id: reqRef.id,
@@ -1134,12 +1876,14 @@ export const createTransferRequest = async (familyId: string, toChildId: string,
       visibleTo: [currentUserUid, toChildId],
       timestamp: serverTimestamp()
     });
+
+    // Write stage performs ZERO reads.
+    applyNotificationWrites(transaction, notifPlan);
   });
 };
 
 export const approveTransferRequest = async (familyId: string, requestId: string) => {
   const reqRef = doc(db, `families/${familyId}/transfer_requests`, requestId);
-  const feedRef = doc(collection(db, `families/${familyId}/feed`));
   const approvalTxId = doc(collection(db, `families/${familyId}/wallet_transactions`)).id;
   const txOutRef = doc(db, `families/${familyId}/wallet_transactions`, `${approvalTxId}_out`);
   const txInRef = doc(db, `families/${familyId}/wallet_transactions`, `${approvalTxId}_in`);
@@ -1182,8 +1926,37 @@ export const approveTransferRequest = async (familyId: string, requestId: string
     if (senderData.role !== 'child' || recipientData.role !== 'child') throw new Error("Both participants must be children");
     if (senderData.familyId !== familyId || recipientData.familyId !== familyId) throw new Error("Both participants must be in the same family");
 
-    const fromBalance = await ensureWalletDocument(transaction, familyId, requestData.fromChildId, senderDoc, fromWalletDoc);
-    const toBalance = await ensureWalletDocument(transaction, familyId, requestData.toChildId, recipientDoc, toWalletDoc);
+    // The canonical wallet documents are the single source of truth. Transfers must
+    // never fall back to the legacy users.walletBalance profile field. Fail clearly
+    // if either wallet document is missing rather than seeding from a stale profile.
+    if (!fromWalletDoc.exists()) throw new WalletNotFoundError(requestData.fromChildId);
+    if (!toWalletDoc.exists()) throw new WalletNotFoundError(requestData.toChildId);
+    const fromBalance = fromWalletDoc.data().balance || 0;
+    const toBalance = toWalletDoc.data().balance || 0;
+
+    // Resolve the notification dedupe reads up-front (reads-before-writes).
+    const senderNotifPlan = await loadNotificationRecipientsInTransaction(transaction, familyId, {
+      type: 'transfer_approved',
+      actorId: currentUserUid,
+      recipientIds: [requestData.fromChildId],
+      title: 'Transfer approved',
+      body: `Your transfer to ${requestData.toChildName} was approved.`,
+      entityType: 'transfer_request',
+      entityId: requestId,
+      actionUrl: '/wallet',
+      dedupeKey: transferApprovedSenderKey(requestId),
+    });
+    const recipientNotifPlan = await loadNotificationRecipientsInTransaction(transaction, familyId, {
+      type: 'transfer_approved',
+      actorId: currentUserUid,
+      recipientIds: [requestData.toChildId],
+      title: 'Transfer received',
+      body: `You received £${(requestData.amountPence / 100).toFixed(2)} from ${requestData.fromChildName}.`,
+      entityType: 'transfer_request',
+      entityId: requestId,
+      actionUrl: '/wallet',
+      dedupeKey: transferApprovedRecipientKey(requestId),
+    });
 
     if (fromBalance < requestData.amountPence) {
       throw new Error("Sender no longer has sufficient funds.");
@@ -1227,6 +2000,7 @@ export const approveTransferRequest = async (familyId: string, requestId: string
       childId: requestData.fromChildId,
       counterpartyChildId: requestData.toChildId,
       amountPence: -requestData.amountPence,
+      description: `Sent to ${requestData.toChildName}`,
       effectSnapshot: effectSnapshot({ entityType: 'transfer_request', familyId, actorId: currentUserUid, childId: requestData.fromChildId, counterpartyChildId: requestData.toChildId, sourceRequestId: requestId, walletDeltaPence: -requestData.amountPence, counterpartyWalletDeltaPence: requestData.amountPence })
     });
 
@@ -1236,16 +2010,32 @@ export const approveTransferRequest = async (familyId: string, requestId: string
       childId: requestData.toChildId,
       counterpartyChildId: requestData.fromChildId,
       amountPence: requestData.amountPence,
+      description: `Received from ${requestData.fromChildName}`,
       effectSnapshot: effectSnapshot({ entityType: 'transfer_request', familyId, actorId: currentUserUid, childId: requestData.fromChildId, counterpartyChildId: requestData.toChildId, sourceRequestId: requestId, walletDeltaPence: -requestData.amountPence, counterpartyWalletDeltaPence: requestData.amountPence })
     });
 
-    transaction.set(feedRef, {
+    const feedSenderRef = doc(collection(db, `families/${familyId}/feed`));
+    const feedRecipientRef = doc(collection(db, `families/${familyId}/feed`));
+
+    transaction.set(feedSenderRef, {
       actorId: currentUserUid,
       type: 'custom',
-      text: `${requestData.fromChildName} sent £${(requestData.amountPence / 100).toFixed(2)} to ${requestData.toChildName}.`,
-      visibleTo: [requestData.fromChildId, requestData.toChildId],
+      text: `Your transfer to ${requestData.toChildName} was approved.`,
+      visibleTo: [requestData.fromChildId],
       timestamp: serverTimestamp()
     });
+
+    transaction.set(feedRecipientRef, {
+      actorId: currentUserUid,
+      type: 'custom',
+      text: `You received £${(requestData.amountPence / 100).toFixed(2)} from ${requestData.fromChildName}.`,
+      visibleTo: [requestData.toChildId],
+      timestamp: serverTimestamp()
+    });
+
+    // Write stage performs ZERO reads.
+    applyNotificationWrites(transaction, senderNotifPlan);
+    applyNotificationWrites(transaction, recipientNotifPlan);
   });
 };
 
@@ -1268,6 +2058,19 @@ export const rejectTransferRequest = async (familyId: string, requestId: string,
     if (userData.familyId !== familyId) throw new Error("Reviewer not in family");
     if (userData.role !== 'parent' && userData.role !== 'owner') throw new Error("Reviewer is not parent/owner");
 
+    // Resolve the notification dedupe read up-front (reads-before-writes).
+    const notifPlan = await loadNotificationRecipientsInTransaction(transaction, familyId, {
+      type: 'transfer_rejected',
+      actorId: currentUserUid,
+      recipientIds: [reqDoc.data().fromChildId],
+      title: 'Transfer rejected',
+      body: `Your transfer to ${reqDoc.data().toChildName} was rejected${rejectionReason.trim() ? `: ${rejectionReason.trim()}` : ''}.`,
+      entityType: 'transfer_request',
+      entityId: requestId,
+      actionUrl: '/wallet',
+      dedupeKey: transferRejectedKey(requestId),
+    });
+
     transaction.update(reqRef, {
       status: 'rejected',
       reviewedAt: serverTimestamp(),
@@ -1280,10 +2083,13 @@ export const rejectTransferRequest = async (familyId: string, requestId: string,
       actorId: currentUserUid,
       actorName: userData.displayName,
       type: 'custom',
-      text: `Transfer request from ${reqDoc.data().fromChildName} to ${reqDoc.data().toChildName} was rejected.`,
-      visibleTo: [reqDoc.data().fromChildId, reqDoc.data().toChildId],
+      text: `Your transfer to ${reqDoc.data().toChildName} was rejected.`,
+      visibleTo: [reqDoc.data().fromChildId],
       timestamp: serverTimestamp()
     });
+
+    // Write stage performs ZERO reads.
+    applyNotificationWrites(transaction, notifPlan);
   });
 };
 export const createMoneyRequest = async (familyId: string, requestedFromId: string, amountPence: number, message: string) => {
@@ -1308,7 +2114,7 @@ export const createMoneyRequest = async (familyId: string, requestedFromId: stri
     if (fromData.familyId !== familyId || toData.familyId !== familyId) throw new Error("Both participants must be in the same family");
     if (amountPence <= 0 || !Number.isInteger(amountPence)) throw new Error("Invalid amount");
     if (fromDoc.id === toDoc.id) throw new Error("Cannot request from self");
-    const initialStatus = toData.role === 'parent' ? 'pending' : 'pending_acceptance';
+    const initialStatus = toData.role === 'parent' || toData.role === 'owner' ? 'pending' : 'pending_acceptance';
 
     transaction.set(reqRef, {
       familyId,
@@ -1325,6 +2131,8 @@ export const createMoneyRequest = async (familyId: string, requestedFromId: stri
     transaction.set(feedRef, {
       actorId: currentUserUid,
       text: `${fromData.displayName} requested £${(amountPence / 100).toFixed(2)} from ${toData.displayName}.`,
+      entityType: 'money_request',
+      entityId: reqRef.id,
       visibleTo: [currentUserUid, requestedFromId],
       timestamp: serverTimestamp()
     });
@@ -1352,6 +2160,8 @@ export const acceptMoneyRequest = async (familyId: string, requestId: string) =>
     transaction.set(feedRef, {
       actorId: currentUserUid,
       text: `${reqData.requestedFromName} accepted ${reqData.requesterName}'s request for £${(reqData.amountPence / 100).toFixed(2)}. Awaiting parent approval.`,
+      entityType: 'money_request',
+      entityId: requestId,
       visibleTo: [currentUserUid, reqData.requesterId],
       timestamp: serverTimestamp()
     });
@@ -1380,6 +2190,8 @@ export const declineMoneyRequest = async (familyId: string, requestId: string) =
     transaction.set(feedRef, {
       actorId: currentUserUid,
       text: `${reqData.requestedFromName} declined ${reqData.requesterName}'s request.`,
+      entityType: 'money_request',
+      entityId: requestId,
       visibleTo: [currentUserUid, reqData.requesterId],
       timestamp: serverTimestamp()
     });
@@ -1407,7 +2219,7 @@ export const approveMoneyRequest = async (familyId: string, requestId: string) =
 
     if (!userDoc.exists() || userData?.familyId !== familyId) throw new Error('Reviewer not in family');
     if (userData?.role !== 'parent' && userData?.role !== 'owner') throw new Error("Unauthorized");
-    if (reqData.status !== 'pending') throw new Error("Request is not pending approval");
+    if (reqData.status !== 'pending' && reqData.status !== 'pending_acceptance') throw new Error("Request is not pending approval");
 
     const requesterWalletRef = doc(db, `families/${familyId}/wallets`, reqData.requesterId);
 
@@ -1522,6 +2334,8 @@ export const approveMoneyRequest = async (familyId: string, requestId: string) =
       actorId: currentUserUid,
       type: 'custom',
       text: `Money request approved.`,
+      entityType: 'money_request',
+      entityId: requestId,
       visibleTo: [reqData.requesterId, reqData.requestedFromId],
       timestamp: serverTimestamp()
     });
@@ -1544,7 +2358,7 @@ export const rejectMoneyRequest = async (familyId: string, requestId: string, re
     const userData = userDoc.data();
 
     if (!userDoc.exists() || userData?.familyId !== familyId || (userData?.role !== 'parent' && userData?.role !== 'owner')) throw new Error("Unauthorized");
-    if (reqDoc.data().status !== 'pending') throw new Error('Request is not pending approval');
+    if (reqDoc.data().status !== 'pending' && reqDoc.data().status !== 'pending_acceptance') throw new Error('Request is not pending approval');
 
     transaction.update(reqRef, {
       status: 'rejected',
@@ -1559,10 +2373,42 @@ export const rejectMoneyRequest = async (familyId: string, requestId: string, re
       actorId: currentUserUid,
       type: 'custom',
       text: `Money request rejected.`,
+      entityType: 'money_request',
+      entityId: requestId,
       visibleTo: [reqDoc.data().requesterId, reqDoc.data().requestedFromId],
       timestamp: serverTimestamp()
     });
   });
+};
+
+/**
+ * Maps a thrown approval/rejection error to a friendly, user-safe message.
+ * Raw Firebase error codes (e.g. `permission-denied`) and server messages must
+ * never be rendered to end users in production. The original error is preserved
+ * on the returned object for development-only logging.
+ */
+export type MappedApprovalError = { message: string; code?: string; raw?: unknown };
+
+export const mapApprovalError = (err: unknown): MappedApprovalError => {
+  const code = (err as any)?.code;
+  const message: string = (err as any)?.message || '';
+
+  if (code === 'permission-denied' || /permission-denied|Missing or insufficient permissions/i.test(message)) {
+    return { message: "You no longer have permission to manage this request.", code: 'permission-denied', raw: err };
+  }
+  if (/not pending approval|Request cannot|Request is not pending/i.test(message)) {
+    return { message: "This request has already been decided.", code, raw: err };
+  }
+  if (/Request not found/i.test(message)) {
+    return { message: "The request changed while you were reviewing it. Please refresh and try again.", code, raw: err };
+  }
+  if (/Unauthorized/i.test(message)) {
+    return { message: "You no longer have permission to manage this request.", code, raw: err };
+  }
+  if (/Rejection reason is required/i.test(message)) {
+    return { message: "Please provide a reason for rejecting this request.", code, raw: err };
+  }
+  return { message: "We couldn’t reject this request. Please try again.", code, raw: err };
 };
 
 export type PendingApprovalKind = 'task' | 'transfer' | 'money_request' | 'petbox';

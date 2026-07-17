@@ -50,17 +50,25 @@ describe('traceable transaction writers', () => {
     }))
   })
 
-  it('records an expense effect and refuses to overdraw a fund', async () => {
+  it('records an expense effect and allows the fund to go negative (no insufficient-balance rejection)', async () => {
     const tx = transactionWith({ 'families/family-1/funds/fund-1': { balance: 1_000 } })
     await addFundExpense('family-1', 'fund-1', { amount: 300, category: 'vet', description: 'Check-up', fundName: 'Pet Box' })
     expect(tx.set).toHaveBeenCalledWith(expect.objectContaining({ path: 'families/family-1/fund_transactions/generated-1' }), expect.objectContaining({
       sourceId: 'generated-1', actorId: 'owner-1', familyId: 'family-1', status: 'completed',
       effectSnapshot: expect.objectContaining({ actorId: 'owner-1', fundId: 'fund-1', fundDeltaPence: -300 }),
     }))
+    expect(tx.update).toHaveBeenCalledWith(
+      expect.objectContaining({ path: 'families/family-1/funds/fund-1' }),
+      expect.objectContaining({ balance: 700 })
+    )
 
+    // Overdrawing is permitted: a £3.00 expense against a £1.00 balance yields -£2.00.
     const overdrawTx = transactionWith({ 'families/family-1/funds/fund-1': { balance: 100 } })
-    await expect(addFundExpense('family-1', 'fund-1', { amount: 300, category: 'vet', description: 'Check-up', fundName: 'Pet Box' })).rejects.toThrow('Insufficient fund balance')
-    expect(overdrawTx.update).not.toHaveBeenCalled()
+    await addFundExpense('family-1', 'fund-1', { amount: 300, category: 'vet', description: 'Check-up', fundName: 'Pet Box' })
+    expect(overdrawTx.update).toHaveBeenCalledWith(
+      expect.objectContaining({ path: 'families/family-1/funds/fund-1' }),
+      expect.objectContaining({ balance: -200 })
+    )
   })
 
   it('cancels only the authenticated originator’s pending request without balance writes', async () => {

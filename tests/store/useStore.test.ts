@@ -82,6 +82,9 @@ const familyResources = [
   'families/fam1/transfer_requests',
   'families/fam1/money_requests',
   'families/fam1/petbox_requests',
+  'families/fam1/profile_update_requests',
+  'families/fam1/reversals',
+  'families/fam1/users/user1/avatar_unlocks',
 ] as const;
 
 const childFamilyResources = familyResources
@@ -277,13 +280,19 @@ describe('bootstrap/auth/listener state machine', () => {
     expect(transferQuery?.constraints.some(constraint => constraint.type === 'where')).toBe(false);
   });
 
-  it('does not subscribe to reversals during initial bootstrap', () => {
-    authenticatedState();
+  it('subscribes to reversals during initial bootstrap for parent/owner', () => {
+    authenticatedState('fam1', 'parent');
+    useStore.getState().loadFamilyData('user1', 'fam1');
+    expect(listeners.some(item => item.target === 'families/fam1/reversals')).toBe(true);
+  });
+
+  it('does not subscribe to reversals during bootstrap for child', () => {
+    authenticatedState('fam1', 'child');
     useStore.getState().loadFamilyData('user1', 'fam1');
     expect(listeners.some(item => item.target === 'families/fam1/reversals')).toBe(false);
   });
 
-  it.each(['parent', 'owner'])('contains a reversals permission error to the optional feature for %s', role => {
+  it.each(['parent', 'owner'])('handles reversals permission error during bootstrap for %s', role => {
     authenticatedState('fam1', role);
     useStore.getState().loadFamilyData('user1', 'fam1');
     emitAllFamilySnapshots({
@@ -291,9 +300,7 @@ describe('bootstrap/auth/listener state machine', () => {
       'families/fam1/rewards': [{ id: 'reward-1', title: 'Core reward' }],
       'families/fam1/wallets': [{ id: 'child-1', balance: 500 }],
     });
-    expect(useStore.getState().appReady).toBe(true);
-
-    useStore.getState().loadReversals();
+    // Don't emit reversals snapshot - simulate permission error
     const reversalListener = listener('families/fam1/reversals');
     reversalListener.error({ code: 'permission-denied', message: 'Missing or insufficient permissions' });
 

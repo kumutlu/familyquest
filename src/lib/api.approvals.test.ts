@@ -21,7 +21,7 @@ vi.mock('firebase/auth', () => ({
 }))
 vi.mock('./firebase', () => ({ db: { name: 'db' }, auth: authState, googleProvider: {} }))
 
-import { approveJoinRequest, approveMoneyRequest, approveTaskCompletion, approveTransferRequest, cancelPendingApproval, rejectTaskCompletion } from './api'
+import { approveJoinRequest, approveMoneyRequest, approveTaskCompletion, approveTransferRequest, cancelPendingApproval, rejectMoneyRequest, rejectTaskCompletion, mapApprovalError } from './api'
 
 function snapshot(data?: Record<string, any>) { return { exists: () => data !== undefined, data: () => data } }
 function transactionWith(docs: Record<string, Record<string, any> | undefined>, enforceReadBeforeWrite = false) {
@@ -104,7 +104,7 @@ describe('approval API transaction contracts', () => {
     }))
   })
 
-  it('uses the production transfer path when both wallets are missing without reading after a write', async () => {
+  it('rejects the transfer approval with WALLET_NOT_FOUND when a canonical wallet is missing (no legacy seeding)', async () => {
     const tx = transactionWith({
       'families/family-1/transfer_requests/transfer-1': { fromChildId: 'child-1', toChildId: 'child-2', amountPence: 100, status: 'pending' },
       'users/owner-1': { familyId: 'family-1', role: 'owner', displayName: 'Owner' },
@@ -112,14 +112,12 @@ describe('approval API transaction contracts', () => {
       'users/child-2': { familyId: 'family-1', role: 'child' },
     }, true)
 
-    await approveTransferRequest('family-1', 'transfer-1')
-
-    expect(tx.set).toHaveBeenCalledWith(expect.objectContaining({ path: 'families/family-1/wallets/child-1' }), expect.objectContaining({
-      balance: 150, lastTransferReqId: 'transfer-1', migratedFromLegacy: true,
-    }), { merge: true })
-    expect(tx.set).toHaveBeenCalledWith(expect.objectContaining({ path: 'families/family-1/wallets/child-2' }), expect.objectContaining({
-      balance: 100, lastTransferReqId: 'transfer-1', migratedFromLegacy: true,
-    }), { merge: true })
+    await expect(approveTransferRequest('family-1', 'transfer-1')).rejects.toMatchObject({
+      code: 'WALLET_NOT_FOUND',
+      childId: 'child-1',
+    })
+    expect(tx.set).not.toHaveBeenCalledWith(expect.objectContaining({ path: 'families/family-1/wallets/child-1' }), expect.anything())
+    expect(tx.set).not.toHaveBeenCalledWith(expect.objectContaining({ path: 'families/family-1/wallets/child-2' }), expect.anything())
   })
 
   it('uses the production sibling-money path when the requester wallet is missing without reading after a write', async () => {
@@ -134,7 +132,7 @@ describe('approval API transaction contracts', () => {
     await approveMoneyRequest('family-1', 'money-1')
 
     expect(tx.set).toHaveBeenCalledWith(expect.objectContaining({ path: 'families/family-1/wallets/child-2' }), expect.objectContaining({
-      balance: 125, lastTransferReqId: 'money-1', migratedFromLegacy: true,
+      balance: 100, lastTransferReqId: 'money-1', migratedFromLegacy: true,
     }), { merge: true })
   })
 
@@ -147,5 +145,103 @@ describe('approval API transaction contracts', () => {
     expect(tx.update).toHaveBeenCalledWith(expect.objectContaining({ path: 'families/family-1/transfer_requests/transfer-1' }), expect.objectContaining({
       status: 'cancelled', cancelledBy: 'owner-1',
     }))
+  })
+
+  describe('rejectMoneyRequest', () => {
+    const baseRequest = {
+      requesterId: 'child-2', requestedFromId: 'child-1', amountPence: 100, status: 'pending_acceptance', message: 'Lunch',
+    }
+
+    it('rejects a pending_acceptance money request and records the approver (regression for production bug)', async () => {
+      const tx = transactionWith({
+        'families/family-1/money_requests/money-1': { ...baseRequest },
+        'users/owner-1': { familyId: 'family-1', role: 'owner', displayName: 'Kemal' },
+      })
+
+      await rejectMoneyRequest('family-1', 'money-1', 'Not allowed')
+
+      expect(tx.update).toHaveBeenCalledWith(expect.objectContaining({ path: 'families/family-1/money_requests/money-1' }), expect.objectContaining({
+        status: 'rejected',
+        reviewedBy: 'owner-1',
+        reviewedByName: 'Kemal',
+        rejectionReason: 'Not allowed',
+      }))
+      // No wallet or wallet_transaction writes must occur on rejection.
+      expect(tx.set).not.toHaveBeenCalledWith(expect.objectContaining({ path: expect.stringContaining('/wallets/') }), expect.anything())
+      expect(tx.set).not.toHaveBeenCalledWith(expect.objectContaining({ path: expect.stringContaining('/wallet_transactions/') }), expect.anything())
+    })
+
+    it('writes a feed entry attributed to the authenticated approver', async () => {
+      const tx = transactionWith({
+        'families/family-1/money_requests/money-1': { ...baseRequest },
+        'users/owner-1': { familyId: 'family-1', role: 'owner', displayName: 'Kemal' },
+      })
+
+      await rejectMoneyRequest('family-1', 'money-1', 'Not allowed')
+
+      expect(tx.set).toHaveBeenCalledWith(
+        expect.objectContaining({ path: expect.stringContaining('families/family-1/feed/') }),
+        expect.objectContaining({
+          actorId: 'owner-1',
+          entityType: 'money_request',
+          entityId: 'money-1',
+          type: 'custom',
+          text: 'Money request rejected.',
+          visibleTo: ['child-2', 'child-1'],
+        })
+      )
+    })
+
+    it('requires a non-empty rejection reason', async () => {
+      const tx = transactionWith({
+        'families/family-1/money_requests/money-1': { ...baseRequest },
+        'users/owner-1': { familyId: 'family-1', role: 'owner', displayName: 'Kemal' },
+      })
+      await expect(rejectMoneyRequest('family-1', 'money-1', '   ')).rejects.toThrow('Rejection reason is required')
+      expect(tx.update).not.toHaveBeenCalled()
+    })
+
+    it('rejects when the caller is not a parent/owner in the family', async () => {
+      const tx = transactionWith({
+        'families/family-1/money_requests/money-1': { ...baseRequest },
+        'users/owner-1': { familyId: 'other-family', role: 'owner', displayName: 'Kemal' },
+      })
+      await expect(rejectMoneyRequest('family-1', 'money-1', 'No')).rejects.toThrow('Unauthorized')
+      expect(tx.update).not.toHaveBeenCalled()
+    })
+
+    it('rejects when the request is not pending approval', async () => {
+      const tx = transactionWith({
+        'families/family-1/money_requests/money-1': { ...baseRequest, status: 'approved', paymentTransferId: 'pay1' },
+        'users/owner-1': { familyId: 'family-1', role: 'owner', displayName: 'Kemal' },
+      })
+      await expect(rejectMoneyRequest('family-1', 'money-1', 'No')).rejects.toThrow('Request is not pending approval')
+      expect(tx.update).not.toHaveBeenCalled()
+    })
+  })
+})
+
+describe('mapApprovalError', () => {
+  it('never surfaces raw Firebase permission-denied text', () => {
+    const mapped = mapApprovalError({ code: 'permission-denied', message: 'Missing or insufficient permissions.' })
+    expect(mapped.message).not.toContain('permission-denied')
+    expect(mapped.message).not.toContain('Missing or insufficient permissions')
+    expect(mapped.message).toBe('You no longer have permission to manage this request.')
+    expect(mapped.code).toBe('permission-denied')
+  })
+
+  it('maps already-decided requests to a friendly message', () => {
+    const mapped = mapApprovalError(new Error('Request is not pending approval'))
+    expect(mapped.message).toBe('This request has already been decided.')
+  })
+
+  it('maps missing requests to a refresh prompt', () => {
+    const mapped = mapApprovalError(new Error('Request not found'))
+    expect(mapped.message).toBe('The request changed while you were reviewing it. Please refresh and try again.')
+  })
+
+  it('falls back to a generic message for unknown errors', () => {
+    const mapped = mapApprovalError(new Error('boom'))
+    expect(mapped.message).toBe('We couldn’t reject this request. Please try again.')
   })
 })

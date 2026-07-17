@@ -29,6 +29,7 @@ export function HistoryActionControl({ sourceKind, source }: { sourceKind: Rever
   });
 
   if (cancelled || source.status === 'cancelled') return <Badge variant="danger">Cancelled</Badge>;
+  if (action.isLegacy) return <span className="text-xs text-gray-500">Legacy donation — refund unavailable</span>;
   if (!action.action && !action.reversal) return null;
 
   const cancel = async (historyAction: HistoryAction) => {
@@ -42,7 +43,7 @@ export function HistoryActionControl({ sourceKind, source }: { sourceKind: Rever
     <div className="flex flex-col items-end gap-1">
       {action.reversal ? (
         <div className="text-right text-xs text-gray-600">
-          <Badge variant="danger">Reversed</Badge>
+          <Badge variant="danger">{sourceKind === 'petbox_request' ? 'Refunded' : 'Reversed'}</Badge>
           <p className="mt-1 font-medium">{action.reversal.reason}</p>
           <p>by {action.reversal.actorName} · {auditDate(action.reversal.occurredAt)}</p>
         </div>

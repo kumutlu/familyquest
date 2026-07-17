@@ -1,7 +1,9 @@
 declare const __FAMILYQUEST_BUILD_SHA__: string;
 declare const __FAMILYQUEST_BUILT_AT__: string;
+declare const __FAMILYQUEST_APP_VERSION__: string;
 
 export interface FamilyQuestBuildInfo {
+  version: string;
   sha: string;
   builtAt: string;
 }
@@ -13,6 +15,7 @@ declare global {
 }
 
 export const FAMILYQUEST_BUILD: FamilyQuestBuildInfo = Object.freeze({
+  version: __FAMILYQUEST_APP_VERSION__,
   sha: __FAMILYQUEST_BUILD_SHA__,
   builtAt: __FAMILYQUEST_BUILT_AT__,
 });

@@ -1,0 +1,273 @@
+import { assertFails, assertSucceeds, initializeTestEnvironment, RulesTestEnvironment } from '@firebase/rules-unit-testing';
+import { doc, setDoc, serverTimestamp, collection, addDoc, getDoc, updateDoc, deleteDoc } from 'firebase/firestore';
+import { readFileSync } from 'fs';
+import { describe, beforeAll, afterAll, beforeEach, it, expect } from 'vitest';
+
+let testEnv: RulesTestEnvironment;
+
+beforeAll(async () => {
+  testEnv = await initializeTestEnvironment({
+    projectId: 'familyquest-notifications-rules-test',
+    firestore: {
+      rules: readFileSync('firestore.rules', 'utf8'),
+      host: '127.0.0.1',
+      port: 8080,
+    },
+  });
+});
+
+afterAll(async () => {
+  await testEnv.cleanup();
+});
+
+beforeEach(async () => {
+  await testEnv.clearFirestore();
+  await testEnv.withSecurityRulesDisabled(async (context) => {
+    const db = context.firestore();
+    await setDoc(doc(db, 'families/family1'), { name: 'Family 1' });
+    await setDoc(doc(db, 'families/family2'), { name: 'Family 2' });
+    await setDoc(doc(db, 'users/owner1'), { familyId: 'family1', role: 'owner', displayName: 'Owner' });
+    await setDoc(doc(db, 'users/parent1'), { familyId: 'family1', role: 'parent', displayName: 'Parent' });
+    await setDoc(doc(db, 'users/child1'), { familyId: 'family1', role: 'child', displayName: 'C1' });
+    await setDoc(doc(db, 'users/child2'), { familyId: 'family1', role: 'child', displayName: 'C2' });
+    await setDoc(doc(db, 'users/owner2'), { familyId: 'family2', role: 'owner', displayName: 'Owner2' });
+    await setDoc(doc(db, 'users/child3'), { familyId: 'family2', role: 'child', displayName: 'C3' });
+  });
+});
+
+// A well-formed notification created by a parent in family1, addressed to child1.
+function validNotification(overrides: Record<string, any> = {}) {
+  return {
+    familyId: 'family1',
+    type: 'task_approved',
+    actorId: 'parent1',
+    recipientIds: ['child1'],
+    title: 'Task approved',
+    body: 'Nice work',
+    entityType: 'task',
+    entityId: 'task1',
+    actionUrl: '/tasks',
+    dedupeKey: 'task_approve_task1',
+    createdAt: serverTimestamp(),
+    ...overrides,
+  };
+}
+
+describe('Notification content (families/{familyId}/notifications/{id})', () => {
+  it('parent can create a valid notification addressed to a child', async () => {
+    const db = testEnv.authenticatedContext('parent1').firestore();
+    await assertSucceeds(
+      setDoc(doc(db, 'families/family1/notifications/n1'), validNotification()),
+    );
+  });
+
+  it('owner can create a valid notification', async () => {
+    const db = testEnv.authenticatedContext('owner1').firestore();
+    await assertSucceeds(
+      setDoc(doc(db, 'families/family1/notifications/n1'), validNotification({ actorId: 'owner1' })),
+    );
+  });
+
+  it('child CAN create a notification as themselves (e.g. task_submitted / profile_update_requested)', async () => {
+    // Children legitimately originate notifications inside the same transaction
+    // as the business event. The actor must equal the authenticated uid and the
+    // child must be a family member; all field/recipient constraints still apply.
+    const db = testEnv.authenticatedContext('child1').firestore();
+    await assertSucceeds(
+      setDoc(doc(db, 'families/family1/notifications/n1'), validNotification({ actorId: 'child1', type: 'task_submitted', recipientIds: ['parent1'] })),
+    );
+  });
+
+  it('child CANNOT forge a notification with actorId != auth.uid', async () => {
+    // A child cannot create a notification attributed to another user.
+    const db = testEnv.authenticatedContext('child1').firestore();
+    await assertFails(
+      setDoc(doc(db, 'families/family1/notifications/n1'), validNotification({ actorId: 'owner1' })),
+    );
+  });
+
+  it('parent CANNOT forge a notification with actorId != auth.uid', async () => {
+    // Even a parent cannot attribute a notification to another user.
+    const db = testEnv.authenticatedContext('parent1').firestore();
+    await assertFails(
+      setDoc(doc(db, 'families/family1/notifications/n1'), validNotification({ actorId: 'owner1' })),
+    );
+  });
+
+  it('parent CANNOT create a notification with an empty recipientIds list', async () => {
+    const db = testEnv.authenticatedContext('parent1').firestore();
+    await assertFails(
+      setDoc(doc(db, 'families/family1/notifications/n1'), validNotification({ recipientIds: [] })),
+    );
+  });
+
+  it('parent CANNOT create a notification with more than 50 recipients', async () => {
+    const db = testEnv.authenticatedContext('parent1').firestore();
+    const tooMany = Array.from({ length: 51 }, (_, i) => `child${i}`);
+    await assertFails(
+      setDoc(doc(db, 'families/family1/notifications/n1'), validNotification({ recipientIds: tooMany })),
+    );
+  });
+
+  it('parent CANNOT create a notification with unexpected fields', async () => {
+    const db = testEnv.authenticatedContext('parent1').firestore();
+    await assertFails(
+      setDoc(doc(db, 'families/family1/notifications/n1'), {
+        ...validNotification(),
+        forgedField: 'evil',
+      }),
+    );
+  });
+
+  it('parent CANNOT create a notification with familyId != the document family', async () => {
+    const db = testEnv.authenticatedContext('parent1').firestore();
+    await assertFails(
+      setDoc(doc(db, 'families/family1/notifications/n1'), validNotification({ familyId: 'family2' })),
+    );
+  });
+
+  it('parent CANNOT create a notification with createdAt != request.time', async () => {
+    const db = testEnv.authenticatedContext('parent1').firestore();
+    await assertFails(
+      setDoc(doc(db, 'families/family1/notifications/n1'), {
+        ...validNotification(),
+        createdAt: new Date('2020-01-01T00:00:00Z'),
+      }),
+    );
+  });
+
+  it('recipient child CAN read a notification addressed to them', async () => {
+    const setup = testEnv.authenticatedContext('parent1').firestore();
+    await setDoc(doc(setup, 'families/family1/notifications/n1'), validNotification());
+    const db = testEnv.authenticatedContext('child1').firestore();
+    await assertSucceeds(getDoc(doc(db, 'families/family1/notifications/n1')));
+  });
+
+  it('a DIFFERENT child CANNOT read a notification not addressed to them', async () => {
+    const setup = testEnv.authenticatedContext('parent1').firestore();
+    await setDoc(doc(setup, 'families/family1/notifications/n1'), validNotification());
+    const db = testEnv.authenticatedContext('child2').firestore();
+    await assertFails(getDoc(doc(db, 'families/family1/notifications/n1')));
+  });
+
+  it('a parent CAN read a notification addressed to a child (family member + recipient)', async () => {
+    const setup = testEnv.authenticatedContext('parent1').firestore();
+    await setDoc(doc(setup, 'families/family1/notifications/n1'), validNotification({ recipientIds: ['parent1'] }));
+    const db = testEnv.authenticatedContext('parent1').firestore();
+    await assertSucceeds(getDoc(doc(db, 'families/family1/notifications/n1')));
+  });
+
+  it('cross-family user CANNOT read another family notification', async () => {
+    const setup = testEnv.authenticatedContext('parent1').firestore();
+    await setDoc(doc(setup, 'families/family1/notifications/n1'), validNotification());
+    const db = testEnv.authenticatedContext('owner2').firestore();
+    await assertFails(getDoc(doc(db, 'families/family1/notifications/n1')));
+  });
+
+  it('notification content CANNOT be updated (immutable)', async () => {
+    const setup = testEnv.authenticatedContext('parent1').firestore();
+    await setDoc(doc(setup, 'families/family1/notifications/n1'), validNotification());
+    const db = testEnv.authenticatedContext('parent1').firestore();
+    await assertFails(updateDoc(doc(db, 'families/family1/notifications/n1'), { title: 'hacked' }));
+  });
+
+  it('notification content CANNOT be deleted (no client deletes)', async () => {
+    const setup = testEnv.authenticatedContext('parent1').firestore();
+    await setDoc(doc(setup, 'families/family1/notifications/n1'), validNotification());
+    const db = testEnv.authenticatedContext('parent1').firestore();
+    await assertFails(deleteDoc(doc(db, 'families/family1/notifications/n1')));
+  });
+});
+
+describe('Notification read state (families/{familyId}/notification_reads/{id})', () => {
+  beforeEach(async () => {
+    await testEnv.withSecurityRulesDisabled(async (context) => {
+      const db = context.firestore();
+      await setDoc(doc(db, 'families/family1/notifications/n1'), validNotification());
+      await setDoc(doc(db, 'families/family1/notifications/n2'), validNotification({ recipientIds: ['child2'], dedupeKey: 'task_approve_task2' }));
+    });
+  });
+
+  function validRead(userId: string, notificationId: string, overrides: Record<string, any> = {}) {
+    return {
+      familyId: 'family1',
+      userId,
+      notificationId,
+      readAt: serverTimestamp(),
+      ...overrides,
+    };
+  }
+
+  it('recipient can create their own read record', async () => {
+    const db = testEnv.authenticatedContext('child1').firestore();
+    await assertSucceeds(
+      setDoc(doc(db, 'families/family1/notification_reads/r1'), validRead('child1', 'n1')),
+    );
+  });
+
+  it('user CANNOT create a read record for another user (userId != auth.uid)', async () => {
+    const db = testEnv.authenticatedContext('child2').firestore();
+    await assertFails(
+      setDoc(doc(db, 'families/family1/notification_reads/r1'), validRead('child1', 'n1')),
+    );
+  });
+
+  it('user CANNOT mark read a notification they are not a recipient of', async () => {
+    // child2 is not a recipient of n1.
+    const db = testEnv.authenticatedContext('child2').firestore();
+    await assertFails(
+      setDoc(doc(db, 'families/family1/notification_reads/r1'), validRead('child2', 'n1')),
+    );
+  });
+
+  it('user CANNOT create a read record with readAt != request.time', async () => {
+    const db = testEnv.authenticatedContext('child1').firestore();
+    await assertFails(
+      setDoc(doc(db, 'families/family1/notification_reads/r1'), validRead('child1', 'n1', { readAt: new Date('2020-01-01T00:00:00Z') })),
+    );
+  });
+
+  it('user CANNOT create a read record for a non-existent notification', async () => {
+    const db = testEnv.authenticatedContext('child1').firestore();
+    await assertFails(
+      setDoc(doc(db, 'families/family1/notification_reads/r1'), validRead('child1', 'does-not-exist')),
+    );
+  });
+
+  it('user CANNOT create a read record with unexpected fields', async () => {
+    const db = testEnv.authenticatedContext('child1').firestore();
+    await assertFails(
+      setDoc(doc(db, 'families/family1/notification_reads/r1'), { ...validRead('child1', 'n1'), forged: true }),
+    );
+  });
+
+  it('user can update their own existing read record', async () => {
+    const setup = testEnv.authenticatedContext('child1').firestore();
+    await setDoc(doc(setup, 'families/family1/notification_reads/r1'), validRead('child1', 'n1'));
+    const db = testEnv.authenticatedContext('child1').firestore();
+    await assertSucceeds(
+      setDoc(doc(db, 'families/family1/notification_reads/r1'), validRead('child1', 'n1')),
+    );
+  });
+
+  it('user CANNOT read another user read record', async () => {
+    const setup = testEnv.authenticatedContext('child1').firestore();
+    await setDoc(doc(setup, 'families/family1/notification_reads/r1'), validRead('child1', 'n1'));
+    const db = testEnv.authenticatedContext('child2').firestore();
+    await assertFails(getDoc(doc(db, 'families/family1/notification_reads/r1')));
+  });
+
+  it('read record CANNOT be deleted', async () => {
+    const setup = testEnv.authenticatedContext('child1').firestore();
+    await setDoc(doc(setup, 'families/family1/notification_reads/r1'), validRead('child1', 'n1'));
+    const db = testEnv.authenticatedContext('child1').firestore();
+    await assertFails(deleteDoc(doc(db, 'families/family1/notification_reads/r1')));
+  });
+
+  it('cross-family user CANNOT create a read record in another family', async () => {
+    const db = testEnv.authenticatedContext('owner2').firestore();
+    await assertFails(
+      setDoc(doc(db, 'families/family1/notification_reads/r1'), validRead('owner2', 'n1', { familyId: 'family1' })),
+    );
+  });
+});

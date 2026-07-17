@@ -18,11 +18,13 @@ describe('reversal domain', () => {
     })
   })
 
-  it('rejects a reversal that would breach wallet debt, fund, or points sufficiency', () => {
+  it('rejects a reversal that would breach wallet debt or points sufficiency, but permits a negative fund balance', () => {
     const walletCredit = effectSnapshot({ entityType: 'deposit', familyId: 'f', actorId: 'p', childId: 'c', walletDeltaPence: 800 })
     expect(() => planReversal(walletCredit, { ...balances, childWalletPence: 100 }, -500)).toThrow('Insufficient wallet balance to reverse')
+    // A fund reversal may legitimately drive the balance negative (parents pay real
+    // pet expenses; children later cover the deficit), so no sufficiency check is thrown.
     const fundCredit = effectSnapshot({ entityType: 'fund', familyId: 'f', actorId: 'p', fundId: 'fund', fundDeltaPence: 800 })
-    expect(() => planReversal(fundCredit, balances, -500)).toThrow('Insufficient fund balance to reverse')
+    expect(planReversal(fundCredit, balances, -500).fundPence).toBe(-100)
     const pointsCredit = effectSnapshot({ entityType: 'task', familyId: 'f', actorId: 'p', childId: 'c', pointsDelta: 80 })
     expect(() => planReversal(pointsCredit, balances, -500)).toThrow('Insufficient points to reverse')
   })

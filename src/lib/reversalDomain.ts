@@ -37,7 +37,9 @@ export function planReversal(snapshot: EffectSnapshot, balances: ReversalBalance
   if (snapshot.fundDeltaPence !== undefined) {
     plan.inverseFundDeltaPence = -snapshot.fundDeltaPence
     plan.fundPence = exactInverse(balances.fundPence, snapshot.fundDeltaPence, 'Fund balance unavailable')
-    if (plan.fundPence < 0) throw new Error('Insufficient fund balance to reverse')
+    // Negative fund balances are permitted: parents pay real pet expenses from
+    // their own money and children later cover the deficit, so a reversal must
+    // not be rejected for driving the fund negative.
   }
   if (snapshot.pointsDelta !== undefined) {
     plan.inversePointsDelta = -snapshot.pointsDelta

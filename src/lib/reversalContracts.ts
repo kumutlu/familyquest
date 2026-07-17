@@ -23,7 +23,24 @@ export function effectSnapshot(fields: Omit<EffectSnapshot, 'schemaVersion' | 'x
   return { schemaVersion: 1, ...fields, xpAdjustment: 0 }
 }
 
-export function assertTraceableSource<T extends object>(source: T & { effectSnapshot?: unknown }): T & { effectSnapshot: EffectSnapshot } {
-  if (!source.effectSnapshot) throw new Error('This legacy transaction cannot be reversed automatically. Missing effectSnapshot.')
+export function assertTraceableSource<T extends object>(source: T & { effectSnapshot?: unknown }, sourceKind?: string, sourceId?: string): T & { effectSnapshot: EffectSnapshot } {
+  if (!source.effectSnapshot) {
+    if (sourceKind === 'petbox_request' && (source as any).status === 'approved' && (source as any).amountPence && (source as any).childId && (source as any).fundId && sourceId && (source as any).familyId) {
+      return {
+        ...source,
+        effectSnapshot: effectSnapshot({
+          entityType: 'petbox_donation',
+          familyId: (source as any).familyId,
+          actorId: (source as any).reviewedBy || (source as any).childId,
+          childId: (source as any).childId,
+          fundId: (source as any).fundId,
+          sourceRequestId: sourceId,
+          walletDeltaPence: -(source as any).amountPence,
+          fundDeltaPence: (source as any).amountPence,
+        })
+      } as T & { effectSnapshot: EffectSnapshot }
+    }
+    throw new Error('This legacy transaction cannot be reversed automatically. Missing effectSnapshot.')
+  }
   return source as T & { effectSnapshot: EffectSnapshot }
 }

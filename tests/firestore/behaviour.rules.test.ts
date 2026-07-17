@@ -309,7 +309,11 @@ describe('wallet ledger and direct balance writes', () => {
     await assertFails(updateDoc(doc(user(CHILD_ID), 'users', CHILD_ID), { [field]: 999 }));
   });
 
-  test('child can still update an unrelated self-service field', async () => {
-    await assertSucceeds(updateDoc(doc(user(CHILD_ID), 'users', CHILD_ID), { displayName: 'Casey Updated' }));
+  test.each(['displayName', 'avatarUrl', 'avatarId'])('child cannot directly change profile field %s (must use approval)', async (field) => {
+    await assertFails(updateDoc(doc(user(CHILD_ID), 'users', CHILD_ID), { [field]: 'x' }));
+  });
+
+  test('child can still update an unrelated self-service field (e.g. lastActiveDate)', async () => {
+    await assertSucceeds(updateDoc(doc(user(CHILD_ID), 'users', CHILD_ID), { lastActiveDate: serverTimestamp() }));
   });
 });

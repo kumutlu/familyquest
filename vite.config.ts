@@ -3,19 +3,26 @@ import tailwindcss from '@tailwindcss/vite'
 import { VitePWA } from 'vite-plugin-pwa'
 import { defineConfig } from 'vitest/config'
 import { execFileSync } from 'node:child_process'
+import { readFileSync } from 'node:fs'
 
 const buildSha = execFileSync('git', ['rev-parse', 'HEAD'], { encoding: 'utf8' }).trim()
 const builtAt = new Date().toISOString()
+const appVersion = JSON.parse(readFileSync('package.json', 'utf8')).version
 
 export default defineConfig({
   define: {
     __FAMILYQUEST_BUILD_SHA__: JSON.stringify(buildSha),
     __FAMILYQUEST_BUILT_AT__: JSON.stringify(builtAt),
+    __FAMILYQUEST_APP_VERSION__: JSON.stringify(appVersion),
   },
   test: {
     environment: 'jsdom',
     globals: true,
     setupFiles: './src/test/setup.ts',
+    // The `functions/` directory is a separate deployable package with its own
+    // test runner; exclude it (and its nested node_modules) from the web app's
+    // test run. Root-level `tests/functions/**` is still included.
+    exclude: ['node_modules', 'dist', 'tests/e2e/**', 'functions/**'],
   },
   plugins: [
     tailwindcss(), 

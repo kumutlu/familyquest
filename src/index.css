@@ -13,7 +13,12 @@
   --color-primary-900: #312e81;
 
   --color-success-500: #22c55e; /* Green */
+  --color-warning-50: #fff7ed;
+  --color-warning-100: #ffedd5;
+  --color-warning-200: #fed7aa;
   --color-warning-500: #f97316; /* Orange */
+  --color-warning-600: #ea580c;
+  --color-warning-700: #c2410c;
   --color-danger-500: #ef4444;  /* Red */
   --color-reward-400: #fbbf24;  /* Gold */
   --color-reward-500: #f59e0b;

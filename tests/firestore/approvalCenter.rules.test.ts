@@ -593,6 +593,145 @@ describe('Approval Center Actions', () => {
     await assertSucceeds(batch.commit());
   });
 
+  it('6b. owner can reject a pending_acceptance money request (regression for production bug)', async () => {
+    await testEnv.withSecurityRulesDisabled(async (context: any) => {
+      await setDoc(doc(context.firestore(), `families/${familyId}/money_requests`, 'money_pending_acceptance'), {
+        requesterId: siblingId,
+        requestedFromId: childId,
+        amountPence: 100,
+        status: 'pending_acceptance'
+      });
+    });
+
+    const db = testEnv.authenticatedContext('owner123').firestore();
+    const batch = writeBatch(db);
+
+    batch.update(doc(db, `families/${familyId}/money_requests`, 'money_pending_acceptance'), {
+      status: 'rejected',
+      reviewedAt: serverTimestamp(),
+      reviewedBy: 'owner123',
+      reviewedByName: 'Owner',
+      rejectionReason: 'Not allowed'
+    });
+
+    batch.set(doc(db, `families/${familyId}/feed`, 'feed_rej_money_pa'), {
+      actorId: 'owner123',
+      actorName: 'Owner',
+      type: 'custom',
+      text: 'Money request rejected.',
+      visibleTo: [childId, siblingId],
+      timestamp: serverTimestamp()
+    });
+
+    await assertSucceeds(batch.commit());
+  });
+
+  it('6c. child cannot reject their own pending_acceptance money request', async () => {
+    await testEnv.withSecurityRulesDisabled(async (context: any) => {
+      await setDoc(doc(context.firestore(), `families/${familyId}/money_requests`, 'money_child_reject'), {
+        requesterId: siblingId,
+        requestedFromId: childId,
+        amountPence: 100,
+        status: 'pending_acceptance'
+      });
+    });
+
+    const db = testEnv.authenticatedContext(siblingId).firestore();
+    await assertFails(updateDoc(doc(db, `families/${familyId}/money_requests`, 'money_child_reject'), {
+      status: 'rejected',
+      reviewedAt: serverTimestamp(),
+      reviewedBy: siblingId,
+      reviewedByName: 'Muhammed Osman',
+      rejectionReason: 'Not allowed'
+    }));
+  });
+
+  it('6d. unrelated-family parent cannot reject a pending_acceptance money request', async () => {
+    await testEnv.withSecurityRulesDisabled(async (context: any) => {
+      await setDoc(doc(context.firestore(), `families/${familyId}/money_requests`, 'money_other_family'), {
+        requesterId: siblingId,
+        requestedFromId: childId,
+        amountPence: 100,
+        status: 'pending_acceptance'
+      });
+    });
+
+    const db = testEnv.authenticatedContext('otherParent').firestore();
+    await assertFails(updateDoc(doc(db, `families/${familyId}/money_requests`, 'money_other_family'), {
+      status: 'rejected',
+      reviewedAt: serverTimestamp(),
+      reviewedBy: 'otherParent',
+      reviewedByName: 'Other',
+      rejectionReason: 'Not allowed'
+    }));
+  });
+
+  it('6e. approved money request cannot be rejected', async () => {
+    await testEnv.withSecurityRulesDisabled(async (context: any) => {
+      await setDoc(doc(context.firestore(), `families/${familyId}/money_requests`, 'money_approved'), {
+        requesterId: siblingId,
+        requestedFromId: childId,
+        amountPence: 100,
+        status: 'approved',
+        paymentTransferId: 'pay1'
+      });
+    });
+
+    const db = testEnv.authenticatedContext(parentId).firestore();
+    await assertFails(updateDoc(doc(db, `families/${familyId}/money_requests`, 'money_approved'), {
+      status: 'rejected',
+      reviewedAt: serverTimestamp(),
+      reviewedBy: parentId,
+      reviewedByName: 'Kemal',
+      rejectionReason: 'Not allowed'
+    }));
+  });
+
+  it('6f. already-rejected money request cannot be rejected again', async () => {
+    await testEnv.withSecurityRulesDisabled(async (context: any) => {
+      await setDoc(doc(context.firestore(), `families/${familyId}/money_requests`, 'money_rejected'), {
+        requesterId: siblingId,
+        requestedFromId: childId,
+        amountPence: 100,
+        status: 'rejected',
+        reviewedAt: serverTimestamp(),
+        reviewedBy: parentId,
+        reviewedByName: 'Kemal',
+        rejectionReason: 'Not allowed'
+      });
+    });
+
+    const db = testEnv.authenticatedContext(parentId).firestore();
+    await assertFails(updateDoc(doc(db, `families/${familyId}/money_requests`, 'money_rejected'), {
+      status: 'rejected',
+      reviewedAt: serverTimestamp(),
+      reviewedBy: parentId,
+      reviewedByName: 'Kemal',
+      rejectionReason: 'Still not allowed'
+    }));
+  });
+
+  it('6g. oversized rejection comment is denied', async () => {
+    await testEnv.withSecurityRulesDisabled(async (context: any) => {
+      await setDoc(doc(context.firestore(), `families/${familyId}/money_requests`, 'money_oversize'), {
+        requesterId: siblingId,
+        requestedFromId: childId,
+        amountPence: 100,
+        status: 'pending_acceptance'
+      });
+    });
+
+    const db = testEnv.authenticatedContext(parentId).firestore();
+    const oversize = 'x'.repeat(2001);
+    await assertFails(updateDoc(doc(db, `families/${familyId}/money_requests`, 'money_oversize'), {
+      status: 'rejected',
+      reviewedAt: serverTimestamp(),
+      reviewedBy: parentId,
+      reviewedByName: 'Kemal',
+      rejectionReason: oversize
+    }));
+  });
+
   it('7. approvePetBoxDonation', async () => {
     const db = testEnv.authenticatedContext(parentId).firestore();
     const batch = writeBatch(db);

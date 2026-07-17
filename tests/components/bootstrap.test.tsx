@@ -87,8 +87,8 @@ describe('rendered bootstrap boundary', () => {
       transferRequests: [{ id: 'request1', status: 'pending', fromChildId: 'child1', toChildId: 'child2', amountPence: 50 }],
     }));
 
-    expect(await screen.findByText('Parent Console')).toBeInTheDocument();
-    expect(screen.getByText('Children')).toBeInTheDocument();
+    expect(await screen.findByText('Recent Family Activity')).toBeInTheDocument();
+    expect(screen.getByText('Children Overview')).toBeInTheDocument();
     expect(screen.getByText('Pending (1)')).toBeInTheDocument();
     expect(screen.queryByText('Pending (0)')).not.toBeInTheDocument();
   });
@@ -136,7 +136,7 @@ describe('rendered bootstrap boundary', () => {
       }
     });
 
-    expect(await screen.findByText('Parent Console')).toBeInTheDocument();
+    expect(await screen.findByText('Recent Family Activity')).toBeInTheDocument();
     expect(screen.getByText('Pending (1)')).toBeInTheDocument();
     expect(screen.queryByText('Pending (0)')).not.toBeInTheDocument();
   });
@@ -153,7 +153,7 @@ describe('rendered bootstrap boundary', () => {
 
     renderApp();
 
-    expect(await screen.findByText('Parent Console')).toBeInTheDocument();
+    expect(await screen.findByText('Recent Family Activity')).toBeInTheDocument();
     expect(loadReversals).not.toHaveBeenCalled();
     expect(bootstrapListeners.some(listener => listener.target === 'families/fam1/reversals')).toBe(false);
   });
@@ -174,7 +174,7 @@ describe('rendered bootstrap boundary', () => {
 
     expect(screen.getByText('Connection Error')).toBeInTheDocument();
     expect(screen.getByText(/\[Family\] permission-denied/)).toBeInTheDocument();
-    expect(screen.queryByText('Parent Console')).not.toBeInTheDocument();
+    expect(screen.queryByText('Recent Family Activity')).not.toBeInTheDocument();
   });
 
   it('shows an auth observer error instead of unresolved auth loading', () => {

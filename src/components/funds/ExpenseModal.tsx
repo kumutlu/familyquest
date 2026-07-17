@@ -2,6 +2,17 @@ import { useState } from 'react';
 import { addFundExpense } from '../../lib/api';
 import { Button } from '../ui/Button';
 
+// Map genuine (non-balance) failures to friendly, non-technical messages.
+// Insufficient balance is intentionally NOT an error: parents may record
+// expenses that overdraw the Pet Box, and children later cover the deficit.
+function mapExpenseError(err: any): string {
+  const message = err?.message || '';
+  if (/not authenticated|fund not found/i.test(message)) return 'You no longer have permission to manage this fund.';
+  if (/amount must be a positive integer/i.test(message)) return 'The amount entered is not valid.';
+  if (/already been recorded|duplicate/i.test(message)) return 'This expense has already been recorded.';
+  return 'We could not save this expense. Please try again.';
+}
+
 interface ExpenseModalProps {
   fund: any;
   familyId: string;
@@ -18,7 +29,10 @@ export function ExpenseModal({ fund, familyId, onClose, currencySymbol }: Expens
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     const numAmount = Math.round(parseFloat(amount) * 100);
-    if (!numAmount || numAmount <= 0) return;
+    if (!numAmount || numAmount <= 0) {
+      alert('The amount entered is not valid.');
+      return;
+    }
 
     setIsSubmitting(true);
     try {
@@ -29,8 +43,8 @@ export function ExpenseModal({ fund, familyId, onClose, currencySymbol }: Expens
         fundName: fund.name
       });
       onClose();
-    } catch {
-      alert('Failed to add expense');
+    } catch (err: any) {
+      alert(mapExpenseError(err));
     } finally {
       setIsSubmitting(false);
     }

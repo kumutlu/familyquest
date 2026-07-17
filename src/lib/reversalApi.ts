@@ -7,6 +7,7 @@ import { buildReversalPayloads } from './reversalPayloads'
 export type ReversalSourceKind =
   | 'wallet_transaction' | 'fund_transaction' | 'behaviour_event' | 'task_completion'
   | 'reward_redemption' | 'transfer_request' | 'money_request' | 'petbox_request'
+  | 'profile_update'
 
 const sourceCollections: Record<ReversalSourceKind, string> = {
   wallet_transaction: 'wallet_transactions',
@@ -17,6 +18,7 @@ const sourceCollections: Record<ReversalSourceKind, string> = {
   transfer_request: 'transfer_requests',
   money_request: 'money_requests',
   petbox_request: 'petbox_requests',
+  profile_update: 'profile_update_requests',
 }
 
 export function sourceCollectionFor(kind: string): string {
@@ -73,7 +75,7 @@ export async function reverseTransaction(input: ReverseTransactionInput): Promis
     if (!familyDoc.exists()) throw new Error('Family not found')
     if (!sourceDoc.exists()) throw new Error('Reversal source not found')
 
-    const source = assertTraceableSource(sourceDoc.data())
+    const source = assertTraceableSource(sourceDoc.data(), input.sourceKind, input.sourceId)
     const snapshot = source.effectSnapshot
     if (snapshot.familyId !== input.familyId || snapshot.schemaVersion !== 1 || snapshot.xpAdjustment !== 0) {
       throw new Error('Invalid effectSnapshot for this family')

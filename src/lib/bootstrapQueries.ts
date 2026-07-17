@@ -30,7 +30,9 @@ export type BootstrapResource =
   | 'transferRequests'
   | 'moneyRequests'
   | 'petboxRequests'
+  | 'profileUpdateRequests'
   | 'reversals'
+  | 'avatarUnlocks'
   | 'wallets'
 
 export type BootstrapQueryPlanEntry =
@@ -65,6 +67,14 @@ export const bootstrapCompositeIndexes = [
     ],
   },
   {
+    collectionGroup: 'profile_update_requests',
+    queryScope: 'COLLECTION',
+    fields: [
+      { fieldPath: 'childId', order: 'ASCENDING' },
+      { fieldPath: 'createdAt', order: 'DESCENDING' },
+    ],
+  },
+  {
     collectionGroup: 'money_requests',
     queryScope: 'COLLECTION',
     fields: [
@@ -78,6 +88,23 @@ export const bootstrapCompositeIndexes = [
     fields: [
       { fieldPath: 'requestedFromId', order: 'ASCENDING' },
       { fieldPath: 'createdAt', order: 'DESCENDING' },
+    ],
+  },
+  {
+    collectionGroup: 'notifications',
+    queryScope: 'COLLECTION',
+    fields: [
+      { fieldPath: 'recipientIds', arrayConfig: 'CONTAINS' },
+      { fieldPath: 'createdAt', order: 'DESCENDING' },
+    ],
+  },
+  {
+    collectionGroup: 'push_tokens',
+    queryScope: 'COLLECTION',
+    fields: [
+      { fieldPath: 'familyId', order: 'ASCENDING' },
+      { fieldPath: 'userId', order: 'ASCENDING' },
+      { fieldPath: 'enabled', order: 'ASCENDING' },
     ],
   },
 ] as const
@@ -100,8 +127,11 @@ export const bootstrapResources: BootstrapResource[] = [
   'transferRequests',
   'moneyRequests',
   'petboxRequests',
+  'profileUpdateRequests',
+  'reversals',
+  'avatarUnlocks',
   'wallets',
-]
+  ]
 
 export const criticalBootstrapResources: BootstrapResource[] = [
   'family',
@@ -111,7 +141,7 @@ export const criticalBootstrapResources: BootstrapResource[] = [
   'wallets',
 ]
 
-const childBootstrapResources = bootstrapResources.filter(resource => resource !== 'joinRequests')
+const childBootstrapResources = bootstrapResources.filter(resource => resource !== 'joinRequests' && resource !== 'reversals')
 
 export const bootstrapResourcesForRole = (role: BootstrapRole | unknown) =>
   role === 'parent' || role === 'owner' ? bootstrapResources : childBootstrapResources
@@ -153,15 +183,26 @@ export function createBootstrapQueryPlan(
       { resource: 'transferRequests', key: 'transferRequests', kind: 'query', target: query(collection(db, `${familyPath}/transfer_requests`), orderBy('createdAt', 'desc')) },
       { resource: 'moneyRequests', key: 'moneyRequests', kind: 'query', target: query(collection(db, `${familyPath}/money_requests`), orderBy('createdAt', 'desc')) },
       { resource: 'petboxRequests', key: 'petboxRequests', kind: 'query', target: query(collection(db, `${familyPath}/petbox_requests`), orderBy('createdAt', 'desc')) },
+      { resource: 'profileUpdateRequests', key: 'profileUpdateRequests', kind: 'query', target: query(collection(db, `${familyPath}/profile_update_requests`), orderBy('createdAt', 'desc')) },
+      { resource: 'reversals', key: 'reversals', kind: 'query', target: query(collection(db, `${familyPath}/reversals`), orderBy('completedAt', 'desc')) },
     )
   } else {
-    plan.push(
-      { resource: 'taskCompletions', key: 'taskCompletions', kind: 'query', target: query(collection(db, `${familyPath}/task_completions`), where('assigneeId', '==', userId)) },
+      plan.push(
+      { resource: 'taskCompletions', key: 'taskCompletions', kind: 'query', target: collection(db, `${familyPath}/task_completions`) },
       { resource: 'redemptions', key: 'redemptions', kind: 'query', target: query(collection(db, `${familyPath}/redemptions`), where('userId', '==', userId)) },
       { resource: 'walletTransactions', key: 'walletTransactions', kind: 'query', target: query(collection(db, `${familyPath}/wallet_transactions`), where('childId', '==', userId)) },
       { resource: 'savingsGoals', key: 'savingsGoals', kind: 'query', target: query(collection(db, `${familyPath}/savings_goals`), where('childId', '==', userId)) },
-      { resource: 'transferRequests', key: 'transferRequests', kind: 'query', target: query(collection(db, `${familyPath}/transfer_requests`), where('fromChildId', '==', userId), orderBy('createdAt', 'desc')) },
+      // NOTE: intentionally NO orderBy here. A `where('fromChildId','==',uid)
+      // plus `orderBy('createdAt','desc')` requires the composite index
+      // `fromChildId ASC, createdAt DESC`. If that index is missing or still
+      // building in production the query fails with `failed-precondition` and
+      // the whole Pending-transfers section errors out. Filtering by the sender
+      // alone only needs the automatic single-field index, and we sort the
+      // results client-side (see useStore normalisation) — so the feature works
+      // regardless of composite-index deployment state.
+      { resource: 'transferRequests', key: 'transferRequests', kind: 'query', target: query(collection(db, `${familyPath}/transfer_requests`), where('fromChildId', '==', userId)) },
       { resource: 'petboxRequests', key: 'petboxRequests', kind: 'query', target: query(collection(db, `${familyPath}/petbox_requests`), where('childId', '==', userId), orderBy('createdAt', 'desc')) },
+      { resource: 'profileUpdateRequests', key: 'profileUpdateRequests', kind: 'query', target: query(collection(db, `${familyPath}/profile_update_requests`), where('childId', '==', userId), orderBy('createdAt', 'desc')) },
       { resource: 'moneyRequests', key: 'moneyRequests:requester', kind: 'query', target: query(collection(db, `${familyPath}/money_requests`), where('requesterId', '==', userId), orderBy('createdAt', 'desc')) },
       { resource: 'moneyRequests', key: 'moneyRequests:requestedFrom', kind: 'query', target: query(collection(db, `${familyPath}/money_requests`), where('requestedFromId', '==', userId), orderBy('createdAt', 'desc')) },
     )
@@ -178,6 +219,9 @@ export function createBootstrapQueryPlan(
     { resource: 'challenges', key: 'challenges', kind: 'query', target: query(collection(db, `${familyPath}/challenges`), orderBy('createdAt', 'desc')) },
     { resource: 'funds', key: 'funds', kind: 'query', target: collection(db, `${familyPath}/funds`) },
     { resource: 'fundTransactions', key: 'fundTransactions', kind: 'query', target: query(collection(db, `${familyPath}/fund_transactions`), orderBy('createdAt', 'desc')) },
+    // Current user's own avatar unlocks (premium ownership records). Scoped to
+    // the user so a child only ever sees their own collection.
+    { resource: 'avatarUnlocks', key: 'avatarUnlocks', kind: 'query', target: query(collection(db, `${familyPath}/users/${userId}/avatar_unlocks`)) },
   )
 
   return plan

@@ -24,9 +24,10 @@ export function ReversalActionModal({ open, familyId, historyAction, onClose, on
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
   const inFlight = useRef(false);
+  const isRefund = historyAction?.actionLabel === 'Refund';
   useEffect(() => {
     if (!open) return;
-    setReason('');
+    setReason(isRefund ? 'Donation refunded' : '');
     setError('');
     setLoading(false);
     inFlight.current = false;
@@ -67,7 +68,9 @@ export function ReversalActionModal({ open, familyId, historyAction, onClose, on
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-gray-900/40 p-4 backdrop-blur-sm" role="dialog" aria-modal="true">
       <div className="w-full max-w-md rounded-3xl bg-white p-6 shadow-xl">
-        <h2 className="text-xl font-bold text-gray-900">{historyAction.actionLabel} action</h2>
+        <h2 className="text-xl font-bold text-gray-900">
+          {historyAction.actionLabel === 'Refund' ? 'Refund donation' : `${historyAction.actionLabel} action`}
+        </h2>
         <p className="mt-1 text-sm text-gray-600">{historyAction.summary}</p>
         <div className="mt-4 space-y-2 rounded-2xl bg-gray-50 p-4">
           {historyAction.targets.map(target => (
@@ -83,7 +86,9 @@ export function ReversalActionModal({ open, familyId, historyAction, onClose, on
             ? 'Cancelling a pending action does not change balances.'
             : 'This creates a linked reversal record. The original action will remain in history.'}
         </p>
-        <label className="mt-4 block text-sm font-semibold text-gray-700" htmlFor="reversal-reason">Reason</label>
+        <label className="mt-4 block text-sm font-semibold text-gray-700" htmlFor="reversal-reason">
+          {isRefund ? 'Reason (optional)' : 'Reason'}
+        </label>
         <textarea id="reversal-reason" aria-label="Reason" value={reason} onChange={event => setReason(event.target.value)} className="mt-1 min-h-20 w-full rounded-xl border border-gray-200 p-3" />
         {error && <p role="alert" className="mt-2 text-sm font-medium text-danger-600">{error}</p>}
         <div className="mt-5 flex justify-end gap-2">

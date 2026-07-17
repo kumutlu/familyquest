@@ -42,10 +42,10 @@ describe('Family page', () => {
       ]
     });
     expect(screen.queryByText(/Admin/i)).toBeNull();
-    // 16. owner excluded, 17. parent excluded, 18. admin excluded
-    expect(screen.queryByText('Kemal')).toBeNull();
-    expect(screen.queryByText('Bilge')).toBeNull();
-    expect(screen.queryByText('Old')).toBeNull();
+    // They should be rendered now in the Adults section
+    expect(screen.getByText('Kemal')).toBeInTheDocument();
+    expect(screen.getByText('Bilge')).toBeInTheDocument();
+    expect(screen.getByText('Old')).toBeInTheDocument();
     // 15. only children appear
     expect(screen.getByText('Kid')).toBeInTheDocument();
   });

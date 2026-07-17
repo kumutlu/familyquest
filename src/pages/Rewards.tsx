@@ -6,6 +6,7 @@ import { Gift, Gamepad2, Pizza, Ticket, Plus, Edit, Trash2 } from 'lucide-react'
 import { useStore } from '../store/useStore';
 import { redeemReward, createReward, updateReward } from '../lib/api';
 import { cn } from '../lib/utils';
+import { isParentRole } from '../lib/roles';
 import { HistoryActionControl } from '../components/reversals/HistoryActionControl';
 
 export function Rewards() {
@@ -127,8 +128,8 @@ export function Rewards() {
           <Badge variant="reward" className="text-sm px-3 py-1 bg-reward-100 text-reward-700">
             {currentUser.rewardPoints} pts
           </Badge>
-          {currentUser.role === 'parent' && (
-            <Button onClick={openCreateForm} size="sm" className="bg-reward-500 hover:bg-reward-600 rounded-full h-10 w-10 p-0 shadow-lg flex items-center justify-center">
+          {isParentRole(currentUser.role) && (
+            <Button onClick={openCreateForm} aria-label="Add Reward" size="sm" className="bg-reward-500 hover:bg-reward-600 rounded-full h-10 w-10 p-0 shadow-lg flex items-center justify-center">
               <Plus size={20} />
             </Button>
           )}
@@ -219,7 +220,7 @@ export function Rewards() {
                 {error && <div className="p-3 bg-danger-50 text-danger-600 rounded-xl text-sm w-full font-medium">{error}</div>}
 
                 {/* Parent Actions */}
-                {currentUser?.role === 'parent' && (
+                {isParentRole(currentUser?.role) && (
                    <div className="flex gap-4 w-full mt-6 pt-6 border-t border-gray-100">
                       <Button variant="secondary" fullWidth onClick={() => openEditForm(selectedReward)}><Edit size={16} className="mr-2"/> Edit</Button>
                       <Button variant="danger" fullWidth onClick={() => handleArchive(selectedReward.id)}><Trash2 size={16} className="mr-2"/> Archive</Button>

@@ -41,3 +41,20 @@ latest_ruleset_name
 *.njsproj
 *.sln
 *.sw?
+
+# Firebase private credentials
+firebase-key.json
+*-firebase-adminsdk-*.json
+
+# Generated test and browser reports
+playwright-report/
+test-results/
+
+# Local environment files
+.env
+.env.local
+.env.production
+
+# Temporary patches and backups
+*.patch
+*.backup

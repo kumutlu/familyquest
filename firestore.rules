@@ -974,7 +974,7 @@ service cloud.firestore {
       }
 
       match /task_completions/{completionId} {
-        allow read: if isParent(familyId) || (isAuthenticated() && resource.data.assigneeId == request.auth.uid);
+        allow read: if isFamilyMember(familyId);
         allow create: if isFamilyMember(familyId);
         allow update: if (isParent(familyId) && resource.data.status == 'pending_approval'
           && request.resource.data.status in ['approved', 'rejected']
@@ -1118,9 +1118,14 @@ service cloud.firestore {
           function allowedUpdateKeys() {
             return ['enabled', 'permission', 'deviceLabel', 'updatedAt', 'lastSeenAt'];
           }
-          allow read: if request.auth.uid == userId
-            && isFamilyMember(familyId)
-            && resource.data.userId == request.auth.uid;
+          // A non-existent document (e.g. the getDoc() pre-read during first-time
+          // registration, when no token record exists yet) must resolve to "no
+          // data" rather than throw a Null value error. Existing tokens remain
+          // readable only by their owner. This mirrors the notifications read rule.
+          allow read: if resource == null
+            || (request.auth.uid == userId
+              && isFamilyMember(familyId)
+              && resource.data.userId == request.auth.uid);
           allow create: if request.auth.uid == userId
             && isFamilyMember(familyId)
             && request.resource.data.keys().hasOnly(allowedCreateKeys())
@@ -1130,7 +1135,7 @@ service cloud.firestore {
             && request.resource.data.token.size() > 0
             && request.resource.data.token.size() <= 1000
             && request.resource.data.enabled == true
-            && request.resource.data.permission in ['default', 'granted', 'denied']
+            && request.resource.data.permission == 'granted'
             && request.resource.data.createdAt == request.time
             && request.resource.data.updatedAt == request.time
             && request.resource.data.lastSeenAt == request.time;
@@ -1142,7 +1147,11 @@ service cloud.firestore {
             && request.resource.data.familyId == resource.data.familyId
             && request.resource.data.diff(resource.data).affectedKeys().hasOnly(allowedUpdateKeys())
             && request.resource.data.enabled is bool
-            && request.resource.data.permission in ['default', 'granted', 'denied'];
+            && request.resource.data.permission in ['default', 'granted', 'denied']
+            && request.resource.data.updatedAt == request.time
+            && request.resource.data.lastSeenAt == request.time
+            // createdAt is immutable after create.
+            && request.resource.data.createdAt == resource.data.createdAt;
           allow delete: if request.auth.uid == userId
             && isFamilyMember(familyId)
             && resource.data.userId == request.auth.uid;

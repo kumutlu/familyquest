@@ -7,7 +7,19 @@ import { Button } from '../components/ui/Button';
 import { CurrencyDisplay } from '../components/ui/CurrencyDisplay';
 
 export function FundsDashboard() {
-  const { currentUser, familyData, myWallet, funds, fundTransactions } = useStore();
+  const { currentUser, familyData, myWallet, funds, fundTransactions, petboxRequests, reversals } = useStore();
+  
+  // Temporary diagnostic logging
+  if (typeof window !== 'undefined') {
+    console.log('[Pet Box Diagnostics]', {
+      petboxRequests: petboxRequests.length,
+      reversals: reversals.length,
+      funds: funds.length,
+      fundTransactions: fundTransactions.length,
+      hasReversals: reversals.length > 0,
+    });
+  }
+  
   const [showCreate, setShowCreate] = useState(false);
 
   const [newFund, setNewFund] = useState({
@@ -63,14 +75,14 @@ export function FundsDashboard() {
             </div>
           ) : (
             funds.map((fund: any) => (
-              <FundCard key={fund.id} fund={fund} fundTransactions={fundTransactions} isParent={isParent} currencySymbol={currencySymbol} />
+              <FundCard key={fund.id} fund={fund} fundTransactions={fundTransactions} petboxRequests={petboxRequests} isParent={isParent} currencySymbol={currencySymbol} />
             ))
           )}
         </div>
 
         <div className="space-y-4">
           <h2 className="text-lg font-bold text-gray-900 px-1">Top Helpers</h2>
-          <PetLeaderboard fundTransactions={fundTransactions} familyMembers={useStore.getState().familyMembers} currencySymbol={currencySymbol} />
+          <PetLeaderboard fundTransactions={fundTransactions} familyMembers={useStore.getState().familyMembers} reversals={reversals} currencySymbol={currencySymbol} />
         </div>
       </div>
 

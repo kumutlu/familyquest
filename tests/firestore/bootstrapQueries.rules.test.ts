@@ -1,5 +1,6 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest'
 import {
+  assertFails,
   assertSucceeds,
   initializeTestEnvironment,
   type RulesTestEnvironment,
@@ -38,6 +39,13 @@ beforeAll(async () => {
       port: 8080,
     },
   })
+
+  it('child only sees their own outgoing transfer requests, never a sibling’s', async () => {
+    const results = await executePlan(testEnv.authenticatedContext(childId).firestore(), childId, 'child');
+    expect(results.get('transferRequests')).toEqual(['own']);
+    expect(results.get('transferRequests')).not.toContain('sibling');
+  });
+
 })
 
 afterAll(async () => testEnv.cleanup())
@@ -72,6 +80,7 @@ beforeEach(async () => {
       setDoc(doc(db, `families/${familyId}/money_requests/received`), { requesterId: siblingId, requestedFromId: childId, createdAt: now }),
       setDoc(doc(db, `families/${familyId}/petbox_requests/own`), { childId, createdAt: now }),
       setDoc(doc(db, `families/${familyId}/petbox_requests/sibling`), { childId: siblingId, createdAt: now }),
+      setDoc(doc(db, `families/${familyId}/reversals/reversal`), { status: 'completed', completedAt: now }),
       setDoc(doc(db, `families/${familyId}/feed/family-wide`), { visibleTo: [parentId, ownerId, childId, siblingId], timestamp: now }),
       setDoc(doc(db, `families/${familyId}/feed/child-visible`), { visibleTo: [parentId, childId], timestamp: now }),
       setDoc(doc(db, `families/${familyId}/feed/sibling-only`), { visibleTo: [parentId, siblingId], timestamp: now }),
@@ -79,9 +88,11 @@ beforeEach(async () => {
       setDoc(doc(db, `families/${familyId}/feed/public`), { timestamp: now }),
       setDoc(doc(db, `families/${familyId}/behaviour_events/legacy`), { createdAt: now }),
       setDoc(doc(db, `families/${familyId}/behaviour_events/v2`), { timestamp: now }),
-      setDoc(doc(db, `families/${familyId}/challenges/challenge`), { createdAt: now }),
       setDoc(doc(db, `families/${familyId}/funds/fund`), { balance: 0 }),
       setDoc(doc(db, `families/${familyId}/fund_transactions/transaction`), { createdAt: now }),
+      // A sibling completion in a DIFFERENT family, used to prove cross-family
+      // isolation: a child must NOT be able to read it.
+      setDoc(doc(db, `families/other-family/task_completions/sibling`), { assigneeId: siblingId }),
     ])
   })
 })
@@ -137,5 +148,19 @@ describe('production bootstrap query plan against Firestore rules', () => {
     expect(results.get('petboxRequests')).toEqual(['own'])
     expect(results.get('moneyRequests:requester')).toEqual(['sent'])
     expect(results.get('moneyRequests:requestedFrom')).toEqual(['received'])
+  })
+
+  // Regression test for the Family weekly ranking inconsistency: a child must be
+  // able to read a SIBLING's approved task completion in the same family (so the
+  // weekly ranking can include every child's completions), but must NOT be able
+  // to read a completion in a different family.
+  it('child can read a sibling task completion in the same family but not in another family', async () => {
+    const childDb = testEnv.authenticatedContext(childId).firestore()
+
+    // Sibling completion in the SAME family — must be readable.
+    await assertSucceeds(getDoc(doc(childDb, `families/${familyId}/task_completions/sibling`)))
+
+    // Sibling completion in a DIFFERENT family — must be denied.
+    await assertFails(getDoc(doc(childDb, 'families/other-family/task_completions/sibling')))
   })
 })

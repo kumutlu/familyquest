@@ -15,13 +15,15 @@ import {
   approveMoneyRequest,
   rejectMoneyRequest,
   approvePetBoxDonation,
-  rejectPetBoxDonation
+  rejectPetBoxDonation,
+  approveProfileUpdateRequest,
+  rejectProfileUpdateRequest
 } from '../../lib/api';
 import { HistoryActionControl } from '../reversals/HistoryActionControl';
 import type { ReversalSourceKind } from '../../lib/reversalApi';
 
 export function ApprovalCenter() {
-  const { currentUser, tasks, familyMembers, taskCompletions, transferRequests, moneyRequests, petboxRequests } = useStore();
+  const { currentUser, tasks, familyMembers, taskCompletions, transferRequests, moneyRequests, petboxRequests, profileUpdateRequests } = useStore();
 
   const [activeTab, setActiveTab] = useState<'pending' | 'history'>('pending');
   const [processing, setProcessing] = useState<Record<string, 'approve' | 'reject'>>({});
@@ -64,9 +66,17 @@ export function ApprovalCenter() {
       isPending: r.status === 'pending'
     })));
 
+    // 5. Profile Update Requests
+    items.push(...(profileUpdateRequests || []).map(r => ({
+      ...r,
+      category: 'profile_update',
+      sortDate: r.createdAt?.toDate ? r.createdAt.toDate() : new Date(),
+      isPending: r.status === 'pending'
+    })));
+
     items.sort((a, b) => b.sortDate.getTime() - a.sortDate.getTime());
     return items;
-  }, [taskCompletions, transferRequests, moneyRequests, petboxRequests]);
+  }, [taskCompletions, transferRequests, moneyRequests, petboxRequests, profileUpdateRequests]);
 
   const itemKey = (item: any) => approvalKey(item.category as ApprovalType, item.id);
   const pendingApprovals = timeline.filter(item => item.isPending && !optimisticallyRemovedIds.has(itemKey(item)));
@@ -98,6 +108,8 @@ export function ApprovalCenter() {
         await approveMoneyRequest(currentUser.familyId, item.id);
       } else if (item.category === 'petbox') {
         await approvePetBoxDonation(currentUser.familyId, item.id);
+      } else if (item.category === 'profile_update') {
+        await approveProfileUpdateRequest(currentUser.familyId, item.id);
       }
       setOptimisticallyRemovedIds(prev => new Set(prev).add(key));
     } catch (err: any) {
@@ -125,6 +137,8 @@ export function ApprovalCenter() {
         await rejectMoneyRequest(currentUser.familyId, item.id, rejectionReason);
       } else if (item.category === 'petbox') {
         await rejectPetBoxDonation(currentUser.familyId, item.id, rejectionReason);
+      } else if (item.category === 'profile_update') {
+        await rejectProfileUpdateRequest(currentUser.familyId, item.id, rejectionReason);
       }
       setOptimisticallyRemovedIds(prev => new Set(prev).add(key));
     } catch (err: any) {
@@ -142,7 +156,13 @@ export function ApprovalCenter() {
     let badge = null;
     let avatarSrc = '';
     let fallback = '';
-    const sourceKind = ({ task: 'task_completion', transfer: 'transfer_request', money_request: 'money_request', petbox: 'petbox_request' } as Record<string, ReversalSourceKind>)[item.category];
+    const sourceKindMap: Partial<Record<string, ReversalSourceKind>> = {
+      task: 'task_completion',
+      transfer: 'transfer_request',
+      money_request: 'money_request',
+      petbox: 'petbox_request',
+    };
+    const sourceKind = sourceKindMap[item.category];
 
     if (item.category === 'task') {
       const task = tasks.find(t => t.id === item.taskId);
@@ -181,6 +201,19 @@ export function ApprovalCenter() {
       amount = item.amountPence;
       avatarSrc = '';
       fallback = item.childName?.[0] || '?';
+    } else if (item.category === 'profile_update') {
+      const child = familyMembers.find(c => c.id === item.childId);
+      const requestedName = item.requestedDisplayName || item.childName || child?.displayName || 'A child';
+      const currentName = child?.displayName || item.childName || '';
+      const nameChanged = requestedName && currentName && requestedName !== currentName;
+      const avatarChanged = Boolean(item.requestedAvatarId) || Boolean(item.requestedAvatar);
+      const changes: string[] = [];
+      if (nameChanged) changes.push(`name → "${requestedName}"`);
+      if (avatarChanged) changes.push('avatar');
+      title = 'Profile Update Request';
+      description = `${item.childName || child?.displayName || 'A child'} wants to update their profile${changes.length ? ` (${changes.join(', ')})` : ''}.`;
+      avatarSrc = item.requestedAvatar || child?.avatarUrl || '';
+      fallback = (item.childName || child?.displayName || '?')[0] || '?';
     }
 
     return (
@@ -214,7 +247,9 @@ export function ApprovalCenter() {
             ) : (
               <div className="flex items-center gap-2">
                 <Badge variant={item.status === 'approved' ? 'success' : 'danger'}>{item.status}</Badge>
-                <HistoryActionControl sourceKind={sourceKind} source={item} />
+                {sourceKind ? (
+                  <HistoryActionControl sourceKind={sourceKind} source={item} />
+                ) : null}
               </div>
             )}
           </div>

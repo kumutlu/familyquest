@@ -2,14 +2,16 @@ import { useState } from 'react';
 import { Card, CardContent } from '../components/ui/Card';
 import { Badge } from '../components/ui/Badge';
 import { Button } from '../components/ui/Button';
-import { CheckCircle2, Plus, Edit, Trash2 } from 'lucide-react';
+import { Plus, CheckCircle2 } from 'lucide-react';
 import { useStore } from '../store/useStore';
 import { completeTask, createTask, updateTask } from '../lib/api';
 import { cn } from '../lib/utils';
+import { isParentRole } from '../lib/roles';
+import { TaskDetailsModal } from '../components/tasks/TaskDetailsModal';
 
 export function Tasks() {
   const { currentUser, tasks, taskCompletions, loading } = useStore();
-  const [filter, setFilter] = useState<'all' | 'daily' | 'weekly' | 'one-time'>('all');
+  const [filter, setFilter] = useState<'all' | 'daily' | 'weekdays' | 'weekends' | 'weekly' | 'one-time'>('all');
   const [selectedTask, setSelectedTask] = useState<any>(null);
   
   const [isFormOpen, setIsFormOpen] = useState(false);
@@ -26,11 +28,16 @@ export function Tasks() {
 
   // Map completions back to tasks to know their status for the current user
   const mappedTasks = activeTasks.map(task => {
-    const completion = taskCompletions.find(c => c.taskId === task.id && c.assigneeId === currentUser?.id);
+    const completionsForTask = taskCompletions.filter(c => c.taskId === task.id && c.assigneeId === currentUser?.id);
+    const latestCompletion = completionsForTask.sort((a, b) => {
+      const timeA = a.completedAt?.toMillis ? a.completedAt.toMillis() : 0;
+      const timeB = b.completedAt?.toMillis ? b.completedAt.toMillis() : 0;
+      return timeB - timeA;
+    })[0];
     return {
       ...task,
-      status: completion ? completion.status : 'pending',
-      completionId: completion?.id
+      status: latestCompletion ? latestCompletion.status : 'pending',
+      completionId: latestCompletion?.id
     };
   });
 
@@ -120,8 +127,8 @@ export function Tasks() {
           <h1 className="text-2xl font-bold text-gray-900 tracking-tight">Tasks</h1>
           <p className="text-gray-500 mt-1">Earn points by completing your tasks.</p>
         </div>
-        {currentUser?.role === 'parent' && (
-          <Button onClick={openCreateForm} size="sm" className="bg-primary-500 rounded-full h-10 w-10 p-0 shadow-lg flex items-center justify-center">
+        {isParentRole(currentUser?.role) && (
+          <Button onClick={openCreateForm} aria-label="Add Task" size="sm" className="bg-primary-500 rounded-full h-10 w-10 p-0 shadow-lg flex items-center justify-center">
             <Plus size={20} />
           </Button>
         )}
@@ -136,6 +143,8 @@ export function Tasks() {
       <div className="flex gap-2 overflow-x-auto pb-2 scrollbar-hide -mx-4 px-4 sm:mx-0 sm:px-0">
         <Button variant={filter === 'all' ? 'primary' : 'secondary'} size="sm" onClick={() => setFilter('all')} className="rounded-full">All Tasks</Button>
         <Button variant={filter === 'daily' ? 'primary' : 'secondary'} size="sm" onClick={() => setFilter('daily')} className="rounded-full">Daily</Button>
+        <Button variant={filter === 'weekdays' ? 'primary' : 'secondary'} size="sm" onClick={() => setFilter('weekdays')} className="rounded-full">Weekdays</Button>
+        <Button variant={filter === 'weekends' ? 'primary' : 'secondary'} size="sm" onClick={() => setFilter('weekends')} className="rounded-full">Weekends</Button>
         <Button variant={filter === 'weekly' ? 'primary' : 'secondary'} size="sm" onClick={() => setFilter('weekly')} className="rounded-full">Weekly</Button>
         <Button variant={filter === 'one-time' ? 'primary' : 'secondary'} size="sm" onClick={() => setFilter('one-time')} className="rounded-full whitespace-nowrap">One Time</Button>
       </div>
@@ -147,10 +156,20 @@ export function Tasks() {
           </div>
         ) : (
           filteredTasks.map((task) => (
-            <Card key={task.id} className={cn(
-              "cursor-pointer transition-all active:scale-[0.98]",
+            <Card key={task.id} role="button" tabIndex={0}
+              aria-label={`View details for ${task.title}`}
+              className={cn(
+              "cursor-pointer transition-all active:scale-[0.98] focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-400",
               task.status === 'approved' ? 'opacity-50' : 'hover:border-primary-300'
-            )} onClick={() => handleTaskClick(task)}>
+            )}
+              onClick={() => handleTaskClick(task)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' || e.key === ' ') {
+                  e.preventDefault();
+                  handleTaskClick(task);
+                }
+              }}
+            >
               <CardContent className="p-4 flex items-center gap-4">
                 <div className={cn(
                   "w-6 h-6 rounded-full border-2 flex items-center justify-center shrink-0 transition-colors",
@@ -182,58 +201,16 @@ export function Tasks() {
 
       {/* Task Details Modal */}
       {selectedTask && (
-        <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-gray-900/40 backdrop-blur-sm animate-in fade-in duration-200">
-          <div className="bg-white w-full sm:max-w-md sm:rounded-3xl rounded-t-3xl shadow-xl animate-in slide-in-from-bottom-full sm:slide-in-from-bottom-10 duration-300 overflow-hidden flex flex-col max-h-[90vh]">
-            <div className="px-6 py-4 flex justify-between items-center border-b border-gray-100 shrink-0 bg-white sticky top-0">
-              <h3 className="text-xl font-bold text-gray-900">Task Details</h3>
-              <button onClick={() => setSelectedTask(null)} className="p-2 -mr-2 bg-gray-100 hover:bg-gray-200 rounded-full text-gray-500 transition-colors">
-                ✕
-              </button>
-            </div>
-            
-            <div className="p-6 overflow-y-auto">
-              <div className="flex flex-col items-center text-center space-y-4">
-                <div className="w-20 h-20 bg-primary-100 rounded-full flex items-center justify-center text-primary-500">
-                  <CheckCircle2 size={40} />
-                </div>
-                
-                <div>
-                  <h4 className="text-2xl font-bold text-gray-900">{selectedTask.title}</h4>
-                  <p className="text-gray-500 font-medium mt-1">Reward: {selectedTask.pointsReward} points</p>
-                </div>
-
-                <div className="flex gap-2">
-                  <Badge variant="default">{selectedTask.type}</Badge>
-                  {selectedTask.requiresApproval && <Badge variant="warning">Requires Approval</Badge>}
-                </div>
-                
-                {error && <p className="text-danger-500 text-sm font-medium">{error}</p>}
-
-                {/* Parent Actions */}
-                {currentUser?.role === 'parent' && (
-                   <div className="flex gap-4 w-full mt-6 pt-6 border-t border-gray-100">
-                      <Button variant="secondary" fullWidth onClick={() => openEditForm(selectedTask)}><Edit size={16} className="mr-2"/> Edit</Button>
-                      <Button variant="danger" fullWidth onClick={() => handleArchive(selectedTask.id)}><Trash2 size={16} className="mr-2"/> Archive</Button>
-                   </div>
-                )}
-
-                {/* Child Actions */}
-                {currentUser?.role === 'child' && selectedTask.status === 'pending' && (
-                  <Button fullWidth onClick={handleComplete} size="lg" disabled={isSubmitting} className="shadow-primary-500/25 mt-6">
-                    {isSubmitting ? 'Submitting...' : 'Mark as Done'}
-                  </Button>
-                )}
-                {currentUser?.role === 'child' && selectedTask.status !== 'pending' && (
-                  <div className="mt-6 p-4 bg-gray-50 rounded-xl w-full">
-                    <p className="text-gray-500 font-medium">
-                      {selectedTask.status === 'approved' ? 'Task completed and approved!' : 'Waiting for parent approval.'}
-                    </p>
-                  </div>
-                )}
-              </div>
-            </div>
-          </div>
-        </div>
+        <TaskDetailsModal
+          task={selectedTask}
+          currentUserRole={currentUser?.role}
+          isSubmitting={isSubmitting}
+          error={error}
+          onClose={() => setSelectedTask(null)}
+          onEdit={openEditForm}
+          onArchive={handleArchive}
+          onComplete={handleComplete}
+        />
       )}
 
       {/* Create/Edit Form Modal */}
@@ -258,6 +235,8 @@ export function Tasks() {
                   <label className="block text-sm font-medium text-gray-700">Category</label>
                   <select value={formData.type} onChange={e => setFormData({...formData, type: e.target.value})} className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md bg-white">
                     <option value="daily">Daily</option>
+                    <option value="weekdays">Weekdays (Mon-Fri)</option>
+                    <option value="weekends">Weekends (Sat-Sun)</option>
                     <option value="weekly">Weekly</option>
                     <option value="one-time">One-Time</option>
                   </select>

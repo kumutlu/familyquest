@@ -7,11 +7,19 @@ import { contributeToFund } from '../../lib/api';
 import { PetBoxConfirmationModal } from './PetBoxConfirmationModal';
 import { useStore } from '../../store/useStore';
 import { HistoryActionControl } from '../reversals/HistoryActionControl';
+import { findLegacyPetboxRequest, logLegacyMatchDiagnostics } from '../../lib/legacyPetboxMatcher';
 
-export function FundCard({ fund, fundTransactions, isParent, currencySymbol }: { fund: any, fundTransactions: any[], isParent: boolean, currencySymbol: string }) {
+export function FundCard({ fund, fundTransactions, petboxRequests = [], isParent, currencySymbol }: {
+  fund: any;
+  fundTransactions: any[];
+  petboxRequests?: any[];
+  isParent: boolean;
+  currencySymbol: string;
+}) {
   const [showExpense, setShowExpense] = useState(false);
   const [isContributing, setIsContributing] = useState(false);
   const [showAllExpenses, setShowAllExpenses] = useState(false);
+  const [showAllDonations, setShowAllDonations] = useState(false);
   const [confirmAmount, setConfirmAmount] = useState<number | null>(null);
   const { currentUser, familyData, familyMembers } = useStore();
 
@@ -28,7 +36,7 @@ export function FundCard({ fund, fundTransactions, isParent, currencySymbol }: {
   const fundTxs = fundTransactions.filter(tx => tx.fundId === fund.id);
 
   const spentThisMonth = fundTxs
-    .filter(tx => tx.fundId === fund.id && tx.type === 'expense')
+    .filter(tx => tx.type === 'expense')
     .filter(tx => {
       if (!tx.createdAt) return false;
       const date = tx.createdAt.toDate();
@@ -39,15 +47,26 @@ export function FundCard({ fund, fundTransactions, isParent, currencySymbol }: {
 
   const budgetProgress = fund.monthlyBudget ? Math.min((spentThisMonth / fund.monthlyBudget) * 100, 100) : 0;
   const emergencyProgress = fund.emergencyGoal ? Math.min((fund.balance / fund.emergencyGoal) * 100, 100) : 0;
+
   const expenseTxs = fundTxs
     .filter(tx => tx.type === 'expense')
-    .sort((a, b) => {
-      const aTime = a.createdAt?.toMillis() || 0;
-      const bTime = b.createdAt?.toMillis() || 0;
-      return bTime - aTime;
-    });
+    .sort((a, b) => (b.createdAt?.toMillis() || 0) - (a.createdAt?.toMillis() || 0));
+
+  // Donation history: contribution-type fund_transactions for this fund
+  const donationTxs = fundTxs
+    .filter(tx => tx.type === 'contribution')
+    .sort((a, b) => (b.createdAt?.toMillis() || 0) - (a.createdAt?.toMillis() || 0));
+
+  // Lookup map: petbox_request id → petbox_request document
+  // fund_transactions link back to petbox_requests via tx.sourceId
+  const petboxRequestMap = new Map<string, any>(
+    petboxRequests
+      .filter(r => r.fundId === fund.id)
+      .map(r => [r.id, r])
+  );
 
   const visibleExpenses = showAllExpenses ? expenseTxs : expenseTxs.slice(0, 5);
+  const visibleDonations = showAllDonations ? donationTxs : donationTxs.slice(0, 5);
 
   const formatDate = (ts: any) => {
     if (!ts) return '';
@@ -60,7 +79,6 @@ export function FundCard({ fund, fundTransactions, isParent, currencySymbol }: {
 
   const executeContribution = async () => {
     if (!currentUser || !confirmAmount) return;
-
     setIsContributing(true);
     try {
       await contributeToFund(familyData.id, fund.id, currentUser.id, confirmAmount, fund.name, currentUser.displayName);
@@ -76,6 +94,7 @@ export function FundCard({ fund, fundTransactions, isParent, currencySymbol }: {
   return (
     <Card>
       <CardContent className="p-4">
+        {/* Header */}
         <div className="flex justify-between items-start mb-4">
           <div className="flex items-center gap-3">
             <div className="w-16 h-16 bg-primary-100 rounded-2xl flex items-center justify-center text-4xl shadow-sm border border-primary-200">
@@ -88,10 +107,25 @@ export function FundCard({ fund, fundTransactions, isParent, currencySymbol }: {
           </div>
           <div className="text-right">
             <p className="text-xs text-gray-500 font-bold uppercase mb-1">Balance</p>
-            <p className="text-xl font-extrabold text-success-600">{currencySymbol}{(fund.balance / 100).toFixed(2)}</p>
+            {fund.balance < 0 ? (
+              <p className="text-xl font-extrabold text-warning-700" data-testid="fund-balance">
+                -{currencySymbol}{(Math.abs(fund.balance) / 100).toFixed(2)}
+              </p>
+            ) : (
+              <p className="text-xl font-extrabold text-success-600" data-testid="fund-balance">
+                {currencySymbol}{(fund.balance / 100).toFixed(2)}
+              </p>
+            )}
           </div>
         </div>
 
+        {fund.balance < 0 && (
+          <div className="mb-4 rounded-xl bg-warning-50 border border-warning-200 p-3 text-warning-700 text-sm" data-testid="fund-deficit">
+            <span className="font-bold">{currencySymbol}{(Math.abs(fund.balance) / 100).toFixed(2)} needed to cover expenses</span>
+          </div>
+        )}
+
+        {/* Monthly Budget */}
         {fund.monthlyBudget > 0 && (
           <div className="bg-gray-50 p-4 rounded-xl mb-3">
             <div className="flex justify-between text-sm mb-2">
@@ -102,6 +136,7 @@ export function FundCard({ fund, fundTransactions, isParent, currencySymbol }: {
           </div>
         )}
 
+        {/* Emergency Goal */}
         {fund.emergencyGoal > 0 && (
           <div className="bg-gray-50 p-4 rounded-xl mb-4 border border-success-100">
             <div className="flex justify-between text-sm mb-2">
@@ -112,6 +147,83 @@ export function FundCard({ fund, fundTransactions, isParent, currencySymbol }: {
           </div>
         )}
 
+        {/* Donations history */}
+        <div className="mb-4 space-y-2 border-t border-gray-100 pt-4">
+          <h4 className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-2">Donations</h4>
+          {donationTxs.length === 0 ? (
+            <p className="text-sm text-gray-500 text-center py-2">No donations yet.</p>
+          ) : (
+            <>
+              {visibleDonations.map((tx: any) => {
+                const donor = tx.fromUserId ? familyMembers.find((m: any) => m.id === tx.fromUserId) : null;
+                const donorName = donor?.displayName || tx.childName || 'Someone';
+                
+                // Retrieve the petbox_request that generated this fund_transaction
+                let petboxRequest = tx.sourceId ? petboxRequestMap.get(tx.sourceId) : undefined;
+                
+                // If not directly linked, try legacy matching
+                if (!petboxRequest && !tx.sourceId && tx.fromUserId) {
+                  const matchResult = findLegacyPetboxRequest(
+                    {
+                      fundTxId: tx.id,
+                      familyId: familyData.id,
+                      fundId: fund.id,
+                      fromUserId: tx.fromUserId,
+                      amount: tx.amount,
+                      createdAt: tx.createdAt,
+                    },
+                    petboxRequests.filter(r => r.fundId === fund.id)
+                  );
+                  
+                  logLegacyMatchDiagnostics(matchResult, false);
+                  
+                  if (matchResult.matched && matchResult.petboxRequestId) {
+                    petboxRequest = petboxRequestMap.get(matchResult.petboxRequestId);
+                  }
+                }
+                
+                return (
+                  <div key={tx.id} className="flex justify-between items-center text-sm p-2 bg-reward-50 rounded-lg border border-reward-100">
+                    <div className="flex items-center gap-2">
+                      <span className="text-lg">💝</span>
+                      <div>
+                        <p className="font-bold text-gray-700">{donorName}</p>
+                        <p className="text-[10px] text-gray-500">{formatDate(tx.createdAt)}</p>
+                      </div>
+                    </div>
+                    <div className="flex flex-col items-end gap-1">
+                      <span className="font-bold text-reward-700">
+                        +{currencySymbol}{(tx.amount / 100).toFixed(2)}
+                      </span>
+                      {/* Refund button: only shown to parents/owners when petbox_request is available */}
+                      {isParent && petboxRequest && (
+                        <HistoryActionControl sourceKind="petbox_request" source={petboxRequest} />
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
+              {!showAllDonations && donationTxs.length > 5 && (
+                <button
+                  onClick={() => setShowAllDonations(true)}
+                  className="w-full text-xs font-bold text-gray-500 bg-gray-100 hover:bg-gray-200 py-2 rounded-lg transition-colors mt-2"
+                >
+                  View all donations
+                </button>
+              )}
+              {showAllDonations && donationTxs.length > 5 && (
+                <button
+                  onClick={() => setShowAllDonations(false)}
+                  className="w-full text-xs font-bold text-gray-500 bg-gray-100 hover:bg-gray-200 py-2 rounded-lg transition-colors mt-2"
+                >
+                  Show less
+                </button>
+              )}
+            </>
+          )}
+        </div>
+
+        {/* Recent Expenses */}
         <div className="mb-4 space-y-2 border-t border-gray-100 pt-4">
           <h4 className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-2">Recent Expenses</h4>
           {expenseTxs.length === 0 ? (
@@ -163,6 +275,7 @@ export function FundCard({ fund, fundTransactions, isParent, currencySymbol }: {
           )}
         </div>
 
+        {/* Action: parent adds expense, child donates */}
         {isParent ? (
           <Button fullWidth onClick={() => setShowExpense(true)}>Add Expense</Button>
         ) : (
@@ -181,7 +294,7 @@ export function FundCard({ fund, fundTransactions, isParent, currencySymbol }: {
               ))}
               <button
                 onClick={() => {
-                  const amt = parseFloat(prompt(`Enter amount to contribute (${currencySymbol}):`, "10") || "0");
+                  const amt = parseFloat(prompt(`Enter amount to contribute (${currencySymbol}):`, '10') || '0');
                   if (amt > 0) handleContribute(amt);
                 }}
                 disabled={isContributing}
@@ -201,7 +314,9 @@ export function FundCard({ fund, fundTransactions, isParent, currencySymbol }: {
         amountPence={confirmAmount || 0}
         fundName={fund.name}
       />
-      {showExpense && <ExpenseModal fund={fund} familyId={familyData.id} onClose={() => setShowExpense(false)} currencySymbol={currencySymbol} />}
+      {showExpense && (
+        <ExpenseModal fund={fund} familyId={familyData.id} onClose={() => setShowExpense(false)} currencySymbol={currencySymbol} />
+      )}
     </Card>
   );
 }

@@ -76,7 +76,7 @@ function inverseFor(original: EffectSnapshot, actorId: string) {
   })
 }
 
-function fullReversalBatch(actorId: string, sourceKind: string, sourceId: string, original: EffectSnapshot, overrides: Record<string, any> = {}) {
+function fullReversalBatch(actorId: string, sourceKind: string, sourceId: string, original: EffectSnapshot, overrides: Record<string, any> = {}, startingFundBalance: number = 700) {
   const db = testEnv.authenticatedContext(actorId).firestore()
   const reversalId = reversalRecordId(sourceKind, sourceId)
   const inverse = inverseFor(original, actorId)
@@ -92,7 +92,7 @@ function fullReversalBatch(actorId: string, sourceKind: string, sourceId: string
     batch.set(doc(db, `families/${familyId}/wallet_transactions/${reversalId}__counterparty`), { ...payloads.wallet(original.counterpartyChildId!, inverse.counterpartyWalletDeltaPence), ...(overrides.counterparty || {}) })
   }
   if (inverse.fundDeltaPence !== undefined) {
-    batch.update(doc(db, `families/${familyId}/funds/${original.fundId}`), { balance: 700 + inverse.fundDeltaPence, lastReversalId: reversalId })
+    batch.update(doc(db, `families/${familyId}/funds/${original.fundId}`), { balance: startingFundBalance + inverse.fundDeltaPence, lastReversalId: reversalId })
     batch.set(doc(db, `families/${familyId}/fund_transactions/${reversalId}__fund`), { ...payloads.fund(original.fundId!, inverse.fundDeltaPence), ...(overrides.fund || {}) })
   }
   if (inverse.pointsDelta !== undefined) {
@@ -166,12 +166,50 @@ describe('reversal security rules', () => {
     await assertFails(updateDoc(doc(first.db, `families/${familyId}/reversal_events/${first.reversalId}`), { reason: 'changed' }))
   })
 
-  it('enforces wallet debt and fund sufficiency', async () => {
+  it('enforces the wallet debt limit on reversals', async () => {
     const wallet = effectSnapshot({ entityType: 'wallet_transaction', familyId, actorId: parentId, childId, walletDeltaPence: 1100 })
     await seedSource('wallet_transactions', 'debt-source', wallet)
     await assertFails(fullReversalBatch(parentId, 'wallet_transaction', 'debt-source', wallet).batch.commit())
+  })
+
+  it('allows a fund reversal that drives the balance negative (negative balances permitted)', async () => {
     const fund = effectSnapshot({ entityType: 'fund_transaction', familyId, actorId: parentId, fundId: 'fund-1', fundDeltaPence: 800 })
     await seedSource('fund_transactions', 'fund-source', fund)
-    await assertFails(fullReversalBatch(parentId, 'fund_transaction', 'fund-source', fund).batch.commit())
+    // Fund balance is 700, inverse fundDeltaPence = -800 → balance would be -100 (allowed).
+    await assertSucceeds(fullReversalBatch(parentId, 'fund_transaction', 'fund-source', fund).batch.commit())
+  })
+
+  it('14. allows an expense refund that increases a negative fund balance', async () => {
+    // Pre-set the fund to a negative balance (-£3.88) before refunding a £2.00 expense.
+    await testEnv.withSecurityRulesDisabled(async (context: any) => {
+      await setDoc(doc(context.firestore(), `families/${familyId}/funds/fund-1`), { balance: -388 })
+    })
+    const original = effectSnapshot({ entityType: 'fund_transaction', familyId, actorId: parentId, fundId: 'fund-1', fundDeltaPence: -200 })
+    await seedSource('fund_transactions', 'neg-fund-source', original)
+    const { db, batch } = fullReversalBatch(parentId, 'fund_transaction', 'neg-fund-source', original, {}, -388)
+    await assertSucceeds(batch.commit())
+    expect((await getDoc(doc(db, `families/${familyId}/funds/fund-1`))).data()?.balance).toBe(-188)
+  })
+
+  it('accepts petbox_request reversal (donation refund) from parent/owner', async () => {
+    // Petbox donation: child wallet -200, fund +200
+    const original = effectSnapshot({ entityType: 'petbox_donation', familyId, actorId: parentId, childId, fundId: 'fund-1', walletDeltaPence: -200, fundDeltaPence: 200 })
+    await seedSource('petbox_requests', 'petbox-source', original)
+    // Fund starts at 700 (set in beforeEach) — enough to return 200
+    await assertSucceeds(fullReversalBatch(parentId, 'petbox_request', 'petbox-source', original).batch.commit())
+  })
+
+  it('allows a petbox_request refund even when it drives the fund negative', async () => {
+    // Donation of 800 — fund only has 700, so returning 800 drives the balance to -100.
+    const original = effectSnapshot({ entityType: 'petbox_donation', familyId, actorId: parentId, childId, fundId: 'fund-1', walletDeltaPence: -800, fundDeltaPence: 800 })
+    await seedSource('petbox_requests', 'petbox-debt-source', original)
+    // Negative resulting balances are permitted, so the refund succeeds.
+    await assertSucceeds(fullReversalBatch(parentId, 'petbox_request', 'petbox-debt-source', original).batch.commit())
+  })
+
+  it('denies petbox_request refund from a child', async () => {
+    const original = effectSnapshot({ entityType: 'petbox_donation', familyId, actorId: parentId, childId, fundId: 'fund-1', walletDeltaPence: -200, fundDeltaPence: 200 })
+    await seedSource('petbox_requests', 'petbox-child-source', original)
+    await assertFails(fullReversalBatch(childId, 'petbox_request', 'petbox-child-source', original).batch.commit())
   })
 })

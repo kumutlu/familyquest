@@ -1,31 +1,18 @@
 import { Link, Outlet, useLocation, Navigate } from 'react-router-dom';
-import { Home, Users, CheckSquare, Gift, Settings, Bell } from 'lucide-react';
+import { Home, Users, CheckSquare, Gift, Wallet } from 'lucide-react';
+import { isParentRole } from '../../lib/roles';
 import { cn } from '../../lib/utils';
-import { Avatar } from '../ui/Avatar';
 import { useStore } from '../../store/useStore';
-import { useState, useRef, useEffect } from 'react';
+import { ProfileDropdown } from './ProfileDropdown';
+import { NotificationCenter } from './NotificationCenter';
 
 export function AppLayout() {
   const location = useLocation();
   const authUser = useStore(state => state.authUser);
   const currentUser = useStore(state => state.currentUser);
-  const feed = useStore(state => state.feed);
   const appReady = useStore(state => state.appReady);
   const bootstrapError = useStore(state => state.bootstrapError);
   const retryBootstrap = useStore(state => state.retryBootstrap);
-  const [isNotificationsOpen, setIsNotificationsOpen] = useState(false);
-  const notifRef = useRef<HTMLDivElement>(null);
-
-  // Close notifications on click outside
-  useEffect(() => {
-    const handleClickOutside = (event: MouseEvent) => {
-      if (notifRef.current && !notifRef.current.contains(event.target as Node)) {
-        setIsNotificationsOpen(false);
-      }
-    };
-    document.addEventListener("mousedown", handleClickOutside);
-    return () => document.removeEventListener("mousedown", handleClickOutside);
-  }, []);
 
   // Still loading auth state
   if (authUser === undefined && !bootstrapError) {
@@ -71,14 +58,18 @@ export function AppLayout() {
     return <div className="min-h-screen bg-gray-50 flex items-center justify-center animate-pulse">Loading Dashboard...</div>;
   }
 
-  const navItems = [
+  const baseNavItems = [
     { name: 'Home', path: '/', icon: Home },
     { name: 'Tasks', path: '/tasks', icon: CheckSquare },
-    { name: 'Family', path: '/family', icon: Users },
     { name: 'Rewards', path: '/rewards', icon: Gift },
     { name: 'Pet Box', path: '/pet-box', icon: () => <span className="text-lg">🐾</span> },
-    { name: 'Settings', path: '/settings', icon: Settings },
   ];
+
+  // Settings is no longer a top-level tab; it lives in the profile dropdown.
+  // Family is moved to the end of the navigation for a cleaner layout.
+  const navItems = isParentRole(currentUser?.role)
+    ? [...baseNavItems, { name: 'Wallets', path: '/wallets', icon: Wallet }, { name: 'Family', path: '/family', icon: Users }]
+    : [...baseNavItems, { name: 'Wallet', path: '/wallet', icon: Wallet }, { name: 'Family', path: '/family', icon: Users }];
 
   return (
     <div className="min-h-screen bg-gray-50 flex flex-col font-sans">
@@ -116,40 +107,8 @@ export function AppLayout() {
           </div>
           
           <div className="flex items-center space-x-4">
-            <div className="relative" ref={notifRef}>
-              <button 
-                onClick={() => setIsNotificationsOpen(!isNotificationsOpen)} 
-                className="p-2 text-gray-400 hover:text-gray-600 transition-colors relative"
-              >
-                <Bell size={24} />
-                {feed.length > 0 && <span className="absolute top-2 right-2 w-2 h-2 bg-primary-500 rounded-full border border-white"></span>}
-              </button>
-              
-              {isNotificationsOpen && (
-                <div className="absolute right-0 mt-2 w-72 bg-white rounded-2xl shadow-xl border border-gray-100 overflow-hidden z-50">
-                  <div className="p-3 border-b border-gray-50 bg-gray-50 font-bold text-gray-900 text-sm">
-                    Notifications
-                  </div>
-                  <div className="max-h-64 overflow-y-auto p-2 space-y-1">
-                    {feed.length === 0 ? (
-                      <div className="p-4 text-center text-sm text-gray-500">No new notifications</div>
-                    ) : (
-                      feed.slice(0, 10).map((item: any) => (
-                        <div key={item.id} className="p-3 bg-white hover:bg-gray-50 rounded-xl transition-colors text-sm text-gray-700">
-                           {item.text}
-                          <div className="text-[10px] text-gray-400 mt-1">
-                            {item.timestamp?.toDate ? item.timestamp.toDate().toLocaleString() : 'Just now'}
-                          </div>
-                        </div>
-                      ))
-                    )}
-                  </div>
-                </div>
-              )}
-            </div>
-            {currentUser && (
-              <Avatar fallback={currentUser.displayName[0]} src={currentUser.avatarUrl} size="sm" className="ring-2 ring-primary-100" />
-            )}
+            <NotificationCenter />
+            <ProfileDropdown />
           </div>
         </div>
       </header>

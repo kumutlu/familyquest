@@ -81,4 +81,68 @@ describe('reversal API dispatcher', () => {
     expect(tx.update).not.toHaveBeenCalled()
     expect(tx.set).not.toHaveBeenCalled()
   })
+
+  it('atomically refunds a petbox_request by crediting child wallet and debiting the fund', async () => {
+    const reversalId = 'petbox_request__pet-1'
+    const tx = transactionWith({
+      'users/parent-1': { familyId: 'family-1', role: 'parent', displayName: 'Parent' },
+      'families/family-1': { debtLimitPence: -500 },
+      'families/family-1/petbox_requests/pet-1': {
+        effectSnapshot: effectSnapshot({ entityType: 'petbox_donation', familyId: 'family-1', actorId: 'parent-1', childId: 'child-1', fundId: 'fund-1', walletDeltaPence: -200, fundDeltaPence: 200 }),
+      },
+      [`families/family-1/reversals/${reversalId}`]: undefined,
+      'families/family-1/wallets/child-1': { balance: 300 },
+      'families/family-1/funds/fund-1': { balance: 700 },
+    })
+
+    await expect(reverseTransaction({ familyId: 'family-1', sourceKind: 'petbox_request', sourceId: 'pet-1', reason: 'Accidental donation' })).resolves.toEqual({ reversalId, status: 'completed' })
+
+    // Child wallet should be credited (+200 pence)
+    expect(tx.update).toHaveBeenCalledWith(
+      expect.objectContaining({ path: 'families/family-1/wallets/child-1' }),
+      { balance: 500, lastReversalId: reversalId }
+    )
+    // Fund balance should be debited (-200 pence)
+    expect(tx.update).toHaveBeenCalledWith(
+      expect.objectContaining({ path: 'families/family-1/funds/fund-1' }),
+      { balance: 500, lastReversalId: reversalId }
+    )
+    // Wallet reversal ledger entry
+    expect(tx.set).toHaveBeenCalledWith(
+      expect.objectContaining({ path: `families/family-1/wallet_transactions/${reversalId}__wallet` }),
+      expect.objectContaining({ type: 'reversal', reversalId, sourceId: 'pet-1', amountPence: 200, actorId: 'parent-1' })
+    )
+    // Fund reversal ledger entry
+    expect(tx.set).toHaveBeenCalledWith(
+      expect.objectContaining({ path: `families/family-1/fund_transactions/${reversalId}__fund` }),
+      expect.objectContaining({ type: 'reversal', reversalId, sourceId: 'pet-1', amount: -200, actorId: 'parent-1' })
+    )
+    // Reversal record
+    expect(tx.set).toHaveBeenCalledWith(
+      expect.objectContaining({ path: `families/family-1/reversals/${reversalId}` }),
+      expect.objectContaining({ status: 'completed', sourceKind: 'petbox_request', sourceId: 'pet-1', xpAdjustment: 0, xpReversed: false })
+    )
+  })
+
+  it('allows a refund that drives the Pet Box balance negative', async () => {
+    const reversalId = 'petbox_request__pet-2'
+    const tx = transactionWith({
+      'users/parent-1': { familyId: 'family-1', role: 'parent', displayName: 'Parent' },
+      'families/family-1': { debtLimitPence: -500 },
+      'families/family-1/petbox_requests/pet-2': {
+        effectSnapshot: effectSnapshot({ entityType: 'petbox_donation', familyId: 'family-1', actorId: 'parent-1', childId: 'child-1', fundId: 'fund-1', walletDeltaPence: -500, fundDeltaPence: 500 }),
+      },
+      [`families/family-1/reversals/${reversalId}`]: undefined,
+      'families/family-1/wallets/child-1': { balance: 100 },
+      // Fund only has 300 but refund returns 500, driving the balance to -200 (permitted).
+      'families/family-1/funds/fund-1': { balance: 300 },
+    })
+
+    await reverseTransaction({ familyId: 'family-1', sourceKind: 'petbox_request', sourceId: 'pet-2', reason: 'Test' })
+    // Fund balance decreases by the refunded amount: 300 - 500 = -200.
+    expect(tx.update).toHaveBeenCalledWith(
+      expect.objectContaining({ path: 'families/family-1/funds/fund-1' }),
+      expect.objectContaining({ balance: -200 })
+    )
+  })
 })

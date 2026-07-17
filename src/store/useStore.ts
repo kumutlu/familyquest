@@ -74,7 +74,9 @@ const emptyFamilyState = () => ({
   transferRequests: [] as any[],
   moneyRequests: [] as any[],
   petboxRequests: [] as any[],
+  profileUpdateRequests: [] as any[],
   reversals: [] as any[],
+  avatarUnlocks: [] as any[],
   myWallet: null,
   childWallets: [] as any[],
 });
@@ -110,7 +112,9 @@ interface AppState {
   transferRequests: any[];
   moneyRequests: any[];
   petboxRequests: any[];
+  profileUpdateRequests: any[];
   reversals: any[];
+  avatarUnlocks: any[];
   myWallet: any | null;
   childWallets: any[];
   error: string | null;
@@ -155,6 +159,20 @@ const stopFamilyListener = (name: string) => {
 
 const errorText = (context: string, error: any) =>
   `[${context}] ${error?.code || 'unknown'}: ${error?.message || 'Listener failed'}`;
+
+// Surface the underlying Firebase error in development only. This is how we
+// diagnose issues like a missing composite index (`failed-precondition`) or a
+// rules/query mismatch (`permission-denied`) without ever exposing raw Firebase
+// errors to end users in production.
+const logDevError = (context: string, error: any, queryShape?: unknown) => {
+  if (import.meta.env?.PROD) return;
+  // eslint-disable-next-line no-console
+  console.error(`[dev] ${context} failed:`, {
+    code: error?.code,
+    message: error?.message,
+    queryShape,
+  });
+};
 
 export const useStore = create<AppState>((set, get) => ({
   authInitialized: false,
@@ -440,9 +458,11 @@ export const useStore = create<AppState>((set, get) => ({
           if (snapshot.metadata?.fromCache) return;
           acceptSnapshot(snapshot);
         },
-        error => critical
-          ? handleCriticalListenerError(resource, context, error)
-          : handleOptionalListenerError(listenerName, resource, context, error),
+        error => {
+          logDevError(context, error, { collection: String(target?.type || "query") });
+          if (critical) handleCriticalListenerError(resource, context, error);
+          else handleOptionalListenerError(listenerName, resource, context, error);
+        },
       );
       stopFamilyListener(listenerName);
       familyListeners.set(listenerName, { critical, unsubscribe });
@@ -452,6 +472,7 @@ export const useStore = create<AppState>((set, get) => ({
         })
         .catch(error => {
           if (get().bootstrapStatus[resource] !== 'ready') {
+            logDevError(context, error, { collection: String(target?.type || "query") });
             if (critical) handleCriticalListenerError(resource, context, error);
             else handleOptionalListenerError(listenerName, resource, context, error);
           }
@@ -492,13 +513,13 @@ export const useStore = create<AppState>((set, get) => ({
       if (currentUser?.role === 'parent' || currentUser?.role === 'owner') {
         subscribePlanned('wallets', 'Wallets', snapshot => set({ childWallets: docs(snapshot) }));
       } else if (currentUser?.role === 'child') {
-        subscribePlanned('wallets', 'Wallets', snapshot => {
-          set({
-            myWallet: snapshot.exists()
-              ? { id: snapshot.id, ...snapshot.data() }
-              : { id: currentUser.id, balance: currentUser.walletBalance || 0 },
-          });
+      subscribePlanned('wallets', 'Wallets', snapshot => {
+        set({
+          myWallet: snapshot.exists()
+            ? { id: snapshot.id, ...snapshot.data() }
+            : { id: currentUser.id, balance: 0 },
         });
+      });
       } else {
         markReady('wallets');
       }
@@ -513,6 +534,9 @@ export const useStore = create<AppState>((set, get) => ({
         subscribePlanned('transferRequests', 'Transfer requests', snapshot => set({ transferRequests: docs(snapshot) }));
         subscribePlanned('moneyRequests', 'Money requests', snapshot => set({ moneyRequests: docs(snapshot) }));
         subscribePlanned('petboxRequests', 'Pet Box requests', snapshot => set({ petboxRequests: docs(snapshot) }));
+        subscribePlanned('profileUpdateRequests', 'Profile update requests', snapshot => set({ profileUpdateRequests: docs(snapshot) }));
+        subscribePlanned('reversals', 'Reversals', snapshot => set({ reversals: docs(snapshot) }));
+        subscribePlanned('avatarUnlocks', 'Avatar unlocks', snapshot => set({ avatarUnlocks: docs(snapshot) }));
       } else {
         subscribePlanned('taskCompletions', 'Task completions', snapshot => set({ taskCompletions: docs(snapshot) }));
         subscribePlanned('redemptions', 'Redemptions', snapshot => set({ redemptions: docs(snapshot) }));
@@ -520,6 +544,7 @@ export const useStore = create<AppState>((set, get) => ({
         subscribePlanned('savingsGoals', 'Savings goals', snapshot => set({ savingsGoals: docs(snapshot) }));
         subscribePlanned('transferRequests', 'Transfer requests', snapshot => set({ transferRequests: docs(snapshot) }));
         subscribePlanned('petboxRequests', 'Pet Box requests', snapshot => set({ petboxRequests: docs(snapshot) }));
+        subscribePlanned('profileUpdateRequests', 'Profile update requests', snapshot => set({ profileUpdateRequests: docs(snapshot) }));
 
         const moneyRequestResults: any[][] = [[], []];
         const moneyRequestReady = [false, false];
