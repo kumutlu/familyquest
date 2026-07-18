@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { Button } from '../components/ui/Button';
 import { signIn, signInWithGoogle } from '../lib/api';
@@ -15,10 +15,16 @@ export function Login() {
 
   // Once Firebase Auth reports the user as authenticated, the AppLayout route
   // guard performs the redirect to the correct protected route. We must NOT
-  // navigate ourselves with a fixed timeout — that races the async
-  // onAuthStateChanged listener and can land the user back on /login.
+  // navigate during render (calling navigate() in the render body triggers
+  // React's "Cannot update a component while rendering a different component"
+  // warning and can corrupt the mounted tree). Defer it to an effect.
+  useEffect(() => {
+    if (authStatus === 'authenticated') {
+      navigate('/', { replace: true });
+    }
+  }, [authStatus, navigate]);
+
   if (authStatus === 'authenticated') {
-    navigate('/', { replace: true });
     return null;
   }
 
