@@ -6,10 +6,13 @@ import { Gift, Gamepad2, Pizza, Ticket, Plus, Edit, Trash2 } from 'lucide-react'
 import { useStore } from '../store/useStore';
 import { redeemReward, createReward, updateReward } from '../lib/api';
 import { cn } from '../lib/utils';
+import { isParentRole } from '../lib/roles';
+import { HistoryActionControl } from '../components/reversals/HistoryActionControl';
 
 export function Rewards() {
-  const { currentUser, rewards, loading } = useStore();
+  const { currentUser, rewards, redemptions, loading } = useStore();
   const [selectedReward, setSelectedReward] = useState<any>(null);
+  const isParent = currentUser?.role === 'parent' || currentUser?.role === 'owner';
   
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [formData, setFormData] = useState<any>({ title: '', cost: 50, icon: 'Gift', inventory: '' });
@@ -125,8 +128,8 @@ export function Rewards() {
           <Badge variant="reward" className="text-sm px-3 py-1 bg-reward-100 text-reward-700">
             {currentUser.rewardPoints} pts
           </Badge>
-          {currentUser.role === 'parent' && (
-            <Button onClick={openCreateForm} size="sm" className="bg-reward-500 hover:bg-reward-600 rounded-full h-10 w-10 p-0 shadow-lg flex items-center justify-center">
+          {isParentRole(currentUser.role) && (
+            <Button onClick={openCreateForm} aria-label="Add Reward" size="sm" className="bg-reward-500 hover:bg-reward-600 rounded-full h-10 w-10 p-0 shadow-lg flex items-center justify-center">
               <Plus size={20} />
             </Button>
           )}
@@ -169,6 +172,28 @@ export function Rewards() {
         )}
       </div>
 
+      {isParent && redemptions.length > 0 && (
+        <section>
+          <h2 className="mb-3 text-lg font-bold text-gray-900">Redemption history</h2>
+          <div className="space-y-2">
+            {redemptions.map(redemption => {
+              const reward = rewards.find(item => item.id === redemption.rewardId);
+              return (
+                <Card key={redemption.id}>
+                  <CardContent className="flex items-center justify-between gap-4 p-4">
+                    <div>
+                      <p className="font-semibold text-gray-900">{reward?.title || 'Reward'}</p>
+                      <p className="text-sm text-gray-500">{redemption.costPaid} points redeemed</p>
+                    </div>
+                    <HistoryActionControl sourceKind="reward_redemption" source={redemption} />
+                  </CardContent>
+                </Card>
+              );
+            })}
+          </div>
+        </section>
+      )}
+
       {/* Detail & Redemption Modal */}
       {selectedReward && (
         <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-gray-900/40 backdrop-blur-sm animate-in fade-in duration-200">
@@ -195,7 +220,7 @@ export function Rewards() {
                 {error && <div className="p-3 bg-danger-50 text-danger-600 rounded-xl text-sm w-full font-medium">{error}</div>}
 
                 {/* Parent Actions */}
-                {currentUser?.role === 'parent' && (
+                {isParentRole(currentUser?.role) && (
                    <div className="flex gap-4 w-full mt-6 pt-6 border-t border-gray-100">
                       <Button variant="secondary" fullWidth onClick={() => openEditForm(selectedReward)}><Edit size={16} className="mr-2"/> Edit</Button>
                       <Button variant="danger" fullWidth onClick={() => handleArchive(selectedReward.id)}><Trash2 size={16} className="mr-2"/> Archive</Button>

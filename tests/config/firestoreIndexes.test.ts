@@ -1,0 +1,33 @@
+import { readFileSync } from 'node:fs'
+import { describe, expect, it } from 'vitest'
+import { bootstrapCompositeIndexes } from '../../src/lib/bootstrapQueries'
+
+describe('Firestore composite index configuration', () => {
+  it('points Firebase at a source-controlled manifest matching production bootstrap queries', () => {
+    const firebaseConfig = JSON.parse(readFileSync('firebase.json', 'utf8'))
+    const indexConfig = JSON.parse(readFileSync('firestore.indexes.json', 'utf8'))
+
+    expect(firebaseConfig.firestore.indexes).toBe('firestore.indexes.json')
+    expect(indexConfig).toEqual({
+      indexes: bootstrapCompositeIndexes,
+      fieldOverrides: [],
+    })
+  })
+
+  it('keeps the transfer_requests index in sync with the child pending-query shape', () => {
+    // The child pending-transfer query filters by `fromChildId` only (no orderBy),
+    // so it relies on the automatic single-field index and must NOT require a
+    // composite index to load. The composite index defined here is retained for
+    // any ordered server-side reads, but its absence must never break the query.
+    const transferIndex = bootstrapCompositeIndexes.find(
+      (idx: any) =>
+        idx.collectionGroup === 'transfer_requests' &&
+        idx.fields.some((f: any) => f.fieldPath === 'fromChildId'),
+    )
+    expect(transferIndex).toBeDefined()
+    expect(transferIndex.fields.map((f: any) => f.fieldPath)).toEqual([
+      'fromChildId',
+      'createdAt',
+    ])
+  })
+})

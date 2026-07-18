@@ -1,74 +1,187 @@
-import { Card, CardContent } from '../components/ui/Card';
-import { Stat } from '../components/ui/Stat';
-import { ArrowDownRight, ArrowUpRight, Wallet as WalletIcon, Target } from 'lucide-react';
+import { useState } from 'react';
 import { useStore } from '../store/useStore';
+import { isChildRole } from '../lib/roles';
+import {
+  computeMoneyInsights,
+  pendingOutgoingPence,
+  sortTransactionsNewestFirst,
+  requestTime,
+} from '../lib/walletPresentation';
+import { isPendingTransferStatus } from '../lib/requestStatus';
+import { AccountHeader } from '../components/wallet/AccountHeader';
+import { BalanceCard } from '../components/wallet/BalanceCard';
+import { QuickActions } from '../components/wallet/QuickActions';
+import { MoneyInsights } from '../components/wallet/MoneyInsights';
+import { PendingTransfers } from '../components/wallet/PendingTransfers';
+import { TransactionList } from '../components/wallet/TransactionList';
+import { TransactionDetailsModal } from '../components/wallet/TransactionDetailsModal';
+import { SendMoneyModal } from '../components/wallet/SendMoneyModal';
+import { RequestMoneyModal } from '../components/wallet/RequestMoneyModal';
+import { ErrorState, TransactionSkeletonRows } from '../components/wallet/WalletStates';
+
+// Re-exported for backward compatibility with helpers previously defined here.
+export {
+  signedTransactionAmount,
+  isSameMonth,
+  requestTime,
+} from '../lib/walletPresentation';
+
+const INITIAL_VISIBLE = 20;
 
 export function Wallet() {
-  const { currentUser, walletTransactions, loading } = useStore();
+  const {
+    currentUser,
+    myWallet,
+    walletTransactions,
+    transferRequests,
+    loading,
+    familyMembers,
+    familyData,
+    bootstrapError,
+    featureErrors,
+    bootstrapStatus,
+    retryBootstrap,
+  } = useStore();
 
-  if (loading || !currentUser) return <div className="p-8 text-center text-gray-500 animate-pulse">Loading Wallet...</div>;
+  const [selectedTransaction, setSelectedTransaction] = useState<any>(null);
+  const [activeModal, setActiveModal] = useState<null | 'send' | 'request'>(null);
+  const [visibleCount, setVisibleCount] = useState(INITIAL_VISIBLE);
 
-  const currentBalance = currentUser.walletBalance || 0; // Stored in cents
+  // Full-page loading skeleton (global bootstrap still in flight).
+  if (loading || !currentUser) {
+    return (
+      <div className="mx-auto max-w-2xl w-full px-4 space-y-5 pb-[calc(2.5rem+env(safe-area-inset-bottom))]">
+        <BalanceCard loading />
+        <div className="grid grid-cols-2 gap-3" aria-hidden="true">
+          <div className="h-[72px] rounded-2xl bg-gray-100 animate-pulse" />
+          <div className="h-[72px] rounded-2xl bg-gray-100 animate-pulse" />
+        </div>
+        <div className="grid grid-cols-3 gap-3" aria-hidden="true">
+          <div className="h-16 rounded-2xl bg-gray-100 animate-pulse" />
+          <div className="h-16 rounded-2xl bg-gray-100 animate-pulse" />
+          <div className="h-16 rounded-2xl bg-gray-100 animate-pulse" />
+        </div>
+        <div className="rounded-2xl bg-white border border-gray-100 overflow-hidden">
+          <TransactionSkeletonRows />
+        </div>
+        <span className="sr-only" role="status">Loading wallet</span>
+      </div>
+    );
+  }
+
+  const isChild = isChildRole(currentUser?.role);
+  const currency = familyData?.currency || '£';
+  const currentBalance = myWallet?.balance || 0;
+  const bs = bootstrapStatus || {};
+
+  // Critical bootstrap failure: show a friendly error with retry. Raw Firebase
+  // error text is never surfaced to the user.
+  if (bootstrapError) {
+    return (
+      <div className="mx-auto max-w-2xl w-full px-4 pb-[calc(2.5rem+env(safe-area-inset-bottom))]">
+        <ErrorState message="We couldn’t load your wallet." onRetry={retryBootstrap} />
+      </div>
+    );
+  }
+
+  // Name resolver for counterparties / actors, built from real family data.
+  const memberMap = new Map<string, any>();
+  (familyMembers || []).forEach(m => memberMap.set(m.id, m));
+  memberMap.set(currentUser.id, currentUser);
+  const nameResolver = (id?: string) => (id ? memberMap.get(id)?.displayName : undefined);
+
+  const insights = computeMoneyInsights(walletTransactions, new Date());
+  // Pending insight is unavailable (not £0.00) when its data source failed to load.
+  const pendingUnavailable = isChild && !!featureErrors?.transferRequests;
+  const pending = isChild ? pendingOutgoingPence(transferRequests, currentUser.id) : 0;
+
+  const sorted = sortTransactionsNewestFirst(walletTransactions);
+  const visible = sorted.slice(0, visibleCount);
+  const hasMore = sorted.length > visibleCount;
+
+  // Only outgoing requests still awaiting parent approval belong in the
+  // Pending transfers section. Rejected/approved requests are excluded.
+  const myTransferRequests = isChild
+    ? (transferRequests || [])
+        .filter(r => r.fromChildId === currentUser.id && isPendingTransferStatus(r.status))
+        .sort((a, b) => requestTime(b.createdAt) - requestTime(a.createdAt))
+        .slice(0, 5)
+    : [];
 
   return (
-    <div className="space-y-6 animate-in fade-in duration-300">
-      <header>
-        <h1 className="text-2xl font-bold text-gray-900 tracking-tight">Wallet</h1>
-        <p className="text-gray-500 mt-1">Manage your allowance.</p>
-      </header>
+    <div className="mx-auto max-w-2xl w-full px-4 space-y-5 pb-[calc(2.5rem+env(safe-area-inset-bottom))] animate-in fade-in duration-300">
+      {isChild ? (
+        <AccountHeader
+          name={currentUser.displayName || 'Member'}
+          avatarUrl={currentUser.avatarUrl}
+          subtitle="My Wallet"
+          accountStatus="Family account"
+        />
+      ) : (
+        <header>
+          <h1 className="text-2xl font-bold text-gray-900 tracking-tight">Wallet</h1>
+          <p className="text-gray-500 mt-1">Your family wallet overview.</p>
+        </header>
+      )}
 
-      <div className="bg-gray-900 p-6 rounded-3xl text-white shadow-lg relative overflow-hidden">
-        <div className="absolute top-0 right-0 p-4 opacity-10">
-          <WalletIcon size={120} strokeWidth={1} />
-        </div>
-        <div className="relative z-10">
-          <p className="text-gray-400 font-medium text-sm mb-1 uppercase tracking-wider">Total Balance</p>
-          <h2 className="text-4xl font-extrabold tracking-tight">${(currentBalance / 100).toFixed(2)}</h2>
-        </div>
-      </div>
+      <BalanceCard
+        balance={currentBalance}
+        currency={currency}
+        loading={!!bs.wallets && bs.wallets === 'loading'}
+        unavailable={myWallet == null}
+      />
 
-      <div className="grid grid-cols-2 gap-4">
-        {/* Placeholder for future V2 goals, just showing static zero for MVP as goals are removed from schema */}
-        <Stat label="Saved this month" value="$0.00" icon={<Target className="text-primary-500" />} />
-        <Stat label="Spent this month" value="$0.00" icon={<ArrowDownRight className="text-danger-500" />} />
-      </div>
+      {isChild && (
+        <QuickActions
+          onSend={() => setActiveModal('send')}
+          onRequest={() => setActiveModal('request')}
+        />
+      )}
 
-      <section className="mt-8">
-        <h3 className="text-lg font-bold text-gray-900 mb-4">Recent Transactions</h3>
-        
-        {walletTransactions.length === 0 ? (
-          <div className="bg-white rounded-2xl border border-gray-100 p-8 text-center text-gray-500">
-            No transactions yet.
-          </div>
-        ) : (
-          <Card>
-            <CardContent className="p-2">
-              <div className="divide-y divide-gray-50">
-                {walletTransactions.map((tx) => {
-                  const isCredit = tx.type === 'credit';
-                  const date = tx.timestamp?.toDate ? tx.timestamp.toDate() : new Date();
-                  return (
-                    <div key={tx.id} className="p-3 flex items-center justify-between">
-                      <div className="flex items-center gap-3">
-                        <div className={`w-10 h-10 rounded-full flex items-center justify-center shrink-0 ${isCredit ? 'bg-success-50 text-success-600' : 'bg-gray-100 text-gray-600'}`}>
-                          {isCredit ? <ArrowUpRight size={20} /> : <ArrowDownRight size={20} />}
-                        </div>
-                        <div>
-                          <p className="font-semibold text-gray-900 text-sm">{tx.description}</p>
-                          <p className="text-xs text-gray-400 mt-0.5">{date.toLocaleDateString()}</p>
-                        </div>
-                      </div>
-                      <div className={`font-bold ${isCredit ? 'text-success-600' : 'text-gray-900'}`}>
-                        {isCredit ? '+' : '-'}${(tx.amount / 100).toFixed(2)}
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            </CardContent>
-          </Card>
-        )}
-      </section>
+      <MoneyInsights
+        moneyIn={insights.moneyIn}
+        moneyOut={insights.moneyOut}
+        pending={pending}
+        currency={currency}
+        pendingUnavailable={pendingUnavailable}
+      />
+
+      {isChild && (
+        <PendingTransfers
+          requests={myTransferRequests}
+          currency={currency}
+          loading={!!bs.transferRequests && bs.transferRequests === 'loading'}
+          error={featureErrors?.transferRequests || null}
+          unavailable={pendingUnavailable}
+          onRetry={retryBootstrap}
+        />
+      )}
+
+      <TransactionList
+        transactions={visible}
+        hasMore={hasMore}
+        onLoadMore={() => setVisibleCount(c => c + INITIAL_VISIBLE)}
+        onSelect={setSelectedTransaction}
+        nameResolver={nameResolver}
+        currency={currency}
+        currentUserId={currentUser.id}
+        loading={!!bs.walletTransactions && bs.walletTransactions === 'loading'}
+        error={featureErrors?.walletTransactions || null}
+        onRetry={retryBootstrap}
+      />
+
+      <TransactionDetailsModal
+        isOpen={!!selectedTransaction}
+        onClose={() => setSelectedTransaction(null)}
+        transaction={selectedTransaction}
+        nameResolver={nameResolver}
+      />
+      {isChild && activeModal === 'send' && (
+        <SendMoneyModal onClose={() => setActiveModal(null)} />
+      )}
+      {isChild && activeModal === 'request' && (
+        <RequestMoneyModal onClose={() => setActiveModal(null)} />
+      )}
     </div>
   );
 }

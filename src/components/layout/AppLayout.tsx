@@ -1,36 +1,52 @@
 import { Link, Outlet, useLocation, Navigate } from 'react-router-dom';
-import { Home, Users, CheckSquare, Gift, Settings, Bell } from 'lucide-react';
+import { Home, Users, CheckSquare, Gift, Wallet, Target } from 'lucide-react';
+import { isParentRole } from '../../lib/roles';
 import { cn } from '../../lib/utils';
-import { Avatar } from '../ui/Avatar';
 import { useStore } from '../../store/useStore';
-import { useState, useRef, useEffect } from 'react';
+import { ProfileDropdown } from './ProfileDropdown';
+import { NotificationCenter } from './NotificationCenter';
 
 export function AppLayout() {
   const location = useLocation();
+  const authStatus = useStore(state => state.authStatus);
   const authUser = useStore(state => state.authUser);
   const currentUser = useStore(state => state.currentUser);
-  const feed = useStore(state => state.feed);
-  const [isNotificationsOpen, setIsNotificationsOpen] = useState(false);
-  const notifRef = useRef<HTMLDivElement>(null);
+  const appReady = useStore(state => state.appReady);
+  const bootstrapError = useStore(state => state.bootstrapError);
+  const retryBootstrap = useStore(state => state.retryBootstrap);
 
-  // Close notifications on click outside
-  useEffect(() => {
-    const handleClickOutside = (event: MouseEvent) => {
-      if (notifRef.current && !notifRef.current.contains(event.target as Node)) {
-        setIsNotificationsOpen(false);
-      }
-    };
-    document.addEventListener("mousedown", handleClickOutside);
-    return () => document.removeEventListener("mousedown", handleClickOutside);
-  }, []);
-
-  // Still loading auth state
-  if (authUser === undefined) {
+  // Firebase Auth is still initializing - never redirect to /login while the
+  // first auth state has not resolved. This prevents the temporary redirect to
+  // /login that forced users to close & reopen the PWA.
+  if (authStatus === 'initializing') {
     return <div className="min-h-screen bg-gray-50 flex items-center justify-center">Loading...</div>;
   }
 
+  // A recoverable bootstrap/auth error takes precedence over the login
+  // redirect (matches the previous contract where an error screen was shown
+  // even when authUser was null).
+  if (bootstrapError) {
+    return (
+      <div className="min-h-screen bg-gray-50 flex flex-col items-center justify-center p-4">
+        <div className="bg-white p-6 rounded-2xl shadow-xl max-w-md w-full text-center border border-red-100">
+          <div className="w-12 h-12 bg-red-100 text-red-600 rounded-full flex items-center justify-center mx-auto mb-4">
+            <span className="text-2xl font-bold">!</span>
+          </div>
+          <h2 className="text-xl font-bold text-gray-900 mb-2">Connection Error</h2>
+          <p className="text-gray-500 mb-6 text-sm">{bootstrapError}</p>
+          <button
+            onClick={retryBootstrap}
+            className="w-full bg-primary-600 hover:bg-primary-700 text-white font-bold py-3 rounded-xl transition-colors"
+          >
+            Retry Connection
+          </button>
+        </div>
+      </div>
+    );
+  }
+
   // Not logged in -> Login
-  if (authUser === null) {
+  if (authStatus === 'unauthenticated' || authUser === null) {
     return <Navigate to="/login" replace />;
   }
 
@@ -44,13 +60,23 @@ export function AppLayout() {
     return <Navigate to="/onboarding" replace />;
   }
 
-  const navItems = [
+  if (currentUser?.familyId && !appReady) {
+    return <div className="min-h-screen bg-gray-50 flex items-center justify-center animate-pulse">Loading Dashboard...</div>;
+  }
+
+  const baseNavItems = [
     { name: 'Home', path: '/', icon: Home },
     { name: 'Tasks', path: '/tasks', icon: CheckSquare },
-    { name: 'Family', path: '/family', icon: Users },
     { name: 'Rewards', path: '/rewards', icon: Gift },
-    { name: 'Settings', path: '/settings', icon: Settings },
+    { name: 'Goals', path: '/goals', icon: Target },
+    { name: 'Pet Box', path: '/pet-box', icon: () => <span className="text-lg">🐾</span> },
   ];
+
+  // Settings is no longer a top-level tab; it lives in the profile dropdown.
+  // Family is moved to the end of the navigation for a cleaner layout.
+  const navItems = isParentRole(currentUser?.role)
+    ? [...baseNavItems, { name: 'Wallets', path: '/wallets', icon: Wallet }, { name: 'Family', path: '/family', icon: Users }]
+    : [...baseNavItems, { name: 'Wallet', path: '/wallet', icon: Wallet }, { name: 'Family', path: '/family', icon: Users }];
 
   return (
     <div className="min-h-screen bg-gray-50 flex flex-col font-sans">
@@ -69,7 +95,7 @@ export function AppLayout() {
             <nav className="hidden md:flex ml-8 space-x-6">
               {navItems.map((item) => {
                 const isActive = location.pathname === item.path;
-                const Icon = item.icon;
+                const IconComp = item.icon as any;
                 return (
                   <Link 
                     key={item.name} 
@@ -79,7 +105,7 @@ export function AppLayout() {
                       isActive ? "text-primary-600" : "text-gray-500 hover:text-gray-900"
                     )}
                   >
-                    <Icon size={16} />
+                    {typeof item.icon === 'function' ? <IconComp /> : <IconComp size={16} />}
                     <span>{item.name}</span>
                   </Link>
                 );
@@ -88,40 +114,8 @@ export function AppLayout() {
           </div>
           
           <div className="flex items-center space-x-4">
-            <div className="relative" ref={notifRef}>
-              <button 
-                onClick={() => setIsNotificationsOpen(!isNotificationsOpen)} 
-                className="p-2 text-gray-400 hover:text-gray-600 transition-colors relative"
-              >
-                <Bell size={24} />
-                {feed.length > 0 && <span className="absolute top-2 right-2 w-2 h-2 bg-primary-500 rounded-full border border-white"></span>}
-              </button>
-              
-              {isNotificationsOpen && (
-                <div className="absolute right-0 mt-2 w-72 bg-white rounded-2xl shadow-xl border border-gray-100 overflow-hidden z-50">
-                  <div className="p-3 border-b border-gray-50 bg-gray-50 font-bold text-gray-900 text-sm">
-                    Notifications
-                  </div>
-                  <div className="max-h-64 overflow-y-auto p-2 space-y-1">
-                    {feed.length === 0 ? (
-                      <div className="p-4 text-center text-sm text-gray-500">No new notifications</div>
-                    ) : (
-                      feed.slice(0, 10).map((item: any) => (
-                        <div key={item.id} className="p-3 bg-white hover:bg-gray-50 rounded-xl transition-colors text-sm text-gray-700">
-                           {item.text}
-                          <div className="text-[10px] text-gray-400 mt-1">
-                            {item.timestamp?.toDate ? item.timestamp.toDate().toLocaleString() : 'Just now'}
-                          </div>
-                        </div>
-                      ))
-                    )}
-                  </div>
-                </div>
-              )}
-            </div>
-            {currentUser && (
-              <Avatar fallback={currentUser.displayName[0]} src={currentUser.avatarUrl} size="sm" className="ring-2 ring-primary-100" />
-            )}
+            <NotificationCenter />
+            <ProfileDropdown />
           </div>
         </div>
       </header>
@@ -136,7 +130,7 @@ export function AppLayout() {
         <div className="flex justify-around items-center h-16">
           {navItems.map((item) => {
             const isActive = location.pathname === item.path;
-            const Icon = item.icon;
+            const IconComp = item.icon as any;
             
             return (
               <Link
@@ -151,7 +145,7 @@ export function AppLayout() {
                   "p-1 rounded-xl transition-all duration-200",
                   isActive ? "bg-primary-50 scale-110" : ""
                 )}>
-                  <Icon size={22} strokeWidth={isActive ? 2.5 : 2} />
+                  {typeof item.icon === 'function' ? <IconComp /> : <IconComp size={22} strokeWidth={isActive ? 2.5 : 2} />}
                 </div>
                 <span className="text-[10px] font-semibold">{item.name}</span>
               </Link>

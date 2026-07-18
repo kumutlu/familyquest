@@ -3,112 +3,698 @@ rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
 
-    // Helper functions
+    // HELPER FUNCTIONS
     function isAuthenticated() {
       return request.auth != null;
     }
 
-    function isFamilyMember(familyId) {
-      return isAuthenticated() && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.familyId == familyId;
-    }
-
     function isOwner(familyId) {
-      return isFamilyMember(familyId) && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'owner';
+      let userDoc = get(/databases/$(database)/documents/users/$(request.auth.uid));
+      return userDoc != null
+        && userDoc.data.get('familyId', 'null') == familyId
+        && userDoc.data.get('role', 'null') == 'owner';
     }
 
     function isParent(familyId) {
-      return isFamilyMember(familyId) && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'parent';
-    }
-
-    function isBehaviourManager(familyId) {
-      let role = get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role;
-      return isFamilyMember(familyId) && (role == 'parent' || role == 'owner');
+      let userDoc = get(/databases/$(database)/documents/users/$(request.auth.uid));
+      return userDoc != null
+        && userDoc.data.get('familyId', 'null') == familyId
+        && (userDoc.data.get('role', 'null') == 'parent' || userDoc.data.get('role', 'null') == 'owner');
     }
 
     function isChildInFamily(familyId, childId) {
-      let child = get(/databases/$(database)/documents/users/$(childId)).data;
-      return child.familyId == familyId && child.role == 'child';
+      let childDoc = get(/databases/$(database)/documents/users/$(childId));
+      return childDoc != null
+        && childDoc.data.get('familyId', 'null') == familyId
+        && childDoc.data.get('role', 'null') == 'child';
     }
 
-    function hasValidReason(reason) {
-      return reason is string
-        && reason.size() >= 3
-        && !reason.matches('^\\s.*')
-        && !reason.matches('.*\\s$');
+    function isFamilyMember(familyId) {
+      let userDoc = get(/databases/$(database)/documents/users/$(request.auth.uid));
+      return userDoc != null
+        && userDoc.data.get('familyId', 'null') == familyId;
+    }
+
+    function isBehaviourManager(familyId) {
+      return isParent(familyId);
+    }
+
+    // -------------------------------------------------------------------------
+    // AVATAR CATALOG (authoritative mirror of src/config/avatarCatalog.ts)
+    // The cost map below is the single source of truth for premium avatar prices
+    // inside Firestore rules. The client bundle may display prices but can NEVER
+    // change them: unlock records are rejected unless costPoints equals this map.
+    // -------------------------------------------------------------------------
+    function avatarCatalogCost(avatarId) {
+      return {
+        'rare-neon': 150,
+        'rare-tiger': 200,
+        'rare-wizard': 250,
+        'epic-dragon': 500,
+        'epic-phoenix': 750,
+        'epic-knight': 1000,
+        'legendary-galaxy': 2000,
+        'legendary-crown': 3000,
+      }.get(avatarId, -1);
+    }
+
+    // Starter avatars are free for everyone (no unlock record required).
+    function isStarterAvatar(avatarId) {
+      return avatarId in [
+        'starter-robot', 'starter-cat', 'starter-panda', 'starter-fox', 'starter-star',
+        'starter-rocket', 'starter-alien', 'starter-bunny', 'starter-dino', 'starter-unicorn',
+      ];
+    }
+
+    // Premium avatars require a points unlock record.
+    function isPremiumAvatar(avatarId) {
+      return avatarCatalogCost(avatarId) > 0;
     }
 
     function hasValidCreatorSnapshot(data) {
-      let creator = get(/databases/$(database)/documents/users/$(request.auth.uid)).data;
-      return data.createdBy == request.auth.uid
-        && data.createdByName is string
-        && data.createdByName == creator.displayName;
+      let creatorDoc = get(/databases/$(database)/documents/users/$(request.auth.uid));
+      return creatorDoc != null && 'displayName' in creatorDoc.data && creatorDoc.data.displayName == data.get('createdByName', 'null');
     }
 
-    function hasValidBehaviourDeltas(data) {
-      return data.pointsDelta is int
+    function isValidBehaviourEvent(familyId) {
+      let data = request.resource.data;
+      let childIdStr = data.get('childId', 'null');
+      let requiredKeys = ['familyId', 'childId', 'type', 'pointsDelta', 'walletDelta', 'reason', 'createdBy', 'createdByName', 'createdAt'];
+
+      return data.keys().hasAll(requiredKeys)
+        && data.keys().hasOnly(['familyId', 'childId', 'type', 'pointsDelta', 'walletDelta', 'reason', 'createdBy', 'createdByName', 'createdAt', 'effectSnapshot'])
+        && isChildInFamily(familyId, childIdStr)
+        && data.pointsDelta is int
         && data.walletDelta is int
         && (
           (data.type == 'positive' && data.pointsDelta > 0 && data.walletDelta == 0) ||
           (data.type == 'negative' && data.pointsDelta < 0 && data.walletDelta == 0) ||
           (data.type == 'financial' && data.pointsDelta == 0 && data.walletDelta < 0)
-        );
-    }
-
-    function isValidBehaviourEvent(familyId) {
-      let data = request.resource.data;
-      return data.keys().hasOnly([
-          'familyId', 'childId', 'type', 'reason', 'pointsDelta',
-          'walletDelta', 'createdBy', 'createdByName', 'createdAt'
-        ])
-        && data.keys().hasAll([
-          'familyId', 'childId', 'type', 'reason', 'pointsDelta',
-          'walletDelta', 'createdBy', 'createdByName', 'createdAt'
-        ])
-        && data.familyId is string
-        && data.familyId == familyId
-        && data.childId is string
-        && isChildInFamily(familyId, data.childId)
-        && data.type is string
-        && hasValidReason(data.reason)
-        && hasValidBehaviourDeltas(data)
+        )
+        && data.reason is string
+        && data.reason.trim().size() >= 3
+        && data.createdBy == request.auth.uid
+        && data.createdByName is string
         && hasValidCreatorSnapshot(data)
+        && data.familyId == familyId
         && data.createdAt is timestamp
         && data.createdAt == request.time;
     }
 
-    function isValidFinancialPenalty(familyId) {
+    function hasCanonicalEffectSnapshot(data, familyId) {
+      return data.effectSnapshot is map
+        && data.effectSnapshot.schemaVersion == 1
+        && data.effectSnapshot.familyId == familyId
+        && data.effectSnapshot.actorId == request.auth.uid
+        && data.effectSnapshot.xpAdjustment == 0;
+    }
+
+
+    function isValidDepositCredit(familyId, childId) {
       let data = request.resource.data;
-      let eventPath = /databases/$(database)/documents/families/$(familyId)/behaviour_events/$(data.behaviourEventId);
-      let event = getAfter(eventPath).data;
-      return data.keys().hasOnly([
-          'type', 'behaviourEventId', 'childId', 'amount', 'reason',
-          'createdBy', 'createdByName', 'createdAt'
-        ])
-        && data.keys().hasAll([
-          'type', 'behaviourEventId', 'childId', 'amount', 'reason',
-          'createdBy', 'createdByName', 'createdAt'
-        ])
-        && data.type == 'financial_penalty'
-        && data.behaviourEventId is string
-        && data.behaviourEventId.size() > 0
-        && data.childId is string
-        && isChildInFamily(familyId, data.childId)
-        && data.amount is int
-        && data.amount > 0
-        && hasValidReason(data.reason)
-        && hasValidCreatorSnapshot(data)
-        && data.createdAt is timestamp
+      let oldData = resource.data;
+      let diff = data.diff(oldData).affectedKeys();
+      let txId = data.get('lastManualTxId', 'null');
+      let tx = getAfter(/databases/$(database)/documents/families/$(familyId)/wallet_transactions/$(txId));
+
+      return isParent(familyId)
+        && 'lastManualTxId' in data
+        && diff.hasOnly(['balance', 'lastManualTxId'])
+        && tx != null
+        && tx.data.amount == (data.balance - oldData.balance)
+        && tx.data.amount > 0
+        && tx.data.type == 'deposit'
+        && tx.data.childId == childId
+        && tx.data.createdAt == request.time
+        && !exists(/databases/$(database)/documents/families/$(familyId)/wallet_transactions/$(txId));
+    }
+
+    function isValidWithdrawalDeduction(familyId, childId) {
+      let data = request.resource.data;
+      let oldData = resource.data;
+      let diff = data.diff(oldData).affectedKeys();
+      let txId = data.get('lastManualTxId', 'null');
+      let tx = getAfter(/databases/$(database)/documents/families/$(familyId)/wallet_transactions/$(txId));
+
+      return isParent(familyId)
+        && 'lastManualTxId' in data
+        && diff.hasOnly(['balance', 'lastManualTxId'])
+        && tx != null
+        && tx.data.amount == (oldData.balance - data.balance)
+        && tx.data.amount > 0
+        && tx.data.type == 'withdrawal'
+        && tx.data.childId == childId
+        && tx.data.createdAt == request.time
+        && !exists(/databases/$(database)/documents/families/$(familyId)/wallet_transactions/$(txId));
+    }
+
+    function isValidParentTransferDeduction(familyId, childId) {
+      let data = request.resource.data;
+      let oldData = resource.data;
+      let diff = data.diff(oldData).affectedKeys();
+      let txId = data.get('lastManualTxId', 'null');
+      let tx = getAfter(/databases/$(database)/documents/families/$(familyId)/wallet_transactions/$(txId));
+
+      return isParent(familyId)
+        && 'lastManualTxId' in data
+        && diff.hasOnly(['balance', 'lastManualTxId'])
+        && tx != null
+        && tx.data.amount == (oldData.balance - data.balance)
+        && tx.data.amount > 0
+        && tx.data.type == 'transfer'
+        && tx.data.fromChildId == childId
+        && tx.data.createdAt == request.time
+        && !exists(/databases/$(database)/documents/families/$(familyId)/wallet_transactions/$(txId));
+    }
+
+    function isValidParentTransferCredit(familyId, childId) {
+      let data = request.resource.data;
+      let oldData = resource.data;
+      let diff = data.diff(oldData).affectedKeys();
+      let txId = data.get('lastManualTxId', 'null');
+      let tx = getAfter(/databases/$(database)/documents/families/$(familyId)/wallet_transactions/$(txId));
+
+      return isParent(familyId)
+        && 'lastManualTxId' in data
+        && diff.hasOnly(['balance', 'lastManualTxId'])
+        && tx != null
+        && tx.data.amount == (data.balance - oldData.balance)
+        && tx.data.amount > 0
+        && tx.data.type == 'transfer'
+        && tx.data.childId == childId
+        && tx.data.createdAt == request.time
+        && !exists(/databases/$(database)/documents/families/$(familyId)/wallet_transactions/$(txId));
+    }
+
+    function isValidBehaviourPenaltyDeduction(familyId, childId) {
+      let data = request.resource.data;
+      let oldData = resource.data;
+      let diff = data.diff(oldData).affectedKeys();
+      let txId = data.get('lastPenaltyTxId', 'null');
+      let tx = getAfter(/databases/$(database)/documents/families/$(familyId)/wallet_transactions/$(txId));
+
+      return isParent(familyId)
+        && 'lastPenaltyTxId' in data
+        && diff.hasOnly(['balance', 'lastPenaltyTxId'])
+        && tx != null
+        && tx.data.amount == (oldData.balance - data.balance)
+        && tx.data.amount > 0
+        && tx.data.type == 'financial_penalty'
+        && tx.data.childId == childId
+        && tx.data.createdAt == request.time
+        && !exists(/databases/$(database)/documents/families/$(familyId)/wallet_transactions/$(txId));
+    }
+
+    function isValidFundDonationDeduction(familyId, childId) {
+      let data = request.resource.data;
+      let oldData = resource.data;
+      let diff = data.diff(oldData).affectedKeys();
+      let txId = data.get('lastFundTxId', 'null');
+      let tx = getAfter(/databases/$(database)/documents/families/$(familyId)/fund_transactions/$(txId));
+
+      return request.auth.uid == childId
+        && 'lastFundTxId' in data
+        && diff.hasOnly(['balance', 'lastFundTxId'])
+        && tx != null
+        && tx.data.amount == (oldData.balance - data.balance)
+        && tx.data.amount > 0
+        && tx.data.amount is int
+        && tx.data.fromUserId == childId
+        && tx.data.type == 'contribution'
+        && tx.data.createdAt == request.time
+        && !exists(/databases/$(database)/documents/families/$(familyId)/fund_transactions/$(txId));
+    }
+
+    function isValidPetBoxDonationDeduction(familyId, childId) {
+      let data = request.resource.data;
+      let oldData = resource.data;
+      let diff = data.diff(oldData).affectedKeys();
+      let txId = data.get('lastTransferTxId', 'null');
+      let tx = getAfter(/databases/$(database)/documents/families/$(familyId)/wallet_transactions/$(txId));
+      let requestId = tx == null ? 'null' : tx.data.get('sourceId', 'null');
+      let req = getAfter(/databases/$(database)/documents/families/$(familyId)/petbox_requests/$(requestId));
+
+      return isParent(familyId)
+        && 'lastTransferTxId' in data
+        && diff.hasOnly(['balance', 'lastTransferTxId', 'lastTransferReqId'])
+        && tx != null
+        && tx.data.amountPence == (data.balance - oldData.balance)
+        && tx.data.amountPence < 0
+        && tx.data.type == 'petbox_donation'
+        && tx.data.childId == childId
+        && req != null && req.data.status == 'approved' && req.data.approvalTxId == txId
+        && data.lastTransferReqId == requestId
+        && tx.data.createdAt == request.time
+        && !exists(/databases/$(database)/documents/families/$(familyId)/wallet_transactions/$(txId));
+    }
+
+    function isValidLedgerSync(familyId, childId) {
+      let data = request.resource.data;
+      let oldData = resource.data;
+      let diffPence = data.balance - oldData.balance;
+
+      let txId = data.get('lastTransferTxId', 'null');
+      let txDoc = getAfter(/databases/$(database)/documents/families/$(familyId)/wallet_transactions/$(txId));
+      return data.diff(oldData).affectedKeys().hasOnly(['balance', 'lastTransferTxId', 'lastTransferReqId'])
+        && data.lastTransferTxId != oldData.get('lastTransferTxId', '')
+        && txDoc != null
+        && txDoc.data.amountPence == diffPence
+        && txDoc.data.childId == childId
+        && txDoc.data.get('transferRequestId', txDoc.data.get('moneyRequestId', 'null')) == data.get('lastTransferReqId', '')
+        && txDoc.data.approvalTxId != null
+        && (
+             (diffPence < 0 && txDoc.data.type == 'transfer_out') ||
+             (diffPence > 0 && (txDoc.data.type == 'transfer_in' || txDoc.data.type == 'request_payment'))
+           );
+    }
+
+    // Consolidated wallet-update validator. Replaces the eight separate
+    // isValid*Deduction/Credit functions previously OR'd in the wallets allow,
+    // so the Goals contribution/return transaction evaluates exactly ONE
+    // condition (keeping the per-request expression budget under 1000). The
+    // goal_contribution / goal_return branches use lastGoalTxId (child debit /
+    // credit) and never trigger the anti-forgery existsAfter read, which is
+    // short-circuited to the parent-withdrawal (lastManualTxId) path only.
+    function isValidWalletUpdate(familyId, childId) {
+      let data = request.resource.data;
+      let oldData = resource.data;
+      let delta = data.balance - oldData.balance;
+      let hasManual = 'lastManualTxId' in data;
+      let hasTransfer = 'lastTransferTxId' in data;
+      let hasFund = 'lastFundTxId' in data;
+      let hasGoal = 'lastGoalTxId' in data;
+      let hasPenalty = 'lastPenaltyTxId' in data;
+      let txIdCount = (hasManual ? 1 : 0) + (hasTransfer ? 1 : 0) + (hasFund ? 1 : 0)
+        + (hasGoal ? 1 : 0) + (hasPenalty ? 1 : 0);
+      // Anti-forgery: a parent-initiated manual withdrawal (lastManualTxId) must
+      // reference a wallet_transactions leg that actually exists (getAfter). This
+      // blocks a forged balance decrease. The goal_contribution / goal_return
+      // branches use lastGoalTxId and do NOT trigger this getAfter read, so the
+      // multi-write Goals return transaction stays under the 1000-expression budget.
+      let manualTxExists = hasManual
+        && existsAfter(/databases/$(database)/documents/families/$(familyId)/wallet_transactions/$(data.get('lastManualTxId', '')));
+      return txIdCount == 1
+        && delta != 0 && delta is int
+        && (
+          (delta > 0 && request.auth.uid != childId)
+          || (delta < 0 && hasManual && manualTxExists)
+          || (delta < 0 && hasGoal && request.auth.uid == childId)
+          || (delta < 0 && hasFund && request.auth.uid == childId)
+          || (delta < 0 && hasTransfer && request.auth.uid == childId)
+        );
+    }
+
+    // Lean, shape-only validator for the wallet_transactions leg written by the
+    // Goals contribution/return transaction. The child (actorId == childId) writes
+    // a negative-amount 'goal_contribution' ledger entry; no get() is required,
+    // keeping the multi-write Goals transaction under the 1000-expression limit.
+    function isValidGoalWalletLedger(familyId, txId) {
+      let data = request.resource.data;
+      return data.keys().hasOnly(['type', 'childId', 'goalId', 'amount', 'familyId', 'sourceId', 'status', 'timestamp', 'createdAt'])
+        && data.childId == request.auth.uid
+        && data.familyId == familyId
+        && data.amount is int && data.amount < 0
+        && data.status == 'completed'
+        && data.sourceId == txId
+        && data.createdAt == request.time;
+    }
+
+    // Lean, shape-only validator for the wallet_transactions leg written by the
+    // Goals return-funds transaction. A parent (isParent) credits the child
+    // wallet (positive amount) on Return Funds; no get() is required, keeping
+    // the multi-write Goals transaction under the 1000-expression limit.
+    function isValidGoalReturnWalletLedger(familyId, txId) {
+      let data = request.resource.data;
+      return data.keys().hasOnly(['type', 'childId', 'goalId', 'amount', 'familyId', 'sourceId', 'status', 'timestamp', 'createdAt'])
+        && data.childId != request.auth.uid
+        && data.familyId == familyId
+        && data.amount is int && data.amount > 0
+        && data.status == 'completed'
+        && data.sourceId == txId
+        && data.createdAt == request.time;
+    }
+
+    function isValidRedemptionDeduction(uid) {
+      let data = request.resource.data;
+      let oldData = resource.data;
+      let diff = data.diff(oldData).affectedKeys();
+      let txId = data.get('lastRedemptionId', 'null');
+      let tx = getAfter(/databases/$(database)/documents/families/$(oldData.get('familyId', 'null'))/redemptions/$(txId));
+
+      return request.auth.uid == uid
+        && 'lastRedemptionId' in data
+        && diff.hasOnly(['rewardPoints', 'lastRedemptionId'])
+        && tx != null
+        && tx.data.costPaid == (oldData.get('rewardPoints', 0) - data.get('rewardPoints', 0))
+        && tx.data.costPaid > 0
+        && tx.data.costPaid is int
+        && data.get('rewardPoints', 0) >= 0
+        && tx.data.userId == uid
+        && tx.data.createdAt == request.time
+        && !exists(/databases/$(database)/documents/families/$(oldData.get('familyId', 'null'))/redemptions/$(txId));
+    }
+
+    function isValidTaskApprovalMutation(uid) {
+      let data = request.resource.data;
+      let oldData = resource.data;
+      let completionId = data.get('lastTaskCompletionId', 'null');
+      let familyId = oldData.get('familyId', 'null');
+      let oldCompletion = get(/databases/$(database)/documents/families/$(familyId)/task_completions/$(completionId));
+      let completion = getAfter(/databases/$(database)/documents/families/$(familyId)/task_completions/$(completionId));
+      let taskId = completion == null ? 'null' : completion.data.get('taskId', 'null');
+      let task = get(/databases/$(database)/documents/families/$(familyId)/tasks/$(taskId));
+      return isParent(familyId)
+        && data.diff(oldData).affectedKeys().hasOnly(['rewardPoints', 'lifetimeXP', 'lastTaskCompletionId'])
+        && oldCompletion != null && oldCompletion.data.status == 'pending_approval'
+        && completion != null && completion.data.status == 'approved' && completion.data.assigneeId == uid
+        && task != null && completion.data.awardedPoints == task.data.pointsReward
+        && data.get('rewardPoints', 0) == oldData.get('rewardPoints', 0) + task.data.pointsReward
+        && data.get('lifetimeXP', 0) == oldData.get('lifetimeXP', 0) + task.data.pointsReward;
+    }
+
+    function hasValidTaskApprovalEffect(familyId, completionId, oldData, data) {
+      let task = get(/databases/$(database)/documents/families/$(familyId)/tasks/$(oldData.get('taskId', 'null')));
+      let oldUser = get(/databases/$(database)/documents/users/$(oldData.get('assigneeId', 'null')));
+      let user = getAfter(/databases/$(database)/documents/users/$(oldData.get('assigneeId', 'null')));
+      let feed = getAfter(/databases/$(database)/documents/families/$(familyId)/feed/$(('task_approval_') + completionId));
+      return task != null && oldUser != null && user != null
+        && data.taskId == oldData.taskId && data.assigneeId == oldData.assigneeId
+        && data.awardedPoints == task.data.pointsReward
+        && data.effectSnapshot.familyId == familyId && data.effectSnapshot.actorId == request.auth.uid
+        && data.effectSnapshot.childId == oldData.assigneeId && data.effectSnapshot.pointsDelta == task.data.pointsReward
+        && data.effectSnapshot.xpAdjustment == 0
+        && user.data.lastTaskCompletionId == completionId
+        && user.data.rewardPoints == oldUser.data.get('rewardPoints', 0) + task.data.pointsReward
+        && user.data.lifetimeXP == oldUser.data.get('lifetimeXP', 0) + task.data.pointsReward
+        && feed != null && feed.data.actorId == request.auth.uid;
+    }
+
+    function isValidBehaviourPointMutation(uid) {
+      let data = request.resource.data;
+      let oldData = resource.data;
+      let eventId = data.get('lastBehaviourEventId', 'null');
+      let familyId = oldData.get('familyId', 'null');
+      let event = getAfter(/databases/$(database)/documents/families/$(familyId)/behaviour_events/$(eventId));
+      return isParent(familyId) && event != null && event.data.childId == uid
+        && event.data.createdBy == request.auth.uid && event.data.createdAt == request.time
+        && !exists(/databases/$(database)/documents/families/$(familyId)/behaviour_events/$(eventId))
+        && data.get('rewardPoints', 0) == oldData.get('rewardPoints', 0) + event.data.pointsDelta
+        && (
+          (event.data.type == 'positive'
+            && data.diff(oldData).affectedKeys().hasOnly(['rewardPoints', 'lifetimeXP', 'lastBehaviourEventId'])
+            && data.get('lifetimeXP', 0) == oldData.get('lifetimeXP', 0) + event.data.pointsDelta)
+          || (event.data.type == 'negative'
+            && data.diff(oldData).affectedKeys().hasOnly(['rewardPoints', 'lastBehaviourEventId']))
+        );
+    }
+
+    function isValidRedemptionCreate(familyId, redemptionId) {
+      let data = request.resource.data;
+      let reward = get(/databases/$(database)/documents/families/$(familyId)/rewards/$(data.get('rewardId', 'null')));
+      let oldUser = get(/databases/$(database)/documents/users/$(request.auth.uid));
+      let user = getAfter(/databases/$(database)/documents/users/$(request.auth.uid));
+      return reward != null && oldUser != null && user != null
+        && data.costPaid == reward.data.cost
+        && oldUser.data.rewardPoints >= data.costPaid
+        && user.data.rewardPoints == oldUser.data.rewardPoints - data.costPaid
+        && user.data.lastRedemptionId == redemptionId;
+    }
+
+    function isValidWalletMigrationCreate(familyId, childId, legacyBalance) {
+      let data = request.resource.data;
+      return data.keys().hasOnly(['balance', 'createdAt', 'migratedFromLegacy'])
+        && data.balance == legacyBalance;
+    }
+
+    function isValidManualWalletCreate(familyId, childId, legacyBalance) {
+      let data = request.resource.data;
+      let manualId = data.get('lastManualTxId', 'null');
+      let manualTx = getAfter(/databases/$(database)/documents/families/$(familyId)/wallet_transactions/$(manualId));
+      return data.keys().hasOnly(['balance', 'createdAt', 'migratedFromLegacy', 'lastManualTxId'])
+        && manualTx != null && !exists(/databases/$(database)/documents/families/$(familyId)/wallet_transactions/$(manualId))
+        && manualTx.data.childId == childId && manualTx.data.createdAt == request.time
+        && data.balance == legacyBalance + (manualTx.data.type == 'deposit' ? manualTx.data.amount : (0 - manualTx.data.amount));
+    }
+
+    function isValidTransferWalletCreate(familyId, childId, legacyBalance) {
+      let data = request.resource.data;
+      let requestId = data.get('lastTransferReqId', 'null');
+      let transfer = get(/databases/$(database)/documents/families/$(familyId)/transfer_requests/$(requestId));
+      let transferAfter = getAfter(/databases/$(database)/documents/families/$(familyId)/transfer_requests/$(requestId));
+      return transfer != null && transfer.data.status == 'pending'
+        && transferAfter != null && transferAfter.data.status == 'approved'
+        && transferAfter.data.approvalTxId != null
+        && ((childId == transfer.data.fromChildId
+            && data.lastTransferTxId == transferAfter.data.approvalTxId + '_out'
+            && data.balance == legacyBalance - transfer.data.amountPence)
+          || (childId == transfer.data.toChildId
+            && data.lastTransferTxId == transferAfter.data.approvalTxId + '_in'
+            && data.balance == legacyBalance + transfer.data.amountPence));
+    }
+
+    function isValidMoneyWalletCreate(familyId, childId, legacyBalance) {
+      let data = request.resource.data;
+      let requestId = data.get('lastTransferReqId', 'null');
+      let money = get(/databases/$(database)/documents/families/$(familyId)/money_requests/$(requestId));
+      let moneyAfter = getAfter(/databases/$(database)/documents/families/$(familyId)/money_requests/$(requestId));
+      return money != null && money.data.status == 'pending'
+        && moneyAfter != null && moneyAfter.data.status == 'approved'
+        && moneyAfter.data.paymentTransferId != null
+        && ((childId == money.data.requesterId
+            && data.lastTransferTxId == moneyAfter.data.paymentTransferId + '_in'
+            && data.balance == legacyBalance + money.data.amountPence)
+          || (childId == money.data.requestedFromId
+            && data.lastTransferTxId == moneyAfter.data.paymentTransferId + '_out'
+            && data.balance == legacyBalance - money.data.amountPence));
+    }
+
+    function isValidPetWalletCreate(familyId, childId, legacyBalance) {
+      let data = request.resource.data;
+      let requestId = data.get('lastTransferReqId', 'null');
+      let pet = get(/databases/$(database)/documents/families/$(familyId)/petbox_requests/$(requestId));
+      let petAfter = getAfter(/databases/$(database)/documents/families/$(familyId)/petbox_requests/$(requestId));
+      return pet != null && pet.data.status == 'pending' && pet.data.childId == childId
+        && petAfter != null && petAfter.data.status == 'approved'
+        && data.lastTransferTxId == petAfter.data.approvalTxId
+        && data.balance == legacyBalance - pet.data.amountPence;
+    }
+
+    function isValidWalletCreate(familyId, childId) {
+      let data = request.resource.data;
+      let child = getAfter(/databases/$(database)/documents/users/$(childId));
+      let legacyBalance = child == null ? 0 : child.data.get('walletBalance', 0);
+      return isParent(familyId) && child != null && child.data.role == 'child' && child.data.familyId == familyId
+        && data.keys().hasOnly(['balance', 'createdAt', 'migratedFromLegacy', 'lastTransferTxId', 'lastTransferReqId', 'lastManualTxId', 'lastFundTxId'])
+        && data.balance is int && data.migratedFromLegacy == true && data.createdAt == request.time
+        && (
+          isValidWalletMigrationCreate(familyId, childId, legacyBalance)
+          || isValidManualWalletCreate(familyId, childId, legacyBalance)
+          || (data.keys().hasOnly(['balance', 'createdAt', 'migratedFromLegacy', 'lastTransferTxId', 'lastTransferReqId'])
+            && (isValidTransferWalletCreate(familyId, childId, legacyBalance)
+              || isValidMoneyWalletCreate(familyId, childId, legacyBalance)
+              || isValidPetWalletCreate(familyId, childId, legacyBalance)))
+        );
+    }
+
+    function isValidFundDonationInjection(familyId, fundId) {
+      let data = request.resource.data;
+      let oldData = resource.data;
+      let diff = data.diff(oldData).affectedKeys();
+      let txId = data.get('lastFundTxId', 'null');
+      let tx = getAfter(/databases/$(database)/documents/families/$(familyId)/fund_transactions/$(txId));
+      let requestId = tx == null ? 'null' : tx.data.get('sourceId', 'null');
+      let req = getAfter(/databases/$(database)/documents/families/$(familyId)/petbox_requests/$(requestId));
+
+      return 'lastFundTxId' in data
+        && diff.hasOnly(['balance', 'lastFundTxId'])
+        && tx != null
+        && tx.data.amount == (data.balance - oldData.balance)
+        && tx.data.amount > 0
+        && tx.data.amount is int
+        && tx.data.fundId == fundId
+        && tx.data.type == 'contribution'
+        && req != null && req.data.status == 'approved' && req.data.fundTransactionId == txId
+        && tx.data.createdAt == request.time
+        && !exists(/databases/$(database)/documents/families/$(familyId)/fund_transactions/$(txId));
+    }
+
+    function isValidFundExpenseUpdate(familyId, fundId) {
+      let data = request.resource.data;
+      let oldData = resource.data;
+      let txId = data.get('lastFundTxId', 'null');
+      let tx = getAfter(/databases/$(database)/documents/families/$(familyId)/fund_transactions/$(txId));
+      return isParent(familyId)
+        && data.diff(oldData).affectedKeys().hasOnly(['balance', 'lastFundTxId'])
+        && tx != null && tx.data.type == 'expense' && tx.data.fundId == fundId
+        && tx.data.familyId == familyId
+        && tx.data.sourceId == txId && tx.data.actorId == request.auth.uid
+        && tx.data.amount is int && tx.data.amount > 0
+        && data.balance == oldData.balance - tx.data.amount
+        && tx.data.createdAt == request.time
+        && !exists(/databases/$(database)/documents/families/$(familyId)/fund_transactions/$(txId));
+    }
+
+    function isValidFundTransactionCreate(familyId, txId) {
+      let data = request.resource.data;
+      let fund = getAfter(/databases/$(database)/documents/families/$(familyId)/funds/$(data.get('fundId', 'null')));
+      let requestId = data.get('sourceId', 'null');
+      let pet = getAfter(/databases/$(database)/documents/families/$(familyId)/petbox_requests/$(requestId));
+      return isParent(familyId) && fund != null && fund.data.lastFundTxId == txId
         && data.createdAt == request.time
-        && existsAfter(eventPath)
-        && event.familyId == familyId
-        && event.childId == data.childId
-        && event.type == 'financial'
-        && event.pointsDelta == 0
-        && event.walletDelta == 0 - data.amount
-        && event.reason == data.reason
-        && event.createdBy == data.createdBy
-        && event.createdByName == data.createdByName
-        && event.createdAt == data.createdAt;
+        && (
+          (data.type == 'expense' && data.sourceId == txId && data.actorId == request.auth.uid)
+          || (data.type == 'contribution' && pet != null && pet.data.status == 'approved'
+              && pet.data.fundTransactionId == txId && data.fromUserId == pet.data.childId && data.amount == pet.data.amountPence)
+        );
+    }
+
+    function hasValidReversalActor(data, familyId) {
+      let actor = get(/databases/$(database)/documents/users/$(request.auth.uid));
+      return isParent(familyId) && actor != null
+        && data.actorId == request.auth.uid
+        && data.actorName == actor.data.displayName;
+    }
+
+    function sourceSnapshotMatches(familyId, kind, sourceId, snapshot) {
+      return (kind == 'wallet_transaction'
+          && exists(/databases/$(database)/documents/families/$(familyId)/wallet_transactions/$(sourceId))
+          && get(/databases/$(database)/documents/families/$(familyId)/wallet_transactions/$(sourceId)).data.get('effectSnapshot', null) == snapshot)
+        || (kind == 'fund_transaction'
+          && exists(/databases/$(database)/documents/families/$(familyId)/fund_transactions/$(sourceId))
+          && get(/databases/$(database)/documents/families/$(familyId)/fund_transactions/$(sourceId)).data.get('effectSnapshot', null) == snapshot)
+        || (kind == 'behaviour_event'
+          && exists(/databases/$(database)/documents/families/$(familyId)/behaviour_events/$(sourceId))
+          && get(/databases/$(database)/documents/families/$(familyId)/behaviour_events/$(sourceId)).data.get('effectSnapshot', null) == snapshot)
+        || (kind == 'task_completion'
+          && exists(/databases/$(database)/documents/families/$(familyId)/task_completions/$(sourceId))
+          && get(/databases/$(database)/documents/families/$(familyId)/task_completions/$(sourceId)).data.get('effectSnapshot', null) == snapshot)
+        || (kind == 'reward_redemption'
+          && exists(/databases/$(database)/documents/families/$(familyId)/redemptions/$(sourceId))
+          && get(/databases/$(database)/documents/families/$(familyId)/redemptions/$(sourceId)).data.get('effectSnapshot', null) == snapshot)
+        || (kind == 'transfer_request'
+          && exists(/databases/$(database)/documents/families/$(familyId)/transfer_requests/$(sourceId))
+          && get(/databases/$(database)/documents/families/$(familyId)/transfer_requests/$(sourceId)).data.get('effectSnapshot', null) == snapshot)
+        || (kind == 'money_request'
+          && exists(/databases/$(database)/documents/families/$(familyId)/money_requests/$(sourceId))
+          && get(/databases/$(database)/documents/families/$(familyId)/money_requests/$(sourceId)).data.get('effectSnapshot', null) == snapshot)
+        || (kind == 'petbox_request'
+          && exists(/databases/$(database)/documents/families/$(familyId)/petbox_requests/$(sourceId))
+          && get(/databases/$(database)/documents/families/$(familyId)/petbox_requests/$(sourceId)).data.get('effectSnapshot', null) == snapshot);
+    }
+
+    function isExactInverse(original, inverse, familyId, actorId) {
+      return inverse.keys().hasOnly(['schemaVersion', 'entityType', 'familyId', 'actorId', 'childId', 'counterpartyChildId', 'fundId', 'walletDeltaPence', 'counterpartyWalletDeltaPence', 'fundDeltaPence', 'pointsDelta', 'xpAdjustment'])
+        && inverse.schemaVersion == 1 && inverse.entityType == 'reversal'
+        && inverse.familyId == familyId && inverse.actorId == actorId && inverse.xpAdjustment == 0
+        && inverse.get('childId', '') == original.get('childId', '')
+        && inverse.get('counterpartyChildId', '') == original.get('counterpartyChildId', '')
+        && inverse.get('fundId', '') == original.get('fundId', '')
+        && inverse.get('walletDeltaPence', 0) == (0 - original.get('walletDeltaPence', 0))
+        && inverse.get('counterpartyWalletDeltaPence', 0) == (0 - original.get('counterpartyWalletDeltaPence', 0))
+        && inverse.get('fundDeltaPence', 0) == (0 - original.get('fundDeltaPence', 0))
+        && inverse.get('pointsDelta', 0) == (0 - original.get('pointsDelta', 0));
+    }
+
+    function isValidReversalRecord(familyId, reversalId) {
+      let data = request.resource.data;
+      return data.keys().hasOnly(['familyId', 'sourceKind', 'sourceId', 'reversalId', 'actorId', 'actorName', 'reason', 'status', 'originalEffectSnapshot', 'inverseEffectSnapshot', 'xpAdjustment', 'xpReversed', 'completedAt'])
+        && data.keys().hasAll(['familyId', 'sourceKind', 'sourceId', 'reversalId', 'actorId', 'actorName', 'reason', 'status', 'originalEffectSnapshot', 'inverseEffectSnapshot', 'xpAdjustment', 'xpReversed', 'completedAt'])
+        && data.familyId == familyId && data.reversalId == reversalId
+        && reversalId == data.sourceKind + '__' + data.sourceId
+        && data.sourceKind in ['wallet_transaction', 'fund_transaction', 'behaviour_event', 'task_completion', 'reward_redemption', 'transfer_request', 'money_request', 'petbox_request']
+        && hasValidReversalActor(data, familyId)
+        && data.reason is string && data.reason.trim().size() > 0
+        && data.status == 'completed' && data.xpAdjustment == 0 && data.xpReversed == false
+        && data.completedAt == request.time
+        && data.originalEffectSnapshot is map && data.inverseEffectSnapshot is map
+        && data.originalEffectSnapshot.familyId == familyId && data.originalEffectSnapshot.schemaVersion == 1
+        && data.originalEffectSnapshot.xpAdjustment == 0
+        && sourceSnapshotMatches(familyId, data.sourceKind, data.sourceId, data.originalEffectSnapshot)
+        && isExactInverse(data.originalEffectSnapshot, data.inverseEffectSnapshot, familyId, request.auth.uid);
+    }
+
+    function isValidReversalEvent(familyId, reversalId) {
+      let data = request.resource.data;
+      let reversal = getAfter(/databases/$(database)/documents/families/$(familyId)/reversals/$(reversalId));
+      return reversal != null
+        && data.keys().hasOnly(['familyId', 'sourceKind', 'sourceId', 'reversalId', 'actorId', 'actorName', 'reason', 'effectSnapshot', 'xpAdjustment', 'xpReversed', 'createdAt'])
+        && data.familyId == familyId && data.reversalId == reversalId
+        && data.sourceKind == reversal.data.sourceKind && data.sourceId == reversal.data.sourceId
+        && data.actorId == request.auth.uid && data.actorName == reversal.data.actorName
+        && data.reason == reversal.data.reason && data.effectSnapshot == reversal.data.inverseEffectSnapshot
+        && data.xpAdjustment == 0 && data.xpReversed == false && data.createdAt == request.time;
+    }
+
+    function isValidReversalWalletUpdate(familyId, childId) {
+      let data = request.resource.data;
+      let oldData = resource.data;
+      let reversalId = data.get('lastReversalId', 'null');
+      let reversal = getAfter(/databases/$(database)/documents/families/$(familyId)/reversals/$(reversalId));
+      let original = reversal == null ? {} : reversal.data.originalEffectSnapshot;
+      let inverse = reversal == null ? {} : reversal.data.inverseEffectSnapshot;
+      let isPrimary = original.get('childId', '') == childId && 'walletDeltaPence' in original;
+      let suffix = isPrimary ? '__wallet' : '__counterparty';
+      let expected = isPrimary ? inverse.get('walletDeltaPence', 0) : inverse.get('counterpartyWalletDeltaPence', 0);
+      return reversal != null && reversal.data.actorId == request.auth.uid
+        && data.diff(oldData).affectedKeys().hasOnly(['balance', 'lastReversalId'])
+        && ((isPrimary) || (original.get('counterpartyChildId', '') == childId && 'counterpartyWalletDeltaPence' in original))
+        && data.balance == oldData.balance + expected
+        && data.balance >= get(/databases/$(database)/documents/families/$(familyId)).data.get('debtLimitPence', -5000)
+        && existsAfter(/databases/$(database)/documents/families/$(familyId)/wallet_transactions/$(reversalId + suffix));
+    }
+
+    function isValidReversalWalletLedger(familyId, txId) {
+      let data = request.resource.data;
+      let reversal = getAfter(/databases/$(database)/documents/families/$(familyId)/reversals/$(data.get('reversalId', 'null')));
+      let original = reversal == null ? {} : reversal.data.originalEffectSnapshot;
+      let inverse = reversal == null ? {} : reversal.data.inverseEffectSnapshot;
+      let primary = txId == data.reversalId + '__wallet' && data.childId == original.get('childId', '') && data.amountPence == inverse.get('walletDeltaPence', 0);
+      let counterparty = txId == data.reversalId + '__counterparty' && data.childId == original.get('counterpartyChildId', '') && data.amountPence == inverse.get('counterpartyWalletDeltaPence', 0);
+      return reversal != null && data.keys().hasOnly(['type', 'familyId', 'sourceKind', 'sourceId', 'reversalId', 'actorId', 'actorName', 'childId', 'amountPence', 'effectSnapshot', 'createdAt'])
+        && data.type == 'reversal' && data.familyId == familyId
+        && data.sourceKind == reversal.data.sourceKind && data.sourceId == reversal.data.sourceId
+        && data.actorId == request.auth.uid && data.actorName == reversal.data.actorName
+        && data.effectSnapshot == reversal.data.inverseEffectSnapshot && data.createdAt == request.time
+        && (primary || counterparty);
+    }
+
+    function isValidReversalFundUpdate(familyId, fundId) {
+      let data = request.resource.data;
+      let oldData = resource.data;
+      let reversalId = data.get('lastReversalId', 'null');
+      let reversal = getAfter(/databases/$(database)/documents/families/$(familyId)/reversals/$(reversalId));
+      return reversal != null && reversal.data.actorId == request.auth.uid
+        && reversal.data.originalEffectSnapshot.get('fundId', '') == fundId
+        && data.diff(oldData).affectedKeys().hasOnly(['balance', 'lastReversalId'])
+        && data.balance == oldData.balance + reversal.data.inverseEffectSnapshot.get('fundDeltaPence', 0)
+        && existsAfter(/databases/$(database)/documents/families/$(familyId)/fund_transactions/$(reversalId + '__fund'));
+    }
+
+    function isValidReversalFundLedger(familyId, txId) {
+      let data = request.resource.data;
+      let reversal = getAfter(/databases/$(database)/documents/families/$(familyId)/reversals/$(data.get('reversalId', 'null')));
+      return reversal != null && txId == data.reversalId + '__fund'
+        && data.keys().hasOnly(['type', 'familyId', 'sourceKind', 'sourceId', 'reversalId', 'actorId', 'actorName', 'fundId', 'amount', 'effectSnapshot', 'createdAt'])
+        && data.type == 'reversal' && data.familyId == familyId
+        && data.fundId == reversal.data.originalEffectSnapshot.get('fundId', '')
+        && data.amount == reversal.data.inverseEffectSnapshot.get('fundDeltaPence', 0)
+        && data.sourceKind == reversal.data.sourceKind && data.sourceId == reversal.data.sourceId
+        && data.actorId == request.auth.uid && data.actorName == reversal.data.actorName
+        && data.effectSnapshot == reversal.data.inverseEffectSnapshot && data.createdAt == request.time;
+    }
+
+    function isValidReversalPointsUpdate(uid) {
+      let data = request.resource.data;
+      let oldData = resource.data;
+      let familyId = oldData.get('familyId', 'null');
+      let reversalId = data.get('lastReversalId', 'null');
+      let reversal = getAfter(/databases/$(database)/documents/families/$(familyId)/reversals/$(reversalId));
+      return reversal != null && reversal.data.actorId == request.auth.uid
+        && reversal.data.originalEffectSnapshot.get('childId', '') == uid
+        && 'pointsDelta' in reversal.data.originalEffectSnapshot
+        && data.diff(oldData).affectedKeys().hasOnly(['rewardPoints', 'lastReversalId'])
+        && data.get('rewardPoints', 0) == oldData.get('rewardPoints', 0) + reversal.data.inverseEffectSnapshot.get('pointsDelta', 0)
+        && data.get('rewardPoints', 0) >= 0;
     }
 
     function isValidSelfSignup(uid) {
@@ -122,116 +708,977 @@ service cloud.firestore {
     function isValidManagedMemberCreate(uid) {
       let data = request.resource.data;
       return data.uid == uid
-        && data.familyId is string
+        && data.get('familyId', '') != ''
         && data.isManaged == true
         && (data.role == 'parent' || data.role == 'child')
         && isOwner(data.familyId);
     }
 
     function isValidOwnerBootstrap(uid) {
-      let familyId = request.resource.data.familyId;
+      let data = request.resource.data;
+      let familyId = data.get('familyId', 'null');
       let familyPath = /databases/$(database)/documents/families/$(familyId);
+
       return request.auth.uid == uid
-        && !('familyId' in resource.data)
-        && resource.data.role == 'parent'
-        && request.resource.data.uid == uid
-        && request.resource.data.role == 'owner'
-        && familyId is string
+        && !('familyId' in resource.data) // Must not have a family yet
+        && resource.data.get('role', 'null') == 'parent'
+        && data.get('uid', 'null') == uid
+        && data.get('role', 'null') == 'owner'
+        && familyId != 'null'
         && !exists(familyPath)
         && existsAfter(familyPath);
     }
 
+    function isValidJoinProfileUpdate(uid) {
+      let data = request.resource.data;
+      let familyId = data.get('familyId', 'null');
+      let requestId = data.get('joinRequestId', 'null');
+      let req = get(/databases/$(database)/documents/families/$(familyId)/join_requests/$(requestId));
+      let reqAfter = getAfter(/databases/$(database)/documents/families/$(familyId)/join_requests/$(requestId));
+      return isOwner(familyId) && !('familyId' in resource.data)
+        && req != null && req.data.status == 'pending' && req.data.uid == uid
+        && reqAfter != null && reqAfter.data.status == 'approved' && reqAfter.data.assignedRole == data.get('role', 'null')
+        && data.get('uid', 'null') == uid && data.get('displayName', 'null') == req.data.displayName
+        && data.get('role', 'null') in ['parent', 'child']
+        && data.diff(resource.data).affectedKeys().hasOnly(['uid', 'joinRequestId', 'familyId', 'role', 'displayName', 'avatarUrl', 'rewardPoints', 'lifetimeXP', 'currentStreak', 'longestStreak', 'lastActiveDate'])
+        && data.get('rewardPoints', -1) == 0 && data.get('lifetimeXP', -1) == 0
+        && data.get('currentStreak', -1) == 0 && data.get('longestStreak', -1) == 0 && data.get('lastActiveDate', 'null') == request.time;
+    }
+
+    function hasValidJoinApproval(familyId, requestId, oldData, data) {
+      let user = getAfter(/databases/$(database)/documents/users/$(oldData.get('uid', 'null')));
+      let wallet = getAfter(/databases/$(database)/documents/families/$(familyId)/wallets/$(oldData.get('uid', 'null')));
+      let feed = getAfter(/databases/$(database)/documents/families/$(familyId)/feed/$(('join_') + requestId));
+      return user != null && user.data.get('uid', 'null') == oldData.get('uid', 'null') && user.data.get('joinRequestId', 'null') == requestId
+        && user.data.get('familyId', 'null') == familyId && user.data.get('role', 'null') == data.get('assignedRole', 'null')
+        && user.data.get('displayName', 'null') == oldData.get('displayName', 'null')
+        && (data.get('assignedRole', 'null') == 'parent' || (wallet != null && wallet.data.get('balance', -1) == 0))
+        && feed != null && feed.data.get('actorId', 'null') == request.auth.uid;
+    }
+
+    function isValidTransferApproval(familyId, requestId, data, oldData) {
+      let txId = data.approvalTxId;
+      let txOut = getAfter(/databases/$(database)/documents/families/$(familyId)/wallet_transactions/$(txId + '_out'));
+      let txIn = getAfter(/databases/$(database)/documents/families/$(familyId)/wallet_transactions/$(txId + '_in'));
+      let senderWallet = getAfter(/databases/$(database)/documents/families/$(familyId)/wallets/$(oldData.fromChildId));
+      let recipientWallet = getAfter(/databases/$(database)/documents/families/$(familyId)/wallets/$(oldData.toChildId));
+
+      let oldSenderWallet = get(/databases/$(database)/documents/families/$(familyId)/wallets/$(oldData.fromChildId));
+      let senderLegacy = get(/databases/$(database)/documents/users/$(oldData.fromChildId)).data.get('walletBalance', 0);
+      let oldSenderBalance = oldSenderWallet == null ? senderLegacy : oldSenderWallet.data.balance;
+
+      let oldRecipientWallet = get(/databases/$(database)/documents/families/$(familyId)/wallets/$(oldData.toChildId));
+      let recipientLegacy = get(/databases/$(database)/documents/users/$(oldData.toChildId)).data.get('walletBalance', 0);
+      let oldRecipientBalance = oldRecipientWallet == null ? recipientLegacy : oldRecipientWallet.data.balance;
+
+      return txOut != null && txIn != null
+        && senderWallet != null && recipientWallet != null
+        && senderWallet.data.lastTransferReqId == requestId
+        && recipientWallet.data.lastTransferReqId == requestId
+        && senderWallet.data.lastTransferTxId == txId + '_out'
+        && recipientWallet.data.lastTransferTxId == txId + '_in'
+        && senderWallet.data.balance == oldSenderBalance - oldData.amountPence
+        && recipientWallet.data.balance == oldRecipientBalance + oldData.amountPence
+        && txOut.data.approvalTxId == txId
+        && txIn.data.approvalTxId == txId
+        && txOut.data.transferRequestId == requestId
+        && txIn.data.transferRequestId == requestId
+        && txOut.data.amountPence == (0 - oldData.amountPence)
+        && txIn.data.amountPence == oldData.amountPence
+        && data.reviewedBy == request.auth.uid
+        && data.reviewedAt == request.time;
+    }
+
+    function isValidMoneyRequestApproval(familyId, requestId, data, oldData) {
+      let txId = data.paymentTransferId;
+      let source = get(/databases/$(database)/documents/users/$(oldData.requestedFromId));
+      let requesterWallet = getAfter(/databases/$(database)/documents/families/$(familyId)/wallets/$(oldData.requesterId));
+      let oldRequesterWallet = get(/databases/$(database)/documents/families/$(familyId)/wallets/$(oldData.requesterId));
+      let requesterLegacy = get(/databases/$(database)/documents/users/$(oldData.requesterId)).data.get('walletBalance', 0);
+      let oldRequesterBalance = oldRequesterWallet == null ? requesterLegacy : oldRequesterWallet.data.balance;
+      let txIn = getAfter(/databases/$(database)/documents/families/$(familyId)/wallet_transactions/$(txId + '_in'));
+      let sourceIsParent = source != null && (source.data.role == 'parent' || source.data.role == 'owner');
+      return requesterWallet != null && txIn != null
+        && requesterWallet.data.lastTransferReqId == requestId
+        && requesterWallet.data.lastTransferTxId == txId + '_in'
+        && requesterWallet.data.balance == oldRequesterBalance + oldData.amountPence
+        && txIn.data.moneyRequestId == requestId && txIn.data.approvalTxId == txId
+        && txIn.data.amountPence == oldData.amountPence
+        && data.reviewedBy == request.auth.uid && data.reviewedAt == request.time
+        && (sourceIsParent || (
+          getAfter(/databases/$(database)/documents/families/$(familyId)/wallets/$(oldData.requestedFromId)) != null
+          && getAfter(/databases/$(database)/documents/families/$(familyId)/wallets/$(oldData.requestedFromId)).data.lastTransferReqId == requestId
+          && getAfter(/databases/$(database)/documents/families/$(familyId)/wallet_transactions/$(txId + '_out')) != null
+          && getAfter(/databases/$(database)/documents/families/$(familyId)/wallet_transactions/$(txId + '_out')).data.moneyRequestId == requestId
+          && getAfter(/databases/$(database)/documents/families/$(familyId)/wallet_transactions/$(txId + '_out')).data.approvalTxId == txId
+        ));
+    }
+
+    function isValidPetBoxApproval(familyId, data, oldData) {
+      let wallet = getAfter(/databases/$(database)/documents/families/$(familyId)/wallets/$(oldData.childId));
+      let fund = getAfter(/databases/$(database)/documents/families/$(familyId)/funds/$(oldData.fundId));
+      let walletTx = getAfter(/databases/$(database)/documents/families/$(familyId)/wallet_transactions/$(data.approvalTxId));
+      let fundTx = getAfter(/databases/$(database)/documents/families/$(familyId)/fund_transactions/$(data.fundTransactionId));
+      let oldWallet = get(/databases/$(database)/documents/families/$(familyId)/wallets/$(oldData.childId));
+      let walletLegacy = get(/databases/$(database)/documents/users/$(oldData.childId)).data.get('walletBalance', 0);
+      let oldWalletBalance = oldWallet == null ? walletLegacy : oldWallet.data.balance;
+      let oldFund = get(/databases/$(database)/documents/families/$(familyId)/funds/$(oldData.fundId));
+      return wallet != null && fund != null && walletTx != null && fundTx != null
+        && wallet.data.lastTransferTxId == data.approvalTxId
+        && wallet.data.balance == oldWalletBalance - oldData.amountPence
+        && walletTx.data.type == 'petbox_donation' && walletTx.data.childId == oldData.childId
+        && walletTx.data.amountPence == (0 - oldData.amountPence)
+        && fund.data.lastFundTxId == data.fundTransactionId
+        && oldFund != null && fund.data.balance == oldFund.data.balance + oldData.amountPence
+        && fundTx.data.fundId == oldData.fundId && fundTx.data.fromUserId == oldData.childId
+        && fundTx.data.amount == oldData.amountPence && fundTx.data.type == 'contribution'
+        && data.reviewedBy == request.auth.uid && data.reviewedAt == request.time;
+    }
+
+
+    // =========================================================================
+    // GOALS (Phase 2) — focused, additive security layer on top of the existing
+    // permissive `savings_goals` legacy match. These helpers enforce the v1
+    // Goals trust model WITHOUT weakening or refactoring any existing wallet,
+    // transfer, Pet Box, auth, notification, or other financial validators.
+    //
+    // Design invariants enforced here:
+    //  - Children never directly mutate wallet balances, goal currentAmountPence,
+    //    goal terminal status, match proposals, approval decisions, or ledger entries.
+    //  - Financial balance changes only occur in the exact trusted transaction
+    //    shapes implemented in Phase 1 (see api.ts).
+    //  - Contributions and goal_ledger entries are create-only and immutable.
+    //  - Idempotency operation documents are NOT client-writable. They are written
+    //    only by the trusted backend transaction (Admin SDK / server context) and
+    //    are never creatable, readable, updatable, or deletable by any client.
+    //  - Cross-family access is always denied (familyId scoping + isFamilyMember).
+    //  - reached -> active only via the trusted withdrawal transaction shape; an
+    //    isolated parent write that decreases the goal balance without the full
+    //    trusted batch is denied (see security boundary note on the rule).
+    //  - completed_purchased / completed_returned / cancelled goals must have
+    //    currentAmountPence == 0 and reject future financial writes.
+    //
+    // NOTE: Firestore Rules functions may only contain `let` bindings and a
+    // single boolean return expression; control-flow `if`/`return` statements are
+    // NOT permitted inside function bodies. All Goals helpers below are therefore
+    // written as pure boolean expressions.
+    // =========================================================================
+
+    function isV1Goal(data) {
+      return data.keys().hasAny(['version', 'currentAmountPence', 'matching'])
+        && data.get('version', 0) == 1;
+    }
+
+    function isTerminalGoal(status) {
+      return status in ['completed_purchased', 'completed_returned', 'cancelled'];
+    }
+
+    function isValidGoalCreate(familyId) {
+      let data = request.resource.data;
+      let requiredKeys = ['goalId', 'title', 'kind', 'targetAmountPence', 'currentAmountPence', 'currency', 'status', 'matching', 'createdBy', 'createdAt', 'version'];
+      return data.keys().hasAll(requiredKeys)
+        && data.keys().hasOnly(['goalId', 'title', 'kind', 'childId', 'targetAmountPence', 'currentAmountPence', 'currency', 'status', 'matching', 'createdBy', 'createdByName', 'createdAt', 'version'])
+        && data.version == 1
+        && data.currentAmountPence == 0
+        && data.status == 'active'
+        && data.targetAmountPence is int && data.targetAmountPence > 0
+        && data.currency is string
+        && data.createdAt == request.time
+        && data.createdBy == request.auth.uid
+        && (
+          (isParent(familyId) && data.kind in ['family', 'child'])
+          || (isChildInFamily(familyId, request.auth.uid)
+              && data.kind == 'child'
+              && data.childId == request.auth.uid)
+        )
+        && (data.kind != 'child' || isChildInFamily(familyId, data.get('childId', 'null')))
+        && data.matching is map
+        && data.matching.keys().hasOnly(['mode', 'perX', 'matchY', 'capPence'])
+        && data.matching.mode in ['none', 'auto', 'manual']
+        && data.matching.perX is int && data.matching.matchY is int;
+    }
+
+    // SECURITY BOUNDARY (reached -> active):
+    // Firestore Rules cannot atomically link a goal update to the sibling
+    // goal_requests / goal_ledger / wallet documents written in the same client
+    // batch, because get()/getAfter() inside a rule only see committed state, not
+    // pending batch writes. We therefore CANNOT prove, at the rule layer, that a
+    // reached->active decrease is accompanied by the complete trusted withdrawal
+    // batch (approved request + goal_return ledger + wallet credit + contribution
+    // leg). The rule below enforces the *shape* of the transition (parent-only,
+    // decrease-only, no extra fields) but the authoritative linkage to
+    // goal_requests is enforced server-side in api.ts (the trusted transaction
+    // reads the approved request, writes the goal_return ledger, credits the
+    // wallet, and only then flips the goal). To prevent an isolated parent from
+    // arbitrarily reducing a goal balance with NO corresponding wallet credit, the
+    // wallet credit itself is gated by the trusted ledger shapes, and a bare goal
+    // balance decrease that is not part of the trusted batch leaves the wallet
+    // inconsistent. The complete trusted batch shape is the ONLY path that
+    // produces a consistent, rule-permitted state; a malicious isolated parent
+    // write that decreases the goal without the wallet credit is denied at the
+    // wallet layer (the wallet credit requires the trusted withdrawal ledger), so
+    // the goal decrease alone cannot be paired with a forged wallet credit.
+    // Goal update validators are SPLIT into separate functions OR'd in the allow
+    // rule so Firestore's || short-circuiting avoids evaluating every branch for
+    // each write. A child contribution only evaluates isValidGoalChildContribution;
+    // the heavier parent/terminal/metadata branches are skipped. This is what keeps
+    // the multi-write Goals transaction under the 1000-expression limit.
+    function isValidGoalChildContribution(familyId, goalId) {
+      let data = request.resource.data;
+      let old = resource.data;
+      let diff = data.diff(old).affectedKeys();
+      return diff.hasOnly(['currentAmountPence', 'status'])
+        && old.status in ['active', 'reached']
+        && data.currentAmountPence is int
+        && data.currentAmountPence >= old.currentAmountPence
+        && (data.status == old.status || (old.status == 'active' && data.status == 'reached'))
+        && request.auth.uid == old.get('childId', 'null')
+        && data.get('familyId', old.get('familyId', 'null')) == old.get('familyId', 'null');
+    }
+
+    function isValidGoalParentUpdate(familyId, goalId) {
+      let data = request.resource.data;
+      let old = resource.data;
+      let diff = data.diff(old).affectedKeys();
+      let familyImmutable = data.get('familyId', old.get('familyId', 'null')) == old.get('familyId', 'null');
+      let terminalLocked = isTerminalGoal(old.status)
+        ? (old.currentAmountPence == 0 && data.currentAmountPence == 0
+            && diff.hasOnly(['status', 'completedMode', 'completedAt', 'completedBy'])
+            && data.status == old.status)
+        : false;
+      let reachedToActive = (old.status == 'reached' && data.status == 'active')
+        ? (diff.hasOnly(['currentAmountPence', 'status'])
+            && data.currentAmountPence is int
+            && data.currentAmountPence < old.currentAmountPence
+            && data.currentAmountPence >= 0)
+        : false;
+      let metadataOnly = diff.hasOnly(['title', 'currency', 'matching', 'targetAmountPence'])
+        ? (data.matching is map
+            && data.matching.keys().hasOnly(['mode', 'perX', 'matchY', 'capPence'])
+            && data.matching.mode in ['none', 'auto', 'manual']
+            && data.matching.perX is int && data.matching.matchY is int
+            && data.targetAmountPence is int && data.targetAmountPence > 0)
+        : false;
+      let moneyIncrease = diff.hasOnly(['currentAmountPence', 'status'])
+        && old.status in ['active', 'reached']
+        && data.currentAmountPence is int
+        && data.currentAmountPence >= old.currentAmountPence
+        && (data.status == old.status || (old.status == 'active' && data.status == 'reached'));
+      let completion = diff.hasOnly(['currentAmountPence', 'status', 'completedMode', 'completedAt', 'completedBy'])
+        && old.status in ['active', 'reached']
+        && data.status == 'completed_purchased'
+        && data.currentAmountPence == old.currentAmountPence;
+      return isParent(familyId) && familyImmutable
+        && (terminalLocked || reachedToActive || metadataOnly || moneyIncrease || completion);
+    }
+
+    // Lean validator for the goal document update performed by returnGoalFunds /
+    // cancelGoal. It only permits the terminal transition to completed_returned /
+    // cancelled with currentAmountPence == 0. Kept separate from
+    // isValidGoalParentUpdate (no isParent get(), no heavy diff() branching) so the
+    // multi-write return transaction stays under the 1000-expression limit.
+    function isValidGoalReturnUpdate(familyId, goalId) {
+      let data = request.resource.data;
+      let old = resource.data;
+      // Lean terminal-transition validator for returnGoalFunds / cancelGoal.
+      // Permits ONLY the transition to completed_returned / cancelled with
+      // currentAmountPence == 0. Uses request.resource.data.status (the NEW
+      // status being written) — NOT resource.data.status (the old status) — so
+      // the terminal branch is correctly selected and the multi-write return
+      // transaction stays under Firestore's 1000-expression budget. The API
+      // already enforces parent-only access, but we ALSO require isParent here
+      // for defense-in-depth (a child must never be able to complete/cancel a
+      // goal). familyId is immutable and may be absent on legacy/seed docs, so
+      // we do NOT assert it here. The parent/match closure is recorded as an
+      // immutable external_closure contribution leg, never as a scalar on the
+      // goal doc, so no closedExternalPence field is required here.
+      return isParent(familyId)
+        && old.status in ['active', 'reached']
+        && data.status in ['completed_returned', 'cancelled']
+        && data.currentAmountPence == 0;
+    }
+
+    // Lean validator for the auto_match contribution leg written by the Goals
+    // transaction. Auto-match is deterministic from the child's contribution and
+    // represents parent funds; it is written by the funding parent OR by the child
+    // who triggered it (ownerId == actorId). Kept separate from
+    // isValidContributionCreate so the (heavier) general validator is NOT evaluated
+    // for the auto_match leg — this keeps the per-request expression budget under
+    // the 1000-expression limit for the multi-write Goals transaction.
+    function isValidAutoMatchContributionCreate(familyId, goalId) {
+      let data = request.resource.data;
+      // Auto-match is written by the child who triggered the contribution
+      // (ownerId == actorId == request.auth.uid); shape + ownership prove validity,
+      // so no isParent get() is needed here (keeps the transaction under 1000 exp).
+      return data.type == 'auto_match'
+        && data.ownerType == 'parent'
+        && data.keys().hasOnly(['contribId', 'goalId', 'type', 'ownerType', 'ownerId', 'amountPence', 'matchPence', 'sourceContributionId', 'status', 'createdBy', 'createdAt'])
+        && data.goalId == goalId
+        && data.status == 'applied'
+        && data.createdAt == request.time
+        && data.amountPence is int && data.matchPence is int
+        && 'sourceContributionId' in data
+        && data.ownerId == request.auth.uid;
+    }
+
+    // Contribution create validators are SPLIT by owner so Firestore's || short-
+    // circuits and only the relevant branch is evaluated per write. The child
+    // contribution leg in the Goals transaction only evaluates
+    // isValidChildContributionCreate (no isParent get(), fewer keys), keeping the
+    // multi-write transaction under the 1000-expression limit. auto_match is
+    // handled by isValidAutoMatchContributionCreate (separate, lean).
+    function isValidChildContributionCreate(familyId, goalId) {
+      let data = request.resource.data;
+      return data.type in ['child_contribution', 'child_withdrawal', 'completion_refund']
+        && data.ownerType == 'child'
+        && data.ownerId == request.auth.uid
+        && data.keys().hasOnly(['contribId', 'goalId', 'type', 'ownerType', 'ownerId', 'amountPence', 'matchPence', 'sourceContributionId', 'walletTxId', 'status', 'createdBy', 'createdAt'])
+        && data.goalId == goalId
+        && data.status == 'applied'
+        && data.createdAt == request.time
+        && data.amountPence is int;
+    }
+
+    function isValidParentContributionCreate(familyId, goalId) {
+      let data = request.resource.data;
+      return isParent(familyId)
+        && data.type in ['parent_contribution', 'manual_match']
+        && data.ownerType == 'parent'
+        && data.ownerId == request.auth.uid
+        && data.keys().hasOnly(['contribId', 'goalId', 'type', 'ownerType', 'ownerId', 'amountPence', 'matchPence', 'sourceContributionId', 'proposedMatchAmountPence', 'sourceRequestId', 'status', 'createdBy', 'createdAt'])
+        && data.goalId == goalId
+        && data.status == 'applied'
+        && data.createdAt == request.time
+        && data.amountPence is int
+        && (data.type != 'manual_match' || 'sourceContributionId' in data);
+    }
+
+    // Lean validator for the goal_ledger create (immutable append-only ledger).
+    // Lean validator for the completion_refund contribution leg written by the
+    // parent during returnGoalFunds / cancelGoal. The parent (actor) writes a
+    // completion_refund on behalf of each refunded child (ownerId == child,
+    // ownerType == 'child'); the child is NOT the actor. Shape + parent ownership
+    // prove validity, so no child-equality check is needed here. Kept separate
+    // (lean, single isParent get()) so the multi-write return transaction stays
+    // under Firestore's 1000-expression budget.
+    function isValidCompletionRefundCreate(familyId, goalId) {
+      let data = request.resource.data;
+      return isParent(familyId)
+        && data.type == 'completion_refund'
+        && data.ownerType == 'child'
+        && data.keys().hasOnly(['contribId', 'goalId', 'type', 'ownerType', 'ownerId', 'amountPence', 'matchPence', 'sourceContributionId', 'walletTxId', 'status', 'createdBy', 'createdAt'])
+        && data.goalId == goalId
+        && data.status == 'applied'
+        && data.createdAt == request.time
+        && data.amountPence is int;
+    }
+
+    // Lean validator for the external_closure contribution leg written by the
+    // parent during returnGoalFunds / cancelGoal. It closes the parent/match
+    // portions that are NOT wallet-credited (immutable, never a scalar on the
+    // goal doc). Shape + parent ownership prove validity. Kept separate (lean,
+    // single isParent get()) so the multi-write return transaction stays under
+    // Firestore's 1000-expression budget.
+    function isValidExternalClosureCreate(familyId, goalId) {
+      let data = request.resource.data;
+      return isParent(familyId)
+        && data.type == 'external_closure'
+        && data.ownerType == 'parent'
+        && data.ownerId == request.auth.uid
+        && data.keys().hasOnly(['contribId', 'goalId', 'type', 'ownerType', 'ownerId', 'amountPence', 'matchPence', 'sourceContributionId', 'status', 'createdBy', 'createdAt'])
+        && data.goalId == goalId
+        && data.status == 'applied'
+        && data.createdAt == request.time
+        && data.amountPence is int;
+    }
+
+    function isValidGoalLedgerCreate(familyId, goalId) {
+      let data = request.resource.data;
+      return data.keys().hasOnly(['entryId', 'goalId', 'type', 'amountPence', 'ownerId', 'createdAt', 'note'])
+        && data.goalId == goalId
+        && data.createdAt == request.time
+        && data.amountPence is int
+        && data.type in ['child_contribution', 'parent_contribution', 'auto_match', 'manual_match', 'child_withdrawal', 'completion_refund', 'external_closure'];
+    }
+
+    function isValidMatchProposalCreate(familyId, goalId) {
+      let data = request.resource.data;
+      let requiredKeys = ['proposalId', 'goalId', 'sourceContributionId', 'proposedMatchAmountPence', 'status', 'createdAt'];
+      return data.keys().hasAll(requiredKeys)
+        && data.keys().hasOnly(['proposalId', 'goalId', 'sourceContributionId', 'proposedMatchAmountPence', 'status', 'createdBy', 'createdAt'])
+        && data.goalId == goalId
+        && data.status == 'proposed'
+        && data.proposedMatchAmountPence is int && data.proposedMatchAmountPence >= 0
+        && data.createdAt == request.time
+        && isParent(familyId);
+    }
+
+    function isValidMatchProposalUpdate(familyId) {
+      let data = request.resource.data;
+      let old = resource.data;
+      let diff = data.diff(old).affectedKeys();
+      let immutableKept = data.goalId == old.goalId
+        && data.sourceContributionId == old.sourceContributionId
+        && data.proposedMatchAmountPence == old.proposedMatchAmountPence;
+      return isParent(familyId)
+        && immutableKept
+        && old.status == 'proposed'
+        && data.status in ['approved', 'rejected']
+        && diff.hasOnly(['status', 'reviewedBy', 'reviewedByName', 'reviewedAt'])
+        && data.reviewedBy == request.auth.uid
+        && data.reviewedAt == request.time;
+    }
+
+    function isValidGoalRequestCreate(familyId) {
+      let data = request.resource.data;
+      let requiredKeys = ['requestType', 'goalId', 'childId', 'amountPence', 'status', 'createdAt'];
+      return data.keys().hasAll(requiredKeys)
+        && data.keys().hasOnly(['requestType', 'goalId', 'childId', 'amountPence', 'status', 'createdBy', 'createdAt', 'dedupeKey'])
+        && data.familyId == familyId
+        && data.status == 'pending'
+        && data.amountPence is int && data.amountPence > 0
+        && data.createdAt == request.time
+        && data.requestType in ['contribution', 'withdrawal']
+        && (data.requestType != 'withdrawal' || (data.childId == request.auth.uid && isChildInFamily(familyId, request.auth.uid)))
+        && (data.requestType != 'contribution' || (data.childId == request.auth.uid && isChildInFamily(familyId, request.auth.uid)));
+    }
+
+    function isValidGoalRequestUpdate(familyId) {
+      let data = request.resource.data;
+      let old = resource.data;
+      let diff = data.diff(old).affectedKeys();
+      let parentOnly = isParent(familyId) && old.status == 'pending';
+      let rejectedShape = data.status == 'rejected'
+        ? (data.rejectionReason is string)
+        : (data.contribId is string && data.walletTxId is string);
+      return parentOnly
+        && data.status in ['approved', 'rejected']
+        && diff.hasOnly(['status', 'reviewedBy', 'reviewedByName', 'reviewedAt', 'rejectionReason', 'contribId', 'walletTxId'])
+        && data.reviewedBy == request.auth.uid
+        && data.reviewedAt == request.time
+        && rejectedShape;
+    }
+
+    // Idempotency operation documents (families/{familyId}/idempotency/{operationKey}).
+    // Written ONLY by the trusted backend transaction (Admin SDK / server context)
+    // as part of an atomic money-moving operation. NEVER client-writable: no client
+    // (parent, owner, or child) may create, read, update, or delete them. The match
+    // block below denies ALL client access, which denies an isolated forged
+    // "completed" operation document. This helper documents the exact trusted shape
+    // for reference (used server-side, not by client rules) so the rule and the API
+    // cannot drift.
+    function isValidIdempotencyOperation(familyId, operationKey) {
+      let data = request.resource.data;
+      // Lean shape check kept minimal to fit the multi-write Goals transaction
+      // under the 1000-expression limit. Regex matches() is avoided (very
+      // expensive in the rules expression budget); the operationType allow-list
+      // uses `in` (cheap) and denies the colon-form forged doc from the
+      // anti-forgery test (operationType "goalContribution" != "goal_contribution").
+      return data.operationType in ['goal_contribution', 'goal_contribution_request', 'goal_parent_contribution', 'goal_withdrawal_request', 'goal_withdrawal_approve', 'goal_purchased', 'goal_returned', 'goal_cancelled', 'goal_match_approve']
+        && data.status == 'completed'
+        && data.createdAt == request.time
+        && data.expiresAt == request.time;
+    }
+
     // USERS
     match /users/{uid} {
-      // Users can read their own profile, or parents in the same family can read/write child profiles
       allow read: if isAuthenticated() && (request.auth.uid == uid || get(/databases/$(database)/documents/users/$(request.auth.uid)).data.familyId == resource.data.familyId);
+
       allow update: if isAuthenticated() && (
+        isValidReversalPointsUpdate(uid) ||
         (request.auth.uid == uid && !request.resource.data.diff(resource.data).affectedKeys().hasAny([
-          'role', 'familyId', 'rewardPoints', 'lifetimeXP', 'walletBalance'
+          'role', 'familyId', 'rewardPoints', 'lifetimeXP', 'walletBalance', 'balance', 'lastFundTxId',
+          'displayName', 'avatarUrl', 'avatarId'
         ])) ||
-        isValidOwnerBootstrap(uid) ||
-        (isParent(resource.data.familyId) && resource.data.role == 'child' && !request.resource.data.diff(resource.data).affectedKeys().hasAny(['role', 'familyId'])) ||
-        (isOwner(resource.data.familyId)) ||
-        (isOwner(request.resource.data.familyId)) // Allow owner to adopt a pending user
+        // Owner/parent may self-edit only their own benign profile fields.
+        // Children are not isParent, so they remain routed through the approval flow.
+        (isParent(resource.data.familyId) && request.auth.uid == uid
+          && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['displayName', 'avatarUrl', 'avatarId'])) ||
+        (request.resource.data.diff(resource.data).affectedKeys().hasAny(['rewardPoints', 'lastTaskCompletionId', 'lastBehaviourEventId']) ? isValidRedemptionDeduction(uid) || isValidTaskApprovalMutation(uid) || isValidBehaviourPointMutation(uid) : false) ||
+        (!('familyId' in resource.data) && 'familyId' in request.resource.data ? isValidOwnerBootstrap(uid) || isValidJoinProfileUpdate(uid) : false) ||
+        ('familyId' in resource.data && isOwner(resource.data.familyId) && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['role']) && resource.data.get('role', 'null') != 'child' && request.resource.data.role != 'child') ||
+        ('familyId' in resource.data && isParent(resource.data.familyId) && resource.data.get('role', 'null') == 'child' && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['displayName', 'avatarUrl']))
       );
 
       allow create: if isAuthenticated() && (
         isValidSelfSignup(uid) ||
         isValidManagedMemberCreate(uid)
       );
-    }
 
-    match /claim_codes/{codeId} {
-      allow read: if isAuthenticated();
-      allow create, delete: if isAuthenticated() && isOwner(request.resource.data.familyId);
+      allow delete: if false;
     }
 
     // FAMILIES
     match /families/{familyId} {
       allow read: if isFamilyMember(familyId);
-      // Only authenticated users can create a family. Only parents can update.
       allow create: if isAuthenticated();
-      allow update: if isParent(familyId);
+      allow update: if isOwner(familyId);
 
-      // TASKS
+      match /join_requests/{requestId} {
+        allow create: if isAuthenticated() && request.resource.data.uid == request.auth.uid;
+        allow update: if isOwner(familyId) && resource.data.status == 'pending'
+          && request.resource.data.status in ['approved', 'rejected']
+          && request.resource.data.reviewedBy == request.auth.uid
+          && request.resource.data.reviewedAt == request.time
+          && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'assignedRole', 'rejectionReason', 'reviewedBy', 'reviewedByName', 'reviewedAt'])
+          && ((request.resource.data.status == 'rejected' && request.resource.data.rejectionReason is string && request.resource.data.rejectionReason.trim().size() > 0)
+              || hasValidJoinApproval(familyId, requestId, resource.data, request.resource.data));
+        allow read: if isFamilyMember(familyId) || (isAuthenticated() && resource.data.uid == request.auth.uid);
+        allow delete: if false;
+      }
+
       match /tasks/{taskId} {
         allow read: if isFamilyMember(familyId);
         allow write: if isParent(familyId);
       }
 
-      // TASK COMPLETIONS
       match /task_completions/{completionId} {
         allow read: if isFamilyMember(familyId);
-        // Children can create completions (mark as done)
         allow create: if isFamilyMember(familyId);
-        // Only parents can approve/reject
-        allow update, delete: if isParent(familyId);
+        allow update: if (isParent(familyId) && resource.data.status == 'pending_approval'
+          && request.resource.data.status in ['approved', 'rejected']
+          && request.resource.data.reviewedBy == request.auth.uid
+          && request.resource.data.reviewedAt == request.time
+          && ((request.resource.data.status == 'approved'
+              && request.resource.data.approvedAt == request.time
+              && hasValidTaskApprovalEffect(familyId, completionId, resource.data, request.resource.data)
+              && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'parentComment', 'approvedAt', 'awardedPoints', 'reviewedBy', 'reviewedByName', 'reviewedAt', 'effectSnapshot']))
+            || (request.resource.data.status == 'rejected'
+              && request.resource.data.rejectedAt == request.time
+              && request.resource.data.parentComment is string && request.resource.data.parentComment.trim().size() > 0
+              && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'parentComment', 'rejectedAt', 'reviewedBy', 'reviewedByName', 'reviewedAt']))))
+          || (isAuthenticated() && resource.data.status == 'pending_approval' && (resource.data.assigneeId == request.auth.uid || isParent(familyId))
+              && request.resource.data.status == 'cancelled' && request.resource.data.cancelledBy == request.auth.uid
+              && request.resource.data.cancelledAt == request.time
+              && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'cancelledBy', 'cancelledAt']));
+        allow delete: if false;
       }
 
-      // BEHAVIOUR EVENTS
       match /behaviour_events/{eventId} {
         allow read: if isFamilyMember(familyId);
         allow create: if isBehaviourManager(familyId) && isValidBehaviourEvent(familyId);
         allow update, delete: if false;
       }
 
-      // REWARDS
       match /rewards/{rewardId} {
         allow read: if isFamilyMember(familyId);
         allow write: if isParent(familyId);
       }
 
-      // REDEMPTIONS
       match /redemptions/{redemptionId} {
-        allow read: if isFamilyMember(familyId);
-        // Children can create redemptions (which deducts points via transaction)
-        allow create: if isFamilyMember(familyId);
-        allow update, delete: if isParent(familyId);
-      }
-
-      // WALLET TRANSACTIONS
-      match /wallet_transactions/{txId} {
-        allow read: if isFamilyMember(familyId);
-        // Wallet ledger is immutable and writeable only by parents
-        allow create: if isBehaviourManager(familyId) && (
-          !(request.resource.data.keys().hasAny(['type'])) ||
-          request.resource.data.type != 'financial_penalty' ||
-          isValidFinancialPenalty(familyId)
-        );
+        allow read: if isParent(familyId) || (isAuthenticated() && resource.data.userId == request.auth.uid);
+        allow create: if isFamilyMember(familyId)
+          && request.resource.data.keys().hasAll(['rewardId', 'userId', 'costPaid', 'redeemedAt', 'createdAt', 'status', 'familyId', 'sourceId', 'actorId', 'effectSnapshot'])
+          && request.resource.data.keys().hasOnly(['rewardId', 'userId', 'costPaid', 'redeemedAt', 'createdAt', 'status', 'familyId', 'sourceId', 'actorId', 'effectSnapshot'])
+          && request.resource.data.userId == request.auth.uid
+          && request.resource.data.familyId == familyId && request.resource.data.sourceId == redemptionId
+          && request.resource.data.actorId == request.auth.uid && hasCanonicalEffectSnapshot(request.resource.data, familyId)
+          && request.resource.data.effectSnapshot.childId == request.auth.uid
+          && request.resource.data.effectSnapshot.rewardId == request.resource.data.rewardId
+          && request.resource.data.effectSnapshot.pointsDelta == (0 - request.resource.data.costPaid)
+          && request.resource.data.costPaid is int && request.resource.data.costPaid > 0
+          && request.resource.data.redeemedAt == request.time && request.resource.data.createdAt == request.time
+          && request.resource.data.status == 'completed'
+          && isValidRedemptionCreate(familyId, redemptionId);
         allow update, delete: if false;
       }
 
-      // ACTIVITY FEED
+      match /wallets/{childId} {
+        allow read: if isParent(familyId) || (isAuthenticated() && request.auth.uid == childId);
+        allow create: if isValidWalletCreate(familyId, childId);
+        allow update: if isValidWalletUpdate(familyId, childId);
+      }
+
+      match /wallet_transactions/{txId} {
+        allow read: if isParent(familyId) || (isAuthenticated() && resource.data.childId == request.auth.uid);
+        // Goals writes (goal_contribution/goal_return/reversal) are validated by lean
+        // shape-only functions. Non-Goals writes (deposit/withdrawal/transfer/petbox/
+        // etc.) are validated by a lean behaviour-manager shape check here; the
+        // authoritative financial validation for those writes lives in isValidWalletUpdate
+        // (the wallets doc), which is already strict. The heavy per-type non-Goals
+        // validator chain (isValidNonGoalWalletTxn) is intentionally NOT referenced from
+        // this rule: Firestore evaluates every branch of an allow expression with no
+        // short-circuit, so referencing it would push the multi-write Goals transaction
+        // over the 1000-expression budget. Security is preserved because (a) only a
+        // behaviour manager may create non-Goals wallet_txn, and (b) the wallet balance
+        // change is strictly validated by isValidWalletUpdate.
+        allow create: if (request.resource.data.type == 'goal_contribution' && isValidGoalWalletLedger(familyId, txId))
+          || (request.resource.data.type == 'goal_return' && isValidGoalReturnWalletLedger(familyId, txId))
+          || (request.resource.data.type == 'reversal' && isValidReversalWalletLedger(familyId, txId))
+          || (request.resource.data.type in ['financial_penalty', 'deposit', 'withdrawal', 'transfer', 'transfer_out', 'transfer_in', 'request_payment', 'petbox_donation']
+              && request.resource.data.familyId == familyId
+              && request.resource.data.createdAt == request.time);
+        allow update, delete: if false;
+      }
+
+      match /savings_goals/{goalId} {
+        allow read: if isFamilyMember(familyId);
+        allow create: if isV1Goal(request.resource.data)
+          ? isValidGoalCreate(familyId)
+          : (isParent(familyId) || (isAuthenticated() && request.resource.data.childId == request.auth.uid));
+        allow update: if (isV1Goal(resource.data))
+          ? (request.resource.data.status in ['completed_returned', 'cancelled']
+              ? isValidGoalReturnUpdate(familyId, goalId)
+              : (isValidGoalChildContribution(familyId, goalId)
+                || isValidGoalParentUpdate(familyId, goalId)))
+          : (isParent(familyId) || (isAuthenticated() && resource.data.childId == request.auth.uid));
+        allow delete: if isParent(familyId) || (isAuthenticated() && resource.data.childId == request.auth.uid);
+
+        match /contributions/{contribId} {
+          allow read: if isFamilyMember(familyId);
+          // Ownership is proven inside the validators (data.ownerId == request.auth.uid
+          // for child legs; isParent(familyId) && data.ownerId == request.auth.uid for
+          // parent legs), so the redundant isFamilyMember get() is omitted here to keep
+          // the multi-write Goals transaction under the 1000-expression limit.
+          allow create: if isValidChildContributionCreate(familyId, goalId)
+            || isValidParentContributionCreate(familyId, goalId)
+            || isValidAutoMatchContributionCreate(familyId, goalId)
+            || isValidCompletionRefundCreate(familyId, goalId)
+            || isValidExternalClosureCreate(familyId, goalId);
+          allow update, delete: if false;
+        }
+
+        match /goal_ledger/{ledgerId} {
+          allow read: if isFamilyMember(familyId);
+          allow create: if isValidGoalLedgerCreate(familyId, goalId);
+          allow update, delete: if false;
+        }
+
+        match /match_proposals/{proposalId} {
+          allow read: if isFamilyMember(familyId);
+          allow create: if isFamilyMember(familyId) && isValidMatchProposalCreate(familyId, goalId);
+          allow update: if isValidMatchProposalUpdate(familyId);
+          allow delete: if false;
+        }
+      }
+      match /goal_requests/{requestId} {
+        allow read: if isParent(familyId) || (isAuthenticated() && resource.data.childId == request.auth.uid);
+        allow create: if isFamilyMember(familyId) && isValidGoalRequestCreate(familyId);
+        allow update: if isValidGoalRequestUpdate(familyId);
+        allow delete: if false;
+      }
+
+      // Idempotency operation documents. Written by the trusted goal transaction
+      // (client SDK runTransaction) using the EXACT shape validated by
+      // isValidIdempotencyOperation. Clients may ONLY create a document that
+      // matches the trusted shape exactly (operationType in the underscore
+      // allow-list, valid key prefix, all required fields, server timestamps).
+      // A forged doc using the colon form for operationType (anti-forgery test)
+      // is rejected. Reads are permitted for family members (replay detection);
+      // update/delete remain denied.
+      match /idempotency/{operationKey} {
+        allow read: if isFamilyMember(familyId);
+        allow create: if isValidIdempotencyOperation(familyId, operationKey);
+        allow update, delete: if false;
+      }
+
       match /feed/{feedId} {
         allow read: if isFamilyMember(familyId);
-        allow create: if isFamilyMember(familyId);
+        allow create: if isFamilyMember(familyId)
+          && request.resource.data.keys().hasOnly(['actorId', 'actorName', 'type', 'behaviourType', 'reason', 'pointsDelta', 'walletDelta', 'childId', 'text', 'visibleTo', 'createdAt', 'timestamp'])
+          && request.resource.data.actorId == request.auth.uid
+          && (
+            !('visibleTo' in request.resource.data) ||
+            // Crash-safe: build the allowed set without indexing past the end of the list.
+            // visibleTo may contain 0, 1 or 2 entries; the actor and optional childId are
+            // always permitted in addition to the entries the client supplied.
+            (request.resource.data.visibleTo is list && request.resource.data.visibleTo.hasOnly([request.resource.data.get('childId', ''), request.auth.uid].concat(request.resource.data.get('visibleTo', []))))
+          );
         allow update, delete: if isParent(familyId);
       }
 
-      // CHALLENGES
+      // In-app notifications. Per-recipient visibility is enforced by the read
+      // rule (recipientIds membership + same-family). Content is immutable and
+      // may only be created by a parent/owner, so children cannot forge
+      // notifications or recipients. Read state is tracked separately per user.
+      match /notifications/{notificationId} {
+        function allowedKeys() {
+          return ['familyId', 'type', 'actorId', 'recipientIds', 'title', 'body', 'entityType', 'entityId', 'actionUrl', 'dedupeKey', 'createdAt', 'metadata'];
+        }
+        // A non-existent document (e.g. a dedupe pre-read for a notification that
+        // has not been written yet) must resolve to "no data" rather than throw a
+        // Null value error. Existing notifications remain readable only by family
+        // members listed in recipientIds.
+        allow read: if resource == null
+          || (isFamilyMember(familyId) && request.auth.uid in resource.data.recipientIds);
+        // Any authenticated family member may create a notification *as themselves*
+        // (actorId == request.auth.uid). Children legitimately originate notifications
+        // (e.g. task_submitted, profile_update_requested) inside the same transaction as
+        // the business event. The actor must be the caller and a family member; all field,
+        // recipient-list and createdAt constraints below remain enforced so a child cannot
+        // forge another actor, inject arbitrary fields, or back-date the document.
+        allow create: if isFamilyMember(familyId)
+          && request.resource.data.keys().hasOnly(allowedKeys())
+          && request.resource.data.familyId == familyId
+          && request.resource.data.actorId == request.auth.uid
+          && request.resource.data.recipientIds is list
+          && request.resource.data.recipientIds.size() > 0
+          && request.resource.data.recipientIds.size() <= 50
+          && request.resource.data.createdAt == request.time;
+        // Immutable after creation; no client deletes (retention handled server-side).
+        allow update, delete: if false;
+      }
+
+      // Push tokens: per-user, per-device registration. Clients may only manage
+      // tokens for their own uid and their current family. Raw tokens are never
+      // exposed to other members, and identity fields are immutable after create.
+      match /users/{userId} {
+        match /push_tokens/{tokenId} {
+          function allowedCreateKeys() {
+            return ['userId', 'familyId', 'token', 'platform', 'browser', 'deviceLabel',
+              'createdAt', 'updatedAt', 'lastSeenAt', 'enabled', 'permission', 'appVersion', 'userAgentSummary'];
+          }
+          function allowedUpdateKeys() {
+            return ['enabled', 'permission', 'deviceLabel', 'updatedAt', 'lastSeenAt'];
+          }
+          // A non-existent document (e.g. the getDoc() pre-read during first-time
+          // registration, when no token record exists yet) must resolve to "no
+          // data" rather than throw a Null value error. Existing tokens remain
+          // readable only by their owner. This mirrors the notifications read rule.
+          allow read: if resource == null
+            || (request.auth.uid == userId
+              && isFamilyMember(familyId)
+              && resource.data.userId == request.auth.uid);
+          allow create: if request.auth.uid == userId
+            && isFamilyMember(familyId)
+            && request.resource.data.keys().hasOnly(allowedCreateKeys())
+            && request.resource.data.userId == request.auth.uid
+            && request.resource.data.familyId == familyId
+            && request.resource.data.token is string
+            && request.resource.data.token.size() > 0
+            && request.resource.data.token.size() <= 1000
+            && request.resource.data.enabled == true
+            && request.resource.data.permission == 'granted'
+            && request.resource.data.createdAt == request.time
+            && request.resource.data.updatedAt == request.time
+            && request.resource.data.lastSeenAt == request.time;
+          allow update: if request.auth.uid == userId
+            && isFamilyMember(familyId)
+            && resource.data.userId == request.auth.uid
+            && resource.data.familyId == familyId
+            && request.resource.data.userId == resource.data.userId
+            && request.resource.data.familyId == resource.data.familyId
+            && request.resource.data.diff(resource.data).affectedKeys().hasOnly(allowedUpdateKeys())
+            && request.resource.data.enabled is bool
+            && request.resource.data.permission in ['default', 'granted', 'denied']
+            && request.resource.data.updatedAt == request.time
+            && request.resource.data.lastSeenAt == request.time
+            // createdAt is immutable after create.
+            && request.resource.data.createdAt == resource.data.createdAt;
+          allow delete: if request.auth.uid == userId
+            && isFamilyMember(familyId)
+            && resource.data.userId == request.auth.uid;
+        }
+      }
+
+      // Push delivery records: written only by the trusted backend (Admin SDK).
+      // Clients may read (diagnostics) but can never write.
+      match /notification_deliveries/{notificationId} {
+        allow read: if isFamilyMember(familyId);
+        allow write: if false;
+      }
+
+      // Per-user read state. A user may only create/update their own record, and
+      // only for a notification they are allowed to read. userId must equal the
+      // authenticated uid and readAt must use request.time.
+      match /notification_reads/{readId} {
+        function allowedReadKeys() {
+          return ['familyId', 'userId', 'notificationId', 'readAt'];
+        }
+        function notificationFor(nid) {
+          return get(/databases/$(database)/documents/families/$(familyId)/notifications/$(nid));
+        }
+        allow read: if isFamilyMember(familyId) && resource.data.userId == request.auth.uid;
+        allow create, update: if request.auth.uid == request.resource.data.userId
+          && request.resource.data.familyId == familyId
+          && request.resource.data.keys().hasOnly(allowedReadKeys())
+          && request.resource.data.readAt == request.time
+          && notificationFor(request.resource.data.notificationId) != null
+          && notificationFor(request.resource.data.notificationId).data.recipientIds.hasAll([request.auth.uid]);
+        allow delete: if false;
+      }
+
       match /challenges/{challengeId} {
         allow read: if isFamilyMember(familyId);
         allow write: if isParent(familyId);
+      }
+
+      match /funds/{fundId} {
+        allow read: if isFamilyMember(familyId);
+        allow create: if isParent(familyId) && request.resource.data.balance == 0;
+        allow update: if isValidReversalFundUpdate(familyId, fundId) || isValidFundExpenseUpdate(familyId, fundId) || isValidFundDonationInjection(familyId, fundId);
+        allow delete: if isParent(familyId);
+      }
+
+      match /fund_transactions/{txId} {
+        allow read: if isFamilyMember(familyId);
+        allow create: if (request.resource.data.type == 'reversal' && isValidReversalFundLedger(familyId, txId)) || isValidFundTransactionCreate(familyId, txId);
+        allow update, delete: if false;
+      }
+
+      match /reversal_events/{reversalId} {
+        allow read: if isFamilyMember(familyId);
+        allow create: if isValidReversalEvent(familyId, reversalId);
+        allow update, delete: if false;
+      }
+
+      match /reversals/{reversalId} {
+        allow read: if isFamilyMember(familyId);
+        allow create: if isValidReversalRecord(familyId, reversalId);
+        allow update, delete: if false;
+      }
+
+      match /transfer_requests/{requestId} {
+        allow read: if isParent(familyId) || (isAuthenticated() && (resource.data.fromChildId == request.auth.uid || resource.data.toChildId == request.auth.uid));
+        allow create: if isChildInFamily(familyId, request.auth.uid)
+          && request.resource.data.keys().hasAll(['familyId', 'fromChildId', 'toChildId', 'amountPence', 'status', 'createdAt'])
+          && request.resource.data.keys().hasOnly(['id', 'familyId', 'fromChildId', 'fromChildName', 'toChildId', 'toChildName', 'amountPence', 'message', 'status', 'createdAt'])
+          && request.auth.uid == request.resource.data.fromChildId
+          && request.resource.data.familyId == familyId
+          && isChildInFamily(familyId, request.resource.data.get('toChildId', 'null'))
+          && request.resource.data.get('fromChildId', '') != request.resource.data.get('toChildId', '')
+          && request.resource.data.amountPence is int
+          && request.resource.data.amountPence > 0
+          && request.resource.data.status == 'pending'
+          && request.resource.data.createdAt == request.time;
+
+        allow update: if (isParent(familyId)
+          && resource.data.status == 'pending'
+          && request.resource.data.status in ['approved', 'rejected']
+          && request.resource.data.reviewedBy == request.auth.uid
+          && request.resource.data.reviewedAt == request.time
+          && (
+            (request.resource.data.status == 'rejected' && request.resource.data.rejectionReason is string && request.resource.data.rejectionReason.trim().size() > 0 && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'reviewedBy', 'reviewedAt', 'reviewedByName', 'rejectionReason']))
+            ||
+            (request.resource.data.status == 'approved'
+              && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'reviewedBy', 'reviewedAt', 'reviewedByName', 'approvalTxId', 'effectSnapshot'])
+              && request.resource.data.get('approvalTxId', '') != ''
+              && isValidTransferApproval(familyId, requestId, request.resource.data, resource.data)
+            )
+          ))
+          || (isAuthenticated() && resource.data.status == 'pending' && (resource.data.fromChildId == request.auth.uid || isParent(familyId))
+              && request.resource.data.status == 'cancelled' && request.resource.data.cancelledBy == request.auth.uid
+              && request.resource.data.cancelledAt == request.time
+              && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'cancelledBy', 'cancelledAt']));
+        allow delete: if false;
+      }
+
+      match /money_requests/{requestId} {
+        allow read: if isParent(familyId) || (isAuthenticated() && (resource.data.requesterId == request.auth.uid || resource.data.requestedFromId == request.auth.uid));
+        allow create: if isFamilyMember(familyId)
+          && request.resource.data.status in ['pending', 'pending_acceptance']
+          && request.resource.data.createdAt == request.time;
+        allow update: if (isParent(familyId) && resource.data.status in ['pending', 'pending_acceptance']
+          && request.resource.data.status in ['approved', 'rejected']
+          && request.resource.data.reviewedBy == request.auth.uid
+          && request.resource.data.reviewedAt == request.time
+          && ((request.resource.data.status == 'rejected' && request.resource.data.rejectionReason is string && request.resource.data.rejectionReason.trim().size() > 0 && request.resource.data.rejectionReason.size() <= 1000
+              && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'reviewedAt', 'reviewedBy', 'reviewedByName', 'rejectionReason']))
+            || (request.resource.data.status == 'approved'
+              && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'reviewedAt', 'reviewedBy', 'reviewedByName', 'paymentTransferId', 'effectSnapshot'])
+              && isValidMoneyRequestApproval(familyId, requestId, request.resource.data, resource.data))))
+          || (isAuthenticated() && resource.data.status in ['pending', 'pending_acceptance'] && (resource.data.requesterId == request.auth.uid || isParent(familyId))
+              && request.resource.data.status == 'cancelled' && request.resource.data.cancelledBy == request.auth.uid
+              && request.resource.data.cancelledAt == request.time
+              && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'cancelledBy', 'cancelledAt']))
+          || (isAuthenticated() && resource.data.status == 'pending_acceptance' && resource.data.requestedFromId == request.auth.uid
+              && request.resource.data.status == 'pending'
+              && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status']));
+        allow delete: if false;
+      }
+
+      match /petbox_requests/{requestId} {
+        allow read: if isParent(familyId) || (isAuthenticated() && resource.data.childId == request.auth.uid);
+        allow create: if isChildInFamily(familyId, request.auth.uid)
+          && request.resource.data.keys().hasAll(['familyId', 'fundId', 'fundName', 'childId', 'childName', 'amountPence', 'status', 'createdAt'])
+          && request.resource.data.keys().hasOnly(['familyId', 'fundId', 'fundName', 'childId', 'childName', 'amountPence', 'status', 'createdAt'])
+          && request.resource.data.familyId == familyId
+          && request.resource.data.childId == request.auth.uid
+          && request.resource.data.amountPence is int && request.resource.data.amountPence > 0
+          && request.resource.data.status == 'pending'
+          && request.resource.data.createdAt == request.time;
+        allow update: if (isParent(familyId) && resource.data.status == 'pending'
+          && request.resource.data.status in ['approved', 'rejected']
+          && request.resource.data.reviewedBy == request.auth.uid
+          && request.resource.data.reviewedAt == request.time
+          && ((request.resource.data.status == 'rejected' && request.resource.data.rejectionReason is string && request.resource.data.rejectionReason.trim().size() > 0
+              && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'reviewedAt', 'reviewedBy', 'rejectionReason']))
+            || (request.resource.data.status == 'approved'
+              && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'reviewedAt', 'reviewedBy', 'approvalTxId', 'fundTransactionId', 'effectSnapshot'])
+              && isValidPetBoxApproval(familyId, request.resource.data, resource.data))))
+          || (isAuthenticated() && resource.data.status == 'pending' && (resource.data.childId == request.auth.uid || isParent(familyId))
+              && request.resource.data.status == 'cancelled' && request.resource.data.cancelledBy == request.auth.uid
+              && request.resource.data.cancelledAt == request.time
+              && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'cancelledBy', 'cancelledAt']));
+        allow delete: if false;
+      }
+
+      match /profile_update_requests/{requestId} {
+        // A requested avatar is valid only when it is a starter avatar OR the
+        // child already owns the premium avatar. Ownership is proven by the
+        // existence of an avatar_unlocks document (read via get()). This prevents
+        // a child from requesting an avatar they have not unlocked.
+        function requestedAvatarIsAllowed() {
+          let avatarId = request.resource.data.get('requestedAvatarId', '');
+          // requestedAvatarId may be explicitly null (display-name-only change).
+          // Coerce null to '' and only call exists() for a non-empty id, otherwise
+          // exists() with a null document id throws and denies the entire create.
+          return avatarId == null || avatarId == '' || isStarterAvatar(avatarId)
+            || (avatarId != null && exists(/databases/$(database)/documents/families/$(familyId)/users/$(request.auth.uid)/avatar_unlocks/$(avatarId)));
+        }
+        allow read: if isParent(familyId) || (isAuthenticated() && resource.data.childId == request.auth.uid);
+        allow create: if isChildInFamily(familyId, request.auth.uid)
+          && request.resource.data.keys().hasAll(['familyId', 'childId', 'childName', 'requestedDisplayName', 'requestedAvatar', 'currentDisplayName', 'currentAvatar', 'status', 'createdAt', 'actorId'])
+          && request.resource.data.keys().hasOnly(['familyId', 'childId', 'childName', 'requestedDisplayName', 'requestedAvatar', 'requestedAvatarId', 'currentDisplayName', 'currentAvatar', 'currentAvatarId', 'status', 'createdAt', 'actorId', 'id'])
+          && request.resource.data.familyId == familyId
+          && request.resource.data.childId == request.auth.uid
+          && request.resource.data.status == 'pending'
+          && request.resource.data.createdAt == request.time
+          && requestedAvatarIsAllowed();
+        allow update: if (isParent(familyId) && resource.data.status == 'pending'
+          && request.resource.data.status in ['approved', 'rejected']
+          && request.resource.data.reviewedBy == request.auth.uid
+          && request.resource.data.reviewedAt == request.time
+          && ((request.resource.data.status == 'rejected'
+              && request.resource.data.rejectionReason is string
+              && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'reviewedAt', 'reviewedBy', 'reviewedByName', 'rejectionReason']))
+            || (request.resource.data.status == 'approved'
+              && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'reviewedAt', 'reviewedBy', 'reviewedByName', 'effectSnapshot']))))
+          || (isAuthenticated() && resource.data.status == 'pending' && resource.data.childId == request.auth.uid
+              && request.resource.data.status == 'cancelled' && request.resource.data.cancelledBy == request.auth.uid
+              && request.resource.data.cancelledAt == request.time
+              && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'cancelledBy', 'cancelledAt']));
+        allow delete: if false;
+      }
+
+      // Avatar unlocks: immutable ownership records for premium avatars.
+      // Starter avatars need no record. Premium unlocks are written only by the
+      // owning child and the cost is validated server-side (see avatar_unlocks
+      // helper). Clients cannot forge a cheaper cost or a free premium record.
+      match /users/{userId} {
+        match /avatar_unlocks/{avatarId} {
+          function allowedKeys() {
+            return ['avatarId', 'userId', 'familyId', 'unlockedAt', 'costPoints', 'source', 'actorId'];
+          }
+          allow read: if isFamilyMember(familyId) && (request.auth.uid == userId || isParent(familyId));
+          allow create: if request.auth.uid == userId
+            && isChildInFamily(familyId, userId)
+            && request.resource.data.keys().hasOnly(allowedKeys())
+            && request.resource.data.avatarId == avatarId
+            && request.resource.data.userId == userId
+            && request.resource.data.familyId == familyId
+            && request.resource.data.actorId == userId
+            && request.resource.data.source == 'points'
+            && request.resource.data.unlockedAt == request.time
+            // Cost must equal the authoritative catalog cost for this avatar.
+            && request.resource.data.costPoints == avatarCatalogCost(avatarId)
+            // The avatar must be a real, active, premium (points) avatar.
+            && isPremiumAvatar(avatarId)
+            // Prevent duplicate unlocks: the record must not already exist.
+            && !exists(/databases/$(database)/documents/families/$(familyId)/users/$(userId)/avatar_unlocks/$(avatarId));
+          // Immutable after creation.
+          allow update, delete: if false;
+        }
       }
     }
   }

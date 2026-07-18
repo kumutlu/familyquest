@@ -1,8 +1,23 @@
 {
   "firestore": {
-    "rules": "firestore.rules"
+    "predeploy": [
+      "npm run test:rules"
+    ],
+    "rules": "firestore.rules",
+    "indexes": "firestore.indexes.json"
+  },
+  "functions": {
+    "source": "functions",
+    "runtime": "nodejs22",
+    "predeploy": [
+      "npm --prefix functions install",
+      "npm --prefix functions run build"
+    ]
   },
   "hosting": {
+    "predeploy": [
+      "npm run build"
+    ],
     "public": "dist",
     "ignore": [
       "firebase.json",
@@ -11,11 +26,24 @@
     ],
     "rewrites": [
       {
+        "source": "/firebase-messaging/firebase-messaging-sw.js",
+        "destination": "/firebase-messaging/firebase-messaging-sw.js"
+      },
+      {
         "source": "**",
         "destination": "/index.html"
       }
     ],
     "headers": [
+      {
+        "source": "**",
+        "headers": [
+          {
+            "key": "Cache-Control",
+            "value": "no-cache, no-store, must-revalidate"
+          }
+        ]
+      },
       {
         "source": "/assets/**",
         "headers": [
@@ -26,5 +54,21 @@
         ]
       }
     ]
+  },
+  "emulators": {
+    "auth": {
+      "port": 9099
+    },
+    "firestore": {
+      "port": 8080
+    },
+    "ui": {
+      "enabled": true,
+      "port": 4000
+    },
+    "functions": {
+      "port": 5001
+    },
+    "singleProjectMode": true
   }
 }
