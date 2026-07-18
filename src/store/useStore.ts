@@ -501,7 +501,7 @@ export const useStore = create<AppState>((set, get) => ({
       target: any,
       serverRead: (target: any) => Promise<any>,
       applySnapshot: (snapshot: any) => void,
-      listenerName = resource,
+      listenerName: string = resource,
       critical = requiredResources.includes(resource),
     ) => {
       const acceptSnapshot = (snapshot: any) => {
@@ -642,7 +642,7 @@ export const useStore = create<AppState>((set, get) => ({
         subscribePlanned('savingsGoals', 'Savings goals', snapshot => {
           const goals = docs(snapshot);
           set({ savingsGoals: goals });
-          subscribeGoalSubcollections(goals.map(goal => goal.id));
+          subscribeGoalSubcollections(goals.map((goal: any) => goal.id));
         });
         subscribePlanned('goalRequests', 'Goal requests', snapshot => set({ goalRequests: docs(snapshot) }));
         subscribePlanned('transferRequests', 'Transfer requests', snapshot => set({ transferRequests: docs(snapshot) }));
@@ -658,7 +658,7 @@ export const useStore = create<AppState>((set, get) => ({
         subscribePlanned('savingsGoals', 'Savings goals', snapshot => {
           const goals = docs(snapshot);
           set({ savingsGoals: goals });
-          subscribeGoalSubcollections(goals.map(goal => goal.id));
+          subscribeGoalSubcollections(goals.map((goal: any) => goal.id));
         });
         subscribePlanned('goalRequests', 'Goal requests', snapshot => set({ goalRequests: docs(snapshot) }));
         subscribePlanned('transferRequests', 'Transfer requests', snapshot => set({ transferRequests: docs(snapshot) }));

@@ -51,13 +51,9 @@ import {
   createGoal,
   contributeToGoal,
   addParentGoalContribution,
-  requestGoalWithdrawal,
   approveGoalWithdrawal,
-  rejectGoalWithdrawal,
   completeGoalPurchased,
   returnGoalFunds,
-  cancelGoal,
-  createMatchProposal,
   approveMatchProposal,
   rejectMatchProposal,
 } from './api'
@@ -80,21 +76,19 @@ function transactionWith(docs: Record<string, Record<string, any> | undefined>, 
       if (enforceReadBeforeWrite && wrote) throw new Error('Firestore transactions require all reads to be executed before all writes.')
       return snapshot(docs[ref.path])
     }),
-    update: vi.fn(() => { wrote = true }),
-    set: vi.fn(() => { wrote = true }),
-    delete: vi.fn(() => { wrote = true }),
+    update: vi.fn() as unknown as { mock: { calls: any[] }; (...args: any[]): void },
+    set: vi.fn() as unknown as { mock: { calls: any[] }; (...args: any[]): void },
+    delete: vi.fn() as unknown as { mock: { calls: any[] }; (...args: any[]): void },
   }
   firestore.runTransaction.mockImplementation(async (_db: unknown, callback: any) => callback(tx))
   return tx
 }
-
-const setCall = (tx: any, path: string) => tx.set.mock.calls.find((c: any[]) => c[0]?.path === path)?.[1]
 const updateCall = (tx: any, path: string) => { const calls = tx.update.mock.calls.filter((c: any[]) => c[0]?.path === path); return calls.length ? calls[calls.length-1][1] : undefined }
 const setCallsWhere = (tx: any, pred: (d: any) => boolean) =>
   tx.set.mock.calls
     .filter((c: any[]) => (c[0]?.path ?? '').includes('/contributions/') && pred(c[1]))
     .map((c: any[]) => c[1])
-const setCallOnPath = (tx: any, path: string) => tx.set.mock.calls.find((c: any[]) => c[0]?.path === path)?.[1]
+
 
 // Build a contributions-collection snapshot carrying __docs__ (one doc per leg),
 // matching the real Firestore subcollection shape the API reads via
