@@ -1425,10 +1425,18 @@ export const contributeToGoal = async (
       return;
     }
 
+    // Matching (design §6). Compute the match amount up-front so the goal's
+    // currentAmountPence is updated exactly ONCE (a single Firestore rules
+    // evaluation), keeping the atomic transaction under the 1000-expression
+    // limit even for auto-match goals.
+    const policy = goal.matching ?? { mode: 'none', perX: 0, matchY: 0 };
+    const matchPence = policy.mode === 'auto' ? computeMatchPence(amountPence, policy) : 0;
+    const finalGoalAmount = goal.currentAmountPence + amountPence + matchPence;
+
     transaction.update(walletRef, { balance: walletBalance - amountPence, lastGoalTxId: txRef.id });
     transaction.update(goalDocRef, {
-      currentAmountPence: goal.currentAmountPence + amountPence,
-      ...(goal.currentAmountPence + amountPence >= goal.targetAmountPence ? { status: 'reached' } : {}),
+      currentAmountPence: finalGoalAmount,
+      ...(finalGoalAmount >= goal.targetAmountPence ? { status: 'reached' } : {}),
     });
     transaction.set(txRef, {
       type: 'goal_contribution',
@@ -1463,35 +1471,29 @@ export const contributeToGoal = async (
       createdAt: serverTimestamp(),
     });
 
-    // Matching (design §6).
-    const policy = goal.matching ?? { mode: 'none', perX: 0, matchY: 0 };
-    if (policy.mode === 'auto') {
-      const matchPence = computeMatchPence(amountPence, policy);
-      if (matchPence > 0) {
-        const matchRef = doc(collection(db, `families/${familyId}/${GOAL_COLLECTION}/${goalId}/contributions`));
-        transaction.update(goalDocRef, { currentAmountPence: goal.currentAmountPence + amountPence + matchPence });
-        transaction.set(matchRef, {
-          contribId: matchRef.id,
-          goalId,
-          type: 'auto_match',
-          ownerType: 'parent',
-          ownerId: actorId,
-          amountPence: matchPence,
-          matchPence,
-          sourceContributionId: contribRef.id,
-          status: 'applied',
-          createdBy: actorId,
-          createdAt: serverTimestamp(),
-        });
-        transaction.set(doc(collection(db, `families/${familyId}/${GOAL_COLLECTION}/${goalId}/goal_ledger`)), {
-          entryId: ledgerRef.id + '_m',
-          goalId,
-          type: 'auto_match',
-          amountPence: matchPence,
-          ownerId: actorId,
-          createdAt: serverTimestamp(),
-        });
-      }
+    if (matchPence > 0) {
+      const matchRef = doc(collection(db, `families/${familyId}/${GOAL_COLLECTION}/${goalId}/contributions`));
+      transaction.set(matchRef, {
+        contribId: matchRef.id,
+        goalId,
+        type: 'auto_match',
+        ownerType: 'parent',
+        ownerId: actorId,
+        amountPence: matchPence,
+        matchPence,
+        sourceContributionId: contribRef.id,
+        status: 'applied',
+        createdBy: actorId,
+        createdAt: serverTimestamp(),
+      });
+      transaction.set(doc(collection(db, `families/${familyId}/${GOAL_COLLECTION}/${goalId}/goal_ledger`)), {
+        entryId: ledgerRef.id + '_m',
+        goalId,
+        type: 'auto_match',
+        amountPence: matchPence,
+        ownerId: actorId,
+        createdAt: serverTimestamp(),
+      });
     } else if (policy.mode === 'manual') {
       const proposedMatchAmountPence = computeMatchPence(amountPence, { ...policy, mode: 'auto' });
       transaction.set(proposalRef, {
@@ -1616,11 +1618,11 @@ export const requestGoalWithdrawal = async (
   const requestRef = doc(collection(db, `families/${familyId}/goal_requests`));
   const approverIds = await getApproverIds(familyId);
 
+  const contribSnap = await getDocs(query(contribsRef));
   await runTransaction(db, async (transaction) => {
-    const [idemSnap, goalSnap, contribSnap] = await Promise.all([
+    const [idemSnap, goalSnap] = await Promise.all([
       transaction.get(idemRef),
       transaction.get(goalDocRef),
-      transaction.get(contribsRef),
     ]);
     const prior = checkIdempotency(idemSnap, key, requestHash);
     if (prior !== null) return;
@@ -1629,9 +1631,7 @@ export const requestGoalWithdrawal = async (
     const goal = normalizeGoalDoc(goalSnap.data());
     assertActiveOrReached(goal.status);
 
-    const allLegs: ContributionLeg[] = contribSnap.exists()
-      ? (contribSnap.data().__legs__ ?? [])
-      : [];
+    const allLegs: ContributionLeg[] = contribSnap.docs.map((d) => d.data() as ContributionLeg);
     const net = computeNetChild(allLegs, childId);
     if (amountPence > net) throw new Error('Withdrawal exceeds owned contribution');
 
@@ -1700,17 +1700,17 @@ export const approveGoalWithdrawal = async (familyId: string, requestId: string,
     const goalDocRef = goalRef(familyId, goalId);
     const walletRef = doc(db, `families/${familyId}/wallets`, childId);
     const contribsRef = collection(db, `families/${familyId}/${GOAL_COLLECTION}/${goalId}/contributions`);
-    const [goalSnap, walletSnap, contribSnap] = await Promise.all([
+    const contribSnap = await getDocs(query(contribsRef));
+    const [goalSnap, walletSnap] = await Promise.all([
       transaction.get(goalDocRef),
       transaction.get(walletRef),
-      transaction.get(contribsRef),
     ]);
     if (!goalSnap.exists()) throw new Error('Goal not found');
     const goal = normalizeGoalDoc(goalSnap.data());
     assertActiveOrReached(goal.status);
     if (!walletSnap.exists()) throw new Error('Wallet not found');
 
-    const allLegs: ContributionLeg[] = contribSnap.exists() ? (contribSnap.data().__legs__ ?? []) : [];
+    const allLegs: ContributionLeg[] = contribSnap.docs.map((d) => d.data() as ContributionLeg);
     const net = computeNetChild(allLegs, childId);
     if (amountPence > net) throw new Error('Withdrawal exceeds owned contribution');
 
@@ -1825,7 +1825,7 @@ export const completeGoalPurchased = async (familyId: string, goalId: string, cl
 };
 
 // ---------------------------------------------------------------------------
-// returnGoalFunds (parent-only; per-child separate refund + external_closure)
+// returnGoalFunds (parent-only; per-child separate refund + goal-doc closure)
 // ---------------------------------------------------------------------------
 
 export const returnGoalFunds = async (familyId: string, goalId: string, clientReqId: string) => {
@@ -1840,12 +1840,15 @@ export const returnGoalFunds = async (familyId: string, goalId: string, clientRe
   const idemRef = idempotencyRef(familyId, key);
   const goalDocRef = goalRef(familyId, goalId);
   const contribsRef = collection(db, `families/${familyId}/${GOAL_COLLECTION}/${goalId}/contributions`);
+  // Transaction.get only accepts DocumentReferences in this SDK; read the
+  // contributions collection with getDocs before the transaction. The goal's
+  // currentAmountPence and per-child wallet balances remain the atomic guards.
+  const contribSnap = await getDocs(query(contribsRef));
 
   await runTransaction(db, async (transaction) => {
-    const [idemSnap, goalSnap, contribSnap] = await Promise.all([
+    const [idemSnap, goalSnap] = await Promise.all([
       transaction.get(idemRef),
       transaction.get(goalDocRef),
-      transaction.get(contribsRef),
     ]);
     const prior = checkIdempotency(idemSnap, key, requestHash);
     if (prior !== null) return;
@@ -1853,27 +1856,37 @@ export const returnGoalFunds = async (familyId: string, goalId: string, clientRe
     const goal = normalizeGoalDoc(goalSnap.data());
     assertActiveOrReached(goal.status);
 
-    const allLegs: ContributionLeg[] = contribSnap.exists() ? (contribSnap.data().__legs__ ?? []) : [];
+    const allLegs: ContributionLeg[] = contribSnap.docs.map((d) => d.data() as ContributionLeg);
     const childIds = Array.from(new Set(allLegs.filter(l => l.ownerType === 'child').map(l => l.ownerId)));
     // v1 safety limit: bound the number of per-child refund legs before writing.
     if (childIds.length > MAX_CHILD_REFUNDS_PER_GOAL) {
       throw new Error(`Refund would affect ${childIds.length} child wallets; exceeds safety limit of ${MAX_CHILD_REFUNDS_PER_GOAL}`);
     }
+    // Read ALL child wallets up front (before any write) so the transaction
+    // respects Firestore's "all reads before all writes" constraint. A missing
+    // wallet doc makes the operation fail closed (atomic rollback).
+    const walletRefs = childIds.map((cid) => doc(db, `families/${familyId}/wallets`, cid));
+    const walletSnaps = await Promise.all(walletRefs.map((ref) => transaction.get(ref)));
     let remaining = goal.currentAmountPence;
-    for (const cid of childIds) {
+    for (let i = 0; i < childIds.length; i++) {
+      const cid = childIds[i];
       const net = computeNetChild(allLegs, cid);
       if (net <= 0) continue;
-      const walletRef = doc(db, `families/${familyId}/wallets`, cid);
-      const walletSnap = await transaction.get(walletRef);
-      // A missing child wallet must fail the whole operation closed (atomic
-      // rollback): we must never credit a non-existent wallet or leave the goal
-      // partially refunded.
-      if (!walletSnap.exists()) throw new Error(`Wallet not found for child ${cid}`);
-      const bal = walletSnap.data().balance || 0;
+      const walletSnap = walletSnaps[i];
+      if (!walletSnap.exists()) throw new Error('Wallet not found');
+      const walletRef = walletRefs[i];
+      const walletBalance = walletSnap.data().balance || 0;
       const txRef = doc(collection(db, `families/${familyId}/wallet_transactions`));
-      transaction.update(walletRef, { balance: bal + net, lastGoalTxId: txRef.id });
-      transaction.update(goalDocRef, { currentAmountPence: remaining - net });
+      const contribRef = doc(collection(db, `families/${familyId}/${GOAL_COLLECTION}/${goalId}/contributions`));
+      const ledgerRef = doc(collection(db, `families/${familyId}/${GOAL_COLLECTION}/${goalId}/goal_ledger`));
+      transaction.update(walletRef, { balance: walletBalance + net, lastGoalTxId: txRef.id });
       remaining -= net;
+      // The refund is recorded as a goal_return wallet_txn (carries goalId,
+      // childId, amount) AND an immutable completion_refund contribution leg +
+      // goal_ledger entry. The contributions ledger is the authoritative
+      // ownership/accounting source of truth; each refunded child receives an
+      // immutable completion_refund entry so the ledger always balances and
+      // netChild accounting stays correct.
       transaction.set(txRef, {
         type: 'goal_return',
         childId: cid,
@@ -1885,7 +1898,6 @@ export const returnGoalFunds = async (familyId: string, goalId: string, clientRe
         timestamp: serverTimestamp(),
         createdAt: serverTimestamp(),
       });
-      const contribRef = doc(collection(db, `families/${familyId}/${GOAL_COLLECTION}/${goalId}/contributions`));
       transaction.set(contribRef, {
         contribId: contribRef.id,
         goalId,
@@ -1898,8 +1910,8 @@ export const returnGoalFunds = async (familyId: string, goalId: string, clientRe
         createdBy: actorId,
         createdAt: serverTimestamp(),
       });
-      transaction.set(doc(collection(db, `families/${familyId}/${GOAL_COLLECTION}/${goalId}/goal_ledger`)), {
-        entryId: contribRef.id,
+      transaction.set(ledgerRef, {
+        entryId: ledgerRef.id,
         goalId,
         type: 'completion_refund',
         amountPence: -net,
@@ -1908,9 +1920,14 @@ export const returnGoalFunds = async (familyId: string, goalId: string, clientRe
       });
     }
 
-    // Close parent + match portions via external_closure (no wallet credit).
+    // Parent + match portions are closed out with an immutable external_closure
+    // contribution leg + goal_ledger entry (NOT wallet-credited, NOT a scalar on
+    // the goal doc). This keeps the contributions ledger as the single source of
+    // truth and ensures the ledger always balances:
+    //   Σ child refunds + Σ external_closure == original currentAmountPence.
     if (remaining > 0) {
       const closureRef = doc(collection(db, `families/${familyId}/${GOAL_COLLECTION}/${goalId}/contributions`));
+      const closureLedgerRef = doc(collection(db, `families/${familyId}/${GOAL_COLLECTION}/${goalId}/goal_ledger`));
       transaction.set(closureRef, {
         contribId: closureRef.id,
         goalId,
@@ -1922,8 +1939,8 @@ export const returnGoalFunds = async (familyId: string, goalId: string, clientRe
         createdBy: actorId,
         createdAt: serverTimestamp(),
       });
-      transaction.set(doc(collection(db, `families/${familyId}/${GOAL_COLLECTION}/${goalId}/goal_ledger`)), {
-        entryId: closureRef.id,
+      transaction.set(closureLedgerRef, {
+        entryId: closureLedgerRef.id,
         goalId,
         type: 'external_closure',
         amountPence: -remaining,
@@ -1931,11 +1948,11 @@ export const returnGoalFunds = async (familyId: string, goalId: string, clientRe
         createdAt: serverTimestamp(),
       });
     }
-
     transaction.update(goalDocRef, {
       currentAmountPence: 0,
       status: 'completed_returned',
       completedMode: 'returned',
+      familyId,
       completedAt: serverTimestamp(),
       completedBy: actorId,
     });
@@ -1983,16 +2000,16 @@ export const cancelGoal = async (familyId: string, goalId: string, clientReqId: 
   });
 };
 
-/** Shared per-child refund + external_closure logic used by returnGoalFunds and cancelGoal. */
+/** Shared per-child refund + goal-doc closure logic used by returnGoalFunds and cancelGoal. */
 async function applyReturnFundsInTransaction(
   transaction: any,
   familyId: string,
   goal: Goal,
-  actorId: string,
+  _actorId: string,
 ) {
   const contribsRef = collection(db, `families/${familyId}/${GOAL_COLLECTION}/${goal.goalId}/contributions`);
-  const contribSnap = await transaction.get(contribsRef);
-  const allLegs: ContributionLeg[] = contribSnap.exists() ? (contribSnap.data().__legs__ ?? []) : [];
+  const contribSnap = await getDocs(query(contribsRef));
+  const allLegs: ContributionLeg[] = contribSnap.docs.map((d) => d.data() as ContributionLeg);
   const childIds = Array.from(new Set(allLegs.filter(l => l.ownerType === 'child').map(l => l.ownerId)));
   // v1 safety limit: bound the number of per-child refund legs before writing.
   if (childIds.length > MAX_CHILD_REFUNDS_PER_GOAL) {
@@ -2000,20 +2017,29 @@ async function applyReturnFundsInTransaction(
   }
   let remaining = goal.currentAmountPence;
   const goalDocRef = goalRef(familyId, goal.goalId!);
-  for (const cid of childIds) {
+  // Read ALL child wallets up front (before any write) so the transaction
+  // respects Firestore's "all reads before all writes" constraint. A missing
+  // wallet doc makes the operation fail closed (atomic rollback).
+  const walletRefs = childIds.map((cid) => doc(db, `families/${familyId}/wallets`, cid));
+  const walletSnaps = await Promise.all(walletRefs.map((ref) => transaction.get(ref)));
+  for (let i = 0; i < childIds.length; i++) {
+    const cid = childIds[i];
     const net = computeNetChild(allLegs, cid);
     if (net <= 0) continue;
-    const walletRef = doc(db, `families/${familyId}/wallets`, cid);
-    const walletSnap = await transaction.get(walletRef);
-    // A missing child wallet must fail the whole operation closed (atomic
-    // rollback): we must never credit a non-existent wallet or leave the goal
-    // partially refunded.
-    if (!walletSnap.exists()) throw new Error(`Wallet not found for child ${cid}`);
-    const bal = walletSnap.data().balance || 0;
+    const walletSnap = walletSnaps[i];
+    if (!walletSnap.exists()) throw new Error('Wallet not found');
+    const walletRef = walletRefs[i];
+    const walletBalance = walletSnap.data().balance || 0;
     const txRef = doc(collection(db, `families/${familyId}/wallet_transactions`));
-    transaction.update(walletRef, { balance: bal + net, lastGoalTxId: txRef.id });
-    transaction.update(goalDocRef, { currentAmountPence: remaining - net });
+    const contribRef = doc(collection(db, `families/${familyId}/${GOAL_COLLECTION}/${goal.goalId}/contributions`));
+    const ledgerRef = doc(collection(db, `families/${familyId}/${GOAL_COLLECTION}/${goal.goalId}/goal_ledger`));
+    transaction.update(walletRef, { balance: walletBalance + net, lastGoalTxId: txRef.id });
     remaining -= net;
+    // Refund recorded as a goal_return wallet_txn (carries goalId, childId,
+    // amount) AND an immutable completion_refund contribution leg + goal_ledger
+    // entry. The contributions ledger is the authoritative ownership/accounting
+    // source of truth; each refunded child receives an immutable completion_refund
+    // entry so the ledger always balances and netChild accounting stays correct.
     transaction.set(txRef, {
       type: 'goal_return',
       childId: cid,
@@ -2025,7 +2051,6 @@ async function applyReturnFundsInTransaction(
       timestamp: serverTimestamp(),
       createdAt: serverTimestamp(),
     });
-    const contribRef = doc(collection(db, `families/${familyId}/${GOAL_COLLECTION}/${goal.goalId}/contributions`));
     transaction.set(contribRef, {
       contribId: contribRef.id,
       goalId: goal.goalId,
@@ -2035,25 +2060,45 @@ async function applyReturnFundsInTransaction(
       amountPence: -net,
       status: 'applied',
       walletTxId: txRef.id,
-      createdBy: actorId,
+      createdBy: _actorId,
+      createdAt: serverTimestamp(),
+    });
+    transaction.set(ledgerRef, {
+      entryId: ledgerRef.id,
+      goalId: goal.goalId,
+      type: 'completion_refund',
+      amountPence: -net,
+      ownerId: cid,
       createdAt: serverTimestamp(),
     });
   }
+  // Parent + match portions closed out with an immutable external_closure
+  // contribution leg + goal_ledger entry (NOT wallet-credited, NOT a scalar on
+  // the goal doc). The contributions ledger stays the single source of truth.
   if (remaining > 0) {
     const closureRef = doc(collection(db, `families/${familyId}/${GOAL_COLLECTION}/${goal.goalId}/contributions`));
+    const closureLedgerRef = doc(collection(db, `families/${familyId}/${GOAL_COLLECTION}/${goal.goalId}/goal_ledger`));
     transaction.set(closureRef, {
       contribId: closureRef.id,
       goalId: goal.goalId,
       type: 'external_closure',
       ownerType: 'parent',
-      ownerId: actorId,
+      ownerId: _actorId,
       amountPence: -remaining,
       status: 'applied',
-      createdBy: actorId,
+      createdBy: _actorId,
+      createdAt: serverTimestamp(),
+    });
+    transaction.set(closureLedgerRef, {
+      entryId: closureLedgerRef.id,
+      goalId: goal.goalId,
+      type: 'external_closure',
+      amountPence: -remaining,
+      ownerId: _actorId,
       createdAt: serverTimestamp(),
     });
   }
-  transaction.update(goalDocRef, { currentAmountPence: 0 });
+  transaction.update(goalDocRef, { currentAmountPence: 0, familyId });
 }
 
 // ---------------------------------------------------------------------------

@@ -26,9 +26,17 @@ vi.mock('firebase/firestore', () => ({
   ...firestore,
   setDoc: vi.fn(),
   addDoc: vi.fn(),
-  query: vi.fn(),
+  query: vi.fn((ref: any) => ref),
   where: vi.fn(),
-  getDocs: vi.fn(),
+  // getDocs resolves the contributions subcollection snapshot from docStore,
+  // matching the real Firestore shape the API reads via contribSnap.docs.map(d => d.data()).
+  getDocs: vi.fn(async (ref: { path: string }) => {
+    const data = docStore[ref.path]
+    const docs = data && Array.isArray((data as any).__docs__)
+      ? (data as any).__docs__.map((d: any) => ({ data: () => d, id: d.contribId ?? d.proposalId ?? 'leg' }))
+      : []
+    return { docs, empty: docs.length === 0 }
+  }),
   getDoc: vi.fn(async (ref: { path: string }) => ({ exists: () => docStore[ref.path] !== undefined, data: () => docStore[ref.path] })),
   deleteDoc: vi.fn(),
   updateDoc: vi.fn(),
@@ -55,7 +63,14 @@ import {
 } from './api'
 
 function snapshot(data?: Record<string, any>) {
-  return { exists: () => data !== undefined, data: () => data }
+  // A contributions-collection snapshot carries `docs` (one doc per leg),
+  // matching the real Firestore subcollection shape the API reads via
+  // `contribSnap.docs.map(d => d.data())`.
+  if (data && Array.isArray((data as any).__docs__)) {
+    const docs = (data as any).__docs__.map((d: any) => ({ data: () => d, id: d.contribId ?? d.proposalId ?? 'leg' }))
+    return { exists: () => true, data: () => data, docs, empty: docs.length === 0 }
+  }
+  return { exists: () => data !== undefined, data: () => data, docs: [], empty: true }
 }
 function transactionWith(docs: Record<string, Record<string, any> | undefined>, enforceReadBeforeWrite = false) {
   Object.assign(docStore, docs)
@@ -81,10 +96,11 @@ const setCallsWhere = (tx: any, pred: (d: any) => boolean) =>
     .map((c: any[]) => c[1])
 const setCallOnPath = (tx: any, path: string) => tx.set.mock.calls.find((c: any[]) => c[0]?.path === path)?.[1]
 
-// Build a contributions-collection snapshot carrying __legs__ for the API's
-// `contribSnap.data().__legs__` convention.
+// Build a contributions-collection snapshot carrying __docs__ (one doc per leg),
+// matching the real Firestore subcollection shape the API reads via
+// `contribSnap.docs.map(d => d.data())`.
 function withLegs(legs: any[]) {
-  return { __legs__: legs }
+  return { __docs__: legs }
 }
 
 const GOAL_PATH = 'families/family-1/savings_goals/goal-1'
@@ -318,10 +334,10 @@ describe('Goals — withdrawal approval', () => {
   })
 })
 
-describe('Goals — returnGoalFunds (per-child separate refund + external_closure)', () => {
+  describe('Goals — returnGoalFunds (per-child separate refund + external closure)', () => {
   beforeEach(() => { vi.clearAllMocks(); firestore.reset(); authState.currentUser = { uid: 'parent-1' } })
 
-  it('refunds each child separately; parent+match closed via external_closure; currentAmountPence = 0', async () => {
+  it('refunds each child separately; parent+match closed via immutable external_closure; currentAmountPence = 0', async () => {
     const tx = transactionWith({
       'users/parent-1': { familyId: 'family-1', role: 'parent', displayName: 'P' },
       [GOAL_PATH]: { goalId: 'goal-1', title: 'Trip', kind: 'family', targetAmountPence: 5000, currentAmountPence: 2000, currency: 'GBP', status: 'active', matching: { mode: 'none', perX: 0, matchY: 0 }, version: 1 },
@@ -336,10 +352,18 @@ describe('Goals — returnGoalFunds (per-child separate refund + external_closur
     await returnGoalFunds('family-1', 'goal-1', 'r1')
     expect(updateCall(tx, WALLET_C1).balance).toBe(800)
     expect(updateCall(tx, WALLET_C2).balance).toBe(700)
-    // Parent 500 closed via external_closure, never credited to a wallet.
+    // Each refunded child receives an immutable completion_refund contribution leg.
+    const refunds = setCallsWhere(tx, (d) => d?.type === 'completion_refund')
+    expect(refunds.length).toBe(2)
+    expect(refunds.find((d: any) => d.ownerId === 'child-1')?.amountPence).toBe(-800)
+    expect(refunds.find((d: any) => d.ownerId === 'child-2')?.amountPence).toBe(-700)
+    // Parent 500 closed via an immutable external_closure contribution leg (never
+    // credited to a wallet, never a scalar on the goal doc).
     const closures = setCallsWhere(tx, (d) => d?.type === 'external_closure')
     expect(closures.length).toBe(1)
     expect(closures[0].amountPence).toBe(-500)
+    // No closedExternalPence scalar is written to the goal doc.
+    expect(updateCall(tx, GOAL_PATH).closedExternalPence).toBeUndefined()
     expect(updateCall(tx, GOAL_PATH).currentAmountPence).toBe(0)
     expect(updateCall(tx, GOAL_PATH).status).toBe('completed_returned')
   })

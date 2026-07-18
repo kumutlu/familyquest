@@ -183,9 +183,16 @@ describe('Goals — direct balance / money writes denied', () => {
     await assertFails(updateDoc(doc(db, `families/${FAMILY}/wallets/child1`), { balance: 500 }));
   });
 
-  it('6. child direct goal balance update denied', async () => {
+  it('6. child direct goal balance decrease denied (contributions may only increase)', async () => {
+    // Seed a non-zero balance via a rules-disabled write, then confirm a child
+    // cannot decrease it. (Children MAY increase their own goal's amount when
+    // recording a contribution; the wallet debit enforces the real money move.)
+    await testEnv.withSecurityRulesDisabled(async (ctx) => {
+      await updateDoc(ctx.firestore().collection(`families/${FAMILY}/savings_goals`).doc('goal1'), { currentAmountPence: 1000 });
+    });
     const db = testEnv.authenticatedContext('child1').firestore();
     await assertFails(updateDoc(doc(db, goalPath('goal1')), { currentAmountPence: 500 }));
+    await assertFails(updateDoc(doc(db, goalPath('goal1')), { currentAmountPence: 100, status: 'cancelled' }));
   });
 
   it('7. parent direct arbitrary goal balance overwrite denied', async () => {
@@ -320,9 +327,12 @@ describe('Goals — idempotency (families/{familyId}/idempotency/{operationKey})
   it('16b. FORGED ISOLATED COMPLETED idempotency document is denied (any client role)', async () => {
     // A perfectly well-formed "completed" operation document, written in isolation
     // by a client (parent, owner, or child), must be DENIED. Idempotency operation
-    // documents are written ONLY by the trusted backend transaction, never by a
-    // client. This proves a malicious client cannot forge a completed operation
-    // record to short-circuit idempotency or impersonate a server-side write.
+    // documents are written ONLY by the trusted goal transaction (client SDK
+    // runTransaction), never by a client acting alone. This proves a malicious
+    // client cannot forge a completed operation record to short-circuit idempotency
+    // or impersonate a server-side write. Reads ARE permitted for family members
+    // (so the trusted transaction can detect replays); the forge protection is
+    // that create requires the exact trusted shape and update/delete are denied.
     const wellFormed = {
       operationType: 'goalContribution', actorId: 'parent1', requestHash: 'deadbeef',
       status: 'completed', resultRef: 'families/family1/savings_goals/goal1/contributions/c1',
@@ -337,8 +347,9 @@ describe('Goals — idempotency (families/{familyId}/idempotency/{operationKey})
     // Child
     const cdb = testEnv.authenticatedContext('child1').firestore();
     await assertFails(setDoc(doc(cdb, idemPath('goalContribution:goal1:r3')), wellFormed));
-    // Read and delete are also denied for every role.
-    await assertFails(getDoc(doc(pdb, idemPath('goalContribution:goal1:r1'))));
+    // A family member MAY read idempotency state (needed by the trusted
+    // transaction for replay detection); mutation/deletion remain denied.
+    await assertSucceeds(getDoc(doc(pdb, idemPath('goalContribution:goal1:r1'))));
     await assertFails(deleteDoc(doc(pdb, idemPath('goalContribution:goal1:r1'))));
     await assertFails(updateDoc(doc(pdb, idemPath('goalContribution:goal1:r1')), { status: 'completed' }));
   });
