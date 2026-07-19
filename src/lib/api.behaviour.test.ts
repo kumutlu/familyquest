@@ -68,7 +68,13 @@ describe('addBehaviourEvent transaction contract', () => {
     })
 
     expect(firestore.runTransaction).toHaveBeenCalledTimes(1)
-    expect(transaction.update).toHaveBeenCalledWith(expect.objectContaining({ path: 'families/family-1/wallets/child-1' }), { balance: -500 })
+    // The wallet balance decrease must be linked to the penalty ledger id
+    // (lastPenaltyTxId) so it satisfies isValidBehaviourPenaltyDeduction;
+    // omitting it was the production "Missing or insufficient permissions" bug.
+    expect(transaction.update).toHaveBeenCalledWith(
+      expect.objectContaining({ path: 'families/family-1/wallets/child-1' }),
+      { balance: -500, lastPenaltyTxId: 'generated-2' },
+    )
     const eventWrite = transaction.set.mock.calls.find(([ref]) => ref.path.includes('/behaviour_events/'))?.[1]
     const ledgerWrite = transaction.set.mock.calls.find(([ref]) => ref.path.includes('/wallet_transactions/'))?.[1]
     expect(eventWrite).toMatchObject({

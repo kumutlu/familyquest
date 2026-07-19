@@ -718,7 +718,7 @@ export async function addBehaviourEvent(
     } else if (input.type === 'negative') {
       transaction.update(childRef, { rewardPoints: effect.rewardPoints, lastBehaviourEventId: eventRef.id });
     } else {
-      transaction.update(walletRef, { balance: effect.walletBalance });
+      transaction.update(walletRef, { balance: effect.walletBalance, lastPenaltyTxId: ledgerRef!.id });
     }
 
     transaction.set(eventRef, {

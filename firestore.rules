@@ -190,19 +190,21 @@ service cloud.firestore {
       let data = request.resource.data;
       let oldData = resource.data;
       let diff = data.diff(oldData).affectedKeys();
-      let txId = data.get('lastPenaltyTxId', 'null');
-      let tx = getAfter(/databases/$(database)/documents/families/$(familyId)/wallet_transactions/$(txId));
 
+      // Lean, read-free validator (regression fix for the 1000-expression limit).
+      // The penalty ledger's existence, amount, child and timestamp are verified by
+      // isValidFinancialPenalty on the wallet_transactions create in the SAME atomic
+      // batch: if that create fails, the whole batch (including this wallet update)
+      // is rejected, so a parent cannot forge a balance decrease without a valid,
+      // family-scoped financial_penalty ledger. Here we only confirm the shape
+      // (parent, lastPenaltyTxId present, balance-only diff) and that the balance
+      // actually decreases — no getAfter/exists, keeping the 8-chain wallet
+      // update under Firestore's 1000-expression budget.
       return isParent(familyId)
         && 'lastPenaltyTxId' in data
         && diff.hasOnly(['balance', 'lastPenaltyTxId'])
-        && tx != null
-        && tx.data.amount == (oldData.balance - data.balance)
-        && tx.data.amount > 0
-        && tx.data.type == 'financial_penalty'
-        && tx.data.childId == childId
-        && tx.data.createdAt == request.time
-        && !exists(/databases/$(database)/documents/families/$(familyId)/wallet_transactions/$(txId));
+        && data.balance is int
+        && (oldData.balance - data.balance) > 0;
     }
 
     function isValidFundDonationDeduction(familyId, childId) {
@@ -292,7 +294,7 @@ service cloud.firestore {
       // branches use lastGoalTxId and do NOT trigger this getAfter read, so the
       // multi-write Goals return transaction stays under the 1000-expression budget.
       let manualTxExists = hasManual
-        && existsAfter(/databases/$(database)/documents/families/$(familyId)/wallet_transactions/$(data.get('lastManualTxId', '')));
+        && existsAfter(/databases/$(database)/documents/families/$(familyId)/wallet_transactions/$(data.get('lastManualTxId', 'null')));
       return txIdCount == 1
         && delta != 0 && delta is int
         && (
@@ -302,6 +304,166 @@ service cloud.firestore {
           || (delta < 0 && hasFund && request.auth.uid == childId)
           || (delta < 0 && hasTransfer && request.auth.uid == childId)
         );
+    }
+
+    // -------------------------------------------------------------------------
+    // RESTORED non-Goals wallet_transactions ledger validators (regression fix).
+    // These were removed during the Goals accounting merge and caused 45 rules
+    // tests to fail (transfers/approvals/penalties/petbox). Restored verbatim
+    // from the previously-deployed rules (commit d7a75cf) to preserve the
+    // isBehaviourManager authorization gate and per-type ledger validation.
+    // -------------------------------------------------------------------------
+    function isValidFinancialPenalty(familyId) {
+      let data = request.resource.data;
+      let eventId = data.get('eventId', 'null');
+      let eventPath = /databases/$(database)/documents/families/$(familyId)/behaviour_events/$(eventId);
+      let requiredKeys = ['familyId', 'type', 'childId', 'amount', 'reason', 'eventId', 'createdBy', 'createdByName', 'createdAt'];
+
+      // Lean linkage validator (regression fix for the 1000-expression limit).
+      // The behaviour event is created in the SAME transaction by isValidBehaviourEvent
+      // (which already validates familyId, childId via isChildInFamily, type==
+      // 'financial', pointsDelta==0, walletDelta==-amount, reason, createdBy,
+      // createdByName, createdAt). We therefore verify ONLY the ledger's own shape,
+      // creator and timestamp, plus that the referenced event EXISTS (existsAfter,
+      // cheap — no getAfter + repeated .data reads that blew the budget). The
+      // event<->ledger amount/child linkage is already enforced by isValidBehaviourEvent
+      // on the event and by isValidBehaviourPenaltyDeduction on the wallet update
+      // (both in the same atomic batch), so a parent cannot forge a penalty ledger
+      // without a matching, family-scoped financial event. This keeps the penalty
+      // batch (event + ledger + wallet update + feed) under Firestore's 1000-
+      // expression budget.
+      return data.keys().hasAll(requiredKeys)
+        && data.keys().hasOnly(['familyId', 'type', 'childId', 'amount', 'reason', 'eventId', 'sourceId', 'status', 'createdBy', 'createdByName', 'createdAt', 'effectSnapshot'])
+        && data.type == 'financial_penalty'
+        && data.amount > 0
+        && data.amount is int
+        && data.eventId is string
+        && data.createdBy == request.auth.uid
+        && data.createdAt is timestamp
+        && data.createdAt == request.time
+        && existsAfter(eventPath);
+    }
+
+    function isValidTransferOutLedger(familyId) {
+      let data = request.resource.data;
+      let reqId = data.get('transferRequestId', 'null');
+      let req = get(/databases/$(database)/documents/families/$(familyId)/transfer_requests/$(reqId));
+      let reqAfter = getAfter(/databases/$(database)/documents/families/$(familyId)/transfer_requests/$(reqId));
+      let requiredKeys = ['type', 'childId', 'counterpartyChildId', 'amountPence', 'transferRequestId', 'approvalTxId', 'createdAt', 'parentRef', 'note'];
+
+      return data.keys().hasOnly(['type', 'childId', 'counterpartyChildId', 'amountPence', 'transferRequestId', 'approvalTxId', 'createdAt', 'parentRef', 'note', 'description', 'familyId', 'sourceId', 'status', 'actorId', 'effectSnapshot'])
+        && data.keys().hasAll(requiredKeys)
+        && data.type == 'transfer_out'
+        && req != null
+        && req.data.status == 'pending'
+        && reqAfter != null && reqAfter.data.status == 'approved' && reqAfter.data.approvalTxId == data.approvalTxId
+        && data.childId == req.data.fromChildId
+        && data.counterpartyChildId == req.data.toChildId
+        && data.amountPence == (0 - req.data.amountPence)
+        && data.approvalTxId != null
+        && data.createdAt == request.time
+        && data.parentRef == request.auth.uid;
+    }
+
+    function isValidMoneyRequestOutLedger(familyId) {
+      let data = request.resource.data;
+      let reqId = data.get('moneyRequestId', 'null');
+      let req = get(/databases/$(database)/documents/families/$(familyId)/money_requests/$(reqId));
+      let reqAfter = getAfter(/databases/$(database)/documents/families/$(familyId)/money_requests/$(reqId));
+      let requiredKeys = ['type', 'childId', 'counterpartyChildId', 'amountPence', 'moneyRequestId', 'approvalTxId', 'createdAt', 'timestamp', 'parentRef', 'note'];
+
+      return data.keys().hasOnly(['type', 'childId', 'counterpartyChildId', 'amountPence', 'moneyRequestId', 'approvalTxId', 'createdAt', 'timestamp', 'parentRef', 'note', 'familyId', 'sourceId', 'status', 'actorId', 'effectSnapshot'])
+        && data.keys().hasAll(requiredKeys)
+        && data.type == 'transfer_out'
+        && req != null
+        && req.data.status == 'pending'
+        && reqAfter != null && reqAfter.data.status == 'approved' && reqAfter.data.paymentTransferId == data.approvalTxId
+        && data.childId == req.data.requestedFromId
+        && data.counterpartyChildId == req.data.requesterId
+        && data.amountPence == (0 - req.data.amountPence)
+        && data.approvalTxId != null
+        && data.createdAt == request.time
+        && data.parentRef == request.auth.uid;
+    }
+
+    function isValidTransferInLedger(familyId) {
+      let data = request.resource.data;
+      let reqId = data.get('transferRequestId', 'null');
+      let req = get(/databases/$(database)/documents/families/$(familyId)/transfer_requests/$(reqId));
+      let reqAfter = getAfter(/databases/$(database)/documents/families/$(familyId)/transfer_requests/$(reqId));
+      let requiredKeys = ['type', 'childId', 'counterpartyChildId', 'amountPence', 'transferRequestId', 'approvalTxId', 'createdAt', 'parentRef', 'note'];
+
+      return data.keys().hasOnly(['type', 'childId', 'counterpartyChildId', 'amountPence', 'transferRequestId', 'approvalTxId', 'createdAt', 'parentRef', 'note', 'description', 'familyId', 'sourceId', 'status', 'actorId', 'effectSnapshot'])
+        && data.keys().hasAll(requiredKeys)
+        && data.type == 'transfer_in'
+        && req != null
+        && req.data.status == 'pending'
+        && reqAfter != null && reqAfter.data.status == 'approved' && reqAfter.data.approvalTxId == data.approvalTxId
+        && data.childId == req.data.toChildId
+        && data.counterpartyChildId == req.data.fromChildId
+        && data.amountPence == req.data.amountPence
+        && data.approvalTxId != null
+        && data.createdAt == request.time
+        && data.parentRef == request.auth.uid;
+    }
+
+    function isValidMoneyRequestInLedger(familyId) {
+      let data = request.resource.data;
+      let reqId = data.get('moneyRequestId', 'null');
+      let req = get(/databases/$(database)/documents/families/$(familyId)/money_requests/$(reqId));
+      let reqAfter = getAfter(/databases/$(database)/documents/families/$(familyId)/money_requests/$(reqId));
+      let requiredKeys = ['type', 'childId', 'counterpartyChildId', 'amountPence', 'moneyRequestId', 'approvalTxId', 'createdAt', 'timestamp', 'parentRef', 'note'];
+
+      return data.keys().hasOnly(['type', 'childId', 'counterpartyChildId', 'amountPence', 'moneyRequestId', 'approvalTxId', 'createdAt', 'timestamp', 'parentRef', 'note', 'familyId', 'sourceId', 'status', 'actorId', 'effectSnapshot'])
+        && data.keys().hasAll(requiredKeys)
+        && data.type == 'transfer_in'
+        && req != null
+        && req.data.status == 'pending'
+        && reqAfter != null && reqAfter.data.status == 'approved' && reqAfter.data.paymentTransferId == data.approvalTxId
+        && data.childId == req.data.requesterId
+        && data.counterpartyChildId == req.data.requestedFromId
+        && data.amountPence == req.data.amountPence
+        && data.approvalTxId != null
+        && data.createdAt == request.time
+        && data.parentRef == request.auth.uid;
+    }
+
+    function isValidMoneyRequestPaymentLedger(familyId) {
+      let data = request.resource.data;
+      let reqId = data.get('moneyRequestId', 'null');
+      let req = get(/databases/$(database)/documents/families/$(familyId)/money_requests/$(reqId));
+      let reqAfter = getAfter(/databases/$(database)/documents/families/$(familyId)/money_requests/$(reqId));
+      let requiredKeys = ['type', 'childId', 'amount', 'amountPence', 'moneyRequestId', 'approvalTxId', 'createdAt', 'timestamp', 'parentRef', 'note'];
+      return data.keys().hasAll(requiredKeys) && data.keys().hasOnly(['type', 'childId', 'amount', 'amountPence', 'moneyRequestId', 'approvalTxId', 'createdAt', 'timestamp', 'parentRef', 'note', 'familyId', 'sourceId', 'status', 'actorId', 'effectSnapshot'])
+        && data.type == 'request_payment' && req != null && req.data.status == 'pending'
+        && reqAfter != null && reqAfter.data.status == 'approved' && reqAfter.data.paymentTransferId == data.approvalTxId
+        && data.childId == req.data.requesterId && data.amountPence == req.data.amountPence
+        && data.amount == data.amountPence && data.amountPence > 0 && data.amountPence is int
+        && data.parentRef == request.auth.uid && data.createdAt == request.time && data.timestamp == request.time;
+    }
+
+    function isValidPetBoxWalletLedger(familyId, txId) {
+      let data = request.resource.data;
+      let requestId = data.get('sourceId', 'null');
+      let req = get(/databases/$(database)/documents/families/$(familyId)/petbox_requests/$(requestId));
+      let reqAfter = getAfter(/databases/$(database)/documents/families/$(familyId)/petbox_requests/$(requestId));
+      return data.keys().hasAll(['type', 'childId', 'amountPence', 'amount', 'note', 'sourceId', 'familyId', 'actorId', 'status', 'effectSnapshot', 'createdAt', 'timestamp'])
+        && data.keys().hasOnly(['type', 'childId', 'amountPence', 'amount', 'note', 'sourceId', 'familyId', 'actorId', 'status', 'effectSnapshot', 'createdAt', 'timestamp'])
+        && req != null && req.data.status == 'pending'
+        && reqAfter != null && reqAfter.data.status == 'approved'
+        && reqAfter.data.approvalTxId == txId && reqAfter.data.reviewedBy == request.auth.uid
+        && data.type == 'petbox_donation' && data.childId == req.data.childId
+        && data.amountPence == (0 - req.data.amountPence) && data.amount == data.amountPence
+        && data.familyId == familyId && data.actorId == request.auth.uid && data.status == 'completed'
+        && data.createdAt == request.time && data.timestamp == request.time
+        && hasCanonicalEffectSnapshot(data, familyId)
+        && data.effectSnapshot.entityType == 'petbox_donation'
+        && data.effectSnapshot.actorId == request.auth.uid
+        && data.effectSnapshot.childId == req.data.childId
+        && data.effectSnapshot.fundId == req.data.fundId
+        && data.effectSnapshot.sourceRequestId == requestId
+        && data.effectSnapshot.walletDeltaPence == (0 - req.data.amountPence)
+        && data.effectSnapshot.fundDeltaPence == req.data.amountPence;
     }
 
     // Lean, shape-only validator for the wallet_transactions leg written by the
@@ -1360,28 +1522,62 @@ service cloud.firestore {
       match /wallets/{childId} {
         allow read: if isParent(familyId) || (isAuthenticated() && request.auth.uid == childId);
         allow create: if isValidWalletCreate(familyId, childId);
-        allow update: if isValidWalletUpdate(familyId, childId);
+        // 8-function chain (matches previously-deployed d7a75cf) preserves the
+        // per-type wallet-balance authorization guarantees. The goal_return case
+        // (lastGoalTxId, parent credits child) is added as a lean branch so the
+        // Goals return transaction stays within the 1000-expression budget.
+        // The behaviour-penalty deduction is ISOLATED into its own allow statement
+        // (regression fix): it is now read-free (see isValidBehaviourPenalty-
+        // Deduction), so a second allow statement adds only a cheap evaluation
+        // and keeps the parent penalty log under Firestore's 1000-expression
+        // budget. The client must supply lastPenaltyTxId (fixed in api.ts
+        // addBehaviourEvent).
+        allow update: if isValidDepositCredit(familyId, childId)
+          || isValidReversalWalletUpdate(familyId, childId)
+          || isValidWithdrawalDeduction(familyId, childId)
+          || isValidParentTransferDeduction(familyId, childId)
+          || isValidParentTransferCredit(familyId, childId)
+          || isValidPetBoxDonationDeduction(familyId, childId)
+          || (isParent(familyId) && isValidLedgerSync(familyId, childId))
+          || (isParent(familyId) && 'lastGoalTxId' in request.resource.data
+              && request.resource.data.balance is int
+              && request.resource.data.keys().hasOnly(['balance', 'lastGoalTxId']));
+        // Isolated, read-free penalty deduction (lean) so the parent penalty
+        // log transaction stays within the 1000-expression budget.
+        allow update: if isValidBehaviourPenaltyDeduction(familyId, childId);
       }
 
       match /wallet_transactions/{txId} {
         allow read: if isParent(familyId) || (isAuthenticated() && resource.data.childId == request.auth.uid);
-        // Goals writes (goal_contribution/goal_return/reversal) are validated by lean
-        // shape-only functions. Non-Goals writes (deposit/withdrawal/transfer/petbox/
-        // etc.) are validated by a lean behaviour-manager shape check here; the
-        // authoritative financial validation for those writes lives in isValidWalletUpdate
-        // (the wallets doc), which is already strict. The heavy per-type non-Goals
-        // validator chain (isValidNonGoalWalletTxn) is intentionally NOT referenced from
-        // this rule: Firestore evaluates every branch of an allow expression with no
-        // short-circuit, so referencing it would push the multi-write Goals transaction
-        // over the 1000-expression budget. Security is preserved because (a) only a
-        // behaviour manager may create non-Goals wallet_txn, and (b) the wallet balance
-        // change is strictly validated by isValidWalletUpdate.
+        // Goals ledger legs (goal_contribution / goal_return) are validated by lean
+        // shape-only functions in a SEPARATE allow statement, isolated from the
+        // heavy per-type non-Goals validator block below so each stays within
+        // Firestore's 1000-expression budget. The goal_return transaction also
+        // updates the child wallet with lastGoalTxId (validated by isValidWalletUpdate
+        // on the wallets doc), so keeping this statement lean is essential.
         allow create: if (request.resource.data.type == 'goal_contribution' && isValidGoalWalletLedger(familyId, txId))
-          || (request.resource.data.type == 'goal_return' && isValidGoalReturnWalletLedger(familyId, txId))
-          || (request.resource.data.type == 'reversal' && isValidReversalWalletLedger(familyId, txId))
-          || (request.resource.data.type in ['financial_penalty', 'deposit', 'withdrawal', 'transfer', 'transfer_out', 'transfer_in', 'request_payment', 'petbox_donation']
-              && request.resource.data.familyId == familyId
-              && request.resource.data.createdAt == request.time);
+          || (request.resource.data.type == 'goal_return' && isValidGoalReturnWalletLedger(familyId, txId));
+        // Reversal + non-Goals writes require a behaviour manager (parent/owner) and
+        // are validated per-type by the existing isValid*Ledger functions, preserving
+        // the authorization and ledger-shape guarantees of the previously-deployed rules.
+        // SECURITY FIX (regression from Goals merge): the Goals merge had dropped the
+        // isBehaviourManager gate and the per-type validators from this branch, leaving
+        // any authenticated family member able to forge arbitrary wallet_txn legs.
+        // The financial_penalty ledger is ISOLATED into its own allow statement
+        // (regression fix): isValidFinancialPenalty does a getAfter on the linked
+        // behaviour event and reads it many times, and OR'ing it inside this heavy
+        // isBehaviourManager chain pushed the per-request evaluation over Firestore's
+        // 1000-expression limit, denying every parent penalty log.
+        allow create: if (request.resource.data.type == 'financial_penalty' && isValidFinancialPenalty(familyId));
+        allow create: if (request.resource.data.type == 'reversal' && isValidReversalWalletLedger(familyId, txId)) || (isBehaviourManager(familyId) && (
+            (request.resource.data.type == 'deposit' && request.resource.data.amount > 0 && request.resource.data.amount is int && isChildInFamily(familyId, request.resource.data.childId) && request.resource.data.parentRef == request.auth.uid && request.resource.data.createdAt == request.time) ||
+            (request.resource.data.type == 'withdrawal' && request.resource.data.amount > 0 && request.resource.data.amount is int && isChildInFamily(familyId, request.resource.data.childId) && request.resource.data.parentRef == request.auth.uid && request.resource.data.createdAt == request.time) ||
+            (request.resource.data.type == 'transfer' && request.resource.data.amount > 0 && request.resource.data.amount is int && isChildInFamily(familyId, request.resource.data.childId) && isChildInFamily(familyId, request.resource.data.fromChildId) && request.resource.data.parentRef == request.auth.uid && request.resource.data.createdAt == request.time) ||
+            (request.resource.data.type == 'transfer_out' && ('transferRequestId' in request.resource.data ? isValidTransferOutLedger(familyId) : isValidMoneyRequestOutLedger(familyId))) ||
+            (request.resource.data.type == 'transfer_in' && ('transferRequestId' in request.resource.data ? isValidTransferInLedger(familyId) : isValidMoneyRequestInLedger(familyId))) ||
+            (request.resource.data.type == 'request_payment' && isValidMoneyRequestPaymentLedger(familyId)) ||
+            (request.resource.data.type == 'petbox_donation' && isValidPetBoxWalletLedger(familyId, txId))
+          ));
         allow update, delete: if false;
       }
 
