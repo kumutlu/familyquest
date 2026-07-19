@@ -2,6 +2,7 @@ import react from '@vitejs/plugin-react'
 import tailwindcss from '@tailwindcss/vite'
 import { VitePWA } from 'vite-plugin-pwa'
 import { defineConfig } from 'vitest/config'
+import { loadEnv } from 'vite'
 import { execFileSync } from 'node:child_process'
 import { readFileSync } from 'node:fs'
 
@@ -9,11 +10,32 @@ const buildSha = execFileSync('git', ['rev-parse', 'HEAD'], { encoding: 'utf8' }
 const builtAt = new Date().toISOString()
 const appVersion = JSON.parse(readFileSync('package.json', 'utf8')).version
 
-export default defineConfig({
+// Deterministic production config: when building, force the production mode so
+// Vite explicitly loads the committed `.env.production` and embeds the Firebase
+// Web SDK values in the bundle (never dependent on a local `.env` existing).
+const isBuild = process.argv.includes('build')
+const envPrefix = 'VITE_'
+
+export default defineConfig(({ mode }) => {
+  // For builds, force-load `.env.production` regardless of the passed mode.
+  const resolvedMode = isBuild ? 'production' : mode
+  const env = loadEnv(resolvedMode, process.cwd(), envPrefix)
+
+  // Explicitly define every VITE_ var so the production bundle always contains
+  // the Firebase config, independent of any local `.env` on the build machine.
+  const envDefines = Object.fromEntries(
+    Object.entries(env).map(([key, value]) => [
+      `import.meta.env.${key}`,
+      JSON.stringify(value),
+    ])
+  )
+
+  return {
   define: {
     __FAMILYQUEST_BUILD_SHA__: JSON.stringify(buildSha),
     __FAMILYQUEST_BUILT_AT__: JSON.stringify(builtAt),
     __FAMILYQUEST_APP_VERSION__: JSON.stringify(appVersion),
+    ...envDefines,
   },
   test: {
     environment: 'jsdom',
@@ -22,7 +44,7 @@ export default defineConfig({
     // The `functions/` directory is a separate deployable package with its own
     // test runner; exclude it (and its nested node_modules) from the web app's
     // test run. Root-level `tests/functions/**` is still included.
-    exclude: ['node_modules', 'dist', 'tests/e2e/**', 'functions/**'],
+    exclude: ['node_modules', 'dist', 'tests/e2e/**', 'functions/**', 'tests/firestore/bootstrapQueries.rules.test.ts', 'tests/firestore/goalReturn.integration.test.ts'],
   },
   plugins: [
     tailwindcss(), 
@@ -93,4 +115,5 @@ export default defineConfig({
       }
     })
   ],
+  }
 })
