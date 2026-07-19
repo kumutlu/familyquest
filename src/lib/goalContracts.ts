@@ -44,6 +44,62 @@ export interface MatchingPolicy {
 }
 
 /**
+ * Parent contribution at goal creation (design §2.2 / §7). External money only —
+ * it is NEVER debited from a parent wallet. It is expressed as either a fixed
+ * amount in pence and/or a percentage of the goal target. The two are additive
+ * and both optional. This reuses the existing `parent_contribution` ledger leg
+ * and `goal_ledger` entry types; no new accounting model is introduced.
+ */
+export interface ParentContributionInput {
+  /** Fixed external amount in pence (optional). */
+  fixedPence?: number;
+  /** Percentage of the goal target (0–100, optional). */
+  percent?: number;
+}
+
+/**
+ * Upper bound for a parent contribution percentage. A parent may seed at most
+ * 100% of the target via the percentage component (the fixed component is
+ * separately bounded by the target unless product rules allow otherwise).
+ */
+export const MAX_PARENT_CONTRIBUTION_PERCENT = 100;
+
+/**
+ * Validate a parent contribution input against the existing approved bounds.
+ * Returns the resolved total contribution in pence (fixed + percent of target).
+ * Throws on any invalid value. Zero/blank/undefined means no contribution.
+ *
+ * Rules:
+ *  - no negative values (fixed or percent)
+ *  - percent must be within (0, MAX_PARENT_CONTRIBUTION_PERCENT]
+ *  - fixed amount cannot exceed the target (existing product rule: a parent
+ *    seed must not overshoot the goal target on its own)
+ *  - at least one positive component is required when a contribution is present
+ */
+export function validateParentContribution(
+  input: ParentContributionInput | undefined,
+  targetAmountPence: number,
+): number {
+  if (!input) return 0;
+  const fixed = input.fixedPence ?? 0;
+  const percent = input.percent ?? 0;
+
+  if (fixed < 0) throw new Error('Parent contribution amount cannot be negative');
+  if (percent < 0) throw new Error('Parent contribution percentage cannot be negative');
+  if (percent > MAX_PARENT_CONTRIBUTION_PERCENT) {
+    throw new Error(`Parent contribution percentage cannot exceed ${MAX_PARENT_CONTRIBUTION_PERCENT}%`);
+  }
+  if (fixed > targetAmountPence) {
+    throw new Error('Parent contribution amount cannot exceed the goal target');
+  }
+  if (fixed === 0 && percent === 0) return 0;
+  if (fixed < 0 || percent < 0) return 0; // unreachable, kept for clarity
+
+  const percentPence = Math.round((percent / 100) * targetAmountPence);
+  return fixed + percentPence;
+}
+
+/**
  * Contribution ledger entry types (design §2.2, correction 4). These are the
  * only recognised kinds; the UI breakdown and `netChild` derive from them.
  */

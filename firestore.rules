@@ -879,7 +879,7 @@ service cloud.firestore {
       return data.keys().hasAll(requiredKeys)
         && data.keys().hasOnly(['goalId', 'title', 'kind', 'childId', 'targetAmountPence', 'currentAmountPence', 'currency', 'status', 'matching', 'createdBy', 'createdByName', 'createdAt', 'version'])
         && data.version == 1
-        && data.currentAmountPence == 0
+        && data.currentAmountPence >= 0
         && data.status == 'active'
         && data.targetAmountPence is int && data.targetAmountPence > 0
         && data.currency is string
@@ -950,7 +950,7 @@ service cloud.firestore {
         ? (diff.hasOnly(['currentAmountPence', 'status'])
             && data.currentAmountPence is int
             && data.currentAmountPence < old.currentAmountPence
-            && data.currentAmountPence >= 0)
+            && data.currentAmountPence == 0)
         : false;
       let metadataOnly = diff.hasOnly(['title', 'currency', 'matching', 'targetAmountPence'])
         ? (data.matching is map
@@ -1174,7 +1174,7 @@ service cloud.firestore {
       // expensive in the rules expression budget); the operationType allow-list
       // uses `in` (cheap) and denies the colon-form forged doc from the
       // anti-forgery test (operationType "goalContribution" != "goal_contribution").
-      return data.operationType in ['goal_contribution', 'goal_contribution_request', 'goal_parent_contribution', 'goal_withdrawal_request', 'goal_withdrawal_approve', 'goal_purchased', 'goal_returned', 'goal_cancelled', 'goal_match_approve']
+      return data.operationType in ['goal_create', 'goal_contribution', 'goal_contribution_request', 'goal_parent_contribution', 'goal_withdrawal_request', 'goal_withdrawal_approve', 'goal_purchased', 'goal_returned', 'goal_cancelled', 'goal_match_approve']
         && data.status == 'completed'
         && data.createdAt == request.time
         && data.expiresAt == request.time;

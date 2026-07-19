@@ -5,7 +5,7 @@ import { GoalCard } from '../components/goals/GoalCard';
 import { Button } from '../components/ui/Button';
 import { Modal } from '../components/ui/Modal';
 import { createGoal } from '../lib/api';
-import { normalizeGoalDoc, type GoalKind } from '../lib/goalContracts';
+import { normalizeGoalDoc, type GoalKind, type ParentContributionInput } from '../lib/goalContracts';
 import { Target, Plus } from 'lucide-react';
 
 export function Goals() {
@@ -17,6 +17,8 @@ export function Goals() {
   const [kind, setKind] = useState<GoalKind>('family');
   const [childId, setChildId] = useState('');
   const [target, setTarget] = useState('');
+  const [parentFixed, setParentFixed] = useState('');
+  const [parentPercent, setParentPercent] = useState('');
   const [error, setError] = useState('');
   const [submitting, setSubmitting] = useState(false);
 
@@ -32,6 +34,8 @@ export function Goals() {
     setKind('family');
     setChildId('');
     setTarget('');
+    setParentFixed('');
+    setParentPercent('');
     setError('');
   };
 
@@ -42,6 +46,13 @@ export function Goals() {
     if (targetPence <= 0) { setError('Target must be greater than zero.'); return; }
     if (kind === 'child' && !childId) { setError('Pick a child for this goal.'); return; }
 
+    const fixedPence = Math.round((parseFloat(parentFixed) || 0) * 100);
+    const percent = parseFloat(parentPercent) || 0;
+    const parentContribution: ParentContributionInput | undefined =
+      fixedPence > 0 || percent > 0
+        ? { fixedPence: fixedPence > 0 ? fixedPence : undefined, percent: percent > 0 ? percent : undefined }
+        : undefined;
+
     setSubmitting(true);
     setError('');
     try {
@@ -50,6 +61,7 @@ export function Goals() {
         kind,
         targetAmountPence: targetPence,
         childId: kind === 'child' ? childId : undefined,
+        parentContribution,
       });
       reset();
       setShowCreate(false);
@@ -147,6 +159,48 @@ export function Goals() {
                 className="w-full pl-8 pr-3 py-3 border-2 border-gray-200 rounded-xl focus:border-primary-500 focus:outline-none font-bold"
                 placeholder="0.00"
               />
+            </div>
+          </div>
+
+          <div className="rounded-xl border-2 border-dashed border-gray-200 p-4 space-y-3">
+            <div>
+              <p className="text-sm font-semibold text-gray-700">Parent contribution <span className="font-normal text-gray-400">(optional, external money)</span></p>
+              <p className="text-xs text-gray-400 mt-0.5">Seed the goal with parent money. This is never taken from a wallet.</p>
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="block text-xs font-medium text-gray-500 mb-1">Fixed amount</label>
+                <div className="relative">
+                  <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 font-bold">{familyData?.currency || '£'}</span>
+                  <input
+                    type="number"
+                    inputMode="decimal"
+                    min="0"
+                    step="0.01"
+                    value={parentFixed}
+                    onChange={(e) => setParentFixed(e.target.value)}
+                    className="w-full pl-8 pr-3 py-3 border-2 border-gray-200 rounded-xl focus:border-primary-500 focus:outline-none font-bold"
+                    placeholder="0.00"
+                  />
+                </div>
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-gray-500 mb-1">Percentage of target</label>
+                <div className="relative">
+                  <input
+                    type="number"
+                    inputMode="decimal"
+                    min="0"
+                    max="100"
+                    step="1"
+                    value={parentPercent}
+                    onChange={(e) => setParentPercent(e.target.value)}
+                    className="w-full pl-3 pr-8 py-3 border-2 border-gray-200 rounded-xl focus:border-primary-500 focus:outline-none font-bold"
+                    placeholder="0"
+                  />
+                  <span className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 font-bold">%</span>
+                </div>
+              </div>
             </div>
           </div>
 

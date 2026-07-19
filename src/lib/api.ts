@@ -56,6 +56,8 @@ import {
   type MatchingPolicy,
   type ContributionLeg,
   type MatchProposal,
+  type ParentContributionInput,
+  validateParentContribution,
 } from './goalContracts';
 
 // ---------------------------
@@ -1282,6 +1284,10 @@ export interface CreateGoalInput {
   currency?: string;
   childId?: string;
   matching?: MatchingPolicy;
+  /** Optional external parent seed contribution (never debits a wallet). */
+  parentContribution?: ParentContributionInput;
+  /** Client-supplied idempotency request id (deterministic key). */
+  clientReqId?: string;
 }
 
 export const createGoal = async (familyId: string, input: CreateGoalInput) => {
@@ -1292,6 +1298,10 @@ export const createGoal = async (familyId: string, input: CreateGoalInput) => {
   if (input.kind === 'child' && !input.childId) {
     throw new Error('A child goal requires a childId');
   }
+  // Validate parent contribution up-front (throws on invalid values before any
+  // write). Zero/blank means no contribution.
+  const parentPence = validateParentContribution(input.parentContribution, input.targetAmountPence);
+
   const goalsRef = collection(db, `families/${familyId}/${GOAL_COLLECTION}`);
   const goalDocRef = doc(goalsRef);
   const actorRef = doc(db, 'users', actorId);
@@ -1303,23 +1313,75 @@ export const createGoal = async (familyId: string, input: CreateGoalInput) => {
   } else {
     assertParent(actorRole, familyId);
   }
+
+  // Idempotency: a parent-seeded goal creation is replayable. Children cannot
+  // supply a parent contribution, so the key is stable regardless.
+  const clientReqId = input.clientReqId ?? goalDocRef.id;
+  const key = goalContributionKey(goalDocRef.id, `create:${clientReqId}`);
+  const requestHash = requestHashOf({
+    title: input.title,
+    kind: input.kind,
+    targetAmountPence: input.targetAmountPence,
+    childId: input.childId,
+    parentPence,
+  });
+  const idemRef = idempotencyRef(familyId, key);
+  const contribRef = doc(collection(db, `families/${familyId}/${GOAL_COLLECTION}/${goalDocRef.id}/contributions`));
+  const ledgerRef = doc(collection(db, `families/${familyId}/${GOAL_COLLECTION}/${goalDocRef.id}/goal_ledger`));
+
   const now = serverTimestamp();
   const goal: Goal = {
     goalId: goalDocRef.id,
     title: input.title,
     kind: input.kind,
-    childId: input.childId,
+    ...(input.childId ? { childId: input.childId } : {}),
     targetAmountPence: input.targetAmountPence,
-    currentAmountPence: 0,
+    currentAmountPence: parentPence,
     currency: input.currency ?? 'GBP',
-    status: 'active',
+    status: parentPence >= input.targetAmountPence ? 'reached' : 'active',
     matching: input.matching ?? { mode: 'none', perX: 0, matchY: 0 },
     createdBy: actorId,
-    createdByName: actorSnap.exists() ? (actorSnap.data().displayName as string) : undefined,
+    ...(actorSnap.exists() ? { createdByName: actorSnap.data().displayName as string } : {}),
     createdAt: now,
     version: 1,
   };
-  await setDoc(goalDocRef, goal);
+
+  // Atomic: goal doc + (optional) parent contribution ledger + goal_ledger +
+  // idempotency are all written inside one transaction. No wallet is touched,
+  // so a parent wallet is never debited.
+  await runTransaction(db, async (transaction) => {
+    const idemSnap = await transaction.get(idemRef);
+    const prior = checkIdempotency(idemSnap, key, requestHash);
+    if (prior !== null) return; // idempotent replay, no new writes
+
+    transaction.set(goalDocRef, goal);
+
+    if (parentPence > 0) {
+      transaction.set(contribRef, {
+        contribId: contribRef.id,
+        goalId: goalDocRef.id,
+        type: 'parent_contribution',
+        ownerType: 'parent',
+        ownerId: actorId,
+        amountPence: parentPence,
+        matchPence: 0,
+        status: 'applied',
+        createdBy: actorId,
+        createdAt: now,
+      });
+      transaction.set(ledgerRef, {
+        entryId: ledgerRef.id,
+        goalId: goalDocRef.id,
+        type: 'parent_contribution',
+        amountPence: parentPence,
+        ownerId: actorId,
+        createdAt: now,
+      });
+    }
+
+    writeIdempotency(transaction, familyId, key, 'goal_create', actorId, requestHash, goalDocRef.id);
+  });
+
   return goalDocRef;
 };
 
@@ -1535,7 +1597,6 @@ export const addParentGoalContribution = async (
   const goalDocRef = goalRef(familyId, goalId);
   const contribRef = doc(collection(db, `families/${familyId}/${GOAL_COLLECTION}/${goalId}/contributions`));
   const ledgerRef = doc(collection(db, `families/${familyId}/${GOAL_COLLECTION}/${goalId}/goal_ledger`));
-  const childIds = await getChildIds(familyId);
 
   await runTransaction(db, async (transaction) => {
     const [idemSnap, goalSnap] = await Promise.all([
@@ -1548,6 +1609,7 @@ export const addParentGoalContribution = async (
     if (!goalSnap.exists()) throw new Error('Goal not found');
     const goal = normalizeGoalDoc(goalSnap.data());
     assertActiveOrReached(goal.status);
+    const childIds = await getChildIds(familyId);
 
     let childNotif = { ref: null, data: null } as Awaited<ReturnType<typeof loadNotificationRecipientsInTransaction>>;
     if (childIds.length > 0) {
@@ -2251,7 +2313,6 @@ export const addFundExpense = async (
   const fundRef = doc(db, `families/${familyId}/funds`, fundId);
   const txRef = doc(collection(db, `families/${familyId}/fund_transactions`));
   const feedRef = doc(collection(db, `families/${familyId}/feed`));
-  const childIds = await getChildIds(familyId);
 
   await runTransaction(db, async (transaction) => {
     const fundDoc = await transaction.get(fundRef);
@@ -2260,6 +2321,7 @@ export const addFundExpense = async (
     const currentBalance = fundDoc.data().balance || 0;
 
     // Resolve the notification dedupe read up-front (reads-before-writes).
+    const childIds = await getChildIds(familyId);
     let notifPlan = { ref: null, data: null } as Awaited<
       ReturnType<typeof loadNotificationRecipientsInTransaction>
     >;

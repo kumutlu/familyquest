@@ -88,6 +88,10 @@ const setCallsWhere = (tx: any, pred: (d: any) => boolean) =>
   tx.set.mock.calls
     .filter((c: any[]) => (c[0]?.path ?? '').includes('/contributions/') && pred(c[1]))
     .map((c: any[]) => c[1])
+const ledgerCallsWhere = (tx: any, pred: (d: any) => boolean) =>
+  tx.set.mock.calls
+    .filter((c: any[]) => (c[0]?.path ?? '').includes('/goal_ledger/') && pred(c[1]))
+    .map((c: any[]) => c[1])
 
 
 // Build a contributions-collection snapshot carrying __docs__ (one doc per leg),
@@ -105,11 +109,114 @@ const WALLET_C2 = 'families/family-1/wallets/child-2'
 describe('Goals — createGoal', () => {
   beforeEach(() => { vi.clearAllMocks(); firestore.reset(); authState.currentUser = { uid: 'parent-1' } })
 
-  it('parent creates a family goal with v1 fields', async () => {
-    transactionWith({ 'users/parent-1': { familyId: 'family-1', role: 'parent', displayName: 'P' } })
-    // createGoal uses setDoc (not runTransaction) for the goal doc.
+  it('parent creates a family goal with v1 fields (no parent contribution)', async () => {
+    const tx = transactionWith({ 'users/parent-1': { familyId: 'family-1', role: 'parent', displayName: 'P' } })
     await createGoal('family-1', { title: 'Holiday', kind: 'family', targetAmountPence: 5000 })
-    expect(firestore.runTransaction).not.toHaveBeenCalled()
+    expect(firestore.runTransaction).toHaveBeenCalled()
+    // Goal doc written with zero current amount, no contribution ledger.
+    const goalSet = tx.set.mock.calls.find((c: any[]) => (c[0]?.path ?? '').endsWith('/savings_goals/generated-1'))
+    expect(goalSet).toBeTruthy()
+    expect(goalSet[1].currentAmountPence).toBe(0)
+    expect(goalSet[1].status).toBe('active')
+    // No parent_contribution ledger entry.
+    const contribs = setCallsWhere(tx, (d: any) => d.type === 'parent_contribution')
+    expect(contribs.length).toBe(0)
+  })
+
+  it('parent creates a child goal with no parent contribution', async () => {
+    const tx = transactionWith({ 'users/parent-1': { familyId: 'family-1', role: 'parent', displayName: 'P' } })
+    await createGoal('family-1', { title: 'Lego', kind: 'child', childId: 'child-1', targetAmountPence: 2000 })
+    const goalSet = tx.set.mock.calls.find((c: any[]) => (c[0]?.path ?? '').endsWith('/savings_goals/generated-1'))
+    expect(goalSet[1].kind).toBe('child')
+    expect(goalSet[1].childId).toBe('child-1')
+    expect(goalSet[1].currentAmountPence).toBe(0)
+    expect(setCallsWhere(tx, (d: any) => d.type === 'parent_contribution').length).toBe(0)
+  })
+
+  it('writes a fixed parent contribution ledger + goal_ledger atomically', async () => {
+    const tx = transactionWith({ 'users/parent-1': { familyId: 'family-1', role: 'parent', displayName: 'P' } })
+    await createGoal('family-1', { title: 'Holiday', kind: 'family', targetAmountPence: 5000, parentContribution: { fixedPence: 1000 } })
+    const goalSet = tx.set.mock.calls.find((c: any[]) => (c[0]?.path ?? '').endsWith('/savings_goals/generated-1'))
+    expect(goalSet[1].currentAmountPence).toBe(1000)
+    expect(goalSet[1].status).toBe('active')
+    const contribs = setCallsWhere(tx, (d: any) => d.type === 'parent_contribution')
+    expect(contribs.length).toBe(1)
+    expect(contribs[0].amountPence).toBe(1000)
+    expect(contribs[0].ownerType).toBe('parent')
+    const ledger = ledgerCallsWhere(tx, (d: any) => d.type === 'parent_contribution')
+    expect(ledger.length).toBe(1)
+    expect(ledger[0].amountPence).toBe(1000)
+  })
+
+  it('writes a percentage parent contribution (of target) atomically', async () => {
+    const tx = transactionWith({ 'users/parent-1': { familyId: 'family-1', role: 'parent', displayName: 'P' } })
+    await createGoal('family-1', { title: 'Holiday', kind: 'family', targetAmountPence: 5000, parentContribution: { percent: 20 } })
+    const goalSet = tx.set.mock.calls.find((c: any[]) => (c[0]?.path ?? '').endsWith('/savings_goals/generated-1'))
+    expect(goalSet[1].currentAmountPence).toBe(1000) // 20% of 5000
+    const contribs = setCallsWhere(tx, (d: any) => d.type === 'parent_contribution')
+    expect(contribs.length).toBe(1)
+    expect(contribs[0].amountPence).toBe(1000)
+  })
+
+  it('rejects negative parent contribution', async () => {
+    transactionWith({ 'users/parent-1': { familyId: 'family-1', role: 'parent', displayName: 'P' } })
+    await expect(createGoal('family-1', { title: 'Holiday', kind: 'family', targetAmountPence: 5000, parentContribution: { fixedPence: -100 } }))
+      .rejects.toThrow(/cannot be negative/)
+  })
+
+  it('rejects fixed amount exceeding target', async () => {
+    transactionWith({ 'users/parent-1': { familyId: 'family-1', role: 'parent', displayName: 'P' } })
+    await expect(createGoal('family-1', { title: 'Holiday', kind: 'family', targetAmountPence: 5000, parentContribution: { fixedPence: 6000 } }))
+      .rejects.toThrow(/cannot exceed the goal target/)
+  })
+
+  it('rejects percentage above the approved bound', async () => {
+    transactionWith({ 'users/parent-1': { familyId: 'family-1', role: 'parent', displayName: 'P' } })
+    await expect(createGoal('family-1', { title: 'Holiday', kind: 'family', targetAmountPence: 5000, parentContribution: { percent: 150 } }))
+      .rejects.toThrow(/cannot exceed/)
+  })
+
+  it('atomic rollback: a throwing transaction writes nothing (no idempotency record)', async () => {
+    transactionWith({ 'users/parent-1': { familyId: 'family-1', role: 'parent', displayName: 'P' } })
+    // Force the transaction callback to throw after reads, simulating a failure.
+    firestore.runTransaction.mockImplementationOnce(async (_db: unknown, callback: any) => {
+      const tx = {
+        get: vi.fn(async (ref: { path: string }) => snapshot(docStore[ref.path])),
+        set: vi.fn(() => { throw new Error('simulated write failure') }),
+        update: vi.fn(() => { throw new Error('simulated write failure') }),
+        delete: vi.fn(),
+      }
+      try { await callback(tx) } catch (e) { throw e }
+    })
+    await expect(createGoal('family-1', { title: 'Holiday', kind: 'family', targetAmountPence: 5000, parentContribution: { fixedPence: 1000 } }))
+      .rejects.toThrow(/simulated write failure/)
+    // No idempotency record should be present (transaction aborted).
+    expect(docStore['families/family-1/idempotency/goalContribution:generated-1:create:generated-1']).toBeUndefined()
+  })
+
+  it('idempotent replay with same key + requestHash writes nothing new', async () => {
+    const idemPath = 'families/family-1/idempotency/goalContribution:generated-1:create:r1'
+    const docs: Record<string, any> = {
+      'users/parent-1': { familyId: 'family-1', role: 'parent', displayName: 'P' },
+      [idemPath]: { operationType: 'goal_create', actorId: 'parent-1', requestHash: requestHashOf({ title: 'Holiday', kind: 'family', targetAmountPence: 5000, childId: undefined, parentPence: 1000 }), status: 'completed', resultRef: 'generated-1' },
+    }
+    const tx = transactionWith(docs)
+    await createGoal('family-1', { title: 'Holiday', kind: 'family', targetAmountPence: 5000, parentContribution: { fixedPence: 1000 }, clientReqId: 'r1' })
+    // No new goal doc / contribution writes (idempotent replay returns early).
+    expect(tx.set.mock.calls.filter((c: any[]) => (c[0]?.path ?? '').includes('/savings_goals/')).length).toBe(0)
+  })
+
+  it('parent wallet remains unchanged (no wallet write on goal creation)', async () => {
+    const tx = transactionWith({
+      'users/parent-1': { familyId: 'family-1', role: 'parent', displayName: 'P' },
+      'families/family-1/wallets/parent-1': { balance: 99999 },
+    })
+    await createGoal('family-1', { title: 'Holiday', kind: 'family', targetAmountPence: 5000, parentContribution: { fixedPence: 1000 } })
+    // No wallet update for the parent wallet.
+    const walletWrites = tx.update.mock.calls.filter((c: any[]) => (c[0]?.path ?? '').includes('/wallets/'))
+    expect(walletWrites.length).toBe(0)
+    const walletSets = tx.set.mock.calls.filter((c: any[]) => (c[0]?.path ?? '').includes('/wallets/'))
+    expect(walletSets.length).toBe(0)
   })
 })
 
