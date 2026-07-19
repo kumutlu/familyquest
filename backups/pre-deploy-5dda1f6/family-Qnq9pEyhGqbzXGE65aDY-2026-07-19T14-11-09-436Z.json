@@ -1,0 +1,82 @@
+{
+  "schemaVersion": 1,
+  "valueEncoding": "firestore-tagged-v1",
+  "exportedAt": "2026-07-19T14:11:09.436Z",
+  "projectId": "familyquest-beta-402cb",
+  "family": {
+    "id": "Qnq9pEyhGqbzXGE65aDY",
+    "path": "families/Qnq9pEyhGqbzXGE65aDY",
+    "data": {
+      "name": "Test Family",
+      "inviteCode": "JK589J",
+      "createdAt": {
+        "__firestoreType": "timestamp",
+        "seconds": 1783787538,
+        "nanoseconds": 652000000
+      }
+    }
+  },
+  "members": [
+    {
+      "id": "97Jxj62Ar4WeFiChRcHM",
+      "path": "users/97Jxj62Ar4WeFiChRcHM",
+      "data": {
+        "uid": "97Jxj62Ar4WeFiChRcHM",
+        "familyId": "Qnq9pEyhGqbzXGE65aDY",
+        "role": "child",
+        "displayName": "Managed Child",
+        "isManaged": true,
+        "avatarUrl": "https://api.dicebear.com/7.x/bottts/svg?seed=Managed Child",
+        "walletBalance": 0,
+        "rewardPoints": 0,
+        "lifetimeXP": 0,
+        "currentStreak": 0,
+        "longestStreak": 0,
+        "lastActiveDate": {
+          "__firestoreType": "timestamp",
+          "seconds": 1783787538,
+          "nanoseconds": 812000000
+        }
+      }
+    },
+    {
+      "id": "9nSnTXzKiScrshNUm3UsXfQmA2t1",
+      "path": "users/9nSnTXzKiScrshNUm3UsXfQmA2t1",
+      "data": {
+        "uid": "9nSnTXzKiScrshNUm3UsXfQmA2t1",
+        "displayName": "Test Owner",
+        "avatarUrl": "https://api.dicebear.com/7.x/avataaars/svg?seed=Test Owner",
+        "walletBalance": 0,
+        "rewardPoints": 0,
+        "lifetimeXP": 0,
+        "currentStreak": 0,
+        "longestStreak": 0,
+        "familyId": "Qnq9pEyhGqbzXGE65aDY",
+        "role": "owner",
+        "lastActiveDate": {
+          "__firestoreType": "timestamp",
+          "seconds": 1783787538,
+          "nanoseconds": 652000000
+        }
+      }
+    }
+  ],
+  "subcollections": {
+    "wallets": [
+      {
+        "id": "97Jxj62Ar4WeFiChRcHM",
+        "path": "families/Qnq9pEyhGqbzXGE65aDY/wallets/97Jxj62Ar4WeFiChRcHM",
+        "exists": true,
+        "data": {
+          "balance": 0,
+          "migratedFromLegacy": true,
+          "createdAt": {
+            "__firestoreType": "timestamp",
+            "seconds": 1784058585,
+            "nanoseconds": 534000000
+          }
+        }
+      }
+    ]
+  }
+}

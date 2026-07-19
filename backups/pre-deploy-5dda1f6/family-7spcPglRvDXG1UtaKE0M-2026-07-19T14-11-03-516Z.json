@@ -1,0 +1,21 @@
+{
+  "schemaVersion": 1,
+  "valueEncoding": "firestore-tagged-v1",
+  "exportedAt": "2026-07-19T14:11:03.516Z",
+  "projectId": "familyquest-beta-402cb",
+  "family": {
+    "id": "7spcPglRvDXG1UtaKE0M",
+    "path": "families/7spcPglRvDXG1UtaKE0M",
+    "data": {
+      "name": "Blackiron",
+      "inviteCode": "V16GGZ",
+      "createdAt": {
+        "__firestoreType": "timestamp",
+        "seconds": 1784219962,
+        "nanoseconds": 429000000
+      }
+    }
+  },
+  "members": [],
+  "subcollections": {}
+}

@@ -1,0 +1,306 @@
+{
+  "schemaVersion": 1,
+  "valueEncoding": "firestore-tagged-v1",
+  "exportedAt": "2026-07-19T14:11:17.398Z",
+  "projectId": "familyquest-beta-402cb",
+  "family": {
+    "id": "izrLLHmyfzPmnH064Ltq",
+    "path": "families/izrLLHmyfzPmnH064Ltq",
+    "data": {
+      "name": "Test Family",
+      "inviteCode": "60LP2C",
+      "createdAt": {
+        "__firestoreType": "timestamp",
+        "seconds": 1783775128,
+        "nanoseconds": 20000000
+      }
+    }
+  },
+  "members": [
+    {
+      "id": "HVxYm8PQAAaBwlx8uNllaV6Lzc52",
+      "path": "users/HVxYm8PQAAaBwlx8uNllaV6Lzc52",
+      "data": {
+        "uid": "HVxYm8PQAAaBwlx8uNllaV6Lzc52",
+        "displayName": "Child 2",
+        "rewardPoints": 0,
+        "lifetimeXP": 0,
+        "currentStreak": 0,
+        "longestStreak": 0,
+        "familyId": "izrLLHmyfzPmnH064Ltq",
+        "role": "child",
+        "avatarUrl": "https://api.dicebear.com/7.x/bottts/svg?seed=Child 2",
+        "lastActiveDate": {
+          "__firestoreType": "timestamp",
+          "seconds": 1783775130,
+          "nanoseconds": 923000000
+        },
+        "walletBalance": 100
+      }
+    },
+    {
+      "id": "MtKRMC7bXwQXDKcOMwDeccMzYcZ2",
+      "path": "users/MtKRMC7bXwQXDKcOMwDeccMzYcZ2",
+      "data": {
+        "uid": "MtKRMC7bXwQXDKcOMwDeccMzYcZ2",
+        "displayName": "Child 1",
+        "familyId": "izrLLHmyfzPmnH064Ltq",
+        "role": "child",
+        "avatarUrl": "https://api.dicebear.com/7.x/bottts/svg?seed=Child 1",
+        "currentStreak": 1,
+        "lastActiveDate": {
+          "__firestoreType": "timestamp",
+          "seconds": 1783775132,
+          "nanoseconds": 29000000
+        },
+        "longestStreak": 1,
+        "lifetimeXP": 50,
+        "rewardPoints": 50,
+        "walletBalance": 200
+      }
+    },
+    {
+      "id": "StVYD05IMAfY0UIGXap55b1CNu73",
+      "path": "users/StVYD05IMAfY0UIGXap55b1CNu73",
+      "data": {
+        "uid": "StVYD05IMAfY0UIGXap55b1CNu73",
+        "role": "parent",
+        "displayName": "Parent User",
+        "avatarUrl": "https://api.dicebear.com/7.x/avataaars/svg?seed=Parent User",
+        "walletBalance": 0,
+        "rewardPoints": 0,
+        "lifetimeXP": 0,
+        "currentStreak": 0,
+        "longestStreak": 0,
+        "familyId": "izrLLHmyfzPmnH064Ltq",
+        "lastActiveDate": {
+          "__firestoreType": "timestamp",
+          "seconds": 1783775129,
+          "nanoseconds": 97000000
+        }
+      }
+    },
+    {
+      "id": "Zs1qpeoKh4Rh0akqdwxAxe6JLxq2",
+      "path": "users/Zs1qpeoKh4Rh0akqdwxAxe6JLxq2",
+      "data": {
+        "uid": "Zs1qpeoKh4Rh0akqdwxAxe6JLxq2",
+        "displayName": "Owner User",
+        "avatarUrl": "https://api.dicebear.com/7.x/avataaars/svg?seed=Owner User",
+        "walletBalance": 0,
+        "rewardPoints": 0,
+        "lifetimeXP": 0,
+        "currentStreak": 0,
+        "longestStreak": 0,
+        "familyId": "izrLLHmyfzPmnH064Ltq",
+        "role": "owner",
+        "lastActiveDate": {
+          "__firestoreType": "timestamp",
+          "seconds": 1783775128,
+          "nanoseconds": 20000000
+        }
+      }
+    }
+  ],
+  "subcollections": {
+    "feed": [
+      {
+        "id": "A7WoIUi91AtD1uiUE5Fk",
+        "path": "families/izrLLHmyfzPmnH064Ltq/feed/A7WoIUi91AtD1uiUE5Fk",
+        "exists": true,
+        "data": {
+          "actorId": "MtKRMC7bXwQXDKcOMwDeccMzYcZ2",
+          "text": "Task approved: Clean Room (+50 pts) - \"Good job\"",
+          "timestamp": {
+            "__firestoreType": "timestamp",
+            "seconds": 1783775132,
+            "nanoseconds": 715000000
+          }
+        }
+      },
+      {
+        "id": "FhSixgll9ic2YU8NUlSX",
+        "path": "families/izrLLHmyfzPmnH064Ltq/feed/FhSixgll9ic2YU8NUlSX",
+        "exists": true,
+        "data": {
+          "actorId": "system",
+          "text": "Child 1 has joined the family as a child!",
+          "timestamp": {
+            "__firestoreType": "timestamp",
+            "seconds": 1783775130,
+            "nanoseconds": 863000000
+          }
+        }
+      },
+      {
+        "id": "hFJtCykXKAIHYvVDAO62",
+        "path": "families/izrLLHmyfzPmnH064Ltq/feed/hFJtCykXKAIHYvVDAO62",
+        "exists": true,
+        "data": {
+          "actorId": "system",
+          "text": "Parent User has joined the family as a parent!",
+          "timestamp": {
+            "__firestoreType": "timestamp",
+            "seconds": 1783775129,
+            "nanoseconds": 221000000
+          }
+        }
+      },
+      {
+        "id": "YlnYGO16aEZQQ6nPJ68d",
+        "path": "families/izrLLHmyfzPmnH064Ltq/feed/YlnYGO16aEZQQ6nPJ68d",
+        "exists": true,
+        "data": {
+          "actorId": "system",
+          "text": "Child 2 has joined the family as a child!",
+          "timestamp": {
+            "__firestoreType": "timestamp",
+            "seconds": 1783775130,
+            "nanoseconds": 965000000
+          }
+        }
+      },
+      {
+        "id": "Z0wFQvOsj4tP9BukCP4t",
+        "path": "families/izrLLHmyfzPmnH064Ltq/feed/Z0wFQvOsj4tP9BukCP4t",
+        "exists": true,
+        "data": {
+          "actorId": "system",
+          "text": "New task added: Clean Room",
+          "timestamp": {
+            "__firestoreType": "timestamp",
+            "seconds": 1783775131,
+            "nanoseconds": 514000000
+          }
+        }
+      }
+    ],
+    "task_completions": [
+      {
+        "id": "UHu2XGpywbk4uxTeCDaw",
+        "path": "families/izrLLHmyfzPmnH064Ltq/task_completions/UHu2XGpywbk4uxTeCDaw",
+        "exists": true,
+        "data": {
+          "taskId": "N84AuicUKH7kbUMS3qgp",
+          "assigneeId": "MtKRMC7bXwQXDKcOMwDeccMzYcZ2",
+          "completedAt": {
+            "__firestoreType": "timestamp",
+            "seconds": 1783775132,
+            "nanoseconds": 29000000
+          },
+          "parentComment": "Good job",
+          "approvedAt": {
+            "__firestoreType": "timestamp",
+            "seconds": 1783775132,
+            "nanoseconds": 715000000
+          },
+          "status": "approved"
+        }
+      }
+    ],
+    "tasks": [
+      {
+        "id": "N84AuicUKH7kbUMS3qgp",
+        "path": "families/izrLLHmyfzPmnH064Ltq/tasks/N84AuicUKH7kbUMS3qgp",
+        "exists": true,
+        "data": {
+          "title": "Clean Room",
+          "pointsReward": 50,
+          "icon": "Sparkles",
+          "color": "bg-blue-500",
+          "requiresApproval": true,
+          "isActive": true,
+          "createdAt": {
+            "__firestoreType": "timestamp",
+            "seconds": 1783775131,
+            "nanoseconds": 464000000
+          }
+        }
+      }
+    ],
+    "wallet_transactions": [
+      {
+        "id": "8Y7SBFefW7ftvDwsf8BM",
+        "path": "families/izrLLHmyfzPmnH064Ltq/wallet_transactions/8Y7SBFefW7ftvDwsf8BM",
+        "exists": true,
+        "data": {
+          "type": "transfer",
+          "childId": "HVxYm8PQAAaBwlx8uNllaV6Lzc52",
+          "fromChildId": "MtKRMC7bXwQXDKcOMwDeccMzYcZ2",
+          "amount": 100,
+          "note": "Shared gift",
+          "parentRef": "StVYD05IMAfY0UIGXap55b1CNu73",
+          "timestamp": {
+            "__firestoreType": "timestamp",
+            "seconds": 1783775133,
+            "nanoseconds": 382000000
+          }
+        }
+      },
+      {
+        "id": "BNgzjDcI87vjyO26Bixn",
+        "path": "families/izrLLHmyfzPmnH064Ltq/wallet_transactions/BNgzjDcI87vjyO26Bixn",
+        "exists": true,
+        "data": {
+          "type": "withdrawal",
+          "childId": "MtKRMC7bXwQXDKcOMwDeccMzYcZ2",
+          "amount": 200,
+          "note": "Toy purchase",
+          "parentRef": "StVYD05IMAfY0UIGXap55b1CNu73",
+          "timestamp": {
+            "__firestoreType": "timestamp",
+            "seconds": 1783775133,
+            "nanoseconds": 164000000
+          }
+        }
+      },
+      {
+        "id": "tZyw044whRl3hLfRQ0f2",
+        "path": "families/izrLLHmyfzPmnH064Ltq/wallet_transactions/tZyw044whRl3hLfRQ0f2",
+        "exists": true,
+        "data": {
+          "type": "deposit",
+          "childId": "MtKRMC7bXwQXDKcOMwDeccMzYcZ2",
+          "amount": 500,
+          "note": "Allowance",
+          "parentRef": "StVYD05IMAfY0UIGXap55b1CNu73",
+          "timestamp": {
+            "__firestoreType": "timestamp",
+            "seconds": 1783775132,
+            "nanoseconds": 930000000
+          }
+        }
+      }
+    ],
+    "wallets": [
+      {
+        "id": "HVxYm8PQAAaBwlx8uNllaV6Lzc52",
+        "path": "families/izrLLHmyfzPmnH064Ltq/wallets/HVxYm8PQAAaBwlx8uNllaV6Lzc52",
+        "exists": true,
+        "data": {
+          "balance": 100,
+          "migratedFromLegacy": true,
+          "createdAt": {
+            "__firestoreType": "timestamp",
+            "seconds": 1784058586,
+            "nanoseconds": 21000000
+          }
+        }
+      },
+      {
+        "id": "MtKRMC7bXwQXDKcOMwDeccMzYcZ2",
+        "path": "families/izrLLHmyfzPmnH064Ltq/wallets/MtKRMC7bXwQXDKcOMwDeccMzYcZ2",
+        "exists": true,
+        "data": {
+          "balance": 200,
+          "migratedFromLegacy": true,
+          "createdAt": {
+            "__firestoreType": "timestamp",
+            "seconds": 1784058586,
+            "nanoseconds": 131000000
+          }
+        }
+      }
+    ]
+  }
+}

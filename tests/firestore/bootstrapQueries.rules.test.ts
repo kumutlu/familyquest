@@ -39,13 +39,6 @@ beforeAll(async () => {
       port: 8080,
     },
   })
-
-  it('child only sees their own outgoing transfer requests, never a sibling’s', async () => {
-    const results = await executePlan(testEnv.authenticatedContext(childId).firestore(), childId, 'child');
-    expect(results.get('transferRequests')).toEqual(['own']);
-    expect(results.get('transferRequests')).not.toContain('sibling');
-  });
-
 })
 
 afterAll(async () => testEnv.cleanup())
@@ -117,6 +110,12 @@ function readEntry(entry: BootstrapQueryPlanEntry) {
 }
 
 describe('production bootstrap query plan against Firestore rules', () => {
+  it('child only sees their own outgoing transfer requests, never a sibling’s', async () => {
+    const results = await executePlan(testEnv.authenticatedContext(childId).firestore(), childId, 'child');
+    expect(results.get('transferRequests')).toEqual(['own']);
+    expect(results.get('transferRequests')).not.toContain('sibling');
+  });
+
   it.each([
     ['parent', parentId],
     ['owner', ownerId],

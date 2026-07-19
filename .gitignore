@@ -53,7 +53,9 @@ test-results/
 # Local environment files
 .env
 .env.local
-.env.production
+# NOTE: .env.production is intentionally tracked (committed) — it holds only
+# public Firebase Web SDK values and is required for deterministic production
+# builds. Do NOT add it back to the ignore list.
 
 # Temporary patches and backups
 *.patch

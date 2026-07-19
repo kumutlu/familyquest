@@ -1,0 +1,60 @@
+{
+  "schemaVersion": 1,
+  "valueEncoding": "firestore-tagged-v1",
+  "exportedAt": "2026-07-19T14:11:14.798Z",
+  "projectId": "familyquest-beta-402cb",
+  "family": {
+    "id": "dComLauq7vAVxLVp5pcJ",
+    "path": "families/dComLauq7vAVxLVp5pcJ",
+    "data": {
+      "name": "Test Family",
+      "inviteCode": "D8YYQN",
+      "createdAt": {
+        "__firestoreType": "timestamp",
+        "seconds": 1783775400,
+        "nanoseconds": 397000000
+      }
+    }
+  },
+  "members": [
+    {
+      "id": "kQnU4RcZj0MDrlgMW0lv902qria2",
+      "path": "users/kQnU4RcZj0MDrlgMW0lv902qria2",
+      "data": {
+        "uid": "kQnU4RcZj0MDrlgMW0lv902qria2",
+        "displayName": "Owner User",
+        "avatarUrl": "https://api.dicebear.com/7.x/avataaars/svg?seed=Owner User",
+        "walletBalance": 0,
+        "rewardPoints": 0,
+        "lifetimeXP": 0,
+        "currentStreak": 0,
+        "longestStreak": 0,
+        "familyId": "dComLauq7vAVxLVp5pcJ",
+        "role": "owner",
+        "lastActiveDate": {
+          "__firestoreType": "timestamp",
+          "seconds": 1783775400,
+          "nanoseconds": 397000000
+        }
+      }
+    }
+  ],
+  "subcollections": {
+    "feed": [
+      {
+        "id": "GgSIEHSAh1ngtv7vDQmA",
+        "path": "families/dComLauq7vAVxLVp5pcJ/feed/GgSIEHSAh1ngtv7vDQmA",
+        "exists": true,
+        "data": {
+          "actorId": "system",
+          "text": "Child User has joined the family as a child!",
+          "timestamp": {
+            "__firestoreType": "timestamp",
+            "seconds": 1783775401,
+            "nanoseconds": 551000000
+          }
+        }
+      }
+    ]
+  }
+}

@@ -9,6 +9,9 @@ import { RequestCard } from '../components/requests/RequestCard';
 import { useRequestDetail } from '../components/requests/RequestDetailContext';
 import { normalizeRequest, type RequestContext, type RequestCategory } from '../lib/requestModel';
 import { resolveFeedRequest } from '../lib/feedRequestResolver';
+import { WalletSummaryCard } from '../components/dashboard/WalletSummaryCard';
+import { GoalSummaryCard } from '../components/dashboard/GoalSummaryCard';
+import { PetBoxSummaryCard } from '../components/dashboard/PetBoxSummaryCard';
 
 export function Dashboard() {
   const {
@@ -128,6 +131,14 @@ export function Dashboard() {
           </div>
         </section>
       )}
+
+      <section aria-label="Quick summaries">
+        <div className="grid grid-cols-1 gap-4">
+          <WalletSummaryCard />
+          <GoalSummaryCard />
+          <PetBoxSummaryCard />
+        </div>
+      </section>
 
       <section>
         <h2 className="mb-4 flex items-center gap-2 text-lg font-bold text-gray-900">

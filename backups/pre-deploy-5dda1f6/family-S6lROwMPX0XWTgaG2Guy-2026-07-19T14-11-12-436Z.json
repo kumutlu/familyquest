@@ -1,0 +1,21 @@
+{
+  "schemaVersion": 1,
+  "valueEncoding": "firestore-tagged-v1",
+  "exportedAt": "2026-07-19T14:11:12.436Z",
+  "projectId": "familyquest-beta-402cb",
+  "family": {
+    "id": "S6lROwMPX0XWTgaG2Guy",
+    "path": "families/S6lROwMPX0XWTgaG2Guy",
+    "data": {
+      "name": "Umutlu",
+      "inviteCode": "SE06TU",
+      "createdAt": {
+        "__firestoreType": "timestamp",
+        "seconds": 1783772054,
+        "nanoseconds": 5000000
+      }
+    }
+  },
+  "members": [],
+  "subcollections": {}
+}

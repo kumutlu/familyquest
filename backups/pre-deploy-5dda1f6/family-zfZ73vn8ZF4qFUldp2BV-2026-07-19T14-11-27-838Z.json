@@ -1,0 +1,61 @@
+{
+  "schemaVersion": 1,
+  "valueEncoding": "firestore-tagged-v1",
+  "exportedAt": "2026-07-19T14:11:27.838Z",
+  "projectId": "familyquest-beta-402cb",
+  "family": {
+    "id": "zfZ73vn8ZF4qFUldp2BV",
+    "path": "families/zfZ73vn8ZF4qFUldp2BV",
+    "data": {
+      "name": "Test Family",
+      "inviteCode": "MJQE7W",
+      "createdAt": {
+        "__firestoreType": "timestamp",
+        "seconds": 1783777386,
+        "nanoseconds": 214000000
+      }
+    }
+  },
+  "members": [
+    {
+      "id": "oJRgNDoHrHhLN6AD661163QOHFt1",
+      "path": "users/oJRgNDoHrHhLN6AD661163QOHFt1",
+      "data": {
+        "uid": "oJRgNDoHrHhLN6AD661163QOHFt1",
+        "displayName": "Owner User",
+        "avatarUrl": "https://api.dicebear.com/7.x/avataaars/svg?seed=Owner User",
+        "walletBalance": 0,
+        "rewardPoints": 0,
+        "lifetimeXP": 0,
+        "currentStreak": 0,
+        "longestStreak": 0,
+        "familyId": "zfZ73vn8ZF4qFUldp2BV",
+        "role": "owner",
+        "lastActiveDate": {
+          "__firestoreType": "timestamp",
+          "seconds": 1783777386,
+          "nanoseconds": 214000000
+        }
+      }
+    }
+  ],
+  "subcollections": {
+    "join_requests": [
+      {
+        "id": "O9ZVFcI7JoQAyUm91rdblXiOpey1",
+        "path": "families/zfZ73vn8ZF4qFUldp2BV/join_requests/O9ZVFcI7JoQAyUm91rdblXiOpey1",
+        "exists": true,
+        "data": {
+          "uid": "O9ZVFcI7JoQAyUm91rdblXiOpey1",
+          "displayName": "Joiner User",
+          "status": "pending",
+          "createdAt": {
+            "__firestoreType": "timestamp",
+            "seconds": 1783777387,
+            "nanoseconds": 767000000
+          }
+        }
+      }
+    ]
+  }
+}

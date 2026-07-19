@@ -1,0 +1,43 @@
+{
+  "schemaVersion": 1,
+  "valueEncoding": "firestore-tagged-v1",
+  "exportedAt": "2026-07-19T14:11:26.691Z",
+  "projectId": "familyquest-beta-402cb",
+  "family": {
+    "id": "xxnldFIveiGLSOUpAREk",
+    "path": "families/xxnldFIveiGLSOUpAREk",
+    "data": {
+      "name": "Prod Family",
+      "inviteCode": "E81AZ5",
+      "createdAt": {
+        "__firestoreType": "timestamp",
+        "seconds": 1783789370,
+        "nanoseconds": 169000000
+      }
+    }
+  },
+  "members": [
+    {
+      "id": "kpVRG6nMsTbO3TLjGZ4cFZieKT12",
+      "path": "users/kpVRG6nMsTbO3TLjGZ4cFZieKT12",
+      "data": {
+        "uid": "kpVRG6nMsTbO3TLjGZ4cFZieKT12",
+        "displayName": "Prod Owner",
+        "avatarUrl": "https://api.dicebear.com/7.x/avataaars/svg?seed=Prod Owner",
+        "walletBalance": 0,
+        "rewardPoints": 0,
+        "lifetimeXP": 0,
+        "currentStreak": 0,
+        "longestStreak": 0,
+        "familyId": "xxnldFIveiGLSOUpAREk",
+        "role": "owner",
+        "lastActiveDate": {
+          "__firestoreType": "timestamp",
+          "seconds": 1783789370,
+          "nanoseconds": 169000000
+        }
+      }
+    }
+  ],
+  "subcollections": {}
+}

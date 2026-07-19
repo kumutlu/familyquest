@@ -1,0 +1,43 @@
+{
+  "schemaVersion": 1,
+  "valueEncoding": "firestore-tagged-v1",
+  "exportedAt": "2026-07-19T14:11:16.239Z",
+  "projectId": "familyquest-beta-402cb",
+  "family": {
+    "id": "hkNdKdMqSb2ahiXYgBTL",
+    "path": "families/hkNdKdMqSb2ahiXYgBTL",
+    "data": {
+      "name": "Muhammed Ali Umutlu",
+      "inviteCode": "GB5B37",
+      "createdAt": {
+        "__firestoreType": "timestamp",
+        "seconds": 1783772069,
+        "nanoseconds": 657000000
+      }
+    }
+  },
+  "members": [
+    {
+      "id": "kgz5vqls8IbRwBakvAyE1jxq5BV2",
+      "path": "users/kgz5vqls8IbRwBakvAyE1jxq5BV2",
+      "data": {
+        "uid": "kgz5vqls8IbRwBakvAyE1jxq5BV2",
+        "familyId": "hkNdKdMqSb2ahiXYgBTL",
+        "displayName": "Mnalium ",
+        "avatarUrl": "https://api.dicebear.com/7.x/avataaars/svg?seed=Mnalium ",
+        "walletBalance": 0,
+        "rewardPoints": 0,
+        "lifetimeXP": 0,
+        "currentStreak": 0,
+        "longestStreak": 0,
+        "lastActiveDate": {
+          "__firestoreType": "timestamp",
+          "seconds": 1783772069,
+          "nanoseconds": 657000000
+        },
+        "role": "owner"
+      }
+    }
+  ],
+  "subcollections": {}
+}
