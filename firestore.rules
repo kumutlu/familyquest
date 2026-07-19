@@ -190,21 +190,39 @@ service cloud.firestore {
       let data = request.resource.data;
       let oldData = resource.data;
       let diff = data.diff(oldData).affectedKeys();
-
-      // Lean, read-free validator (regression fix for the 1000-expression limit).
-      // The penalty ledger's existence, amount, child and timestamp are verified by
-      // isValidFinancialPenalty on the wallet_transactions create in the SAME atomic
-      // batch: if that create fails, the whole batch (including this wallet update)
-      // is rejected, so a parent cannot forge a balance decrease without a valid,
-      // family-scoped financial_penalty ledger. Here we only confirm the shape
-      // (parent, lastPenaltyTxId present, balance-only diff) and that the balance
-      // actually decreases — no getAfter/exists, keeping the 8-chain wallet
-      // update under Firestore's 1000-expression budget.
+      // SECURITY BOUNDARY (penalty wallet deduction): Firestore Rules evaluate each
+      // document write independently. The behaviour_event / wallet_transactions
+      // ledger rules do NOT secure this wallet update — a direct client write that
+      // only satisfies the shape (parent + lastPenaltyTxId present + balance
+      // decrease) was previously ALLOWED, letting a parent forge an arbitrary
+      // balance decrease with a fake lastPenaltyTxId. We therefore deterministically
+      // verify the linked penalty accounting record HERE, at the trust boundary,
+      // using a single getAfter() on the deterministically-addressed ledger doc
+      // (lastPenaltyTxId == ledger document ID). The ledger must exist, be a
+      // financial_penalty, belong to the same family, target the same child, be
+      // created by the acting parent, and its amount must exactly equal the wallet
+      // delta. We do NOT rely on another document's allow rule as proof. Kept lean
+      // (one getAfter + equality checks) to stay under Firestore's 1000-expression
+      // budget.
+      let txId = data.get('lastPenaltyTxId', 'null');
+      let txPath = /databases/$(database)/documents/families/$(familyId)/wallet_transactions/$(txId);
+      let tx = getAfter(txPath);
+      let delta = oldData.balance - data.balance;
       return isParent(familyId)
         && 'lastPenaltyTxId' in data
         && diff.hasOnly(['balance', 'lastPenaltyTxId'])
         && data.balance is int
-        && (oldData.balance - data.balance) > 0;
+        && delta > 0
+        && tx != null
+        && tx.data.type == 'financial_penalty'
+        && tx.data.familyId == familyId
+        && tx.data.childId == childId
+        && tx.data.createdBy == request.auth.uid
+        && tx.data.amount == delta
+        && tx.data.amount > 0
+        && tx.data.amount is int
+        && tx.data.createdAt == request.time
+        && !exists(/databases/$(database)/documents/families/$(familyId)/wallet_transactions/$(txId));
     }
 
     function isValidFundDonationDeduction(familyId, childId) {

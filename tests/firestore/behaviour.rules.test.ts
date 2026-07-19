@@ -339,6 +339,111 @@ describe('wallet ledger and direct balance writes', () => {
     await assertFails(deleteDoc(doc(user(OWNER_ID), `families/${FAMILY_ID}/wallet_transactions/immutable`)));
   });
 
+  // ---------------------------------------------------------------------------
+  // DIRECT-CLIENT PENALTY WALLET EXPLOIT TESTS
+  // These do NOT call addBehaviourEvent and do NOT rely on the behaviour_event or
+  // wallet_transactions allow rules as proof. They exercise the wallet update
+  // trust boundary (isValidBehaviourPenaltyDeduction) in isolation, exactly as a
+  // malicious authenticated parent would: a bare updateDoc on the child wallet.
+  // ---------------------------------------------------------------------------
+
+  // Seed a child wallet with a known balance so a direct balance decrease is
+  // well-defined. Returns nothing; the wallet doc id is CHILD_ID.
+  const seedWallet = async (balance: number) => {
+    await testEnv.withSecurityRulesDisabled(async (context) => {
+      await setDoc(doc(context.firestore(), `families/${FAMILY_ID}/wallets`, CHILD_ID), { balance });
+    });
+  };
+
+  // Seed a financial_penalty ledger with explicit overrides (used by the
+  // positive/allowed case and the mismatch-denied cases).
+  const seedPenaltyLedger = async (txId: string, overrides: Record<string, unknown> = {}) => {
+    await testEnv.withSecurityRulesDisabled(async (context) => {
+      await setDoc(doc(context.firestore(), `families/${FAMILY_ID}/wallet_transactions`, txId), validPenalty({
+        amount: 250, eventId: 'event-financial', reason: 'Damaged a book', ...overrides,
+      }));
+    });
+  };
+
+  test('EXPLOIT: direct parent wallet update with fake lastPenaltyTxId is DENIED', async () => {
+    await seedWallet(1000);
+    // No ledger exists at all; the parent forges an arbitrary lastPenaltyTxId.
+    await assertFails(updateDoc(doc(user(PARENT_ID), `families/${FAMILY_ID}/wallets`, CHILD_ID), {
+      balance: 750,
+      lastPenaltyTxId: 'fake-penalty-tx',
+    }));
+  });
+
+  test('direct balance decrease + fake lastPenaltyTxId, no ledger → denied', async () => {
+    await seedWallet(1000);
+    await assertFails(updateDoc(doc(user(PARENT_ID), `families/${FAMILY_ID}/wallets`, CHILD_ID), {
+      balance: 500,
+      lastPenaltyTxId: 'no-such-ledger',
+    }));
+  });
+
+  test('direct balance decrease + unrelated existing ledger → denied', async () => {
+    await seedWallet(1000);
+    // A legitimate, unrelated penalty ledger exists but is NOT referenced.
+    await seedPenaltyLedger('unrelated-penalty', { amount: 250 });
+    await assertFails(updateDoc(doc(user(PARENT_ID), `families/${FAMILY_ID}/wallets`, CHILD_ID), {
+      balance: 500,
+      lastPenaltyTxId: 'unrelated-penalty',
+    }));
+  });
+
+  test('direct balance decrease + ledger with mismatched amount → denied', async () => {
+    await seedWallet(1000);
+    // Ledger amount (250) does NOT equal the wallet delta (1000 - 800 = 200).
+    await seedPenaltyLedger('mismatch-amount', { amount: 250 });
+    await assertFails(updateDoc(doc(user(PARENT_ID), `families/${FAMILY_ID}/wallets`, CHILD_ID), {
+      balance: 800,
+      lastPenaltyTxId: 'mismatch-amount',
+    }));
+  });
+
+  test('direct balance decrease + ledger for another child → denied', async () => {
+    await seedWallet(1000);
+    // Ledger targets a different child.
+    await seedPenaltyLedger('other-child-penalty', { childId: 'child-other' });
+    await assertFails(updateDoc(doc(user(PARENT_ID), `families/${FAMILY_ID}/wallets`, CHILD_ID), {
+      balance: 750,
+      lastPenaltyTxId: 'other-child-penalty',
+    }));
+  });
+
+  test('direct balance decrease + ledger for another family → denied', async () => {
+    await seedWallet(1000);
+    // Ledger targets a different family.
+    await seedPenaltyLedger('other-family-penalty', { familyId: OTHER_FAMILY_ID });
+    await assertFails(updateDoc(doc(user(PARENT_ID), `families/${FAMILY_ID}/wallets`, CHILD_ID), {
+      balance: 750,
+      lastPenaltyTxId: 'other-family-penalty',
+    }));
+  });
+
+  test('valid atomic penalty event + matching ledger + wallet update → allowed', async () => {
+    // Seed the wallet so the delta is well-defined (1000 -> 750, delta 250).
+    await seedWallet(1000);
+    const db = user(PARENT_ID);
+    const batch = writeBatch(db);
+    // 1. behaviour_event (financial) — required by isValidFinancialPenalty's
+    //    existsAfter(eventPath) linkage.
+    batch.set(doc(db, `families/${FAMILY_ID}/behaviour_events/penalty-event-atomic`), validEvent({
+      type: 'financial', pointsDelta: 0, walletDelta: -250, reason: 'Damaged a book',
+    }));
+    // 2. wallet_transactions financial_penalty ledger (id == lastPenaltyTxId).
+    batch.set(doc(db, `families/${FAMILY_ID}/wallet_transactions/penalty-atomic`), validPenalty({
+      amount: 250, eventId: 'penalty-event-atomic', reason: 'Damaged a book',
+    }));
+    // 3. wallet update carrying the matching lastPenaltyTxId.
+    batch.update(doc(db, `families/${FAMILY_ID}/wallets`, CHILD_ID), {
+      balance: 750,
+      lastPenaltyTxId: 'penalty-atomic',
+    });
+    await assertSucceeds(batch.commit());
+  });
+
   test.each([
     ['deposit', { type: 'deposit', childId: CHILD_ID, amount: 500, note: 'Pocket money', parentRef: PARENT_ID, createdAt: serverTimestamp() }],
     ['withdrawal', { type: 'withdrawal', childId: CHILD_ID, amount: 200, note: 'Shop', parentRef: PARENT_ID, createdAt: serverTimestamp() }],
