@@ -58,7 +58,6 @@ vi.mock('firebase/auth', () => ({
 }))
 vi.mock('./firebase', () => ({ db: { name: 'db' }, auth: authState, googleProvider: {} }))
 
-import { writeBatch } from 'firebase/firestore'
 import {
   createGoal,
   contributeToGoal,
@@ -657,23 +656,41 @@ describe('Goals — BUG 1A/1B write payloads (regression)', () => {
     expect(goalSet[1].status).toBe('reached')
   })
 
-  it('BUG1B: createMatchProposal writes via a batch with serverTimestamp() and immutable fields', async () => {
+  it('BUG1B: createMatchProposal writes via a transaction with serverTimestamp() and immutable fields', async () => {
+    const tx = transactionWith({
+      'families/family-1/savings_goals/goal-1': { goalId: 'goal-1', title: 'Bike', kind: 'child', childId: 'child-1', targetAmountPence: 2000, currentAmountPence: 0, currency: 'GBP', status: 'active', version: 1 },
+    })
     await createMatchProposal('family-1', 'goal-1', 'c1', 100)
-    // The fix routes the proposal through writeBatch so serverTimestamp() resolves
-    // to request.time (satisfying the match_proposals create rule).
-    expect(writeBatch).toHaveBeenCalled()
-    const batch = (writeBatch as any).mock.results[0].value
-    const ops = (batch as any).__ops as { path: string; data: any }[]
-    expect(ops.length).toBe(1)
-    const [op] = ops
-    expect(op.path).toBe('families/family-1/savings_goals/goal-1/match_proposals/generated-1')
-    expect(op.data.proposalId).toBe('generated-1')
-    expect(op.data.goalId).toBe('goal-1')
-    expect(op.data.sourceContributionId).toBe('c1')
-    expect(op.data.proposedMatchAmountPence).toBe(100)
-    expect(op.data.status).toBe('proposed')
-    expect(op.data.createdBy).toBe('parent-1')
+    // The fix routes the proposal through runTransaction so serverTimestamp()
+    // resolves to request.time (satisfying the match_proposals create rule) and
+    // an idempotency doc guards against duplicate proposals on double-tap.
+    expect(firestore.runTransaction).toHaveBeenCalled()
+    const proposalSet = tx.set.mock.calls.find((c: any[]) => (c[0]?.path ?? '').includes('/match_proposals/'))
+    expect(proposalSet).toBeDefined()
+    const data = proposalSet![1]
+    expect(data.proposalId).toBe('generated-1')
+    expect(data.goalId).toBe('goal-1')
+    expect(data.sourceContributionId).toBe('c1')
+    expect(data.proposedMatchAmountPence).toBe(100)
+    expect(data.status).toBe('proposed')
+    expect(data.createdBy).toBe('parent-1')
     // serverTimestamp() sentinel is written (resolved to request.time by Firestore).
-    expect(op.data.createdAt).toEqual({ server: true })
+    expect(data.createdAt).toEqual({ server: true })
+    // Idempotency doc is written alongside the proposal.
+    const idemSet = tx.set.mock.calls.find((c: any[]) => (c[0]?.path ?? '').includes('/idempotency/'))
+    expect(idemSet).toBeDefined()
+    expect(idemSet![1].operationType).toBe('goal_match_proposal')
+  })
+
+  it('createMatchProposal is idempotent: double-tap with same clientReqId writes one proposal', async () => {
+    const idemPath = 'families/family-1/idempotency/goalMatch:c1:r1'
+    const tx = transactionWith({
+      'families/family-1/savings_goals/goal-1': { goalId: 'goal-1', title: 'Bike', kind: 'child', childId: 'child-1', targetAmountPence: 2000, currentAmountPence: 0, currency: 'GBP', status: 'active', version: 1 },
+      [idemPath]: { operationType: 'goal_match_proposal', actorId: 'parent-1', requestHash: requestHashOf({ goalId: 'goal-1', sourceContributionId: 'c1', proposedMatchAmountPence: 100 }), status: 'completed', resultRef: 'p1' },
+    })
+    await createMatchProposal('family-1', 'goal-1', 'c1', 100, 'r1')
+    // Replay must perform no new proposal write (idempotency short-circuits).
+    const proposalSets = tx.set.mock.calls.filter((c: any[]) => (c[0]?.path ?? '').includes('/match_proposals/'))
+    expect(proposalSets.length).toBe(0)
   })
 })

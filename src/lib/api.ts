@@ -2216,24 +2216,58 @@ export const createMatchProposal = async (
   goalId: string,
   sourceContributionId: string,
   proposedMatchAmountPence: number,
+  clientReqId?: string,
 ) => {
   const actorId = requireActorId();
+  if (!Number.isInteger(proposedMatchAmountPence) || proposedMatchAmountPence <= 0) {
+    throw new Error('Match amount must be a positive integer number of pence');
+  }
+  // Deterministic idempotency key so a double-tap (or a retried network call)
+  // cannot create a duplicate proposal. When the caller does not supply a
+  // clientReqId we derive one from the normalised request content so identical
+  // replays still collapse to the same proposal.
+  const key = goalMatchKey(sourceContributionId, clientReqId ?? `auto_${requestHashOf({ goalId, sourceContributionId, proposedMatchAmountPence })}`);
+  const requestHash = requestHashOf({ goalId, sourceContributionId, proposedMatchAmountPence });
+  const idemRef = idempotencyRef(familyId, key);
   const proposalRef = doc(collection(db, `families/${familyId}/${GOAL_COLLECTION}/${goalId}/match_proposals`));
-  // Wrap in a batch so serverTimestamp() resolves to request.time and satisfies
-  // the match_proposals create rule (data.createdAt == request.time). A plain
-  // setDoc leaves serverTimestamp() unequal to request.time in the emulator.
-  const batch = writeBatch(db);
-  batch.set(proposalRef, {
-    proposalId: proposalRef.id,
-    goalId,
-    sourceContributionId,
-    proposedMatchAmountPence,
-    status: 'proposed',
-    createdBy: actorId,
-    createdAt: serverTimestamp(),
-  } as MatchProposal);
-  await batch.commit();
-  return proposalRef;
+
+  let replayRef: any = null;
+  await runTransaction(db, async (transaction) => {
+    // ---- PHASE A: ALL READS ----
+    const [idemSnap, goalSnap] = await Promise.all([
+      transaction.get(idemRef),
+      transaction.get(goalRef(familyId, goalId)),
+    ]);
+    const prior = checkIdempotency(idemSnap, key, requestHash);
+    if (prior !== null) {
+      // Idempotent replay: the proposal already exists. Capture its reference
+      // and perform no new writes.
+      replayRef = doc(db, `families/${familyId}/${GOAL_COLLECTION}/${goalId}/match_proposals`, prior);
+      return;
+    }
+    if (!goalSnap.exists()) throw new Error('Goal not found');
+    const goal = normalizeGoalDoc(goalSnap.data());
+    assertActiveOrReached(goal.status);
+
+    // ---- PHASE B: WRITES (zero reads) ----
+    // serverTimestamp() resolves to request.time inside a transaction, which
+    // satisfies the match_proposals create rule (data.createdAt == request.time).
+    transaction.set(proposalRef, {
+      proposalId: proposalRef.id,
+      goalId,
+      sourceContributionId,
+      proposedMatchAmountPence,
+      status: 'proposed',
+      createdBy: actorId,
+      createdAt: serverTimestamp(),
+    } as MatchProposal);
+    writeIdempotency(transaction, familyId, key, 'goal_match_proposal', actorId, requestHash, proposalRef.id, {
+      goalId,
+      amountPence: proposedMatchAmountPence,
+    }, idemRef);
+  });
+
+  return replayRef ?? proposalRef;
 };
 
 export const approveMatchProposal = async (

@@ -43,7 +43,13 @@ export function MatchProposalModal({ goal, contributions, isOpen, onClose, onDon
     setSubmitting(true);
     setError('');
     try {
-      await createMatchProposal(familyData.id, g.goalId!, selected.contribId!, amountPence);
+      await createMatchProposal(
+        familyData.id,
+        g.goalId!,
+        selected.contribId!,
+        amountPence,
+        `${Date.now()}-${Math.random().toString(36).slice(2)}`,
+      );
       setSourceId('');
       setAmount('');
       onDone?.();
