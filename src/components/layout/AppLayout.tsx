@@ -1,5 +1,5 @@
 import { Link, Outlet, useLocation, Navigate } from 'react-router-dom';
-import { Home, Users, CheckSquare, Gift, Wallet, Target } from 'lucide-react';
+import { Home, Users, CheckSquare, Gift } from 'lucide-react';
 import { isParentRole } from '../../lib/roles';
 import { cn } from '../../lib/utils';
 import { useStore } from '../../store/useStore';
@@ -64,19 +64,21 @@ export function AppLayout() {
     return <div className="min-h-screen bg-gray-50 flex items-center justify-center animate-pulse">Loading Dashboard...</div>;
   }
 
+  // Phase 1 navigation simplification: reduce the bottom navigation from 7
+  // items to 4. The removed tabs (Goals, Pet Box, Wallet/Wallets) keep their
+  // routes working — they are reached via deep links, notifications, and
+  // in-app navigation — but are no longer top-level tabs.
   const baseNavItems = [
     { name: 'Home', path: '/', icon: Home },
     { name: 'Tasks', path: '/tasks', icon: CheckSquare },
     { name: 'Rewards', path: '/rewards', icon: Gift },
-    { name: 'Goals', path: '/goals', icon: Target },
-    { name: 'Pet Box', path: '/pet-box', icon: () => <span className="text-lg">🐾</span> },
   ];
 
   // Settings is no longer a top-level tab; it lives in the profile dropdown.
   // Family is moved to the end of the navigation for a cleaner layout.
   const navItems = isParentRole(currentUser?.role)
-    ? [...baseNavItems, { name: 'Wallets', path: '/wallets', icon: Wallet }, { name: 'Family', path: '/family', icon: Users }]
-    : [...baseNavItems, { name: 'Wallet', path: '/wallet', icon: Wallet }, { name: 'Family', path: '/family', icon: Users }];
+    ? [...baseNavItems, { name: 'Family', path: '/family', icon: Users }]
+    : [...baseNavItems, { name: 'Family', path: '/family', icon: Users }];
 
   return (
     <div className="min-h-screen bg-gray-50 flex flex-col font-sans">
