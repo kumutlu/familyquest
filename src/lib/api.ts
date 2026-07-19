@@ -1249,13 +1249,17 @@ function writeIdempotency(
   actorId: string,
   requestHash: string,
   resultRef: string,
+  extra?: { goalId?: string; amountPence?: number },
+  ref?: any,
 ) {
-  transaction.set(idempotencyRef(familyId, key), {
+  transaction.set(ref ?? idempotencyRef(familyId, key), {
     operationType,
     actorId,
     requestHash,
     status: 'completed',
     resultRef,
+    ...(extra?.goalId != null ? { goalId: extra.goalId } : {}),
+    ...(extra?.amountPence != null ? { amountPence: extra.amountPence } : {}),
     createdAt: serverTimestamp(),
     expiresAt: serverTimestamp(),
   });
@@ -1314,10 +1318,17 @@ export const createGoal = async (familyId: string, input: CreateGoalInput) => {
     assertParent(actorRole, familyId);
   }
 
-  // Idempotency: a parent-seeded goal creation is replayable. Children cannot
-  // supply a parent contribution, so the key is stable regardless.
-  const clientReqId = input.clientReqId ?? goalDocRef.id;
-  const key = goalContributionKey(goalDocRef.id, `create:${clientReqId}`);
+  // Idempotency: a parent-seeded goal creation is replayable. The create key is
+  // derived from the request CONTENT (not the auto-id goal doc), so a replay with
+  // the same inputs finds the existing idempotency doc and returns the original
+  // goal id without creating a duplicate. The idempotency doc lives at
+  // idempotency/goalCreate_<requestHash> (a direct document under the idempotency
+  // collection, matching the existing idempotency/<key> pattern). NOTE: Firestore
+  // Security Rules cannot evaluate getAfter()/existsAfter() inside a CREATE rule
+  // in the Firebase Emulator Suite, so the atomic parent-contribution proof is
+  // enforced end-to-end by this trusted transaction (goal doc + contribution +
+  // ledger + idempotency written atomically) and verified in
+  // goalReturn.integration.test.ts via a REAL runTransaction.
   const requestHash = requestHashOf({
     title: input.title,
     kind: input.kind,
@@ -1325,9 +1336,12 @@ export const createGoal = async (familyId: string, input: CreateGoalInput) => {
     childId: input.childId,
     parentPence,
   });
-  const idemRef = idempotencyRef(familyId, key);
-  const contribRef = doc(collection(db, `families/${familyId}/${GOAL_COLLECTION}/${goalDocRef.id}/contributions`));
-  const ledgerRef = doc(collection(db, `families/${familyId}/${GOAL_COLLECTION}/${goalDocRef.id}/goal_ledger`));
+  const key = `goalCreate_${requestHash}`;
+  const idemRef = doc(db, `families/${familyId}/idempotency/${key}`);
+  // Deterministic subdocument ids so the goal-create rule can prove the atomic
+  // initial parent-contribution leg + ledger exist (getAfter/existsAfter).
+  const contribRef = doc(db, `families/${familyId}/${GOAL_COLLECTION}/${goalDocRef.id}/contributions/initialParentContribution`);
+  const ledgerRef = doc(db, `families/${familyId}/${GOAL_COLLECTION}/${goalDocRef.id}/goal_ledger/initialParentLedger`);
 
   const now = serverTimestamp();
   const goal: Goal = {
@@ -1349,10 +1363,16 @@ export const createGoal = async (familyId: string, input: CreateGoalInput) => {
   // Atomic: goal doc + (optional) parent contribution ledger + goal_ledger +
   // idempotency are all written inside one transaction. No wallet is touched,
   // so a parent wallet is never debited.
+  let replayRef: any = null;
   await runTransaction(db, async (transaction) => {
     const idemSnap = await transaction.get(idemRef);
     const prior = checkIdempotency(idemSnap, key, requestHash);
-    if (prior !== null) return; // idempotent replay, no new writes
+    if (prior !== null) {
+      // Idempotent replay: the goal (and its atomic parent-contribution proof)
+      // already exist. Capture the original goal reference; perform no new writes.
+      replayRef = doc(db, `families/${familyId}/${GOAL_COLLECTION}/${prior}`);
+      return;
+    }
 
     transaction.set(goalDocRef, goal);
 
@@ -1379,10 +1399,13 @@ export const createGoal = async (familyId: string, input: CreateGoalInput) => {
       });
     }
 
-    writeIdempotency(transaction, familyId, key, 'goal_create', actorId, requestHash, goalDocRef.id);
+    writeIdempotency(transaction, familyId, key, 'goal_create', actorId, requestHash, goalDocRef.id, {
+      goalId: goalDocRef.id,
+      amountPence: parentPence,
+    }, idemRef);
   });
 
-  return goalDocRef;
+  return replayRef ?? goalDocRef;
 };
 
 // ---------------------------------------------------------------------------

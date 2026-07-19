@@ -17,6 +17,7 @@ export function Goals() {
   const [kind, setKind] = useState<GoalKind>('family');
   const [childId, setChildId] = useState('');
   const [target, setTarget] = useState('');
+  const [parentMode, setParentMode] = useState<'none' | 'fixed' | 'percent'>('none');
   const [parentFixed, setParentFixed] = useState('');
   const [parentPercent, setParentPercent] = useState('');
   const [error, setError] = useState('');
@@ -34,9 +35,19 @@ export function Goals() {
     setKind('family');
     setChildId('');
     setTarget('');
+    setParentMode('none');
     setParentFixed('');
     setParentPercent('');
     setError('');
+  };
+
+  // Switching the parent-contribution mode clears the INACTIVE value so the two
+  // modes stay mutually exclusive. Title, target, goal type, and child selection
+  // are intentionally left untouched.
+  const selectParentMode = (mode: 'none' | 'fixed' | 'percent') => {
+    setParentMode(mode);
+    if (mode !== 'fixed') setParentFixed('');
+    if (mode !== 'percent') setParentPercent('');
   };
 
   const handleCreate = async () => {
@@ -48,10 +59,13 @@ export function Goals() {
 
     const fixedPence = Math.round((parseFloat(parentFixed) || 0) * 100);
     const percent = parseFloat(parentPercent) || 0;
+    // Mutually exclusive mode: only the selected mode's value is submitted.
     const parentContribution: ParentContributionInput | undefined =
-      fixedPence > 0 || percent > 0
-        ? { fixedPence: fixedPence > 0 ? fixedPence : undefined, percent: percent > 0 ? percent : undefined }
-        : undefined;
+      parentMode === 'fixed' && fixedPence > 0
+        ? { mode: 'fixed', fixedPence }
+        : parentMode === 'percent' && percent > 0
+          ? { mode: 'percent', percent }
+          : undefined;
 
     setSubmitting(true);
     setError('');
@@ -165,9 +179,32 @@ export function Goals() {
           <div className="rounded-xl border-2 border-dashed border-gray-200 p-4 space-y-3">
             <div>
               <p className="text-sm font-semibold text-gray-700">Parent contribution <span className="font-normal text-gray-400">(optional, external money)</span></p>
-              <p className="text-xs text-gray-400 mt-0.5">Seed the goal with parent money. This is never taken from a wallet.</p>
+              <p className="text-xs text-gray-400 mt-0.5">Seed the goal with parent money. This is never taken from a wallet. Choose one mode.</p>
             </div>
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-3 gap-2">
+              <button
+                type="button"
+                onClick={() => selectParentMode('none')}
+                className={`py-2 rounded-xl border-2 font-semibold transition-colors text-sm ${parentMode === 'none' ? 'border-primary-500 bg-primary-50 text-primary-700' : 'border-gray-200 text-gray-600'}`}
+              >
+                None
+              </button>
+              <button
+                type="button"
+                onClick={() => selectParentMode('fixed')}
+                className={`py-2 rounded-xl border-2 font-semibold transition-colors text-sm ${parentMode === 'fixed' ? 'border-primary-500 bg-primary-50 text-primary-700' : 'border-gray-200 text-gray-600'}`}
+              >
+                Fixed amount
+              </button>
+              <button
+                type="button"
+                onClick={() => selectParentMode('percent')}
+                className={`py-2 rounded-xl border-2 font-semibold transition-colors text-sm ${parentMode === 'percent' ? 'border-primary-500 bg-primary-50 text-primary-700' : 'border-gray-200 text-gray-600'}`}
+              >
+                Percentage
+              </button>
+            </div>
+            {parentMode === 'fixed' && (
               <div>
                 <label className="block text-xs font-medium text-gray-500 mb-1">Fixed amount</label>
                 <div className="relative">
@@ -184,6 +221,8 @@ export function Goals() {
                   />
                 </div>
               </div>
+            )}
+            {parentMode === 'percent' && (
               <div>
                 <label className="block text-xs font-medium text-gray-500 mb-1">Percentage of target</label>
                 <div className="relative">
@@ -201,7 +240,7 @@ export function Goals() {
                   <span className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 font-bold">%</span>
                 </div>
               </div>
-            </div>
+            )}
           </div>
 
           {error && <p className="text-sm text-danger-600 font-medium">{error}</p>}

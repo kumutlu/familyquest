@@ -195,10 +195,11 @@ describe('Goals — createGoal', () => {
   })
 
   it('idempotent replay with same key + requestHash writes nothing new', async () => {
-    const idemPath = 'families/family-1/idempotency/goalContribution:generated-1:create:r1'
+    const hash = requestHashOf({ title: 'Holiday', kind: 'family', targetAmountPence: 5000, childId: undefined, parentPence: 1000 })
+    const idemPath = `families/family-1/idempotency/goalCreate_${hash}`
     const docs: Record<string, any> = {
       'users/parent-1': { familyId: 'family-1', role: 'parent', displayName: 'P' },
-      [idemPath]: { operationType: 'goal_create', actorId: 'parent-1', requestHash: requestHashOf({ title: 'Holiday', kind: 'family', targetAmountPence: 5000, childId: undefined, parentPence: 1000 }), status: 'completed', resultRef: 'generated-1' },
+      [idemPath]: { operationType: 'goal_create', actorId: 'parent-1', requestHash: hash, status: 'completed', resultRef: 'generated-1' },
     }
     const tx = transactionWith(docs)
     await createGoal('family-1', { title: 'Holiday', kind: 'family', targetAmountPence: 5000, parentContribution: { fixedPence: 1000 }, clientReqId: 'r1' })

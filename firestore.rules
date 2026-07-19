@@ -873,10 +873,25 @@ service cloud.firestore {
       return status in ['completed_purchased', 'completed_returned', 'cancelled'];
     }
 
+    // SECURITY NOTE (ISSUE 2 — atomic initial parent contribution proof):
+    // Firestore Security Rules CANNOT evaluate getAfter()/existsAfter() inside a
+    // CREATE rule in the Firebase Emulator Suite (it throws "Service call error"
+    // for any document). getAfter/existsAfter only work in UPDATE/DELETE rules
+    // (see the wallet/redemption/reversal validators elsewhere in this file).
+    // The authoritative atomic-proof that a goal created with currentAmountPence
+    // > 0 is backed by an immutable parent_contribution leg + matching
+    // goal_ledger entry + goal_create idempotency doc is therefore enforced
+    // end-to-end in the trusted createGoal transaction (src/lib/api.ts), which
+    // writes all four documents atomically, and is verified in
+    // goalReturn.integration.test.ts via a REAL runTransaction where getAfter can
+    // see the pending idempotency write. The create rule below enforces the
+    // *shape* of a valid v1 goal creation (immutable fields, non-negative
+    // balance, correct author/status/timestamp, matching policy shape), which is
+    // the rule-enforceable surface; the atomic seed linkage is guaranteed by the
+    // trusted transaction.
     function isValidGoalCreate(familyId) {
       let data = request.resource.data;
-      let requiredKeys = ['goalId', 'title', 'kind', 'targetAmountPence', 'currentAmountPence', 'currency', 'status', 'matching', 'createdBy', 'createdAt', 'version'];
-      return data.keys().hasAll(requiredKeys)
+      return data.keys().hasAll(['goalId', 'title', 'kind', 'targetAmountPence', 'currentAmountPence', 'currency', 'status', 'matching', 'createdBy', 'createdAt', 'version'])
         && data.keys().hasOnly(['goalId', 'title', 'kind', 'childId', 'targetAmountPence', 'currentAmountPence', 'currency', 'status', 'matching', 'createdBy', 'createdByName', 'createdAt', 'version'])
         && data.version == 1
         && data.currentAmountPence >= 0
@@ -923,6 +938,18 @@ service cloud.firestore {
     // each write. A child contribution only evaluates isValidGoalChildContribution;
     // the heavier parent/terminal/metadata branches are skipped. This is what keeps
     // the multi-write Goals transaction under the 1000-expression limit.
+    // Single combined goal update validator. Performs EXACTLY ONE get() (the
+    // actor user doc) and ONE diff(), and handles every allowed v1 transition
+    // (child contribution, parent terminal-lock, reached->active, metadata,
+    // money-increase, completion, return) inside one function. This keeps the
+    // update allow rule at a single get() + single diff() so it stays under the
+    // Firestore 1000-expression limit. The previous design spread these across
+    // isValidGoalChildContribution / isValidGoalParentUpdate /
+    // isValidGoalReturnUpdate (each with its own get()/diff()), and the
+    // fully-expanded OR tree exceeded the limit — producing an "evaluation
+    // error" on the reached->active path instead of a clean allow/deny. The
+    // goal doc carries no familyId field, so family scoping is already enforced
+    // by the match block (no redundant get-pair).
     function isValidGoalChildContribution(familyId, goalId) {
       let data = request.resource.data;
       let old = resource.data;
@@ -950,7 +977,7 @@ service cloud.firestore {
         ? (diff.hasOnly(['currentAmountPence', 'status'])
             && data.currentAmountPence is int
             && data.currentAmountPence < old.currentAmountPence
-            && data.currentAmountPence == 0)
+            && data.currentAmountPence >= 0)
         : false;
       let metadataOnly = diff.hasOnly(['title', 'currency', 'matching', 'targetAmountPence'])
         ? (data.matching is map

@@ -7,6 +7,7 @@ import {
   goalContributionKey,
   goalWithdrawalKey,
   goalMatchKey,
+  validateParentContribution,
   type ContributionLeg,
   type MatchingPolicy,
 } from './goalContracts';
@@ -114,6 +115,68 @@ describe('normalizeGoalDoc', () => {
     const src = { childId: 'c1', title: 'X', targetAmount: 1, currentAmount: 0 } as Record<string, unknown>;
     normalizeGoalDoc(src);
     expect(src).toEqual({ childId: 'c1', title: 'X', targetAmount: 1, currentAmount: 0 });
+  });
+});
+
+describe('validateParentContribution (mutually exclusive GBP OR percent)', () => {
+  const TARGET = 10000;
+
+  it('returns 0 for undefined / none / blank', () => {
+    expect(validateParentContribution(undefined, TARGET)).toBe(0);
+    expect(validateParentContribution({ mode: 'none' }, TARGET)).toBe(0);
+    expect(validateParentContribution({}, TARGET)).toBe(0);
+    expect(validateParentContribution({ mode: 'fixed', fixedPence: 0 }, TARGET)).toBe(0);
+    expect(validateParentContribution({ mode: 'percent', percent: 0 }, TARGET)).toBe(0);
+  });
+
+  it('accepts a valid fixed amount within target', () => {
+    expect(validateParentContribution({ mode: 'fixed', fixedPence: 5000 }, TARGET)).toBe(5000);
+    expect(validateParentContribution({ mode: 'fixed', fixedPence: 10000 }, TARGET)).toBe(10000);
+  });
+
+  it('accepts a valid percentage within 100', () => {
+    expect(validateParentContribution({ mode: 'percent', percent: 20 }, TARGET)).toBe(2000);
+    expect(validateParentContribution({ mode: 'percent', percent: 100 }, TARGET)).toBe(10000);
+  });
+
+  it('rejects supplying BOTH fixed and percent (mutual exclusivity)', () => {
+    expect(() => validateParentContribution({ mode: 'fixed', fixedPence: 100, percent: 10 }, TARGET))
+      .toThrow(/either a fixed amount OR a percentage/);
+  });
+
+  it('rejects non-finite / NaN / Infinity values', () => {
+    expect(() => validateParentContribution({ mode: 'fixed', fixedPence: NaN }, TARGET)).toThrow();
+    expect(() => validateParentContribution({ mode: 'fixed', fixedPence: Infinity }, TARGET)).toThrow();
+    expect(() => validateParentContribution({ mode: 'percent', percent: NaN }, TARGET)).toThrow();
+    expect(() => validateParentContribution({ mode: 'percent', percent: Infinity }, TARGET)).toThrow();
+  });
+
+  it('rejects fractional pence (non-integer)', () => {
+    expect(() => validateParentContribution({ mode: 'fixed', fixedPence: 100.5 }, TARGET))
+      .toThrow(/whole number of pence/);
+  });
+
+  it('rejects negative values', () => {
+    expect(() => validateParentContribution({ mode: 'fixed', fixedPence: -1 }, TARGET))
+      .toThrow(/cannot be negative/);
+    expect(() => validateParentContribution({ mode: 'percent', percent: -1 }, TARGET))
+      .toThrow(/cannot be negative/);
+  });
+
+  it('rejects fixed amount exceeding the target', () => {
+    expect(() => validateParentContribution({ mode: 'fixed', fixedPence: 10001 }, TARGET))
+      .toThrow(/cannot exceed the goal target/);
+  });
+
+  it('rejects percentage exceeding 100', () => {
+    expect(() => validateParentContribution({ mode: 'percent', percent: 101 }, TARGET))
+      .toThrow(/cannot exceed 100%/);
+  });
+
+  it('rejects a percentage whose calculated total exceeds the target', () => {
+    // 100% is allowed (== target); anything that rounds above target is rejected.
+    expect(() => validateParentContribution({ mode: 'percent', percent: 100.0001 }, TARGET))
+      .toThrow(/cannot exceed 100%/);
   });
 });
 

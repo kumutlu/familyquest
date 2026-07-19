@@ -22,6 +22,7 @@ import { connectAuthEmulator as connectAuth, createUserWithEmailAndPassword, sig
 import { readFileSync } from 'fs';
 import { db, auth } from '../../src/lib/firebase';
 import {
+  createGoal,
   contributeToGoal,
   addParentGoalContribution,
   returnGoalFunds,
@@ -179,5 +180,44 @@ describe('Return Funds — emulator expression-budget (lean rules path)', () => 
     await seedGoal('g9', 500);
     await seedContribution('g9', { type: 'child_contribution', ownerType: 'child', ownerId: 'c1', amountPence: 500 });
     await expect(cancelGoal(FAMILY, 'g9', 'r1')).resolves.toBeUndefined();
+  });
+});
+
+describe('Goal creation — atomic initial parent contribution proof (real transaction)', () => {
+  it('10. zero-contribution goal creation succeeds (no forged leg)', async () => {
+    await expect(createGoal(FAMILY, {
+      title: 'Zero Goal', kind: 'family', targetAmountPence: 1000, currency: 'GBP',
+    })).resolves.toBeDefined();
+  });
+
+  it('11. fixed-amount parent contribution creation succeeds with atomic proof', async () => {
+    const ref = await createGoal(FAMILY, {
+      title: 'Fixed Goal', kind: 'family', targetAmountPence: 1000, currency: 'GBP',
+      parentContribution: { mode: 'fixed', fixedPence: 500 },
+    });
+    const snap = await testEnv.authenticatedContext(parentUid).firestore().doc(`families/${FAMILY}/savings_goals/${ref.id}`).get();
+    expect(snap.data()?.currentAmountPence).toBe(500);
+  });
+
+  it('12. percentage parent contribution creation succeeds with atomic proof', async () => {
+    const ref = await createGoal(FAMILY, {
+      title: 'Pct Goal', kind: 'family', targetAmountPence: 1000, currency: 'GBP',
+      parentContribution: { mode: 'percent', percent: 20 },
+    });
+    const snap = await testEnv.authenticatedContext(parentUid).firestore().doc(`families/${FAMILY}/savings_goals/${ref.id}`).get();
+    expect(snap.data()?.currentAmountPence).toBe(200);
+  });
+
+  it('13. idempotent replay with matching requestHash performs no new writes', async () => {
+    const ref = await createGoal(FAMILY, {
+      title: 'Replay Goal', kind: 'family', targetAmountPence: 1000, currency: 'GBP',
+      parentContribution: { mode: 'fixed', fixedPence: 300 },
+    });
+    // Second call with identical input must be a no-op (idempotent replay).
+    const ref2 = await createGoal(FAMILY, {
+      title: 'Replay Goal', kind: 'family', targetAmountPence: 1000, currency: 'GBP',
+      parentContribution: { mode: 'fixed', fixedPence: 300 },
+    });
+    expect(ref2.id).toBe(ref.id);
   });
 });

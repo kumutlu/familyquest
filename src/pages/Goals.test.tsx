@@ -82,13 +82,14 @@ describe('Goals list page', () => {
     fireEvent.click(screen.getByText('New Goal'));
     fireEvent.change(screen.getByPlaceholderText('e.g. Family Holiday'), { target: { value: 'Trip' } });
     fireEvent.change(screen.getAllByPlaceholderText('0.00')[0], { target: { value: '50' } });
-    // Parent contribution fixed amount input (placeholder "0.00" appears twice: target + fixed).
+    // Select the mutually-exclusive "Fixed amount" mode, then fill the fixed input.
+    fireEvent.click(screen.getByText('Fixed amount'));
     const fixedInputs = screen.getAllByPlaceholderText('0.00');
     fireEvent.change(fixedInputs[1], { target: { value: '10' } });
     fireEvent.click(screen.getByText('Create Goal'));
     expect(createGoal).toHaveBeenCalledWith('family-1', expect.objectContaining({
       title: 'Trip', kind: 'family', targetAmountPence: 5000,
-      parentContribution: { fixedPence: 1000 },
+      parentContribution: { mode: 'fixed', fixedPence: 1000 },
     }));
   });
 
@@ -97,12 +98,14 @@ describe('Goals list page', () => {
     fireEvent.click(screen.getByText('New Goal'));
     fireEvent.change(screen.getByPlaceholderText('e.g. Family Holiday'), { target: { value: 'Trip' } });
     fireEvent.change(screen.getAllByPlaceholderText('0.00')[0], { target: { value: '50' } });
+    // Select the mutually-exclusive "Percentage" mode, then fill the percent input.
+    fireEvent.click(screen.getByText('Percentage'));
     const percentInput = screen.getByPlaceholderText('0');
     fireEvent.change(percentInput, { target: { value: '20' } });
     fireEvent.click(screen.getByText('Create Goal'));
     expect(createGoal).toHaveBeenCalledWith('family-1', expect.objectContaining({
       title: 'Trip', kind: 'family', targetAmountPence: 5000,
-      parentContribution: { percent: 20 },
+      parentContribution: { mode: 'percent', percent: 20 },
     }));
   });
 
@@ -116,11 +119,29 @@ describe('Goals list page', () => {
     expect(call.parentContribution).toBeUndefined();
   });
 
+  it('switching parent mode clears the inactive value without resetting title/target', async () => {
+    render(<MemoryRouter><Goals /></MemoryRouter>);
+    fireEvent.click(screen.getByText('New Goal'));
+    fireEvent.change(screen.getByPlaceholderText('e.g. Family Holiday'), { target: { value: 'Trip' } });
+    fireEvent.change(screen.getAllByPlaceholderText('0.00')[0], { target: { value: '50' } });
+    // Pick fixed, enter a value.
+    fireEvent.click(screen.getByText('Fixed amount'));
+    const fixedInputs = screen.getAllByPlaceholderText('0.00');
+    fireEvent.change(fixedInputs[1], { target: { value: '10' } });
+    // Switch to percentage: the fixed input must be gone (cleared), title/target kept.
+    fireEvent.click(screen.getByText('Percentage'));
+    // Only the target input (placeholder "0.00") remains; the fixed input is removed.
+    expect(screen.getAllByPlaceholderText('0.00')).toHaveLength(1);
+    expect((screen.getByPlaceholderText('e.g. Family Holiday') as HTMLInputElement).value).toBe('Trip');
+    expect((screen.getAllByPlaceholderText('0.00')[0] as HTMLInputElement).value).toBe('50');
+  });
+
   it('preserves title/target/type/child when changing contribution controls (no reset)', async () => {
     render(<MemoryRouter><Goals /></MemoryRouter>);
     fireEvent.click(screen.getByText('New Goal'));
     fireEvent.change(screen.getByPlaceholderText('e.g. Family Holiday'), { target: { value: 'Trip' } });
     fireEvent.change(screen.getAllByPlaceholderText('0.00')[0], { target: { value: '50' } });
+    fireEvent.click(screen.getByText('Fixed amount'));
     const fixedInputs = screen.getAllByPlaceholderText('0.00');
     fireEvent.change(fixedInputs[1], { target: { value: '10' } });
     // Title and target must still hold their values after editing contribution.
@@ -135,6 +156,7 @@ describe('Goals list page', () => {
     fireEvent.change(titleInput, { target: { value: 'Trip' } });
     // Typing in the title must not remount/reset the form (focus + values preserved).
     expect(titleInput.value).toBe('Trip');
+    fireEvent.click(screen.getByText('Fixed amount'));
     const fixedInputs = screen.getAllByPlaceholderText('0.00');
     const fixedInput = fixedInputs[1] as HTMLInputElement;
     fireEvent.change(fixedInput, { target: { value: '10' } });

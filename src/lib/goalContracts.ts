@@ -11,7 +11,7 @@
  * Money is always integer minor units (pence). No floats anywhere.
  *
  * Ownership source of truth: the goal-specific immutable `contributions` ledger
- * (see design §2.2 / §7). `netChild` is computed from that ledger, never from
+ * (see design 2.2 / 7). `netChild` is computed from that ledger, never from
  * `wallet_transactions`.
  */
 
@@ -22,7 +22,7 @@
 export type GoalKind = 'family' | 'child';
 
 /**
- * Goal status state machine (design §3.9, correction 8):
+ * Goal status state machine (design 3.9, correction 8):
  *   active | reached | completed_purchased | completed_returned | cancelled
  * A withdrawal that drops the balance below target may transition
  * `reached` back to `active`.
@@ -44,63 +44,104 @@ export interface MatchingPolicy {
 }
 
 /**
- * Parent contribution at goal creation (design §2.2 / §7). External money only —
- * it is NEVER debited from a parent wallet. It is expressed as either a fixed
- * amount in pence and/or a percentage of the goal target. The two are additive
- * and both optional. This reuses the existing `parent_contribution` ledger leg
- * and `goal_ledger` entry types; no new accounting model is introduced.
+ * Parent contribution at goal creation (design 2.2 / 5.2). External money only —
+ * it is NEVER debited from a parent wallet. The authoritative product spec
+ * (5.2) models the parent seed as a single external `amountPence`; the UI
+ * exposes it as a MUTUALLY EXCLUSIVE choice between a fixed GBP amount and a
+ * percentage of the target. The two modes are never combined: a parent picks
+ * exactly one mode (or none). This is enforced both in the UI (mode selector)
+ * and here (validation rejects any attempt to supply both simultaneously).
  */
+export type ParentContributionMode = 'none' | 'fixed' | 'percent';
+
 export interface ParentContributionInput {
-  /** Fixed external amount in pence (optional). */
+  /** Which mode the parent chose. Drives mutual exclusivity. */
+  mode?: ParentContributionMode;
+  /** Fixed external amount in pence (only valid when mode === 'fixed'). */
   fixedPence?: number;
-  /** Percentage of the goal target (0–100, optional). */
+  /** Percentage of the goal target 0-100 (only valid when mode === 'percent'). */
   percent?: number;
 }
 
 /**
  * Upper bound for a parent contribution percentage. A parent may seed at most
- * 100% of the target via the percentage component (the fixed component is
- * separately bounded by the target unless product rules allow otherwise).
+ * 100% of the target via the percentage mode.
  */
 export const MAX_PARENT_CONTRIBUTION_PERCENT = 100;
 
 /**
- * Validate a parent contribution input against the existing approved bounds.
- * Returns the resolved total contribution in pence (fixed + percent of target).
- * Throws on any invalid value. Zero/blank/undefined means no contribution.
+ * Validate a parent contribution input.
  *
- * Rules:
- *  - no negative values (fixed or percent)
- *  - percent must be within (0, MAX_PARENT_CONTRIBUTION_PERCENT]
- *  - fixed amount cannot exceed the target (existing product rule: a parent
- *    seed must not overshoot the goal target on its own)
- *  - at least one positive component is required when a contribution is present
+ * UX contract (mutually exclusive GBP OR percent):
+ *  - `mode` selects exactly one of `fixed` | `percent` | `none`.
+ *  - Supplying BOTH `fixedPence` and `percent` (regardless of mode) is rejected.
+ *  - blank / zero / undefined / mode 'none' means NO parent contribution (0).
+ *
+ * Hardening (reject before any Firestore write):
+ *  - NaN, Infinity, -Infinity, or any non-finite value is rejected.
+ *  - fractional pence (non-integer pence) is rejected.
+ *  - negative values are rejected.
+ *  - fixed amount must satisfy 0 <= fixed <= target.
+ *  - percentage must satisfy 0 <= percent <= 100.
+ *  - the calculated contribution must not exceed the target.
+ *
+ * Returns the resolved total contribution in pence (always an integer).
+ * Throws on any invalid value.
  */
 export function validateParentContribution(
   input: ParentContributionInput | undefined,
   targetAmountPence: number,
 ): number {
-  if (!input) return 0;
-  const fixed = input.fixedPence ?? 0;
-  const percent = input.percent ?? 0;
+  if (!input || input.mode === 'none' || (input.fixedPence == null && input.percent == null)) {
+    return 0;
+  }
 
-  if (fixed < 0) throw new Error('Parent contribution amount cannot be negative');
+  const hasFixed = input.fixedPence != null;
+  const hasPercent = input.percent != null;
+
+  // Mutual exclusivity: never both at once.
+  if (hasFixed && hasPercent) {
+    throw new Error('Parent contribution must be either a fixed amount OR a percentage, not both');
+  }
+
+  // Reject non-finite / malformed values up front.
+  const raw = hasFixed ? input.fixedPence! : input.percent!;
+  if (typeof raw !== 'number' || !Number.isFinite(raw) || Number.isNaN(raw)) {
+    throw new Error('Parent contribution must be a finite number');
+  }
+
+  if (hasFixed) {
+    const fixed = input.fixedPence!;
+    if (!Number.isInteger(fixed)) {
+      throw new Error('Parent contribution amount must be a whole number of pence');
+    }
+    if (fixed < 0) throw new Error('Parent contribution amount cannot be negative');
+    if (fixed > targetAmountPence) {
+      throw new Error('Parent contribution amount cannot exceed the goal target');
+    }
+    if (fixed === 0) return 0;
+    return fixed;
+  }
+
+  // percent mode
+  const percent = input.percent!;
+  if (!Number.isFinite(percent) || Number.isNaN(percent)) {
+    throw new Error('Parent contribution percentage must be a finite number');
+  }
   if (percent < 0) throw new Error('Parent contribution percentage cannot be negative');
   if (percent > MAX_PARENT_CONTRIBUTION_PERCENT) {
     throw new Error(`Parent contribution percentage cannot exceed ${MAX_PARENT_CONTRIBUTION_PERCENT}%`);
   }
-  if (fixed > targetAmountPence) {
-    throw new Error('Parent contribution amount cannot exceed the goal target');
-  }
-  if (fixed === 0 && percent === 0) return 0;
-  if (fixed < 0 || percent < 0) return 0; // unreachable, kept for clarity
-
+  if (percent === 0) return 0;
   const percentPence = Math.round((percent / 100) * targetAmountPence);
-  return fixed + percentPence;
+  if (percentPence > targetAmountPence) {
+    throw new Error('Parent contribution percentage cannot exceed the goal target');
+  }
+  return percentPence;
 }
 
 /**
- * Contribution ledger entry types (design §2.2, correction 4). These are the
+ * Contribution ledger entry types (design 2.2, correction 4). These are the
  * only recognised kinds; the UI breakdown and `netChild` derive from them.
  */
 export type ContributionType =
@@ -163,7 +204,7 @@ export interface GoalLedgerEntry {
 }
 
 /**
- * Explicit manual-match approval request (design §2.7, correction 6). The
+ * Explicit manual-match approval request (design 2.7, correction 6). The
  * `sourceContributionId` and `proposedMatchAmountPence` are immutable once
  * created; only `status` and reviewer fields change.
  */
@@ -199,15 +240,15 @@ export interface Goal {
 }
 
 // ---------------------------------------------------------------------------
-// Contribution ownership maths (design §7)
+// Contribution ownership maths (design 7)
 // ---------------------------------------------------------------------------
 
 /**
  * Remaining net child-owned contribution still in the goal and available to
  * withdraw/return. Computed from the goal-specific `contributions` ledger only.
  *
- * netChild = Σ child_contribution (owner) − Σ child_withdrawal (owner)
- *            − Σ completion_refund (owner)
+ * netChild = sum child_contribution (owner) - sum child_withdrawal (owner)
+ *            - sum completion_refund (owner)
  *
  * Parent and match contributions (parent_contribution, auto_match, manual_match)
  * and external_closure entries are excluded.
@@ -235,12 +276,12 @@ export function computeNetChild(contributions: ContributionLeg[], childId: strin
 }
 
 // ---------------------------------------------------------------------------
-// Matching maths (design §6)
+// Matching maths (design 6)
 // ---------------------------------------------------------------------------
 
 /**
  * Integer match amount for a child contribution under the policy.
- *   matchPence = min( floor(childAmount / perX) * matchY, capPence ?? ∞ )
+ *   matchPence = min( floor(childAmount / perX) * matchY, capPence ?? infinity )
  * `mode:'none'` and `mode:'manual'` return 0 here (manual is applied explicitly
  * via a proposal, never auto-computed at contribution time).
  */
@@ -254,7 +295,7 @@ export function computeMatchPence(childAmount: number, policy: MatchingPolicy): 
 }
 
 // ---------------------------------------------------------------------------
-// Legacy doc normalisation (design §13)
+// Legacy doc normalisation (design 13)
 // ---------------------------------------------------------------------------
 
 /**
@@ -302,7 +343,7 @@ export function normalizeGoalDoc(doc: Record<string, unknown>): Goal {
 }
 
 // ---------------------------------------------------------------------------
-// Idempotency (design §14, correction 7)
+// Idempotency (design 14, correction 7)
 // ---------------------------------------------------------------------------
 
 /**

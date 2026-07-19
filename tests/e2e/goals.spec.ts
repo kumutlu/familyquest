@@ -58,7 +58,9 @@ test.describe('Goals (Phase 3) UI', () => {
     await page.fill('input[placeholder="e.g. Family Holiday"]', 'Seeded Holiday');
     // Target amount (first 0.00 placeholder).
     await page.fill('div[role="dialog"] input[placeholder="0.00"]', '100');
-    // Parent contribution fixed amount (second 0.00 placeholder).
+    // Select the mutually-exclusive "Fixed amount" parent-contribution mode.
+    await page.click('div[role="dialog"] button:has-text("Fixed amount")');
+    // Parent contribution fixed amount (now the second 0.00 placeholder, revealed by mode selection).
     const fixed = page.locator('div[role="dialog"] input[placeholder="0.00"]').nth(1);
     await fixed.fill('30');
     await expect(fixed).toHaveValue('30');
