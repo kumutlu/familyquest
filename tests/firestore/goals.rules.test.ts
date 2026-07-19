@@ -380,6 +380,109 @@ describe('Goals — create', () => {
 });
 
 describe('Goals — direct balance / money writes denied', () => {
+  // BUG 1A REGRESSION: a seeded goal whose parent contribution meets/exceeds
+  // the target is legitimately 'reached' on creation. The create rule must allow
+  // status 'reached' (not just 'active') so the atomic seed proof path is not
+  // rejected with "Missing or insufficient permissions".
+  const seedLegs = async (goalId, amount, clientReqId) => {
+    await testEnv.withSecurityRulesDisabled(async (ctx) => {
+      const db = ctx.firestore();
+      await setDoc(doc(db, contribPath(goalId, 'initialParentContribution')), {
+        contribId: 'initialParentContribution', goalId, type: 'parent_contribution',
+        ownerType: 'parent', ownerId: 'parent1', amountPence: amount, matchPence: 0, status: 'applied',
+        createdBy: 'parent1', createdAt: serverTimestamp(),
+      });
+      await setDoc(doc(db, ledgerPath(goalId, 'initialParentLedger')), {
+        entryId: 'initialParentLedger', goalId, type: 'parent_contribution',
+        ownerId: 'parent1', amountPence: amount, createdAt: serverTimestamp(),
+      });
+      await setDoc(doc(db, idemPath(`goalCreate_${clientReqId}`)), {
+        operationType: 'goal_create', actorId: 'parent1', goalId, familyId: FAMILY,
+        amountPence: amount, clientReqId, status: 'completed',
+        createdAt: serverTimestamp(), expiresAt: serverTimestamp(),
+      });
+    });
+  };
+
+  it('BUG1A: seeded goal with seed == target (status reached) — ALLOWED', async () => {
+    await seedLegs('gReachedSeed', 1000, 'req-gReachedSeed');
+    const db = testEnv.authenticatedContext('parent1').firestore();
+    // target 1000, seed 1000 -> API sets status 'reached'. All legs present.
+    await assertSucceeds(setDoc(doc(db, goalPath('gReachedSeed')),
+      v1GoalShape({ goalId: 'gReachedSeed', kind: 'family', createdBy: 'parent1', currentAmountPence: 1000, status: 'reached', clientReqId: 'req-gReachedSeed' })));
+  });
+
+  it('BUG1A: seeded goal with seed > target (status reached) — ALLOWED', async () => {
+    await seedLegs('gOverSeed', 1500, 'req-gOverSeed');
+    const db = testEnv.authenticatedContext('parent1').firestore();
+    await assertSucceeds(setDoc(doc(db, goalPath('gOverSeed')),
+      v1GoalShape({ goalId: 'gOverSeed', kind: 'family', createdBy: 'parent1', currentAmountPence: 1500, status: 'reached', clientReqId: 'req-gOverSeed' })));
+  });
+
+  // === BUG 1A REGRESSION: a malformed / unlinked seed ledger must still be
+  // DENIED. Seed the contribution + idempotency but OMIT the goal_ledger leg. ===
+  it('BUG1A: non-zero seed missing the goal_ledger leg — DENIED', async () => {
+    await testEnv.withSecurityRulesDisabled(async (ctx) => {
+      const db = ctx.firestore();
+      await setDoc(doc(db, contribPath('gNoLedger', 'initialParentContribution')), {
+        contribId: 'initialParentContribution', goalId: 'gNoLedger', type: 'parent_contribution',
+        ownerType: 'parent', ownerId: 'parent1', amountPence: 500, matchPence: 0, status: 'applied',
+        createdBy: 'parent1', createdAt: serverTimestamp(),
+      });
+      await setDoc(doc(db, idemPath('goalCreate_req-gNoLedger')), {
+        operationType: 'goal_create', actorId: 'parent1', goalId: 'gNoLedger', familyId: FAMILY,
+        amountPence: 500, clientReqId: 'req-gNoLedger', status: 'completed',
+        createdAt: serverTimestamp(), expiresAt: serverTimestamp(),
+      });
+    });
+    const db = testEnv.authenticatedContext('parent1').firestore();
+    await assertFails(setDoc(doc(db, goalPath('gNoLedger')),
+      v1GoalShape({ goalId: 'gNoLedger', kind: 'family', createdBy: 'parent1', currentAmountPence: 500, clientReqId: 'req-gNoLedger' })));
+  });
+});
+
+describe('Goals — match proposal (BUG 1B regression)', () => {
+  // A valid match proposal is written by a parent in a batch (serverTimestamp
+  // resolves to request.time, satisfying the create rule). It must be ALLOWED.
+  it('BUG1B: valid parent match proposal — ALLOWED', async () => {
+    const db = testEnv.authenticatedContext('parent1').firestore();
+    const batch = db.batch();
+    batch.set(doc(db, proposalPath('goal1', 'propValid')), {
+      proposalId: 'propValid', goalId: 'goal1', sourceContributionId: 'c1',
+      proposedMatchAmountPence: 100, status: 'proposed', createdBy: 'parent1', createdAt: serverTimestamp(),
+    });
+    await assertSucceeds(batch.commit());
+  });
+
+  // A forged proposal (non-parent actor) must be DENIED.
+  it('BUG1B: non-parent cannot create a match proposal — DENIED', async () => {
+    const db = testEnv.authenticatedContext('child1').firestore();
+    await assertFails(setDoc(doc(db, proposalPath('goal1', 'propChild')), {
+      proposalId: 'propChild', goalId: 'goal1', sourceContributionId: 'c1',
+      proposedMatchAmountPence: 100, status: 'proposed', createdBy: 'child1', createdAt: serverTimestamp(),
+    }));
+  });
+
+  // A mismatched proposal (wrong goalId vs path) must be DENIED.
+  it('BUG1B: match proposal with goalId != path goalId — DENIED', async () => {
+    const db = testEnv.authenticatedContext('parent1').firestore();
+    await assertFails(setDoc(doc(db, proposalPath('goal1', 'propMismatch')), {
+      proposalId: 'propMismatch', goalId: 'goalFam', sourceContributionId: 'c1',
+      proposedMatchAmountPence: 100, status: 'proposed', createdBy: 'parent1', createdAt: serverTimestamp(),
+    }));
+  });
+
+  // A proposal with a negative match amount must be DENIED.
+  it('BUG1B: match proposal with negative amount — DENIED', async () => {
+    const db = testEnv.authenticatedContext('parent1').firestore();
+    await assertFails(setDoc(doc(db, proposalPath('goal1', 'propNeg')), {
+      proposalId: 'propNeg', goalId: 'goal1', sourceContributionId: 'c1',
+      proposedMatchAmountPence: -100, status: 'proposed', createdBy: 'parent1', createdAt: serverTimestamp(),
+    }));
+  });
+});
+
+describe('Goals — direct balance / money writes denied', () => {
   it('5. child direct wallet balance update denied', async () => {
     const db = testEnv.authenticatedContext('child1').firestore();
     await assertFails(updateDoc(doc(db, `families/${FAMILY}/wallets/child1`), { balance: 500 }));

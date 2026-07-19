@@ -2219,7 +2219,11 @@ export const createMatchProposal = async (
 ) => {
   const actorId = requireActorId();
   const proposalRef = doc(collection(db, `families/${familyId}/${GOAL_COLLECTION}/${goalId}/match_proposals`));
-  await setDoc(proposalRef, {
+  // Wrap in a batch so serverTimestamp() resolves to request.time and satisfies
+  // the match_proposals create rule (data.createdAt == request.time). A plain
+  // setDoc leaves serverTimestamp() unequal to request.time in the emulator.
+  const batch = writeBatch(db);
+  batch.set(proposalRef, {
     proposalId: proposalRef.id,
     goalId,
     sourceContributionId,
@@ -2228,6 +2232,7 @@ export const createMatchProposal = async (
     createdBy: actorId,
     createdAt: serverTimestamp(),
   } as MatchProposal);
+  await batch.commit();
   return proposalRef;
 };
 

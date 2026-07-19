@@ -1084,7 +1084,7 @@ service cloud.firestore {
         && data.keys().hasOnly(['goalId', 'title', 'kind', 'childId', 'targetAmountPence', 'currentAmountPence', 'currency', 'status', 'matching', 'createdBy', 'createdByName', 'createdAt', 'version', 'clientReqId'])
         && data.version == 1
         && data.currentAmountPence >= 0
-        && data.status == 'active'
+        && data.status in ['active', 'reached']
         && data.targetAmountPence is int && data.targetAmountPence > 0
         && data.currency is string
         && data.createdAt == request.time

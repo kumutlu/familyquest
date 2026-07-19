@@ -40,6 +40,13 @@ export function Modal({
 }: ModalProps) {
   const previouslyFocused = useRef<HTMLElement | null>(null);
   const titleId = title ? 'modal-title' : undefined;
+  // Keep the latest onClose without making it an effect dependency. Passing a
+  // new inline onClose every render (common in callers) previously re-ran this
+  // effect on EVERY render, and its cleanup called .focus() on a captured
+  // element -- stealing focus from the field being typed in (e.g. the Create
+  // Goal form's Fixed amount / Percentage inputs jumped back to Title).
+  const onCloseRef = useRef(onClose);
+  onCloseRef.current = onClose;
 
   useBodyScrollLock(isOpen && lockScroll);
 
@@ -47,15 +54,17 @@ export function Modal({
     if (!isOpen) return;
     previouslyFocused.current = document.activeElement as HTMLElement | null;
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') onClose();
+      if (e.key === 'Escape') onCloseRef.current();
     };
     document.addEventListener('keydown', onKey);
     return () => {
       document.removeEventListener('keydown', onKey);
-      // Return focus to the trigger for accessibility.
+      // Return focus to the trigger for accessibility, but ONLY when the modal
+      // is actually closing (isOpen transitioned to false) -- never on every
+      // re-render, which would yank focus away from an open form.
       previouslyFocused.current?.focus?.();
     };
-  }, [isOpen, onClose]);
+  }, [isOpen]);
 
   if (!isOpen) return null;
 

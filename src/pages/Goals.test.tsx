@@ -165,3 +165,49 @@ describe('Goals list page', () => {
     expect(titleInput.value).toBe('Trip');
   });
 });
+
+describe('Goals — BUG 2 focus regression (Create Goal)', () => {
+  it('typing into Fixed amount keeps focus on that input across keystrokes', async () => {
+    render(<MemoryRouter><Goals /></MemoryRouter>);
+    fireEvent.click(screen.getByText('New Goal'));
+    fireEvent.change(screen.getByPlaceholderText('e.g. Family Holiday'), { target: { value: 'Trip' } });
+    fireEvent.click(screen.getByText('Fixed amount'));
+    const fixedInput = screen.getAllByPlaceholderText('0.00')[1] as HTMLInputElement;
+    // Establish focus on the field (as a real user click/typing would).
+    fixedInput.focus();
+    // Simulate typing "12345" one character at a time.
+    for (const ch of '12345') {
+      fireEvent.change(fixedInput, { target: { value: fixedInput.value + ch } });
+      // The SAME DOM element must remain focused (no remount / focus jump to Title).
+      // If the input were remounted on each keystroke, activeElement would fall back
+      // to <body> and this assertion would fail.
+      expect(document.activeElement).toBe(fixedInput);
+    }
+    expect(fixedInput.value).toBe('12345');
+    // Title must not have been disturbed by a focus jump.
+    expect((screen.getByPlaceholderText('e.g. Family Holiday') as HTMLInputElement).value).toBe('Trip');
+  });
+
+  it('typing into Percentage keeps focus on that input across keystrokes', async () => {
+    render(<MemoryRouter><Goals /></MemoryRouter>);
+    fireEvent.click(screen.getByText('New Goal'));
+    fireEvent.change(screen.getByPlaceholderText('e.g. Family Holiday'), { target: { value: 'Trip' } });
+    fireEvent.click(screen.getByText('Percentage'));
+    const percentInput = screen.getByPlaceholderText('0') as HTMLInputElement;
+    percentInput.focus();
+    for (const ch of '20') {
+      fireEvent.change(percentInput, { target: { value: percentInput.value + ch } });
+      expect(document.activeElement).toBe(percentInput);
+    }
+    expect(percentInput.value).toBe('20');
+    expect((screen.getByPlaceholderText('e.g. Family Holiday') as HTMLInputElement).value).toBe('Trip');
+  });
+
+  it('does NOT auto-focus the Title input after the modal opens', async () => {
+    render(<MemoryRouter><Goals /></MemoryRouter>);
+    fireEvent.click(screen.getByText('New Goal'));
+    const titleInput = screen.getByPlaceholderText('e.g. Family Holiday') as HTMLInputElement;
+    // The modal opening must not steal focus onto the Title input.
+    expect(document.activeElement).not.toBe(titleInput);
+  });
+});

@@ -40,13 +40,25 @@ vi.mock('firebase/firestore', () => ({
   getDoc: vi.fn(async (ref: { path: string }) => ({ exists: () => docStore[ref.path] !== undefined, data: () => docStore[ref.path] })),
   deleteDoc: vi.fn(),
   updateDoc: vi.fn(),
-  writeBatch: vi.fn(),
+  writeBatch: vi.fn(() => {
+    const ops: { path: string; data: any }[] = [];
+    const batch = {
+      set: vi.fn((ref: any, data: any) => { ops.push({ path: ref?.path, data }); return batch; }),
+      update: vi.fn(() => batch),
+      delete: vi.fn(() => batch),
+      commit: vi.fn(async () => { (batch as any).__ops = ops; }),
+      __ops: ops,
+    };
+    return batch;
+  }),
+
 }))
 vi.mock('firebase/auth', () => ({
   createUserWithEmailAndPassword: vi.fn(), signInWithEmailAndPassword: vi.fn(), signInWithPopup: vi.fn(), signOut: vi.fn(),
 }))
 vi.mock('./firebase', () => ({ db: { name: 'db' }, auth: authState, googleProvider: {} }))
 
+import { writeBatch } from 'firebase/firestore'
 import {
   createGoal,
   contributeToGoal,
@@ -56,6 +68,7 @@ import {
   returnGoalFunds,
   approveMatchProposal,
   rejectMatchProposal,
+  createMatchProposal,
 } from './api'
 
 function snapshot(data?: Record<string, any>) {
@@ -615,5 +628,52 @@ describe('Goals — atomic idempotency', () => {
       .rejects.toThrow(/not in active\/reached/i)
     expect(tx.update).not.toHaveBeenCalled()
     expect(tx.set).not.toHaveBeenCalled()
+  })
+})
+
+describe('Goals — BUG 1A/1B write payloads (regression)', () => {
+  beforeEach(() => { vi.clearAllMocks(); firestore.reset(); authState.currentUser = { uid: 'parent-1' } })
+
+  it('BUG1A: seeded goal where parent contribution == target is written with status "reached"', async () => {
+    const tx = transactionWith({ 'users/parent-1': { familyId: 'family-1', role: 'parent', displayName: 'P' } })
+    // target 1000, fixed parent contribution 1000 -> seed meets target.
+    await createGoal('family-1', { title: 'Holiday', kind: 'family', targetAmountPence: 1000, parentContribution: { fixedPence: 1000 } })
+    const goalSet = tx.set.mock.calls.find((c: any[]) => (c[0]?.path ?? '').endsWith('/savings_goals/generated-1'))
+    expect(goalSet).toBeTruthy()
+    expect(goalSet[1].currentAmountPence).toBe(1000)
+    // The exact condition that previously failed the rules check: status 'reached'.
+    expect(goalSet[1].status).toBe('reached')
+    // All seed legs present (contribution + ledger + idempotency).
+    expect(setCallsWhere(tx, (d: any) => d.type === 'parent_contribution').length).toBe(1)
+    expect(ledgerCallsWhere(tx, (d: any) => d.type === 'parent_contribution').length).toBe(1)
+  })
+
+  it('BUG1A: seeded goal where parent contribution == target via percentage is written with status "reached"', async () => {
+    const tx = transactionWith({ 'users/parent-1': { familyId: 'family-1', role: 'parent', displayName: 'P' } })
+    // 100% of a 1000p target = 1000p seed, meeting the target exactly.
+    await createGoal('family-1', { title: 'Holiday', kind: 'family', targetAmountPence: 1000, parentContribution: { percent: 100 } })
+    const goalSet = tx.set.mock.calls.find((c: any[]) => (c[0]?.path ?? '').endsWith('/savings_goals/generated-1'))
+    expect(goalSet[1].currentAmountPence).toBe(1000)
+    expect(goalSet[1].status).toBe('reached')
+  })
+
+  it('BUG1B: createMatchProposal writes via a batch with serverTimestamp() and immutable fields', async () => {
+    await createMatchProposal('family-1', 'goal-1', 'c1', 100)
+    // The fix routes the proposal through writeBatch so serverTimestamp() resolves
+    // to request.time (satisfying the match_proposals create rule).
+    expect(writeBatch).toHaveBeenCalled()
+    const batch = (writeBatch as any).mock.results[0].value
+    const ops = (batch as any).__ops as { path: string; data: any }[]
+    expect(ops.length).toBe(1)
+    const [op] = ops
+    expect(op.path).toBe('families/family-1/savings_goals/goal-1/match_proposals/generated-1')
+    expect(op.data.proposalId).toBe('generated-1')
+    expect(op.data.goalId).toBe('goal-1')
+    expect(op.data.sourceContributionId).toBe('c1')
+    expect(op.data.proposedMatchAmountPence).toBe(100)
+    expect(op.data.status).toBe('proposed')
+    expect(op.data.createdBy).toBe('parent-1')
+    // serverTimestamp() sentinel is written (resolved to request.time by Firestore).
+    expect(op.data.createdAt).toEqual({ server: true })
   })
 })
