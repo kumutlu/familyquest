@@ -233,6 +233,11 @@ export interface Goal {
   createdBy?: string;
   createdByName?: string;
   createdAt?: unknown;
+  /** Client-supplied idempotency request id, stored on the goal doc so the
+   *  CREATE rule can derive the deterministic idempotency document path and
+   *  verify the atomic seed proof (fix(goals): enforce seeded goal creation at
+   *  trust boundary). */
+  clientReqId?: string;
   completedAt?: unknown;
   completedBy?: string;
   completedMode?: 'purchased' | 'returned' | 'cancelled';

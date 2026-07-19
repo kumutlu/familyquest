@@ -1249,7 +1249,7 @@ function writeIdempotency(
   actorId: string,
   requestHash: string,
   resultRef: string,
-  extra?: { goalId?: string; amountPence?: number },
+  extra?: { goalId?: string; amountPence?: number; clientReqId?: string },
   ref?: any,
 ) {
   transaction.set(ref ?? idempotencyRef(familyId, key), {
@@ -1260,6 +1260,7 @@ function writeIdempotency(
     resultRef,
     ...(extra?.goalId != null ? { goalId: extra.goalId } : {}),
     ...(extra?.amountPence != null ? { amountPence: extra.amountPence } : {}),
+    ...(extra?.clientReqId != null ? { clientReqId: extra.clientReqId } : {}),
     createdAt: serverTimestamp(),
     expiresAt: serverTimestamp(),
   });
@@ -1318,17 +1319,27 @@ export const createGoal = async (familyId: string, input: CreateGoalInput) => {
     assertParent(actorRole, familyId);
   }
 
-  // Idempotency: a parent-seeded goal creation is replayable. The create key is
-  // derived from the request CONTENT (not the auto-id goal doc), so a replay with
-  // the same inputs finds the existing idempotency doc and returns the original
-  // goal id without creating a duplicate. The idempotency doc lives at
-  // idempotency/goalCreate_<requestHash> (a direct document under the idempotency
-  // collection, matching the existing idempotency/<key> pattern). NOTE: Firestore
-  // Security Rules cannot evaluate getAfter()/existsAfter() inside a CREATE rule
-  // in the Firebase Emulator Suite, so the atomic parent-contribution proof is
-  // enforced end-to-end by this trusted transaction (goal doc + contribution +
-  // ledger + idempotency written atomically) and verified in
-  // goalReturn.integration.test.ts via a REAL runTransaction.
+  // Idempotency / trust-boundary design (fix(goals): enforce seeded goal creation
+  // at trust boundary). The goal CREATE rule in firestore.rules now enforces the
+  // atomic seed linkage at the RULES layer using getAfter()/existsAfter() on
+  // deterministically-addressable sibling documents. To make that possible, every
+  // document in the atomic create is addressed by an ID DERIVABLE from
+  // request.resource.data (which the rule can read):
+  //   - goal doc id            == goalId field (already in request.resource.data)
+  //   - contribution leg       == contributions/initialParentContribution (constant)
+  //   - ledger entry           == goal_ledger/initialParentLedger (constant)
+  //   - idempotency doc        == idempotency/goalCreate_<clientReqId>
+  //     where clientReqId is a field stored on the goal doc itself.
+  // The rule therefore proves, for any goal created with currentAmountPence > 0,
+  // that the matching parent_contribution leg + goal_ledger entry + goal_create
+  // idempotency doc were written in the SAME batch with the exact same
+  // familyId/goalId/actorId/clientReqId/amount. A direct client write that
+  // forges a non-zero balance without those legs is denied at the boundary.
+  // When the caller does not supply a clientReqId, derive a deterministic one
+  // from the normalised request content (requestHash) so idempotent replay with
+  // identical inputs still finds the existing idempotency doc. This keeps replay
+  // content-based (the original behaviour) while still exposing a stable,
+  // rule-derivable idempotency path for the atomic seed proof.
   const requestHash = requestHashOf({
     title: input.title,
     kind: input.kind,
@@ -1336,7 +1347,13 @@ export const createGoal = async (familyId: string, input: CreateGoalInput) => {
     childId: input.childId,
     parentPence,
   });
-  const key = `goalCreate_${requestHash}`;
+  // When the caller does not supply a clientReqId, derive a deterministic one
+  // from the normalised request content (requestHash) so idempotent replay with
+  // identical inputs still finds the existing idempotency doc. This keeps replay
+  // content-based (the original behaviour) while still exposing a stable,
+  // rule-derivable idempotency path for the atomic seed proof.
+  const clientReqId = input.clientReqId ?? `auto_${requestHash}`;
+  const key = `goalCreate_${clientReqId}`;
   const idemRef = doc(db, `families/${familyId}/idempotency/${key}`);
   // Deterministic subdocument ids so the goal-create rule can prove the atomic
   // initial parent-contribution leg + ledger exist (getAfter/existsAfter).
@@ -1358,6 +1375,9 @@ export const createGoal = async (familyId: string, input: CreateGoalInput) => {
     ...(actorSnap.exists() ? { createdByName: actorSnap.data().displayName as string } : {}),
     createdAt: now,
     version: 1,
+    // clientReqId is stored on the goal doc so the CREATE rule can derive the
+    // deterministic idempotency document path and verify the atomic seed proof.
+    clientReqId,
   };
 
   // Atomic: goal doc + (optional) parent contribution ledger + goal_ledger +
@@ -1402,6 +1422,7 @@ export const createGoal = async (familyId: string, input: CreateGoalInput) => {
     writeIdempotency(transaction, familyId, key, 'goal_create', actorId, requestHash, goalDocRef.id, {
       goalId: goalDocRef.id,
       amountPence: parentPence,
+      clientReqId,
     }, idemRef);
   });
 

@@ -873,26 +873,35 @@ service cloud.firestore {
       return status in ['completed_purchased', 'completed_returned', 'cancelled'];
     }
 
-    // SECURITY NOTE (ISSUE 2 — atomic initial parent contribution proof):
-    // Firestore Security Rules CANNOT evaluate getAfter()/existsAfter() inside a
-    // CREATE rule in the Firebase Emulator Suite (it throws "Service call error"
-    // for any document). getAfter/existsAfter only work in UPDATE/DELETE rules
-    // (see the wallet/redemption/reversal validators elsewhere in this file).
-    // The authoritative atomic-proof that a goal created with currentAmountPence
-    // > 0 is backed by an immutable parent_contribution leg + matching
-    // goal_ledger entry + goal_create idempotency doc is therefore enforced
-    // end-to-end in the trusted createGoal transaction (src/lib/api.ts), which
-    // writes all four documents atomically, and is verified in
-    // goalReturn.integration.test.ts via a REAL runTransaction where getAfter can
-    // see the pending idempotency write. The create rule below enforces the
-    // *shape* of a valid v1 goal creation (immutable fields, non-negative
-    // balance, correct author/status/timestamp, matching policy shape), which is
-    // the rule-enforceable surface; the atomic seed linkage is guaranteed by the
-    // trusted transaction.
+    // SECURITY BOUNDARY (atomic initial parent contribution proof — fix(goals)):
+    // A goal created with currentAmountPence > 0 MUST be backed by an immutable
+    // parent_contribution leg + matching goal_ledger entry + goal_create
+    // idempotency doc, all written in the SAME client batch. This is now enforced
+    // AT THE RULES LAYER (the trust boundary) using getAfter()/existsAfter() in
+    // the goal CREATE rule, NOT merely trusted to the client transaction.
+    //
+    // DIAGNOSIS OF PRIOR "Service call error": the previous code asserted that
+    // getAfter()/existsAfter() throw "Service call error" inside CREATE rules in
+    // the Firebase Emulator Suite. This was empirically FALSE for the emulator in
+    // use (firebase-tools 15.22.1 / 15.23.0, Firestore emulator standard edition):
+    // a minimal CREATE rule using existsAfter()/getAfter() on a deterministically
+    // addressed sibling document SUCCEEDS. The earlier failure was caused by
+    // NON-DETERMINISTIC document ids (the contribution/ledger ids were derived from
+    // an auto-generated goal doc id that is NOT present in request.resource.data),
+    // so the rule could not construct a resolvable path — producing a path/access
+    // error, not a fundamental getAfter limitation. The fix makes every document
+    // in the atomic create addressable from request.resource.data:
+    //   - goal doc id            == data.goalId
+    //   - contribution leg       == contributions/initialParentContribution
+    //   - ledger entry           == goal_ledger/initialParentLedger
+    //   - idempotency doc        == idempotency/goalCreate_<data.clientReqId>
+    // The rule then verifies familyId/goalId/actorId/clientReqId/amount equality
+    // across all three sibling docs. A direct client write that forges a non-zero
+    // balance without the matching legs is DENIED at the boundary.
     function isValidGoalCreate(familyId) {
       let data = request.resource.data;
-      return data.keys().hasAll(['goalId', 'title', 'kind', 'targetAmountPence', 'currentAmountPence', 'currency', 'status', 'matching', 'createdBy', 'createdAt', 'version'])
-        && data.keys().hasOnly(['goalId', 'title', 'kind', 'childId', 'targetAmountPence', 'currentAmountPence', 'currency', 'status', 'matching', 'createdBy', 'createdByName', 'createdAt', 'version'])
+      return data.keys().hasAll(['goalId', 'title', 'kind', 'targetAmountPence', 'currentAmountPence', 'currency', 'status', 'matching', 'createdBy', 'createdAt', 'version', 'clientReqId'])
+        && data.keys().hasOnly(['goalId', 'title', 'kind', 'childId', 'targetAmountPence', 'currentAmountPence', 'currency', 'status', 'matching', 'createdBy', 'createdByName', 'createdAt', 'version', 'clientReqId'])
         && data.version == 1
         && data.currentAmountPence >= 0
         && data.status == 'active'
@@ -900,6 +909,7 @@ service cloud.firestore {
         && data.currency is string
         && data.createdAt == request.time
         && data.createdBy == request.auth.uid
+        && data.clientReqId is string && data.clientReqId.size() > 0
         && (
           (isParent(familyId) && data.kind in ['family', 'child'])
           || (isChildInFamily(familyId, request.auth.uid)
@@ -911,6 +921,43 @@ service cloud.firestore {
         && data.matching.keys().hasOnly(['mode', 'perX', 'matchY', 'capPence'])
         && data.matching.mode in ['none', 'auto', 'manual']
         && data.matching.perX is int && data.matching.matchY is int;
+    }
+
+    // Atomic seed proof for a non-zero initial balance. Verifies, via getAfter(),
+    // that the SAME batch wrote the deterministic parent_contribution leg, the
+    // matching goal_ledger entry, and the goal_create idempotency doc, all with
+    // the exact same familyId/goalId/actorId/clientReqId/amount. Kept lean (3
+    // getAfter calls + equality checks) to stay well under the per-request
+    // access-call and expression limits.
+    function isValidSeededGoalCreate(familyId, goalId) {
+      let data = request.resource.data;
+      let idemKey = 'goalCreate_' + data.clientReqId;
+      let contribPath = /databases/$(database)/documents/families/$(familyId)/savings_goals/$(goalId)/contributions/initialParentContribution;
+      let ledgerPath = /databases/$(database)/documents/families/$(familyId)/savings_goals/$(goalId)/goal_ledger/initialParentLedger;
+      let idemPath = /databases/$(database)/documents/families/$(familyId)/idempotency/$(idemKey);
+      // NOTE: getAfter(...).exists() is NOT a valid method in this emulator's
+      // rules engine (it throws "Function not found error: Name: [exists]"). The
+      // correct, working form is the top-level existsAfter(path) function. This is
+      // the actual root cause of the prior "Service call error" — NOT that
+      // getAfter/existsAfter are unavailable in CREATE rules. Both existAfter() and
+      // getAfter().data.X work correctly inside CREATE rules in this emulator.
+      return existsAfter(contribPath)
+        && getAfter(contribPath).data.type == 'parent_contribution'
+        && getAfter(contribPath).data.goalId == goalId
+        && getAfter(contribPath).data.ownerId == request.auth.uid
+        && getAfter(contribPath).data.amountPence == data.currentAmountPence
+        && getAfter(contribPath).data.status == 'applied'
+        && existsAfter(ledgerPath)
+        && getAfter(ledgerPath).data.type == 'parent_contribution'
+        && getAfter(ledgerPath).data.goalId == goalId
+        && getAfter(ledgerPath).data.ownerId == request.auth.uid
+        && getAfter(ledgerPath).data.amountPence == data.currentAmountPence
+        && existsAfter(idemPath)
+        && getAfter(idemPath).data.operationType == 'goal_create'
+        && getAfter(idemPath).data.actorId == request.auth.uid
+        && getAfter(idemPath).data.goalId == goalId
+        && getAfter(idemPath).data.amountPence == data.currentAmountPence
+        && getAfter(idemPath).data.clientReqId == data.clientReqId;
     }
 
     // SECURITY BOUNDARY (reached -> active):
@@ -1340,8 +1387,15 @@ service cloud.firestore {
 
       match /savings_goals/{goalId} {
         allow read: if isFamilyMember(familyId);
+        // v1 goal create: shape-validated by isValidGoalCreate. A non-zero initial
+        // balance MUST additionally prove the atomic seed linkage (parent_contribution
+        // leg + goal_ledger entry + goal_create idempotency doc) via getAfter() in the
+        // same batch; a zero-seeded goal requires no legs. Legacy (pre-v1) goals keep
+        // the original permissive parent/self create for backwards compatibility.
         allow create: if isV1Goal(request.resource.data)
-          ? isValidGoalCreate(familyId)
+          ? (isValidGoalCreate(familyId)
+             && (request.resource.data.currentAmountPence == 0
+                 || isValidSeededGoalCreate(familyId, goalId)))
           : (isParent(familyId) || (isAuthenticated() && request.resource.data.childId == request.auth.uid));
         allow update: if (isV1Goal(resource.data))
           ? (request.resource.data.status in ['completed_returned', 'cancelled']

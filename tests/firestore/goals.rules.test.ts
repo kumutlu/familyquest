@@ -127,7 +127,8 @@ const v1GoalShape = (over: Record<string, any> = {}) => ({
   goalId: 'newGoal', title: 'New', kind: 'child', childId: 'child1',
   targetAmountPence: 1000, currentAmountPence: 0, currency: 'GBP',
   status: 'active', matching: { mode: 'none', perX: 0, matchY: 0 },
-  createdBy: 'child1', createdAt: serverTimestamp(), version: 1, ...over,
+  createdBy: 'child1', createdAt: serverTimestamp(), version: 1,
+  clientReqId: over.clientReqId ?? 'req-newGoal', ...over,
 });
 
 describe('Goals — cross-family access', () => {
@@ -176,167 +177,205 @@ describe('Goals — create', () => {
     await assertFails(setDoc(doc(db, goalPath('childOther')), v1GoalShape({ goalId: 'childOther', kind: 'child', childId: 'child2', createdBy: 'child1' })));
   });
 
-  // ---- ISSUE 2: atomic initial parent contribution proof on goal create ----
-  // The create rule must require atomically associated immutable records
-  // (parent_contribution contribution doc + matching goal_ledger doc +
-  // goal_create idempotency doc) proving any positive initial seed, and must
-  // reject a forged initial parent-contribution leg alongside a zero-balance goal.
+  // ---- SECURITY BOUNDARY: atomic initial parent contribution proof on goal create ----
+  // A goal created with currentAmountPence > 0 MUST be backed, in the SAME batch,
+  // by an immutable parent_contribution leg + matching goal_ledger entry +
+  // goal_create idempotency doc, all with matching familyId/goalId/actorId/
+  // clientReqId/amount. The create rule enforces this at the trust boundary using
+  // getAfter(). A direct client write that forges a non-zero balance without the
+  // matching legs is DENIED. A zero-seeded goal requires no legs.
 
-  const seedInitialParentRecords = async (ctx: any, goalId: string, amount: number, over: Record<string, any> = {}) => {
+  // Seed the three atomic-proof documents for a goal (used to build a VALID batch
+  // or to test individual-leg mismatches). clientReqId drives the idempotency path.
+  const seedInitialParentRecords = async (ctx: any, goalId: string, amount: number, clientReqId: string, over: Record<string, any> = {}) => {
     const db = ctx.firestore();
     await setDoc(doc(db, contribPath(goalId, 'initialParentContribution')), {
       contribId: 'initialParentContribution', goalId, type: 'parent_contribution',
-      ownerType: 'parent', ownerId: 'parent1', amountPence: amount, status: 'applied',
-      createdAt: serverTimestamp(), ...over.contrib,
+      ownerType: 'parent', ownerId: 'parent1', amountPence: amount, matchPence: 0, status: 'applied',
+      createdBy: 'parent1', createdAt: serverTimestamp(), ...over.contrib,
     });
     await setDoc(doc(db, ledgerPath(goalId, 'initialParentLedger')), {
       entryId: 'initialParentLedger', goalId, type: 'parent_contribution',
       ownerId: 'parent1', amountPence: amount, createdAt: serverTimestamp(), ...over.ledger,
     });
-    await setDoc(doc(db, idemPath(`goalCreate_${goalId}`)), {
+    await setDoc(doc(db, idemPath(`goalCreate_${clientReqId}`)), {
       operationType: 'goal_create', actorId: 'parent1', goalId, familyId: FAMILY,
-      amountPence: amount, createdAt: serverTimestamp(), ...over.idem,
+      amountPence: amount, clientReqId, status: 'completed',
+      createdAt: serverTimestamp(), expiresAt: serverTimestamp(), ...over.idem,
     });
   };
 
-  it('2a. non-zero currentAmountPence with valid v1 shape is allowed (atomic proof is transaction-level)', async () => {
-    // The create rule enforces the v1 goal *shape*; the atomic parent-contribution
-    // proof (contribution + ledger + idempotency) is guaranteed by the trusted
-    // createGoal transaction and verified end-to-end in goalReturn.integration.test.ts.
+  // Helper: write goal + all three legs in ONE batch (the only allowed path for a
+  // non-zero seed). Returns the db context used.
+  const atomicSeedBatch = async (db: any, goalId: string, amount: number, clientReqId: string, goalOver: Record<string, any> = {}, over: Record<string, any> = {}) => {
+    const batch = db.batch();
+    batch.set(doc(db, goalPath(goalId)), v1GoalShape({
+      goalId, kind: 'family', createdBy: 'parent1', currentAmountPence: amount, clientReqId, ...goalOver,
+    }));
+    batch.set(doc(db, contribPath(goalId, 'initialParentContribution')), {
+      contribId: 'initialParentContribution', goalId, type: 'parent_contribution',
+      ownerType: 'parent', ownerId: 'parent1', amountPence: amount, matchPence: 0, status: 'applied',
+      createdBy: 'parent1', createdAt: serverTimestamp(), ...over.contrib,
+    });
+    batch.set(doc(db, ledgerPath(goalId, 'initialParentLedger')), {
+      entryId: 'initialParentLedger', goalId, type: 'parent_contribution',
+      ownerId: 'parent1', amountPence: amount, createdAt: serverTimestamp(), ...over.ledger,
+    });
+    batch.set(doc(db, idemPath(`goalCreate_${clientReqId}`)), {
+      operationType: 'goal_create', actorId: 'parent1', goalId, familyId: FAMILY,
+      amountPence: amount, clientReqId, status: 'completed',
+      createdAt: serverTimestamp(), expiresAt: serverTimestamp(), ...over.idem,
+    });
+    await batch.commit();
+  };
+
+  // === EXPLOIT PROOF (must be DENIED after fix) ===
+  it('EXPLOIT: authenticated parent creates non-zero goal with NO accounting legs — DENIED', async () => {
     const db = testEnv.authenticatedContext('parent1').firestore();
-    await assertSucceeds(setDoc(doc(db, goalPath('seedNoProof')),
-      v1GoalShape({ goalId: 'seedNoProof', kind: 'family', createdBy: 'parent1', currentAmountPence: 500 })));
+    await assertFails(setDoc(doc(db, goalPath('exploitNoLegs')),
+      v1GoalShape({ goalId: 'exploitNoLegs', kind: 'family', createdBy: 'parent1', currentAmountPence: 500, clientReqId: 'req-exploit' })));
   });
 
-  it('2b. contribution without matching ledger — valid shape still allowed (proof is transaction-level)', async () => {
-    // The create rule enforces shape only; the atomic ledger/contribution/idempotency
-    // proof is guaranteed by the trusted createGoal transaction (verified in
-    // goalReturn.integration.test.ts). A well-shaped goal with amount>0 is allowed.
-    const db = testEnv.authenticatedContext('parent1').firestore();
-    await assertSucceeds(setDoc(doc(db, goalPath('seedNoLedger')),
-      v1GoalShape({ goalId: 'seedNoLedger', kind: 'family', createdBy: 'parent1', currentAmountPence: 500 })));
-  });
-
-  it('2c. ledger without matching contribution — valid shape still allowed (proof is transaction-level)', async () => {
-    const db = testEnv.authenticatedContext('parent1').firestore();
-    await assertSucceeds(setDoc(doc(db, goalPath('seedNoContrib')),
-      v1GoalShape({ goalId: 'seedNoContrib', kind: 'family', createdBy: 'parent1', currentAmountPence: 500 })));
-  });
-
-  it('2d. valid v1 shape with seeded (mismatched) records is allowed (proof is transaction-level)', async () => {
-    // The create rule does not inspect sibling contribution/ledger docs (getAfter is
-    // unavailable in create rules); the atomic-proof consistency is enforced by the
-    // trusted createGoal transaction. A well-shaped goal create succeeds.
+  // === INDIVIDUAL-LEG OMISSIONS (non-zero seed, missing one leg) ===
+  it('non-zero goal + contribution only — DENIED', async () => {
     await testEnv.withSecurityRulesDisabled(async (ctx) => {
-      await seedInitialParentRecords(ctx, 'seedAmtMismatch', 500, { contrib: { amountPence: 400 } });
+      await setDoc(ctx.firestore().doc(contribPath('gContribOnly', 'initialParentContribution')), {
+        contribId: 'initialParentContribution', goalId: 'gContribOnly', type: 'parent_contribution',
+        ownerType: 'parent', ownerId: 'parent1', amountPence: 500, matchPence: 0, status: 'applied',
+        createdBy: 'parent1', createdAt: serverTimestamp(),
+      });
     });
     const db = testEnv.authenticatedContext('parent1').firestore();
-    await assertSucceeds(setDoc(doc(db, goalPath('seedAmtMismatch')),
-      v1GoalShape({ goalId: 'seedAmtMismatch', kind: 'family', createdBy: 'parent1', currentAmountPence: 500 })));
+    await assertFails(setDoc(doc(db, goalPath('gContribOnly')),
+      v1GoalShape({ goalId: 'gContribOnly', kind: 'family', createdBy: 'parent1', currentAmountPence: 500, clientReqId: 'req-gContribOnly' })));
   });
 
-  it('2e. valid v1 shape with mismatched goalId records is allowed (proof is transaction-level)', async () => {
+  it('non-zero goal + ledger only — DENIED', async () => {
     await testEnv.withSecurityRulesDisabled(async (ctx) => {
-      await seedInitialParentRecords(ctx, 'seedGoalMismatch', 500, { contrib: { goalId: 'otherGoal' }, ledger: { goalId: 'otherGoal' } });
+      await setDoc(ctx.firestore().doc(ledgerPath('gLedgerOnly', 'initialParentLedger')), {
+        entryId: 'initialParentLedger', goalId: 'gLedgerOnly', type: 'parent_contribution',
+        ownerId: 'parent1', amountPence: 500, createdAt: serverTimestamp(),
+      });
     });
     const db = testEnv.authenticatedContext('parent1').firestore();
-    await assertSucceeds(setDoc(doc(db, goalPath('seedGoalMismatch')),
-      v1GoalShape({ goalId: 'seedGoalMismatch', kind: 'family', createdBy: 'parent1', currentAmountPence: 500 })));
+    await assertFails(setDoc(doc(db, goalPath('gLedgerOnly')),
+      v1GoalShape({ goalId: 'gLedgerOnly', kind: 'family', createdBy: 'parent1', currentAmountPence: 500, clientReqId: 'req-gLedgerOnly' })));
   });
 
-  it('2f. valid v1 shape with mismatched actorId idempotency is allowed (proof is transaction-level)', async () => {
+  it('non-zero goal + idempotency only — DENIED', async () => {
     await testEnv.withSecurityRulesDisabled(async (ctx) => {
-      await seedInitialParentRecords(ctx, 'seedActorMismatch', 500, { idem: { actorId: 'child1' } });
+      await setDoc(ctx.firestore().doc(idemPath('goalCreate_reqIdemOnly')), {
+        operationType: 'goal_create', actorId: 'parent1', goalId: 'gIdemOnly', familyId: FAMILY,
+        amountPence: 500, clientReqId: 'reqIdemOnly', status: 'completed',
+        createdAt: serverTimestamp(), expiresAt: serverTimestamp(),
+      });
     });
     const db = testEnv.authenticatedContext('parent1').firestore();
-    await assertSucceeds(setDoc(doc(db, goalPath('seedActorMismatch')),
-      v1GoalShape({ goalId: 'seedActorMismatch', kind: 'family', createdBy: 'parent1', currentAmountPence: 500 })));
+    await assertFails(setDoc(doc(db, goalPath('gIdemOnly')),
+      v1GoalShape({ goalId: 'gIdemOnly', kind: 'family', createdBy: 'parent1', currentAmountPence: 500, clientReqId: 'reqIdemOnly' })));
   });
 
-  it('2g. valid zero-contribution creation allowed (no forged leg)', async () => {
+  // === MISMATCHED LEGS (all three present but inconsistent) ===
+  it('mismatched amount — DENIED', async () => {
+    await testEnv.withSecurityRulesDisabled(async (ctx) => {
+      await seedInitialParentRecords(ctx, 'gAmt', 400, 'req-gAmt', { contrib: { amountPence: 400 }, ledger: { amountPence: 400 }, idem: { amountPence: 400 } });
+    });
     const db = testEnv.authenticatedContext('parent1').firestore();
-    await assertSucceeds(setDoc(doc(db, goalPath('seedZero')),
-      v1GoalShape({ goalId: 'seedZero', kind: 'family', createdBy: 'parent1', currentAmountPence: 0 })));
+    await assertFails(setDoc(doc(db, goalPath('gAmt')),
+      v1GoalShape({ goalId: 'gAmt', kind: 'family', createdBy: 'parent1', currentAmountPence: 500, clientReqId: 'req-gAmt' })));
   });
 
-  it('2h. fixed-amount initial contribution — valid v1 shape allowed (atomic proof is transaction-level)', async () => {
-    // The create rule enforces shape only; the atomic idempotency proof is written
-    // by the trusted createGoal transaction and verified in goalReturn.integration.test.ts.
+  it('mismatched actor — DENIED', async () => {
+    await testEnv.withSecurityRulesDisabled(async (ctx) => {
+      await seedInitialParentRecords(ctx, 'gActor', 500, 'req-gActor', { idem: { actorId: 'child1' }, contrib: { ownerId: 'child1' }, ledger: { ownerId: 'child1' } });
+    });
     const db = testEnv.authenticatedContext('parent1').firestore();
-    await assertSucceeds(setDoc(doc(db, goalPath('seedFixed')),
-      v1GoalShape({ goalId: 'seedFixed', kind: 'family', createdBy: 'parent1', currentAmountPence: 500 })));
+    await assertFails(setDoc(doc(db, goalPath('gActor')),
+      v1GoalShape({ goalId: 'gActor', kind: 'family', createdBy: 'parent1', currentAmountPence: 500, clientReqId: 'req-gActor' })));
   });
 
-  it('2i. percentage initial contribution — valid v1 shape allowed (atomic proof is transaction-level)', async () => {
-    const db = testEnv.authenticatedContext('parent1').firestore();
-    await assertSucceeds(setDoc(doc(db, goalPath('seedPct')),
-      v1GoalShape({ goalId: 'seedPct', kind: 'family', createdBy: 'parent1', currentAmountPence: 200 })));
-  });
-
-  it('2j. cross-family seeded records do not affect a same-family goal create (proof is transaction-level)', async () => {
-    // Records seeded in the OTHER family must not be readable/required by a create
-    // in FAMILY. The create rule is shape-only; the atomic proof is enforced by the
-    // trusted transaction scoped to the correct familyId.
+  it('mismatched family — DENIED', async () => {
+    // Seed valid records in OTHER family; same-family goal create must still fail
+    // because the rule resolves the idempotency path under FAMILY, not OTHER.
     await testEnv.withSecurityRulesDisabled(async (ctx) => {
       const db = ctx.firestore();
-      await setDoc(doc(db, `families/${OTHER}/savings_goals/seedX/contributions/initialParentContribution`), {
-        contribId: 'initialParentContribution', goalId: 'seedX', type: 'parent_contribution',
-        ownerType: 'parent', ownerId: 'parent2', amountPence: 500, status: 'applied', createdAt: serverTimestamp(),
+      await setDoc(doc(db, `families/${OTHER}/savings_goals/gFam/contributions/initialParentContribution`), {
+        contribId: 'initialParentContribution', goalId: 'gFam', type: 'parent_contribution',
+        ownerType: 'parent', ownerId: 'parent2', amountPence: 500, matchPence: 0, status: 'applied',
+        createdBy: 'parent2', createdAt: serverTimestamp(),
       });
-      await setDoc(doc(db, `families/${OTHER}/savings_goals/seedX/goal_ledger/initialParentLedger`), {
-        entryId: 'initialParentLedger', goalId: 'seedX', type: 'parent_contribution',
+      await setDoc(doc(db, `families/${OTHER}/savings_goals/gFam/goal_ledger/initialParentLedger`), {
+        entryId: 'initialParentLedger', goalId: 'gFam', type: 'parent_contribution',
         ownerId: 'parent2', amountPence: 500, createdAt: serverTimestamp(),
       });
-      await setDoc(doc(db, `families/${OTHER}/idempotency/goalCreate_seedX`), {
-        operationType: 'goal_create', actorId: 'parent2', goalId: 'seedX', familyId: OTHER,
-        amountPence: 500, createdAt: serverTimestamp(),
+      await setDoc(doc(db, `families/${OTHER}/idempotency/goalCreate_req-gFam`), {
+        operationType: 'goal_create', actorId: 'parent2', goalId: 'gFam', familyId: OTHER,
+        amountPence: 500, clientReqId: 'req-gFam', status: 'completed',
+        createdAt: serverTimestamp(), expiresAt: serverTimestamp(),
       });
     });
     const db = testEnv.authenticatedContext('parent1').firestore();
-    await assertSucceeds(setDoc(doc(db, goalPath('seedX')),
-      v1GoalShape({ goalId: 'seedX', kind: 'family', createdBy: 'parent1', currentAmountPence: 500 })));
+    await assertFails(setDoc(doc(db, goalPath('gFam')),
+      v1GoalShape({ goalId: 'gFam', kind: 'family', createdBy: 'parent1', currentAmountPence: 500, clientReqId: 'req-gFam' })));
   });
 
-  it('2k. goal create with mismatched idempotency amount — valid v1 shape allowed (proof is transaction-level)', async () => {
-    // The create rule does not read the idempotency doc (getAfter unavailable in
-    // create rules); the trusted createGoal transaction verifies the amountPence
-    // match atomically. A well-shaped goal create succeeds.
-    const db = testEnv.authenticatedContext('parent1').firestore();
+  it('mismatched goalId — DENIED', async () => {
     await testEnv.withSecurityRulesDisabled(async (ctx) => {
-      await setDoc(doc(ctx.firestore(), idemPath('goalCreate_seedReplayBad')), {
-        operationType: 'goal_create', actorId: 'parent1', goalId: 'seedReplayBad', familyId: FAMILY,
-        amountPence: 999, createdAt: serverTimestamp(),
-      });
+      await seedInitialParentRecords(ctx, 'gGoalMismatch', 500, 'req-gGoalMismatch', { contrib: { goalId: 'otherGoal' }, ledger: { goalId: 'otherGoal' }, idem: { goalId: 'otherGoal' } });
     });
-    await assertSucceeds(setDoc(doc(db, goalPath('seedReplayBad')),
-      v1GoalShape({ goalId: 'seedReplayBad', kind: 'family', createdBy: 'parent1', currentAmountPence: 500 })));
+    const db = testEnv.authenticatedContext('parent1').firestore();
+    await assertFails(setDoc(doc(db, goalPath('gGoalMismatch')),
+      v1GoalShape({ goalId: 'gGoalMismatch', kind: 'family', createdBy: 'parent1', currentAmountPence: 500, clientReqId: 'req-gGoalMismatch' })));
   });
 
-  it('2l. goal create with mismatched idempotency actorId — valid v1 shape allowed (proof is transaction-level)', async () => {
-    const db = testEnv.authenticatedContext('parent1').firestore();
+  it('mismatched clientReqId/requestHash — DENIED', async () => {
     await testEnv.withSecurityRulesDisabled(async (ctx) => {
-      await setDoc(doc(ctx.firestore(), idemPath('goalCreate_seedReplayBad2')), {
-        operationType: 'goal_create', actorId: 'child1', goalId: 'seedReplayBad2', familyId: FAMILY,
-        amountPence: 500, createdAt: serverTimestamp(),
-      });
+      await seedInitialParentRecords(ctx, 'gReq', 500, 'req-gReq-SEED');
     });
-    await assertSucceeds(setDoc(doc(db, goalPath('seedReplayBad2')),
-      v1GoalShape({ goalId: 'seedReplayBad2', kind: 'family', createdBy: 'parent1', currentAmountPence: 500 })));
+    const db = testEnv.authenticatedContext('parent1').firestore();
+    // Goal claims a different clientReqId than the seeded idempotency doc.
+    await assertFails(setDoc(doc(db, goalPath('gReq')),
+      v1GoalShape({ goalId: 'gReq', kind: 'family', createdBy: 'parent1', currentAmountPence: 500, clientReqId: 'req-gReq-DIFFERENT' })));
   });
 
-  it('2m. forged initial parent-contribution leg alongside zero-balance goal — valid v1 shape allowed (proof is transaction-level)', async () => {
-    // The create rule is shape-only; the trusted transaction guarantees the
-    // contribution/ledger/idempotency are written atomically and consistently.
+  // === VALID PATHS ===
+  it('valid atomic seeded goal creation (all legs in one batch) — ALLOWED', async () => {
+    const db = testEnv.authenticatedContext('parent1').firestore();
+    await atomicSeedBatch(db, 'gValid', 500, 'req-gValid');
+  });
+
+  it('valid zero-seeded goal creation (no legs) — ALLOWED', async () => {
+    const db = testEnv.authenticatedContext('parent1').firestore();
+    await assertSucceeds(setDoc(doc(db, goalPath('gZero')),
+      v1GoalShape({ goalId: 'gZero', kind: 'family', createdBy: 'parent1', currentAmountPence: 0, clientReqId: 'req-gZero' })));
+  });
+
+  it('non-parent (child) cannot create a non-zero seeded goal — DENIED', async () => {
+    const db = testEnv.authenticatedContext('child1').firestore();
+    await assertFails(setDoc(doc(db, goalPath('gChildSeed')),
+      v1GoalShape({ goalId: 'gChildSeed', kind: 'child', childId: 'child1', createdBy: 'child1', currentAmountPence: 500, clientReqId: 'req-gChildSeed' })));
+  });
+
+  it('cross-family parent cannot seed a goal in another family — DENIED', async () => {
+    const db = testEnv.authenticatedContext('parent2').firestore();
+    await assertFails(setDoc(doc(db, otherGoalPath('gCross')),
+      v1GoalShape({ goalId: 'gCross', kind: 'family', createdBy: 'parent2', currentAmountPence: 500, clientReqId: 'req-gCross' })));
+  });
+
+  it('forged initial parent-contribution leg alongside zero-balance goal — ALLOWED (no seed required at zero)', async () => {
+    // At zero balance the rule requires NO legs, so a stray contribution doc is
+    // irrelevant; the create is permitted (the contribution itself is separately
+    // gated by its own create rule, not by the goal create rule).
     await testEnv.withSecurityRulesDisabled(async (ctx) => {
-      const db = ctx.firestore();
-      await setDoc(doc(db, contribPath('seedForged', 'initialParentContribution')), {
-        contribId: 'initialParentContribution', goalId: 'seedForged', type: 'parent_contribution',
-        ownerType: 'parent', ownerId: 'parent1', amountPence: 500, status: 'applied', createdAt: serverTimestamp(),
+      await setDoc(ctx.firestore().doc(contribPath('gForged', 'initialParentContribution')), {
+        contribId: 'initialParentContribution', goalId: 'gForged', type: 'parent_contribution',
+        ownerType: 'parent', ownerId: 'parent1', amountPence: 500, matchPence: 0, status: 'applied',
+        createdBy: 'parent1', createdAt: serverTimestamp(),
       });
     });
     const db = testEnv.authenticatedContext('parent1').firestore();
-    await assertSucceeds(setDoc(doc(db, goalPath('seedForged')),
-      v1GoalShape({ goalId: 'seedForged', kind: 'family', createdBy: 'parent1', currentAmountPence: 0 })));
+    await assertSucceeds(setDoc(doc(db, goalPath('gForged')),
+      v1GoalShape({ goalId: 'gForged', kind: 'family', createdBy: 'parent1', currentAmountPence: 0, clientReqId: 'req-gForged' })));
   });
 });
 
