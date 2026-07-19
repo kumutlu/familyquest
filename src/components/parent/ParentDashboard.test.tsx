@@ -7,6 +7,8 @@ const api = vi.hoisted(() => ({
   depositToWallet: vi.fn(), withdrawFromWallet: vi.fn(), transferWalletFunds: vi.fn(),
 }));
 
+const h = vi.hoisted(() => ({ navigate: vi.fn() }));
+
 const store = vi.hoisted(() => ({
   state: {
     currentUser: { id: 'owner-1', familyId: 'family-1', role: 'owner' },
@@ -23,6 +25,10 @@ const store = vi.hoisted(() => ({
 
 vi.mock('../../lib/api', () => api);
 vi.mock('../../store/useStore', () => ({ useStore: () => store.state }));
+vi.mock('react-router-dom', async () => {
+  const actual = await vi.importActual<typeof import('react-router-dom')>('react-router-dom');
+  return { ...actual, useNavigate: () => h.navigate };
+});
 vi.mock('./ApprovalCenter', () => ({ ApprovalCenter: () => <div>Approval Center Section</div> }));
 vi.mock('../reversals/ReversalHistoryPanel', () => ({ ReversalHistoryPanel: () => null }));
 vi.mock('../reversals/HistoryActionControl', () => ({ HistoryActionControl: () => null }));
@@ -112,5 +118,61 @@ describe('ParentDashboard', () => {
     expect(screen.getByText(/couldn.t load your family dashboard/i)).toBeInTheDocument();
     expect(errorSpy).toHaveBeenCalled();
     errorSpy.mockRestore();
+  });
+});
+
+describe('ParentDashboard summary cards (Phase 3)', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    h.navigate.mockClear();
+    store.state = {
+      ...baseState(),
+      childWallets: [
+        { id: 'w-1', balance: 500 },
+        { id: 'w-2', balance: 250 },
+      ],
+      familyMembers: [
+        { id: 'c-1', role: 'child' },
+        { id: 'c-2', role: 'child' },
+      ],
+      savingsGoals: [
+        { goalId: 'g-1', title: 'Bike', status: 'active', currentAmountPence: 500, targetAmountPence: 1000 },
+        { goalId: 'g-2', title: 'Tablet', status: 'active', currentAmountPence: 200, targetAmountPence: 800 },
+      ],
+      funds: [
+        { id: 'f-1', name: 'Rex', species: 'dog', balance: 1500, emergencyGoal: 5000 },
+      ],
+    };
+  });
+
+  it('renders the wallet, goals, and pet box summary cards', () => {
+    render(<MemoryRouter><ParentDashboard /></MemoryRouter>);
+    expect(screen.getByTestId('wallet-summary')).toBeInTheDocument();
+    expect(screen.getByTestId('goal-summary')).toBeInTheDocument();
+    expect(screen.getByTestId('petbox-summary')).toBeInTheDocument();
+  });
+
+  it('shows the parent/owner family wallet aggregate and links to /wallets', () => {
+    render(<MemoryRouter><ParentDashboard /></MemoryRouter>);
+    // Parent aggregate surface, never the child "My Wallet" surface.
+    expect(screen.getByText('Family Wallets')).toBeInTheDocument();
+    expect(screen.queryByText('My Wallet')).not.toBeInTheDocument();
+    expect(screen.getByText('£7.50')).toBeInTheDocument();
+    fireEvent.click(screen.getByTestId('wallet-summary-link'));
+    expect(h.navigate).toHaveBeenCalledWith('/wallets');
+  });
+
+  it('shows active goals count and links to /goals', () => {
+    render(<MemoryRouter><ParentDashboard /></MemoryRouter>);
+    expect(screen.getByText('2')).toBeInTheDocument();
+    fireEvent.click(screen.getByTestId('goal-summary-link'));
+    expect(h.navigate).toHaveBeenCalledWith('/goals');
+  });
+
+  it('shows pet box overview and links to /pet-box', () => {
+    render(<MemoryRouter><ParentDashboard /></MemoryRouter>);
+    expect(screen.getByText('1')).toBeInTheDocument();
+    fireEvent.click(screen.getByTestId('petbox-summary-link'));
+    expect(h.navigate).toHaveBeenCalledWith('/pet-box');
   });
 });

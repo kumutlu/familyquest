@@ -18,7 +18,14 @@ const store = vi.hoisted(() => ({
 }));
 
 vi.mock('../store/useStore', () => ({ useStore: () => store.state }));
-vi.mock('../components/parent/ParentDashboard', () => ({ ParentDashboard: () => <div>Parent Dashboard View</div> }));
+// Render the real ParentDashboard so we can verify the Phase 3 summary cards
+// appear for parents. Mock its heavy sub-components to keep the test focused.
+vi.mock('../components/parent/ApprovalCenter', () => ({ ApprovalCenter: () => <div>Approval Center Section</div> }));
+vi.mock('../components/reversals/ReversalHistoryPanel', () => ({ ReversalHistoryPanel: () => null }));
+vi.mock('../components/reversals/HistoryActionControl', () => ({ HistoryActionControl: () => null }));
+vi.mock('../components/forms/TaskFormModal', () => ({ TaskFormModal: () => null }));
+vi.mock('../components/forms/RewardFormModal', () => ({ RewardFormModal: () => null }));
+vi.mock('../components/forms/BehaviourFormModal', () => ({ BehaviourFormModal: () => null }));
 
 import { Dashboard } from './Dashboard';
 
@@ -41,14 +48,14 @@ describe('Dashboard role routing', () => {
   it.each(['parent', 'owner'])('shows the parent dashboard for the %s role', role => {
     store.state.currentUser.role = role;
     render(<MemoryRouter><Dashboard /></MemoryRouter>);
-    expect(screen.getByText('Parent Dashboard View')).toBeInTheDocument();
+    expect(screen.getByText('Approval Center Section')).toBeInTheDocument();
     expect(screen.queryByText('Total Points')).not.toBeInTheDocument();
   });
 
   it('shows the child dashboard for the child role (no parent quick actions)', () => {
     store.state.currentUser.role = 'child';
     render(<MemoryRouter><Dashboard /></MemoryRouter>);
-    expect(screen.queryByText('Parent Dashboard View')).not.toBeInTheDocument();
+    expect(screen.queryByText('Approval Center Section')).not.toBeInTheDocument();
     expect(screen.queryByText('New Task')).not.toBeInTheDocument();
     expect(screen.getByText('Total Points')).toBeInTheDocument();
   });
@@ -56,7 +63,7 @@ describe('Dashboard role routing', () => {
   it('treats the legacy admin role as a parent (isParentRole, not strict parent)', () => {
     store.state.currentUser.role = 'admin';
     render(<MemoryRouter><Dashboard /></MemoryRouter>);
-    expect(screen.getByText('Parent Dashboard View')).toBeInTheDocument();
+    expect(screen.getByText('Approval Center Section')).toBeInTheDocument();
   });
 });
 
@@ -79,9 +86,12 @@ describe('Dashboard summary cards', () => {
   it('parent dashboard renders wallet summary with family aggregate', () => {
     store.state.currentUser.role = 'parent';
     render(<MemoryRouter><Dashboard /></MemoryRouter>);
-    // ParentDashboard is mocked, so the summary cards are not rendered there.
-    // Instead verify the child dashboard path renders the wallet summary.
-    expect(screen.queryByTestId('wallet-summary')).not.toBeInTheDocument();
+    const summary = screen.getByTestId('wallet-summary');
+    expect(summary).toBeInTheDocument();
+    // Parent sees the family aggregate surface, never the child "My Wallet".
+    expect(within(summary).getByText('Family Wallets')).toBeInTheDocument();
+    expect(within(summary).getByText('£7.50')).toBeInTheDocument();
+    expect(screen.queryByText('My Wallet')).not.toBeInTheDocument();
   });
 
   it('child dashboard renders the correct wallet summary (own balance)', () => {

@@ -14,6 +14,9 @@ import { QuickActions } from './dashboard/QuickActions';
 import { PendingApprovalsSection } from './dashboard/PendingApprovalsSection';
 import { ChildrenOverview } from './dashboard/ChildrenOverview';
 import { RecentActivity } from './dashboard/RecentActivity';
+import { WalletSummaryCard } from '../dashboard/WalletSummaryCard';
+import { GoalSummaryCard } from '../dashboard/GoalSummaryCard';
+import { PetBoxSummaryCard } from '../dashboard/PetBoxSummaryCard';
 
 const joinRequestProcessingKey = (request: { id: string; uid: string }) => `join:${request.id}:${request.uid}`;
 
@@ -79,6 +82,15 @@ export function ParentDashboard() {
       />
 
       <PendingApprovalsSection />
+
+      {/* Compact family summaries (Phase 3): reuse Phase 2 summary cards.
+          These render the parent/owner aggregate views and link to the
+          management screens. Children never see this surface. */}
+      <section className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+        <WalletSummaryCard />
+        <GoalSummaryCard />
+        <PetBoxSummaryCard />
+      </section>
 
       {/* Join Requests (owner only) */}
       {joinRequests && joinRequests.some((request: any) => request.status === 'pending') && currentUser.role === 'owner' && (
