@@ -1,6 +1,7 @@
 import { useTranslation } from 'react-i18next';
 import { useStore } from '../../../store/useStore';
 import { isChildRole } from '../../../lib/roles';
+import { isTaskDoneThisPeriod } from '../../../lib/taskRecurrence';
 import { ChildSummaryCard } from './ChildSummaryCard';
 
 function ChildCardSkeleton() {
@@ -59,12 +60,7 @@ export function ChildrenOverview() {
                 task =>
                   task.isActive !== false &&
                   task.assigneeId === child.id &&
-                  !taskCompletions.some(
-                    completion =>
-                      completion.taskId === task.id &&
-                      completion.assigneeId === child.id &&
-                      completion.status === 'approved',
-                  ),
+                  !isTaskDoneThisPeriod(task, taskCompletions, new Date(), child.id),
               ).length;
 
               return (

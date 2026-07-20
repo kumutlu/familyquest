@@ -43,6 +43,9 @@ import { useStore } from '../store/useStore';
 import { unregisterCurrentDevice } from './pushNotifications';
 import { getAvatarById, getAvatarCost } from '../config/avatarCatalog';
 import {
+  periodKeyFor,
+} from './taskRecurrence';
+import {
   computeNetChild,
   computeMatchPence,
   normalizeGoalDoc,
@@ -447,6 +450,40 @@ export const completeTask = async (familyId: string, taskId: string, userId: str
 
     const userData = userDoc.data();
 
+    // Recurrence period key: a recurring task is "done" only within its current
+    // period. We store this on the immutable completion record and use it (with
+    // the task schedule type) to derive availability without mutating history.
+    const taskType = taskSnap.exists() ? (taskSnap.data().type as string | undefined) : undefined;
+    const currentPeriodKey = periodKeyFor(taskType, new Date());
+
+    // Server-side guard: do not create a second completion / award points again
+    // for the same task+assignee within the current period. This keeps the
+    // recurrence reset authoritative on the server, not just the client UI.
+    // Queries a single field (periodKey) so no composite index is required; the
+    // task/assignee match is resolved in memory.
+    const completionsQuery = query(
+      collection(db, `families/${familyId}/task_completions`),
+      where('periodKey', '==', currentPeriodKey),
+    );
+    if (completionsQuery) {
+      // `Transaction.get` is typed for DocumentReference in this SDK surface; a
+      // Query is accepted at runtime, so we pass it through unchanged.
+      const existingSnap = await transaction.get(completionsQuery as any);
+      const existingDocs = (existingSnap as { docs?: any[] }).docs ?? [];
+      const alreadyDoneThisPeriod = existingDocs.some((d: any) => {
+        const data = typeof d.data === 'function' ? d.data() : d;
+        return (
+          data.taskId === taskId &&
+          data.assigneeId === userId &&
+          (data.status === 'approved' || data.status === 'pending_approval')
+        );
+      });
+      if (alreadyDoneThisPeriod) {
+        // Idempotent no-op for this period: the task is already completed/submitted.
+        return;
+      }
+    }
+
     // Resolve the notification dedupe read up-front so the write phase never
     // performs a transaction.get (Firestore requires reads-before-writes).
     let notifPlan = { ref: null, data: null } as Awaited<
@@ -501,6 +538,7 @@ export const completeTask = async (familyId: string, taskId: string, userId: str
       taskId,
       assigneeId: userId,
       status,
+      periodKey: currentPeriodKey,
       completedAt: serverTimestamp(),
       approvedAt: requiresApproval ? null : serverTimestamp()
     });

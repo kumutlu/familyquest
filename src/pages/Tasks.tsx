@@ -6,6 +6,7 @@ import { Button } from '../components/ui/Button';
 import { Plus, CheckCircle2 } from 'lucide-react';
 import { useStore } from '../store/useStore';
 import { completeTask, createTask, updateTask } from '../lib/api';
+import { deriveTaskAvailability } from '../lib/taskRecurrence';
 import { cn } from '../lib/utils';
 import { isParentRole } from '../lib/roles';
 import { TaskDetailsModal } from '../components/tasks/TaskDetailsModal';
@@ -28,18 +29,17 @@ export function Tasks() {
   // Filter out archived tasks first
   const activeTasks = tasks.filter(t => t.isActive !== false);
 
-  // Map completions back to tasks to know their status for the current user
+  // Derive each task's current availability from immutable completion history +
+  // the current recurrence period. This is the single source of truth shared
+  // with the parent view, so recurring tasks reset correctly instead of staying
+  // permanently completed.
   const mappedTasks = activeTasks.map(task => {
-    const completionsForTask = taskCompletions.filter(c => c.taskId === task.id && c.assigneeId === currentUser?.id);
-    const latestCompletion = completionsForTask.sort((a, b) => {
-      const timeA = a.completedAt?.toMillis ? a.completedAt.toMillis() : 0;
-      const timeB = b.completedAt?.toMillis ? b.completedAt.toMillis() : 0;
-      return timeB - timeA;
-    })[0];
+    const av = deriveTaskAvailability(task, taskCompletions, new Date(), currentUser?.id);
     return {
       ...task,
-      status: latestCompletion ? latestCompletion.status : 'pending',
-      completionId: latestCompletion?.id
+      status: av.status,
+      completionId: av.completionId,
+      available: av.available,
     };
   });
 

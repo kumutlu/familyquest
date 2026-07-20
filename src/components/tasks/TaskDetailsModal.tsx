@@ -164,6 +164,7 @@ export function TaskDetailsModal({
 
             {/* Child completion action stays in the scrollable content */}
             {!isParent &&
+              task.available &&
               (task.status === 'pending' || task.status === 'rejected') && (
                 <Button
                   fullWidth
@@ -175,9 +176,15 @@ export function TaskDetailsModal({
                   {isSubmitting ? t('details.submitting') : t('details.markDone')}
                 </Button>
               )}
+            {!isParent && !task.available && task.status === 'not_eligible' && (
+              <div className="mt-6 p-4 bg-gray-50 rounded-xl w-full">
+                <p className="text-gray-500 font-medium">{t('details.notAvailableToday')}</p>
+              </div>
+            )}
             {!isParent &&
               task.status !== 'pending' &&
-              task.status !== 'rejected' && (
+              task.status !== 'rejected' &&
+              task.status !== 'not_eligible' && (
                 <div className="mt-6 p-4 bg-gray-50 rounded-xl w-full">
                   <p className="text-gray-500 font-medium">
                     {task.status === 'approved'

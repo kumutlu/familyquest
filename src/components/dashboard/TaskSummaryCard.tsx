@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { Card, CardContent, CardHeader, CardTitle } from '../ui/Card';
 import { Progress } from '../ui/Progress';
 import { useStore } from '../../store/useStore';
+import { isTaskDoneThisPeriod } from '../../lib/taskRecurrence';
 import { ListTodo } from 'lucide-react';
 
 /**
@@ -36,10 +37,10 @@ export function TaskSummaryCard() {
       return time >= today.getTime() && time < tomorrow.getTime();
     });
 
-    // Count completions submitted by this child for active tasks.
-    const activeIds = new Set(active.map(t => t.id));
-    const completed = (taskCompletions || []).filter(
-      c => c.assigneeId === uid && activeIds.has(c.taskId),
+    // Count active tasks the child has completed/submitted in the current
+    // recurrence period (resets for recurring schedules, permanent for one-time).
+    const completed = active.filter(t =>
+      isTaskDoneThisPeriod(t, taskCompletions || [], new Date(), uid),
     ).length;
 
     const total = active.length;

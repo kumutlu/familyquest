@@ -28,6 +28,7 @@
     "submitting": "Submitting…",
     "completedApproved": "Task completed and approved!",
     "waitingParent": "Waiting for parent approval.",
+    "notAvailableToday": "Not available today.",
     "closeAria": "Close task details",
     "edit": "Edit",
     "archive": "Archive"
