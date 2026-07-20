@@ -1,8 +1,7 @@
 import { Link, Outlet, useLocation, Navigate } from 'react-router-dom';
-import { Home, Users, CheckSquare, Gift } from 'lucide-react';
-import { isParentRole } from '../../lib/roles';
 import { cn } from '../../lib/utils';
 import { useStore } from '../../store/useStore';
+import { getNavItems } from '../../config/navigation';
 import { ProfileDropdown } from './ProfileDropdown';
 import { NotificationCenter } from './NotificationCenter';
 
@@ -64,21 +63,9 @@ export function AppLayout() {
     return <div className="min-h-screen bg-gray-50 flex items-center justify-center animate-pulse">Loading Dashboard...</div>;
   }
 
-  // Phase 1 navigation simplification: reduce the bottom navigation from 7
-  // items to 4. The removed tabs (Goals, Pet Box, Wallet/Wallets) keep their
-  // routes working — they are reached via deep links, notifications, and
-  // in-app navigation — but are no longer top-level tabs.
-  const baseNavItems = [
-    { name: 'Home', path: '/', icon: Home },
-    { name: 'Tasks', path: '/tasks', icon: CheckSquare },
-    { name: 'Rewards', path: '/rewards', icon: Gift },
-  ];
-
-  // Settings is no longer a top-level tab; it lives in the profile dropdown.
-  // Family is moved to the end of the navigation for a cleaner layout.
-  const navItems = isParentRole(currentUser?.role)
-    ? [...baseNavItems, { name: 'Family', path: '/family', icon: Users }]
-    : [...baseNavItems, { name: 'Family', path: '/family', icon: Users }];
+  // Single source of truth for navigation, shared by the desktop header and the
+  // mobile bottom navigation. See src/config/navigation.ts.
+  const navItems = getNavItems();
 
   return (
     <div className="min-h-screen bg-gray-50 flex flex-col font-sans">
