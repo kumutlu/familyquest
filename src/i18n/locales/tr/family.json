@@ -1,4 +1,81 @@
 {
   "members": "Üyeler",
-  "addMember": "Üye ekle"
+  "addMember": "Üye ekle",
+  "loading": "Aile yükleniyor…",
+  "loginCreated": "{{name}} için giriş oluşturuldu.",
+  "title": "Aile Merkezi",
+  "subtitle": "Herkesin nasıl olduğuna göz atın.",
+  "challenge": {
+    "badge": "Aile Meydan Okuması",
+    "percentComplete": "%{{percent}} Tamamlandı",
+    "rewardEach": "Ödül: çocuk başına {{points}} puan",
+    "claim": "Meydan Okumayı Tamamla ve Puanları Ver!",
+    "claiming": "Tamamlanıyor…",
+    "goalReached": "Hedefe ulaşıldı! Ebeveynin talep etmesi bekleniyor."
+  },
+  "topEarner": {
+    "label": "En Çok Kazanan",
+    "leading": "Grupta önde"
+  },
+  "adults": "Yetişkinler",
+  "edit": "Düzenle",
+  "childrenRankings": "Çocuklar ve Sıralama",
+  "thisWeek": "Bu Hafta",
+  "history": "Geçmiş",
+  "managed": "Yönetilen",
+  "ptsThisWeek": "{{value}} puan bu hafta",
+  "noPastChampions": {
+    "title": "Geçmiş Şampiyon Yok",
+    "subtitle": "Bu haftanın liderini görmek için gelecek hafta tekrar bakın!"
+  },
+  "newChallenge": {
+    "title": "Yeni Aile Meydan Okuması",
+    "challengeTitle": "Meydan Okuma Başlığı",
+    "xpTarget": "Aile XP Hedefi",
+    "xpTargetHelp": "Ailenin birlikte kazanması gereken XP.",
+    "rewardPerChild": "Çocuk Başına Ödül (Puan)",
+    "rewardPerChildHelp": "Başarılı olursa her çocuk bunu alır.",
+    "start": "Meydan Okumayı Başlat",
+    "starting": "Başlatılıyor…"
+  },
+  "login": {
+    "label": "Giriş",
+    "noLogin": "Giriş oluşturulmadı",
+    "create": "Giriş Oluştur",
+    "username": "Kullanıcı adı:",
+    "status": "Durum:",
+    "enabled": "Etkin",
+    "disabled": "Devre dışı",
+    "requiresPasswordChange": "Parola değişimi gerekli:",
+    "yes": "Evet",
+    "no": "Hayır",
+    "lastLogin": "Son giriş:",
+    "never": "Hiç",
+    "resetPassword": "Parolayı Sıfırla",
+    "disableLogin": "Girişi Devre Dışı Bırak",
+    "enableLogin": "Girişi Etkinleştir",
+    "comingSoon": "Yakında"
+  },
+  "editMember": {
+    "title": "Üyeyi Düzenle",
+    "displayName": "Görünen Ad",
+    "chooseAvatar": "Avatar Seç",
+    "freeAvatarError": "Yetişkinler yalnızca katalogdaki ücretsiz başlangıç avatarlarını kullanabilir.",
+    "updateError": "Üye güncellenemedi.",
+    "save": "Kaydet"
+  },
+  "createLogin": {
+    "title": "{{name}} için Giriş Oluştur",
+    "username": "Kullanıcı adı",
+    "usernameHelp": "3–32 karakter. Yalnızca harf, rakam, boşluk ve alt çizgi.",
+    "willBeSavedAs": "Şu şekilde kaydedilecek: {{username}}",
+    "password": "Parola",
+    "passwordHelp": "En az {{min}} karakter, bir harf ve bir rakam içermeli.",
+    "confirmPassword": "Parolayı Onayla",
+    "passwordsDoNotMatch": "Parolalar eşleşmiyor.",
+    "requireChange": "İlk girişte parola değişimi gerekli",
+    "cancel": "İptal",
+    "submit": "Giriş Oluştur",
+    "submitting": "Oluşturuluyor…"
+  }
 }

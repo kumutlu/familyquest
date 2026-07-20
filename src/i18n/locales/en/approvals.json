@@ -1,0 +1,39 @@
+{
+  "title": "Approval Center",
+  "pendingTab": "Pending",
+  "historyTab": "History",
+  "pendingCount": "Pending ({{count}})",
+  "emptyPending": "You’re all caught up!",
+  "emptyHistory": "No approval history yet.",
+  "approve": "Approve",
+  "approving": "Approving…",
+  "reject": "Reject",
+  "rejecting": "Rejecting…",
+  "type": {
+    "taskCompletion": "Task Completion",
+    "transferRequest": "Transfer Request",
+    "moneyRequest": "Money Request",
+    "siblingMoneyRequest": "Sibling Money Request",
+    "petBoxDonation": "Pet Box Donation",
+    "profileUpdateRequest": "Profile Update Request",
+    "goalWithdrawal": "Goal Withdrawal",
+    "goalContribution": "Goal Contribution"
+  },
+  "desc": {
+    "taskCompletion": "{{childName}} completed \"{{taskTitle}}\"",
+    "transferRequest": "{{fromName}} wants to send money to {{toName}}.",
+    "transferRequestMessage": "{{fromName}} wants to send money to {{toName}}: \"{{message}}\"",
+    "moneyRequestFromParent": "{{requesterName}} requested money from Parent.",
+    "moneyRequestFromParentMessage": "{{requesterName}} requested money from Parent: \"{{message}}\"",
+    "moneyRequestSibling": "{{requestedFromName}} accepted {{requesterName}}’s request. Awaiting parent approval.",
+    "moneyRequestSiblingMessage": "{{requestedFromName}} accepted {{requesterName}}’s request. Awaiting parent approval: \"{{message}}\"",
+    "petBoxDonation": "{{childName}} wants to donate to {{fundName}}.",
+    "profileUpdate": "{{childName}} wants to update their profile{{changes}}.",
+    "goalWithdrawal": "{{childName}} wants to withdraw from \"{{goalTitle}}\".",
+    "goalContribution": "{{childName}} wants to contribute to \"{{goalTitle}}\"."
+  },
+  "change": {
+    "name": "name → \"{{name}}\"",
+    "avatar": "avatar"
+  }
+}

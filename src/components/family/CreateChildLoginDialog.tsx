@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { Modal } from '../ui/Modal';
 import { Button } from '../ui/Button';
 import {
@@ -26,6 +27,7 @@ interface CreateChildLoginDialogProps {
 const FORM_ID = 'create-child-login-form';
 
 export function CreateChildLoginDialog({ member, onClose, onSuccess }: CreateChildLoginDialogProps) {
+  const { t } = useTranslation(['family', 'common']);
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [confirm, setConfirm] = useState('');
@@ -110,13 +112,13 @@ export function CreateChildLoginDialog({ member, onClose, onSuccess }: CreateChi
     <Modal
       isOpen={Boolean(member)}
       onClose={handleCancel}
-      title={`Create Login for ${member.displayName}`}
+      title={t('family:createLogin.title', { name: member.displayName })}
     >
       <form id={FORM_ID} onSubmit={handleSubmit} className="space-y-4" noValidate>
         {/* Username */}
         <div>
           <label htmlFor="cl-username" className="block text-sm font-medium text-gray-700">
-            Username
+            {t('family:createLogin.username')}
           </label>
           <input
             id="cl-username"
@@ -131,11 +133,11 @@ export function CreateChildLoginDialog({ member, onClose, onSuccess }: CreateChi
             className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500"
           />
           <p id="cl-username-help" className="text-xs text-gray-500 mt-1">
-            3–32 characters. Letters, numbers, spaces, and underscores only.
+            {t('family:createLogin.usernameHelp')}
           </p>
           {showNormalizedPreview && (
             <p className="text-xs text-gray-500 mt-1">
-              Will be saved as: <span className="font-medium text-gray-700">{normalizedPreview}</span>
+              {t('family:createLogin.willBeSavedAs', { username: normalizedPreview })}
             </p>
           )}
           {touched.username && usernameError && (
@@ -148,7 +150,7 @@ export function CreateChildLoginDialog({ member, onClose, onSuccess }: CreateChi
         {/* Password */}
         <div>
           <label htmlFor="cl-password" className="block text-sm font-medium text-gray-700">
-            Password
+            {t('family:createLogin.password')}
           </label>
           <input
             id="cl-password"
@@ -162,7 +164,7 @@ export function CreateChildLoginDialog({ member, onClose, onSuccess }: CreateChi
             className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500"
           />
           <p id="cl-password-help" className="text-xs text-gray-500 mt-1">
-            At least {PASSWORD_MIN_LENGTH} characters, with a letter and a number.
+            {t('family:createLogin.passwordHelp', { min: PASSWORD_MIN_LENGTH })}
           </p>
           {touched.password && passwordError && (
             <p id="cl-password-error" className="text-xs text-danger-500 mt-1" role="alert">
@@ -174,7 +176,7 @@ export function CreateChildLoginDialog({ member, onClose, onSuccess }: CreateChi
         {/* Confirm Password */}
         <div>
           <label htmlFor="cl-confirm" className="block text-sm font-medium text-gray-700">
-            Confirm Password
+            {t('family:createLogin.confirmPassword')}
           </label>
           <input
             id="cl-confirm"
@@ -189,7 +191,7 @@ export function CreateChildLoginDialog({ member, onClose, onSuccess }: CreateChi
           />
           {touched.confirm && confirmError && (
             <p id="cl-confirm-error" className="text-xs text-danger-500 mt-1" role="alert">
-              {confirmError}
+              {t('family:createLogin.passwordsDoNotMatch')}
             </p>
           )}
         </div>
@@ -204,7 +206,7 @@ export function CreateChildLoginDialog({ member, onClose, onSuccess }: CreateChi
             className="mt-0.5 h-4 w-4 rounded border-gray-300 text-primary-500 focus:ring-primary-500"
           />
           <span>
-            Require password change on first login
+            {t('family:createLogin.requireChange')}
           </span>
         </label>
 
@@ -224,14 +226,14 @@ export function CreateChildLoginDialog({ member, onClose, onSuccess }: CreateChi
             disabled={submitting}
             className="flex-1"
           >
-            Cancel
+            {t('common:cancel')}
           </Button>
           <Button
             type="submit"
             disabled={!formValid || submitting}
             className="flex-1"
           >
-            {submitting ? 'Creating…' : 'Create Login'}
+            {submitting ? t('common:creating') : t('family:createLogin.submit')}
           </Button>
         </div>
       </form>

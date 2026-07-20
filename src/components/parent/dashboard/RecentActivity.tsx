@@ -1,3 +1,4 @@
+import { useTranslation } from 'react-i18next';
 import { useStore } from '../../../store/useStore';
 import { Card } from '../../ui/Card';
 import { Zap, ArrowRightLeft, Gift, Coins, PawPrint, CheckCircle2, Activity, ChevronRight } from 'lucide-react';
@@ -27,6 +28,7 @@ function formatTimestamp(timestamp: any): string {
 }
 
 export function RecentActivity() {
+  const { t } = useTranslation('dashboard');
   const { openRequest } = useRequestDetail();
   const {
     feed = [],
@@ -52,12 +54,12 @@ export function RecentActivity() {
         id="recent-activity-heading"
         className="mb-4 flex items-center gap-2 text-lg font-bold text-gray-900"
       >
-        Recent Family Activity
+        {t('recentActivity.heading')}
       </h2>
 
       {events.length === 0 ? (
         <div className="rounded-2xl border border-gray-100 bg-white p-8 text-center text-gray-500 shadow-sm">
-          No family activity yet.
+          {t('recentActivity.empty')}
         </div>
       ) : (
         <Card className="p-1">
@@ -85,7 +87,7 @@ export function RecentActivity() {
                 </div>
                 {linked && (
                   <span className="ml-2 flex shrink-0 items-center gap-1 text-xs font-medium text-primary-600 opacity-70 transition-opacity group-hover:opacity-100 group-focus-within:opacity-100 sm:opacity-0 sm:group-hover:opacity-100 sm:group-focus-within:opacity-100">
-                    View request
+                    {t('recentActivity.viewRequest')}
                     <ChevronRight size={14} />
                   </span>
                 )}
@@ -108,7 +110,7 @@ export function RecentActivity() {
                 key={item.id}
                 type="button"
                 onClick={() => openRequest(linked)}
-                aria-label={`View request: ${item.text}`}
+                aria-label={t('recentActivity.viewRequestAria', { text: item.text })}
                 className="group flex w-full items-start gap-3 border-b border-gray-50 p-4 text-left last:border-0 transition-colors hover:bg-primary-50/60 focus:bg-primary-50/60 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-400"
               >
                 {baseRow}

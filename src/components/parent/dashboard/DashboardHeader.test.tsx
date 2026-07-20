@@ -7,10 +7,10 @@ vi.mock('../../../store/useStore', () => ({ useStore: () => state.current }));
 import { getGreeting, DashboardHeader } from './DashboardHeader';
 
 describe('getGreeting', () => {
-  it('returns the correct part-of-day greeting', () => {
-    expect(getGreeting(new Date('2026-07-14T08:00:00Z'))).toBe('Good morning');
-    expect(getGreeting(new Date('2026-07-14T14:00:00Z'))).toBe('Good afternoon');
-    expect(getGreeting(new Date('2026-07-14T20:00:00Z'))).toBe('Good evening');
+  it('returns the correct part-of-day greeting key', () => {
+    expect(getGreeting(new Date('2026-07-14T08:00:00Z'))).toBe('morning');
+    expect(getGreeting(new Date('2026-07-14T14:00:00Z'))).toBe('afternoon');
+    expect(getGreeting(new Date('2026-07-14T20:00:00Z'))).toBe('evening');
   });
 });
 

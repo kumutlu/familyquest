@@ -1,4 +1,81 @@
 {
   "members": "Members",
-  "addMember": "Add member"
+  "addMember": "Add member",
+  "loading": "Loading Family…",
+  "loginCreated": "Login created for {{name}}.",
+  "title": "Family Hub",
+  "subtitle": "See how everyone is doing.",
+  "challenge": {
+    "badge": "Family Challenge",
+    "percentComplete": "{{percent}}% Complete",
+    "rewardEach": "Reward: {{points}} pts each",
+    "claim": "Complete Challenge & Award Points!",
+    "claiming": "Claiming…",
+    "goalReached": "Goal reached! Waiting for parent to claim."
+  },
+  "topEarner": {
+    "label": "Top Earner",
+    "leading": "Leading the pack"
+  },
+  "adults": "Adults",
+  "edit": "Edit",
+  "childrenRankings": "Children & Rankings",
+  "thisWeek": "This Week",
+  "history": "History",
+  "managed": "Managed",
+  "ptsThisWeek": "{{value}} pts this week",
+  "noPastChampions": {
+    "title": "No Past Champions",
+    "subtitle": "Check back next week to see who won this week’s leaderboard!"
+  },
+  "newChallenge": {
+    "title": "New Family Challenge",
+    "challengeTitle": "Challenge Title",
+    "xpTarget": "Family XP Target",
+    "xpTargetHelp": "XP the family needs to earn together.",
+    "rewardPerChild": "Reward Per Child (Points)",
+    "rewardPerChildHelp": "Every child gets this if successful.",
+    "start": "Start Challenge",
+    "starting": "Starting…"
+  },
+  "login": {
+    "label": "Login",
+    "noLogin": "No login created",
+    "create": "Create Login",
+    "username": "Username:",
+    "status": "Status:",
+    "enabled": "Enabled",
+    "disabled": "Disabled",
+    "requiresPasswordChange": "Requires password change:",
+    "yes": "Yes",
+    "no": "No",
+    "lastLogin": "Last login:",
+    "never": "Never",
+    "resetPassword": "Reset Password",
+    "disableLogin": "Disable Login",
+    "enableLogin": "Enable Login",
+    "comingSoon": "Coming soon"
+  },
+  "editMember": {
+    "title": "Edit Member",
+    "displayName": "Display Name",
+    "chooseAvatar": "Choose Avatar",
+    "freeAvatarError": "Adults can only use free starter avatars from the catalog.",
+    "updateError": "Failed to update member.",
+    "save": "Save"
+  },
+  "createLogin": {
+    "title": "Create Login for {{name}}",
+    "username": "Username",
+    "usernameHelp": "3–32 characters. Letters, numbers, spaces, and underscores only.",
+    "willBeSavedAs": "Will be saved as: {{username}}",
+    "password": "Password",
+    "passwordHelp": "At least {{min}} characters, with a letter and a number.",
+    "confirmPassword": "Confirm Password",
+    "passwordsDoNotMatch": "Passwords do not match.",
+    "requireChange": "Require password change on first login",
+    "cancel": "Cancel",
+    "submit": "Create Login",
+    "submitting": "Creating…"
+  }
 }

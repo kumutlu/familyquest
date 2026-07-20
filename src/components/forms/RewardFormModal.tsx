@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { useTranslation } from 'react-i18next';
 import { useStore } from '../../store/useStore';
 import { createReward, updateReward } from '../../lib/api';
 import { REWARD_TEMPLATES } from '../../lib/templates';
@@ -11,6 +12,7 @@ interface RewardFormModalProps {
 }
 
 export function RewardFormModal({ isOpen, onClose, rewardToEdit }: RewardFormModalProps) {
+  const { t } = useTranslation(['rewards', 'errors']);
   const { currentUser } = useStore();
 
   const [formData, setFormData] = useState<any>({
@@ -64,13 +66,13 @@ export function RewardFormModal({ isOpen, onClose, rewardToEdit }: RewardFormMod
     <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-gray-900/40 backdrop-blur-sm animate-in fade-in duration-200">
       <div className="bg-white w-full sm:max-w-md sm:rounded-3xl rounded-t-3xl shadow-xl overflow-hidden flex flex-col max-h-[90vh] animate-in slide-in-from-bottom-full sm:slide-in-from-bottom-10 duration-300">
         <div className="px-6 py-4 flex justify-between items-center border-b border-gray-100">
-          <h3 className="text-xl font-bold text-gray-900">{formData.id ? 'Edit Reward' : 'New Reward'}</h3>
+          <h3 className="text-xl font-bold text-gray-900">{formData.id ? t('rewards:form.editTitle') : t('rewards:form.newTitle')}</h3>
           <button onClick={onClose} className="p-2 -mr-2 bg-gray-100 hover:bg-gray-200 rounded-full text-gray-500">✕</button>
         </div>
         <div className="p-6 overflow-y-auto">
           {!formData.id && (
             <div className="mb-6">
-              <label className="block text-sm font-medium text-gray-700 mb-2">Or choose a template:</label>
+              <label className="block text-sm font-medium text-gray-700 mb-2">{t('rewards:form.templateLabel')}</label>
               <select
                 className="w-full px-3 py-2 border border-gray-300 rounded-md bg-white text-sm"
                 onChange={(e) => {
@@ -82,7 +84,7 @@ export function RewardFormModal({ isOpen, onClose, rewardToEdit }: RewardFormMod
                   setFormData({ ...formData, title: tmpl.title, cost: tmpl.points, icon });
                 }}
               >
-                <option value="">Select a template...</option>
+                <option value="">{t('rewards:form.templatePlaceholder')}</option>
                 {REWARD_TEMPLATES.map((tmpl, idx) => (
                   <option key={idx} value={JSON.stringify(tmpl)}>
                     {tmpl.category} - {tmpl.title} ({tmpl.points} pts)
@@ -93,42 +95,42 @@ export function RewardFormModal({ isOpen, onClose, rewardToEdit }: RewardFormMod
           )}
           <form onSubmit={handleFormSubmit} className="space-y-4">
             <div>
-              <label className="block text-sm font-medium text-gray-700">Reward Name</label>
+              <label className="block text-sm font-medium text-gray-700">{t('rewards:form.rewardName')}</label>
               <input type="text" required value={formData.title} onChange={e => setFormData({...formData, title: e.target.value})} className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md" />
             </div>
             <div>
-              <label className="block text-sm font-medium text-gray-700">Description (Optional)</label>
+              <label className="block text-sm font-medium text-gray-700">{t('rewards:form.description')}</label>
               <textarea rows={2} value={formData.description} onChange={e => setFormData({...formData, description: e.target.value})} className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md" />
             </div>
             <div className="grid grid-cols-2 gap-4">
               <div>
-                <label className="block text-sm font-medium text-gray-700">Cost (Points)</label>
+                <label className="block text-sm font-medium text-gray-700">{t('rewards:form.cost')}</label>
                 <input type="number" required min="1" value={formData.cost} onChange={e => setFormData({...formData, cost: e.target.value})} className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md" />
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700">Available Quantity (Optional)</label>
-                <input type="number" min="0" placeholder="Unlimited" value={formData.inventory} onChange={e => setFormData({...formData, inventory: e.target.value})} className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md" />
+                <label className="block text-sm font-medium text-gray-700">{t('rewards:form.quantity')}</label>
+                <input type="number" min="0" placeholder={t('rewards:form.quantityPlaceholder')} value={formData.inventory} onChange={e => setFormData({...formData, inventory: e.target.value})} className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md" />
               </div>
             </div>
             <div>
-              <label className="block text-sm font-medium text-gray-700">Icon / Category</label>
+              <label className="block text-sm font-medium text-gray-700">{t('rewards:form.icon')}</label>
               <select value={formData.icon} onChange={e => setFormData({...formData, icon: e.target.value})} className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md bg-white">
-                <option value="Gift">Gift / Item</option>
-                <option value="Gamepad2">Screen Time / Gaming</option>
-                <option value="Pizza">Food / Treat</option>
-                <option value="Ticket">Experience / Outing</option>
+                <option value="Gift">{t('rewards:form.iconGift')}</option>
+                <option value="Gamepad2">{t('rewards:form.iconGamepad')}</option>
+                <option value="Pizza">{t('rewards:form.iconPizza')}</option>
+                <option value="Ticket">{t('rewards:form.iconTicket')}</option>
               </select>
             </div>
             <div className="flex items-center justify-between pt-2">
               <div className="flex items-center gap-2">
                 <input type="checkbox" id="activeReward" checked={formData.isActive} onChange={e => setFormData({...formData, isActive: e.target.checked})} className="w-4 h-4 text-success-600 rounded border-gray-300 focus:ring-success-500" />
-                <label htmlFor="activeReward" className="text-sm font-medium text-gray-700">Active Status</label>
+                <label htmlFor="activeReward" className="text-sm font-medium text-gray-700">{t('rewards:form.active')}</label>
               </div>
             </div>
             {error && <p className="text-red-500 text-sm">{error}</p>}
             <div className="pt-4">
               <Button type="submit" fullWidth disabled={isSubmitting} className="bg-reward-500 hover:bg-reward-600">
-                {isSubmitting ? 'Saving...' : 'Save Reward'}
+                {isSubmitting ? t('rewards:form.saving') : t('rewards:form.save')}
               </Button>
             </div>
           </form>

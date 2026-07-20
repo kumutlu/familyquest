@@ -3,9 +3,16 @@
   "loading": "Yükleniyor…",
   "save": "Kaydet",
   "cancel": "İptal",
+  "saving": "Kaydediliyor…",
+  "creating": "Oluşturuluyor…",
   "language": "Dil",
   "closeDialog": "Kapat",
   "dismissNotification": "Bildirimi kapat",
   "back": "Geri",
-  "continue": "Devam et"
+  "continue": "Devam et",
+  "roles": {
+    "owner": "Sahip",
+    "parent": "Ebeveyn",
+    "child": "Çocuk"
+  }
 }

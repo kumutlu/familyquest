@@ -1,4 +1,60 @@
 {
   "greeting": "Merhaba, {{name}}",
-  "summary": "Aile özetiniz"
+  "summary": "Aile özetiniz",
+  "loading": "Panel yükleniyor…",
+  "header": {
+    "morning": "Günaydın, {{name}}",
+    "afternoon": "İyi akşamlar, {{name}}",
+    "evening": "İyi akşamlar, {{name}}",
+    "subtitle": "Ailenizde bugün neler olduğuna göz atın.",
+    "family": "{{name}} ailesi"
+  },
+  "quickActions": {
+    "heading": "Hızlı İşlemler",
+    "newTask": "Yeni Görev",
+    "newTaskHelper": "Bir iş veya hedef ata",
+    "newReward": "Yeni Ödül",
+    "newRewardHelper": "Kullanılacak bir şey ekle",
+    "logBehaviour": "Davranış Ekle",
+    "logBehaviourHelper": "İyi veya pek iyi olmayanı kaydet",
+    "manageWallet": "Cüzdanı Yönet",
+    "manageWalletHelper": "Para ekle veya çek",
+    "petBox": "Evcil Kutusu",
+    "petBoxHelper": "Aile tasarruf kutusu",
+    "inviteMember": "Üye Davet Et",
+    "inviteMemberHelper": "Katılım kodunu paylaş"
+  },
+  "childrenOverview": {
+    "heading": "Çocuklara Genel Bakış"
+  },
+  "childCard": {
+    "level": "Seviye {{level}}",
+    "points": "Puan",
+    "wallet": "Cüzdan",
+    "streak": "Seri",
+    "unavailable": "Mevcut değil",
+    "pendingTasks_one": "{{count}} bekleyen görev",
+    "pendingTasks_other": "{{count}} bekleyen görev",
+    "viewProfile": "Profili Gör →",
+    "viewProfileAria": "{{name}} profilini görüntüle"
+  },
+  "recentActivity": {
+    "heading": "Son Aile Etkinliği",
+    "empty": "Henüz aile etkinliği yok.",
+    "viewRequest": "İsteği gör",
+    "viewRequestAria": "İsteği gör: {{text}}"
+  },
+  "joinRequests": {
+    "heading": "Bekleyen Katılım İstekleri",
+    "claimProfile": "Yönetilen bir profili sahiplenmek istiyor",
+    "joinFamily": "Aileye katılmak istiyor",
+    "reject": "Reddet",
+    "rejecting": "Reddediliyor…",
+    "approve": "Çocuk Olarak Onayla",
+    "approving": "Onaylanıyor…"
+  },
+  "loadError": {
+    "title": "Aile panelinizi yükleyemedik.",
+    "subtitle": "Lütfen biraz sonra tekrar deneyin."
+  }
 }

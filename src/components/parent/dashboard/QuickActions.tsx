@@ -1,4 +1,5 @@
 import { useNavigate } from 'react-router-dom';
+import { useTranslation } from 'react-i18next';
 import { Plus, Gift, Zap, Wallet, PawPrint, UserPlus } from 'lucide-react';
 import { QuickActionCard } from './QuickActionCard';
 
@@ -9,53 +10,54 @@ export interface QuickActionsProps {
 }
 
 export function QuickActions({ onNewTask, onNewReward, onLogBehaviour }: QuickActionsProps) {
+  const { t } = useTranslation('dashboard');
   const navigate = useNavigate();
 
   const actions = [
     {
       key: 'task',
-      label: 'New Task',
-      helper: 'Assign a chore or goal',
+      label: t('quickActions.newTask'),
+      helper: t('quickActions.newTaskHelper'),
       icon: <Plus size={20} />,
       accent: 'bg-primary-50 text-primary-600',
       onClick: onNewTask,
     },
     {
       key: 'reward',
-      label: 'New Reward',
-      helper: 'Add something to redeem',
+      label: t('quickActions.newReward'),
+      helper: t('quickActions.newRewardHelper'),
       icon: <Gift size={20} />,
       accent: 'bg-reward-50 text-reward-500',
       onClick: onNewReward,
     },
     {
       key: 'behaviour',
-      label: 'Log Behaviour',
-      helper: 'Record good or not-so-good',
+      label: t('quickActions.logBehaviour'),
+      helper: t('quickActions.logBehaviourHelper'),
       icon: <Zap size={20} />,
       accent: 'bg-warning-50 text-warning-500',
       onClick: onLogBehaviour,
     },
     {
       key: 'money',
-      label: 'Manage Wallet',
-      helper: 'Add or withdraw money',
+      label: t('quickActions.manageWallet'),
+      helper: t('quickActions.manageWalletHelper'),
       icon: <Wallet size={20} />,
       accent: 'bg-success-50 text-success-500',
       onClick: () => navigate('/wallets'),
     },
     {
       key: 'petbox',
-      label: 'Pet Box',
-      helper: 'Family savings pot',
+      label: t('quickActions.petBox'),
+      helper: t('quickActions.petBoxHelper'),
       icon: <PawPrint size={20} />,
       accent: 'bg-primary-50 text-primary-600',
       onClick: () => navigate('/pet-box'),
     },
     {
       key: 'invite',
-      label: 'Invite Member',
-      helper: 'Share the join code',
+      label: t('quickActions.inviteMember'),
+      helper: t('quickActions.inviteMemberHelper'),
       icon: <UserPlus size={20} />,
       accent: 'bg-primary-50 text-primary-600',
       onClick: () => navigate('/settings'),
@@ -65,7 +67,7 @@ export function QuickActions({ onNewTask, onNewReward, onLogBehaviour }: QuickAc
   return (
     <section aria-labelledby="quick-actions-heading">
       <h2 id="quick-actions-heading" className="sr-only">
-        Quick Actions
+        {t('quickActions.heading')}
       </h2>
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
         {actions.map(action => (

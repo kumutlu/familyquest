@@ -1,5 +1,37 @@
 {
   "generic": "Something went wrong",
   "required": "This field is required",
-  "network": "Network error, please try again"
+  "network": "Network error, please try again",
+  "signInRequired": "You must be signed in to save a task.",
+  "saveTaskFailed": "Failed to save task. Please try again.",
+  "completeTaskFailed": "Failed to complete task.",
+  "archiveTaskConfirm": "Are you sure you want to archive this task?",
+  "archiveRewardConfirm": "Are you sure you want to archive this reward?",
+  "redeemFailed": "Failed to redeem reward.",
+  "redeemNotEnoughPoints": "You don’t have enough points for this reward.",
+  "redeemOutOfStock": "This reward is out of stock.",
+  "childLogin": {
+    "usernameRequired": "Please enter a username.",
+    "usernameLength": "Username must be {{min}}–{{max}} characters.",
+    "usernameChars": "Username can only use letters, numbers, spaces, and underscores.",
+    "passwordRequired": "Please enter a password.",
+    "passwordTooShort": "Password must be at least {{min}} characters.",
+    "passwordTooLong": "Password is too long.",
+    "passwordNeedsLetter": "Password must include at least one letter.",
+    "passwordNeedsDigit": "Password must include at least one number.",
+    "passwordSameAsUsername": "Password cannot match the username.",
+    "usernameTaken": "That username is already taken in this family.",
+    "loginAlreadyExists": "This child already has a login.",
+    "childNotFound": "Child not found.",
+    "childNotManaged": "This child is not managed by the family.",
+    "childNotInFamily": "This child is not in your family.",
+    "notAuthorized": "You do not have permission to do this.",
+    "unexpectedField": "Unexpected field sent to the server.",
+    "requestReplay": "This request was already used with different details.",
+    "createFailed": "We could not create the login. Please try again.",
+    "unauthenticated": "You must be signed in to do this.",
+    "alreadyExists": "A login already exists for this child.",
+    "failedPrecondition": "This child is not managed by the family.",
+    "default": "Could not create the login. Please try again."
+  }
 }

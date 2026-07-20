@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { Card, CardContent } from '../components/ui/Card';
 import { Badge } from '../components/ui/Badge';
 import { Button } from '../components/ui/Button';
@@ -7,9 +8,11 @@ import { useStore } from '../store/useStore';
 import { redeemReward, createReward, updateReward } from '../lib/api';
 import { cn } from '../lib/utils';
 import { isParentRole } from '../lib/roles';
+import { formatNumber } from '../i18n/format';
 import { HistoryActionControl } from '../components/reversals/HistoryActionControl';
 
 export function Rewards() {
+  const { t } = useTranslation(['rewards', 'errors']);
   const { currentUser, rewards, redemptions, loading } = useStore();
   const [selectedReward, setSelectedReward] = useState<any>(null);
   const isParent = currentUser?.role === 'parent' || currentUser?.role === 'owner';
@@ -21,18 +24,18 @@ export function Rewards() {
   const [error, setError] = useState<string | null>(null);
   const [successMsg, setSuccessMsg] = useState<string | null>(null);
 
-  if (loading || !currentUser) return <div className="p-8 text-center text-gray-500 animate-pulse">Loading Rewards...</div>;
+  if (loading || !currentUser) return <div className="p-8 text-center text-gray-500 animate-pulse">{t('rewards:loading')}</div>;
 
   const activeRewards = rewards.filter(r => r.isActive !== false);
 
   const handleRedeem = async () => {
     if (currentUser.rewardPoints < selectedReward.cost) {
-      setError("You don't have enough points for this reward.");
+      setError(t('rewards:details.notEnoughPoints'));
       return;
     }
 
     if (selectedReward.inventory !== undefined && selectedReward.inventory !== null && selectedReward.inventory <= 0) {
-      setError("This reward is out of stock.");
+      setError(t('rewards:details.outOfStock'));
       return;
     }
 
@@ -54,7 +57,7 @@ export function Rewards() {
       }, 1500);
     } catch (e: any) {
       console.error(e);
-      setError(e.message || 'Failed to redeem reward.');
+      setError(e.message || t('errors:redeemFailed'));
       setIsSubmitting(false);
     }
   };
@@ -71,7 +74,7 @@ export function Rewards() {
   };
 
   const handleArchive = async (rewardId: string) => {
-    if (confirm('Are you sure you want to archive this reward?')) {
+    if (confirm(t('errors:archiveRewardConfirm'))) {
       try {
         await updateReward(currentUser.familyId, rewardId, { isActive: false });
         setSelectedReward(null);
@@ -95,10 +98,10 @@ export function Rewards() {
 
       if (formData.id) {
         await updateReward(currentUser.familyId, formData.id, dataToSave);
-        setSuccessMsg('Reward updated successfully!');
+        setSuccessMsg(t('rewards:updateSuccess'));
       } else {
         await createReward(currentUser.familyId, dataToSave);
-        setSuccessMsg('Reward created successfully!');
+        setSuccessMsg(t('rewards:createSuccess'));
       }
       setIsFormOpen(false);
       setTimeout(() => setSuccessMsg(null), 3000);
@@ -121,15 +124,15 @@ export function Rewards() {
     <div className="space-y-6 animate-in fade-in duration-300">
       <header className="flex justify-between items-center">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900 tracking-tight">Rewards</h1>
-          <p className="text-gray-500 mt-1">Spend your hard-earned points.</p>
+          <h1 className="text-2xl font-bold text-gray-900 tracking-tight">{t('rewards:title')}</h1>
+          <p className="text-gray-500 mt-1">{t('rewards:subtitle')}</p>
         </div>
         <div className="flex items-center gap-3">
           <Badge variant="reward" className="text-sm px-3 py-1 bg-reward-100 text-reward-700">
-            {currentUser.rewardPoints} pts
+            {t('rewards:pointsBadge', { value: formatNumber(currentUser.rewardPoints) })}
           </Badge>
           {isParentRole(currentUser.role) && (
-            <Button onClick={openCreateForm} aria-label="Add Reward" size="sm" className="bg-reward-500 hover:bg-reward-600 rounded-full h-10 w-10 p-0 shadow-lg flex items-center justify-center">
+            <Button onClick={openCreateForm} aria-label={t('rewards:addAria')} size="sm" className="bg-reward-500 hover:bg-reward-600 rounded-full h-10 w-10 p-0 shadow-lg flex items-center justify-center">
               <Plus size={20} />
             </Button>
           )}
@@ -145,7 +148,7 @@ export function Rewards() {
       <div className="grid grid-cols-2 gap-4 pb-24">
         {activeRewards.length === 0 ? (
           <div className="col-span-2 bg-white rounded-2xl border border-gray-100 p-8 text-center text-gray-500">
-            No rewards available yet.
+            {t('rewards:empty')}
           </div>
         ) : (
           activeRewards.map((reward) => {
@@ -161,9 +164,9 @@ export function Rewards() {
                     {getIcon(reward.icon)}
                   </div>
                   <h3 className="font-bold text-gray-900 text-sm mb-1 leading-tight">{reward.title}</h3>
-                  <p className="text-reward-600 font-bold text-xs">{reward.cost} pts</p>
+                  <p className="text-reward-600 font-bold text-xs">{t('rewards:pointsBadge', { value: formatNumber(reward.cost) })}</p>
                   {reward.inventory !== undefined && reward.inventory !== null && (
-                    <p className="text-xs text-gray-400 mt-1">{reward.inventory} left</p>
+                    <p className="text-xs text-gray-400 mt-1">{t('rewards:details.left', { value: formatNumber(reward.inventory) })}</p>
                   )}
                 </CardContent>
               </Card>
@@ -174,7 +177,7 @@ export function Rewards() {
 
       {isParent && redemptions.length > 0 && (
         <section>
-          <h2 className="mb-3 text-lg font-bold text-gray-900">Redemption history</h2>
+          <h2 className="mb-3 text-lg font-bold text-gray-900">{t('rewards:redemptionHistory')}</h2>
           <div className="space-y-2">
             {redemptions.map(redemption => {
               const reward = rewards.find(item => item.id === redemption.rewardId);
@@ -183,7 +186,7 @@ export function Rewards() {
                   <CardContent className="flex items-center justify-between gap-4 p-4">
                     <div>
                       <p className="font-semibold text-gray-900">{reward?.title || 'Reward'}</p>
-                      <p className="text-sm text-gray-500">{redemption.costPaid} points redeemed</p>
+                      <p className="text-sm text-gray-500">{t('rewards:redeemedPoints', { value: formatNumber(redemption.costPaid) })}</p>
                     </div>
                     <HistoryActionControl sourceKind="reward_redemption" source={redemption} />
                   </CardContent>
@@ -199,8 +202,8 @@ export function Rewards() {
         <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-gray-900/40 backdrop-blur-sm animate-in fade-in duration-200">
           <div className="bg-white w-full sm:max-w-md sm:rounded-3xl rounded-t-3xl shadow-xl animate-in slide-in-from-bottom-full sm:slide-in-from-bottom-10 duration-300 overflow-hidden flex flex-col">
             <div className="px-6 py-4 flex justify-between items-center border-b border-gray-100">
-              <h3 className="text-xl font-bold text-gray-900">Reward Details</h3>
-              <button onClick={() => { setSelectedReward(null); setError(null); }} className="p-2 -mr-2 bg-gray-100 hover:bg-gray-200 rounded-full text-gray-500 transition-colors">✕</button>
+              <h3 className="text-xl font-bold text-gray-900">{t('rewards:details.title')}</h3>
+              <button onClick={() => { setSelectedReward(null); setError(null); }} aria-label={t('rewards:details.closeAria')} className="p-2 -mr-2 bg-gray-100 hover:bg-gray-200 rounded-full text-gray-500 transition-colors">✕</button>
             </div>
             
             <div className="p-6">
@@ -211,9 +214,9 @@ export function Rewards() {
                 
                 <div>
                   <h4 className="text-2xl font-bold text-gray-900">{selectedReward.title}</h4>
-                  <p className="text-reward-600 font-bold text-lg mt-1">{selectedReward.cost} points</p>
+                  <p className="text-reward-600 font-bold text-lg mt-1">{t('rewards:details.points', { value: formatNumber(selectedReward.cost) })}</p>
                   {selectedReward.inventory !== undefined && selectedReward.inventory !== null && (
-                    <p className="text-sm text-gray-500 mt-1">{selectedReward.inventory} in stock</p>
+                    <p className="text-sm text-gray-500 mt-1">{t('rewards:details.inStock', { value: formatNumber(selectedReward.inventory) })}</p>
                   )}
                 </div>
 
@@ -222,15 +225,15 @@ export function Rewards() {
                 {/* Parent Actions */}
                 {isParentRole(currentUser?.role) && (
                    <div className="flex gap-4 w-full mt-6 pt-6 border-t border-gray-100">
-                      <Button variant="secondary" fullWidth onClick={() => openEditForm(selectedReward)}><Edit size={16} className="mr-2"/> Edit</Button>
-                      <Button variant="danger" fullWidth onClick={() => handleArchive(selectedReward.id)}><Trash2 size={16} className="mr-2"/> Archive</Button>
+                      <Button variant="secondary" fullWidth onClick={() => openEditForm(selectedReward)}><Edit size={16} className="mr-2"/> {t('rewards:details.edit')}</Button>
+                      <Button variant="danger" fullWidth onClick={() => handleArchive(selectedReward.id)}><Trash2 size={16} className="mr-2"/> {t('rewards:details.archive')}</Button>
                    </div>
                 )}
 
                 {/* Child Actions */}
                 {currentUser?.role === 'child' && (
                   <Button fullWidth onClick={handleRedeem} size="lg" className="bg-reward-500 hover:bg-reward-600 shadow-reward-500/25 mt-6" disabled={isSubmitting || (selectedReward.inventory !== undefined && selectedReward.inventory !== null && selectedReward.inventory <= 0)}>
-                    {isSubmitting ? 'Redeeming...' : 'Redeem Reward'}
+                    {isSubmitting ? t('rewards:details.redeeming') : t('rewards:details.redeem')}
                   </Button>
                 )}
               </div>
@@ -244,38 +247,38 @@ export function Rewards() {
         <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-gray-900/40 backdrop-blur-sm animate-in fade-in duration-200">
           <div className="bg-white w-full sm:max-w-md sm:rounded-3xl rounded-t-3xl shadow-xl overflow-hidden flex flex-col max-h-[90vh] animate-in slide-in-from-bottom-full sm:slide-in-from-bottom-10 duration-300">
             <div className="px-6 py-4 flex justify-between items-center border-b border-gray-100">
-              <h3 className="text-xl font-bold text-gray-900">{formData.id ? 'Edit Reward' : 'New Reward'}</h3>
+              <h3 className="text-xl font-bold text-gray-900">{formData.id ? t('rewards:form.editTitle') : t('rewards:form.newTitle')}</h3>
               <button onClick={() => setIsFormOpen(false)} className="p-2 -mr-2 bg-gray-100 hover:bg-gray-200 rounded-full text-gray-500">✕</button>
             </div>
             <div className="p-6 overflow-y-auto">
               <form onSubmit={handleFormSubmit} className="space-y-4">
                 <div>
-                  <label className="block text-sm font-medium text-gray-700">Reward Title</label>
+                  <label className="block text-sm font-medium text-gray-700">{t('rewards:form.rewardTitle')}</label>
                   <input type="text" required value={formData.title} onChange={e => setFormData({...formData, title: e.target.value})} className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md" />
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-gray-700">Cost (Points)</label>
+                  <label className="block text-sm font-medium text-gray-700">{t('rewards:form.cost')}</label>
                   <input type="number" required min="1" value={formData.cost} onChange={e => setFormData({...formData, cost: e.target.value})} className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md" />
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-gray-700">Icon / Category</label>
+                  <label className="block text-sm font-medium text-gray-700">{t('rewards:form.icon')}</label>
                   <select value={formData.icon} onChange={e => setFormData({...formData, icon: e.target.value})} className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md bg-white">
-                    <option value="Gift">Gift (General)</option>
-                    <option value="Gamepad2">Gaming</option>
-                    <option value="Pizza">Food & Treats</option>
-                    <option value="Ticket">Experience / Outing</option>
+                    <option value="Gift">{t('rewards:form.iconGift')}</option>
+                    <option value="Gamepad2">{t('rewards:form.iconGamepad')}</option>
+                    <option value="Pizza">{t('rewards:form.iconPizza')}</option>
+                    <option value="Ticket">{t('rewards:form.iconTicket')}</option>
                   </select>
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-gray-700">Inventory (Optional)</label>
-                  <input type="number" placeholder="Leave blank for unlimited" min="0" value={formData.inventory} onChange={e => setFormData({...formData, inventory: e.target.value})} className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md" />
-                  <p className="text-xs text-gray-500 mt-1">If set, limits how many times this can be redeemed.</p>
+                  <label className="block text-sm font-medium text-gray-700">{t('rewards:form.inventory')}</label>
+                  <input type="number" placeholder={t('rewards:form.inventoryPlaceholder')} min="0" value={formData.inventory} onChange={e => setFormData({...formData, inventory: e.target.value})} className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md" />
+                  <p className="text-xs text-gray-500 mt-1">{t('rewards:form.inventoryHelp')}</p>
                 </div>
                 
                 {error && <p className="text-red-500 text-sm">{error}</p>}
                 <div className="pt-4">
                   <Button type="submit" fullWidth disabled={isSubmitting} className="bg-reward-500 hover:bg-reward-600">
-                    {isSubmitting ? 'Saving...' : 'Save Reward'}
+                    {isSubmitting ? t('rewards:form.saving') : t('rewards:form.save')}
                   </Button>
                 </div>
               </form>

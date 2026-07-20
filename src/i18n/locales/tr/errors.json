@@ -1,5 +1,37 @@
 {
   "generic": "Bir şeyler ters gitti",
   "required": "Bu alan zorunludur",
-  "network": "Ağ hatası, lütfen tekrar deneyin"
+  "network": "Ağ hatası, lütfen tekrar deneyin",
+  "signInRequired": "Görevi kaydetmek için giriş yapmış olmalısınız.",
+  "saveTaskFailed": "Görev kaydedilemedi. Lütfen tekrar deneyin.",
+  "completeTaskFailed": "Görev tamamlanamadı.",
+  "archiveTaskConfirm": "Bu görevi arşivlemek istediğinizden emin misiniz?",
+  "archiveRewardConfirm": "Bu ödülü arşivlemek istediğinizden emin misiniz?",
+  "redeemFailed": "Ödül kullanılamadı.",
+  "redeemNotEnoughPoints": "Bu ödül için yeterli puanınız yok.",
+  "redeemOutOfStock": "Bu ödül tükendi.",
+  "childLogin": {
+    "usernameRequired": "Lütfen bir kullanıcı adı girin.",
+    "usernameLength": "Kullanıcı adı {{min}}–{{max}} karakter olmalıdır.",
+    "usernameChars": "Kullanıcı adı yalnızca harf, rakam, boşluk ve alt çizgi kullanabilir.",
+    "passwordRequired": "Lütfen bir parola girin.",
+    "passwordTooShort": "Parola en az {{min}} karakter olmalıdır.",
+    "passwordTooLong": "Parola çok uzun.",
+    "passwordNeedsLetter": "Parola en az bir harf içermelidir.",
+    "passwordNeedsDigit": "Parola en az bir rakam içermelidir.",
+    "passwordSameAsUsername": "Parola kullanıcı adıyla aynı olamaz.",
+    "usernameTaken": "Bu kullanıcı adı aile içinde zaten alınmış.",
+    "loginAlreadyExists": "Bu çocuğun zaten bir girişi var.",
+    "childNotFound": "Çocuk bulunamadı.",
+    "childNotManaged": "Bu çocuk aile tarafından yönetilmiyor.",
+    "childNotInFamily": "Bu çocuk ailenizde değil.",
+    "notAuthorized": "Bunu yapma izniniz yok.",
+    "unexpectedField": "Sunucuya beklenmeyen alan gönderildi.",
+    "requestReplay": "Bu istek farklı ayrıntılarla zaten kullanıldı.",
+    "createFailed": "Giriş oluşturulamadı. Lütfen tekrar deneyin.",
+    "unauthenticated": "Bunu yapmak için giriş yapmış olmalısınız.",
+    "alreadyExists": "Bu çocuk için zaten bir giriş var.",
+    "failedPrecondition": "Bu çocuk aile tarafından yönetilmiyor.",
+    "default": "Giriş oluşturulamadı. Lütfen tekrar deneyin."
+  }
 }

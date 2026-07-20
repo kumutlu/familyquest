@@ -16,6 +16,7 @@
 
 import { httpsCallable } from 'firebase/functions';
 import { functions } from './firebase';
+import i18n from '../i18n/config';
 
 // --- Types (mirror of functions/src/childLogin.ts public contract) ---------
 
@@ -164,55 +165,57 @@ export function mapSignInChildError(_err: unknown): string {
 export function mapChildLoginError(err: unknown): string {
   const e = err as { code?: string; message?: string } | null;
   const code = e?.message ?? e?.code ?? '';
+  const range = { min: USERNAME_MIN_LENGTH, max: USERNAME_MAX_LENGTH };
+  const pw = { min: PASSWORD_MIN_LENGTH };
   switch (code) {
     case 'USERNAME_REQUIRED':
-      return 'Please enter a username.';
+      return i18n.t('errors:childLogin.usernameRequired');
     case 'USERNAME_LENGTH':
-      return `Username must be ${USERNAME_MIN_LENGTH}–${USERNAME_MAX_LENGTH} characters.`;
+      return i18n.t('errors:childLogin.usernameLength', range);
     case 'USERNAME_CHARS':
-      return 'Username can only use letters, numbers, spaces, and underscores.';
+      return i18n.t('errors:childLogin.usernameChars');
     case 'PASSWORD_REQUIRED':
-      return 'Please enter a password.';
+      return i18n.t('errors:childLogin.passwordRequired');
     case 'PASSWORD_TOO_SHORT':
-      return `Password must be at least ${PASSWORD_MIN_LENGTH} characters.`;
+      return i18n.t('errors:childLogin.passwordTooShort', pw);
     case 'PASSWORD_TOO_LONG':
-      return 'Password is too long.';
+      return i18n.t('errors:childLogin.passwordTooLong');
     case 'PASSWORD_NEEDS_LETTER':
-      return 'Password must include at least one letter.';
+      return i18n.t('errors:childLogin.passwordNeedsLetter');
     case 'PASSWORD_NEEDS_DIGIT':
-      return 'Password must include at least one number.';
+      return i18n.t('errors:childLogin.passwordNeedsDigit');
     case 'PASSWORD_SAME_AS_USERNAME':
-      return 'Password cannot match the username.';
+      return i18n.t('errors:childLogin.passwordSameAsUsername');
     case 'USERNAME_TAKEN':
-      return 'That username is already taken in this family.';
+      return i18n.t('errors:childLogin.usernameTaken');
     case 'LOGIN_ALREADY_EXISTS':
-      return 'This child already has a login.';
+      return i18n.t('errors:childLogin.loginAlreadyExists');
     case 'CHILD_NOT_FOUND':
-      return 'Child not found.';
+      return i18n.t('errors:childLogin.childNotFound');
     case 'CHILD_NOT_MANAGED':
-      return 'This child is not managed by the family.';
+      return i18n.t('errors:childLogin.childNotManaged');
     case 'CHILD_NOT_IN_FAMILY':
-      return 'This child is not in your family.';
+      return i18n.t('errors:childLogin.childNotInFamily');
     case 'NOT_AUTHORIZED':
     case 'permission-denied':
-      return 'You do not have permission to do this.';
+      return i18n.t('errors:childLogin.notAuthorized');
     case 'UNEXPECTED_FIELD':
-      return 'Unexpected field sent to the server.';
+      return i18n.t('errors:childLogin.unexpectedField');
     case 'CLIENT_REQ_ID_REPLAY_MISMATCH':
-      return 'This request was already used with different details.';
+      return i18n.t('errors:childLogin.requestReplay');
     case 'AUTH_CREATE_FAILED':
     case 'CLAIMS_FAILED':
     case 'internal':
-      return 'We could not create the login. Please try again.';
+      return i18n.t('errors:childLogin.createFailed');
     case 'unauthenticated':
-      return 'You must be signed in to do this.';
+      return i18n.t('errors:childLogin.unauthenticated');
     case 'not-found':
-      return 'Child not found.';
+      return i18n.t('errors:childLogin.childNotFound');
     case 'failed-precondition':
-      return 'This child is not managed by the family.';
+      return i18n.t('errors:childLogin.failedPrecondition');
     case 'already-exists':
-      return 'A login already exists for this child.';
+      return i18n.t('errors:childLogin.alreadyExists');
     default:
-      return 'Could not create the login. Please try again.';
+      return i18n.t('errors:childLogin.default');
   }
 }

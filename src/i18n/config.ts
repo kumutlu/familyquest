@@ -23,6 +23,7 @@ export const NAMESPACES = [
   'goals',
   'rewards',
   'dashboard',
+  'approvals',
   'settings',
   'notifications',
   'errors',

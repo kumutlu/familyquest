@@ -1,3 +1,4 @@
+import { useTranslation } from 'react-i18next';
 import { Button } from '../ui/Button';
 
 export interface ChildLoginMember {
@@ -17,8 +18,8 @@ interface ChildLoginSectionProps {
 }
 
 /** Best-effort, safe formatting of an optional last-login timestamp. */
-function formatLastLogin(value: unknown): string {
-  if (!value) return 'Never';
+function formatLastLogin(value: unknown, neverLabel: string): string {
+  if (!value) return neverLabel;
   try {
     let date: Date | null = null;
     if (typeof value === 'number') date = new Date(value);
@@ -46,13 +47,14 @@ function formatLastLogin(value: unknown): string {
  * "Coming soon" hint (we do not invent temporary APIs).
  */
 export function ChildLoginSection({ member, onRequestCreate }: ChildLoginSectionProps) {
+  const { t } = useTranslation('family');
   if (!member.hasLogin) {
     return (
       <div className="mt-3 pt-3 border-t border-gray-100">
         <div className="flex items-center justify-between gap-3">
           <div className="min-w-0">
-            <p className="text-xs font-semibold uppercase tracking-wider text-gray-400">Login</p>
-            <p className="text-sm text-gray-500">No login created</p>
+            <p className="text-xs font-semibold uppercase tracking-wider text-gray-400">{t('login.label')}</p>
+            <p className="text-sm text-gray-500">{t('login.noLogin')}</p>
           </div>
           <Button
             type="button"
@@ -64,52 +66,52 @@ export function ChildLoginSection({ member, onRequestCreate }: ChildLoginSection
               onRequestCreate(member);
             }}
           >
-            Create Login
+            {t('login.create')}
           </Button>
         </div>
       </div>
     );
   }
 
-  const status = member.loginEnabled ? 'Enabled' : 'Disabled';
+  const status = member.loginEnabled ? t('login.enabled') : t('login.disabled');
 
   return (
     <div className="mt-3 pt-3 border-t border-gray-100 space-y-2">
-      <p className="text-xs font-semibold uppercase tracking-wider text-gray-400">Login</p>
+      <p className="text-xs font-semibold uppercase tracking-wider text-gray-400">{t('login.label')}</p>
 
       <dl className="text-sm text-gray-700 space-y-0.5">
         <div className="flex justify-between gap-3">
-          <dt className="text-gray-500">Username:</dt>
+          <dt className="text-gray-500">{t('login.username')}</dt>
           <dd className="font-medium truncate">{member.username}</dd>
         </div>
         <div className="flex justify-between gap-3">
-          <dt className="text-gray-500">Status:</dt>
+          <dt className="text-gray-500">{t('login.status')}</dt>
           <dd className="font-medium">{status}</dd>
         </div>
         <div className="flex justify-between gap-3">
-          <dt className="text-gray-500">Requires password change:</dt>
-          <dd className="font-medium">{member.requiresPasswordChange ? 'Yes' : 'No'}</dd>
+          <dt className="text-gray-500">{t('login.requiresPasswordChange')}</dt>
+          <dd className="font-medium">{member.requiresPasswordChange ? t('login.yes') : t('login.no')}</dd>
         </div>
         <div className="flex justify-between gap-3">
-          <dt className="text-gray-500">Last login:</dt>
-          <dd className="font-medium">{formatLastLogin(member.lastLogin)}</dd>
+          <dt className="text-gray-500">{t('login.lastLogin')}</dt>
+          <dd className="font-medium">{formatLastLogin(member.lastLogin, t('login.never'))}</dd>
         </div>
       </dl>
 
       <div className="flex flex-wrap items-center gap-2 pt-1">
-        <Button type="button" size="sm" variant="outline" disabled title="Coming soon">
-          Reset Password
+        <Button type="button" size="sm" variant="outline" disabled title={t('login.comingSoon')}>
+          {t('login.resetPassword')}
         </Button>
         {member.loginEnabled ? (
-          <Button type="button" size="sm" variant="outline" disabled title="Coming soon">
-            Disable Login
+          <Button type="button" size="sm" variant="outline" disabled title={t('login.comingSoon')}>
+            {t('login.disableLogin')}
           </Button>
         ) : (
-          <Button type="button" size="sm" variant="outline" disabled title="Coming soon">
-            Enable Login
+          <Button type="button" size="sm" variant="outline" disabled title={t('login.comingSoon')}>
+            {t('login.enableLogin')}
           </Button>
         )}
-        <span className="text-xs text-gray-400">Coming soon</span>
+        <span className="text-xs text-gray-400">{t('login.comingSoon')}</span>
       </div>
     </div>
   );

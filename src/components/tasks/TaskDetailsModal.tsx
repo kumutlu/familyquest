@@ -1,4 +1,5 @@
 import { useEffect, useRef } from 'react';
+import { useTranslation } from 'react-i18next';
 
 import { Badge } from '../ui/Badge';
 import { Button } from '../ui/Button';
@@ -44,6 +45,7 @@ export function TaskDetailsModal({
   const dialogRef = useRef<HTMLDivElement>(null);
   const previouslyFocused = useRef<HTMLElement | null>(null);
 
+  const { t } = useTranslation('tasks');
   const isParent = isParentRole(currentUserRole);
 
   // Lock background scroll, capture the trigger element, move focus into the
@@ -120,12 +122,12 @@ export function TaskDetailsModal({
           className="shrink-0 flex items-center justify-between px-6 py-4 border-b border-gray-100 bg-white"
         >
           <h3 id="task-details-title" className="text-xl font-bold text-gray-900">
-            Task Details
+            {t('details.title')}
           </h3>
           <button
             type="button"
             onClick={onClose}
-            aria-label="Close task details"
+            aria-label={t('details.closeAria')}
             className="p-2 -mr-2 bg-gray-100 hover:bg-gray-200 rounded-full text-gray-500 transition-colors"
           >
             ✕
@@ -145,14 +147,14 @@ export function TaskDetailsModal({
             <div>
               <h4 className="text-2xl font-bold text-gray-900">{task.title}</h4>
               <p className="text-gray-500 font-medium mt-1">
-                Reward: {task.pointsReward} points
+                {t('details.reward', { points: task.pointsReward })}
               </p>
             </div>
 
             <div className="flex gap-2">
               <Badge variant="default">{task.type}</Badge>
               {task.requiresApproval && (
-                <Badge variant="warning">Requires Approval</Badge>
+                <Badge variant="warning">{t('details.requiresApproval')}</Badge>
               )}
             </div>
 
@@ -170,7 +172,7 @@ export function TaskDetailsModal({
                   disabled={isSubmitting}
                   className="shadow-primary-500/25 mt-6"
                 >
-                  {isSubmitting ? 'Submitting...' : 'Mark as Done'}
+                  {isSubmitting ? t('details.submitting') : t('details.markDone')}
                 </Button>
               )}
             {!isParent &&
@@ -179,8 +181,8 @@ export function TaskDetailsModal({
                 <div className="mt-6 p-4 bg-gray-50 rounded-xl w-full">
                   <p className="text-gray-500 font-medium">
                     {task.status === 'approved'
-                      ? 'Task completed and approved!'
-                      : 'Waiting for parent approval.'}
+                      ? t('details.completedApproved')
+                      : t('details.waitingParent')}
                   </p>
                 </div>
               )}
@@ -195,10 +197,10 @@ export function TaskDetailsModal({
             style={{ paddingBottom: 'calc(1rem + env(safe-area-inset-bottom))' }}
           >
             <Button variant="secondary" fullWidth onClick={() => onEdit(task)}>
-              <Edit size={16} className="mr-2" /> Edit
+              <Edit size={16} className="mr-2" /> {t('details.edit')}
             </Button>
             <Button variant="danger" fullWidth onClick={() => onArchive(task.id)}>
-              <Trash2 size={16} className="mr-2" /> Archive
+              <Trash2 size={16} className="mr-2" /> {t('details.archive')}
             </Button>
           </footer>
         )}

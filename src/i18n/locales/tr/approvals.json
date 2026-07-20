@@ -1,0 +1,39 @@
+{
+  "title": "Onay Merkezi",
+  "pendingTab": "Bekleyen",
+  "historyTab": "Geçmiş",
+  "pendingCount": "Bekleyen ({{count}})",
+  "emptyPending": "Hepsi tamam!",
+  "emptyHistory": "Henüz onay geçmişi yok.",
+  "approve": "Onayla",
+  "approving": "Onaylanıyor…",
+  "reject": "Reddet",
+  "rejecting": "Reddediliyor…",
+  "type": {
+    "taskCompletion": "Görev Tamamlama",
+    "transferRequest": "Transfer İsteği",
+    "moneyRequest": "Para İsteği",
+    "siblingMoneyRequest": "Kardeş Para İsteği",
+    "petBoxDonation": "Evcil Kutusu Bağışı",
+    "profileUpdateRequest": "Profil Güncelleme İsteği",
+    "goalWithdrawal": "Hedef Çekimi",
+    "goalContribution": "Hedef Katkısı"
+  },
+  "desc": {
+    "taskCompletion": "{{childName}}, \"{{taskTitle}}\" görevini tamamladı",
+    "transferRequest": "{{fromName}}, {{toName}} kişisine para göndermek istiyor.",
+    "transferRequestMessage": "{{fromName}}, {{toName}} kişisine para göndermek istiyor: \"{{message}}\"",
+    "moneyRequestFromParent": "{{requesterName}}, ebeveynden para istedi.",
+    "moneyRequestFromParentMessage": "{{requesterName}}, ebeveynden para istedi: \"{{message}}\"",
+    "moneyRequestSibling": "{{requestedFromName}}, {{requesterName}}’in isteğini kabul etti. Ebeveyn onayı bekleniyor.",
+    "moneyRequestSiblingMessage": "{{requestedFromName}}, {{requesterName}}’in isteğini kabul etti. Ebeveyn onayı bekleniyor: \"{{message}}\"",
+    "petBoxDonation": "{{childName}}, {{fundName}} kutusuna bağış yapmak istiyor.",
+    "profileUpdate": "{{childName}} profilini güncellemek istiyor{{changes}}.",
+    "goalWithdrawal": "{{childName}}, \"{{goalTitle}}\" hedefinden para çekmek istiyor.",
+    "goalContribution": "{{childName}}, \"{{goalTitle}}\" hedefine katkı yapmak istiyor."
+  },
+  "change": {
+    "name": "ad → \"{{name}}\"",
+    "avatar": "avatar"
+  }
+}

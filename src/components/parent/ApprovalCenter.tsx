@@ -1,4 +1,5 @@
 import { useState, useMemo, useRef, useEffect } from 'react';
+import { useTranslation } from 'react-i18next';
 import { Card, CardContent } from '../ui/Card';
 import { Badge } from '../ui/Badge';
 import { Avatar } from '../ui/Avatar';
@@ -25,6 +26,7 @@ import { HistoryActionControl } from '../reversals/HistoryActionControl';
 import type { ReversalSourceKind } from '../../lib/reversalApi';
 
 export function ApprovalCenter() {
+  const { t } = useTranslation('approvals');
   const { currentUser, tasks, familyMembers, taskCompletions, transferRequests, moneyRequests, petboxRequests, profileUpdateRequests, goalRequests, savingsGoals } = useStore();
 
   const [activeTab, setActiveTab] = useState<'pending' | 'history'>('pending');
@@ -188,37 +190,41 @@ export function ApprovalCenter() {
     if (item.category === 'task') {
       const task = tasks.find(t => t.id === item.taskId);
       const child = familyMembers.find(c => c.id === item.assigneeId);
-      title = 'Task Completion';
-      description = `${child?.displayName} completed "${task?.title}"`;
+      title = t('type.taskCompletion');
+      description = t('desc.taskCompletion', { childName: child?.displayName || '', taskTitle: task?.title || '' });
       badge = <Badge variant="primary" className="text-[10px]">+{task?.pointsReward} pts</Badge>;
       avatarSrc = child?.avatarUrl || '';
       fallback = child?.displayName[0] || '?';
     } else if (item.category === 'transfer') {
       const fromChild = familyMembers.find(c => c.id === item.fromChildId);
       const toChild = familyMembers.find(c => c.id === item.toChildId);
-      title = 'Transfer Request';
-      description = `${fromChild?.displayName} wants to send money to ${toChild?.displayName}.`;
-      if (item.message) description += ` "${item.message}"`;
+      title = t('type.transferRequest');
+      description = item.message
+        ? t('desc.transferRequestMessage', { fromName: fromChild?.displayName || '', toName: toChild?.displayName || '', message: item.message })
+        : t('desc.transferRequest', { fromName: fromChild?.displayName || '', toName: toChild?.displayName || '' });
       amount = item.amountPence;
       avatarSrc = fromChild?.avatarUrl || '';
       fallback = fromChild?.displayName[0] || '?';
     } else if (item.category === 'money_request') {
       const requestedFrom = familyMembers.find(member => member.id === item.requestedFromId);
       const isFromParent = requestedFrom?.role === 'parent' || requestedFrom?.role === 'owner';
-      title = isFromParent ? 'Money Request' : 'Sibling Money Request';
+      title = isFromParent ? t('type.moneyRequest') : t('type.siblingMoneyRequest');
 
       if (isFromParent) {
-        description = `${item.requesterName} requested money from Parent.`;
+        description = item.message
+          ? t('desc.moneyRequestFromParentMessage', { requesterName: item.requesterName || '', message: item.message })
+          : t('desc.moneyRequestFromParent', { requesterName: item.requesterName || '' });
       } else {
-        description = `${item.requestedFromName} accepted ${item.requesterName}'s request. Awaiting parent approval.`;
+        description = item.message
+          ? t('desc.moneyRequestSiblingMessage', { requestedFromName: item.requestedFromName || '', requesterName: item.requesterName || '', message: item.message })
+          : t('desc.moneyRequestSibling', { requestedFromName: item.requestedFromName || '', requesterName: item.requesterName || '' });
       }
-      if (item.message) description += ` "${item.message}"`;
       amount = item.amountPence;
       avatarSrc = '';
       fallback = item.requesterName?.[0] || '?';
     } else if (item.category === 'petbox') {
-      title = 'Pet Box Donation';
-      description = `${item.childName} wants to donate to ${item.fundName}.`;
+      title = t('type.petBoxDonation');
+      description = t('desc.petBoxDonation', { childName: item.childName || '', fundName: item.fundName || '' });
       amount = item.amountPence;
       avatarSrc = '';
       fallback = item.childName?.[0] || '?';
@@ -229,19 +235,22 @@ export function ApprovalCenter() {
       const nameChanged = requestedName && currentName && requestedName !== currentName;
       const avatarChanged = Boolean(item.requestedAvatarId) || Boolean(item.requestedAvatar);
       const changes: string[] = [];
-      if (nameChanged) changes.push(`name → "${requestedName}"`);
-      if (avatarChanged) changes.push('avatar');
-      title = 'Profile Update Request';
-      description = `${item.childName || child?.displayName || 'A child'} wants to update their profile${changes.length ? ` (${changes.join(', ')})` : ''}.`;
+      if (nameChanged) changes.push(t('change.name', { name: requestedName }));
+      if (avatarChanged) changes.push(t('change.avatar'));
+      title = t('type.profileUpdateRequest');
+      description = t('desc.profileUpdate', {
+        childName: item.childName || child?.displayName || 'A child',
+        changes: changes.length ? ` (${changes.join(', ')})` : '',
+      });
       avatarSrc = item.requestedAvatar || child?.avatarUrl || '';
       fallback = (item.childName || child?.displayName || '?')[0] || '?';
     } else if (item.category === 'goal') {
       const child = familyMembers.find(c => c.id === item.childId);
       const isWithdrawal = item.requestType === 'withdrawal';
-      title = isWithdrawal ? 'Goal Withdrawal' : 'Goal Contribution';
+      title = isWithdrawal ? t('type.goalWithdrawal') : t('type.goalContribution');
       description = isWithdrawal
-        ? `${child?.displayName ?? 'A child'} wants to withdraw from "${item.goalTitle}".`
-        : `${child?.displayName ?? 'A child'} wants to contribute to "${item.goalTitle}".`;
+        ? t('desc.goalWithdrawal', { childName: child?.displayName ?? 'A child', goalTitle: item.goalTitle || '' })
+        : t('desc.goalContribution', { childName: child?.displayName ?? 'A child', goalTitle: item.goalTitle || '' });
       amount = item.amountPence;
       avatarSrc = child?.avatarUrl || '';
       fallback = (child?.displayName ?? '?')[0] || '?';
@@ -269,10 +278,10 @@ export function ApprovalCenter() {
             {item.isPending ? (
               <>
                 <Button size="sm" variant="danger" disabled={itemKey(item) in processing} onClick={() => handleReject(item)}>
-                  {processing[itemKey(item)] === 'reject' ? 'Rejecting…' : 'Reject'}
+                  {processing[itemKey(item)] === 'reject' ? t('rejecting') : t('reject')}
                 </Button>
                 <Button size="sm" className="bg-success-500 hover:bg-success-600 text-white" disabled={itemKey(item) in processing} onClick={() => handleApprove(item)}>
-                  {processing[itemKey(item)] === 'approve' ? 'Approving…' : 'Approve'}
+                  {processing[itemKey(item)] === 'approve' ? t('approving') : t('approve')}
                 </Button>
               </>
             ) : (
@@ -294,20 +303,20 @@ export function ApprovalCenter() {
       <div className="flex flex-col sm:flex-row sm:items-center justify-between mb-4 gap-3">
         <h2 className="text-lg font-bold text-gray-900 flex items-center gap-2">
           <Clock size={20} className="text-warning-500" />
-          Approval Center
+          {t('title')}
         </h2>
         <div className="flex bg-gray-100 p-1 rounded-lg self-start sm:self-auto">
           <button
             onClick={() => setActiveTab('pending')}
             className={`px-3 py-1 text-sm font-medium rounded-md transition-colors ${activeTab === 'pending' ? 'bg-white shadow-sm text-gray-900' : 'text-gray-500'}`}
           >
-            Pending ({pendingApprovals.length})
+            {t('pendingCount', { count: pendingApprovals.length })}
           </button>
           <button
             onClick={() => setActiveTab('history')}
             className={`px-3 py-1 text-sm font-medium rounded-md transition-colors ${activeTab === 'history' ? 'bg-white shadow-sm text-gray-900' : 'text-gray-500'}`}
           >
-            History
+            {t('historyTab')}
           </button>
         </div>
       </div>
@@ -321,7 +330,7 @@ export function ApprovalCenter() {
       {activeTab === 'pending' ? (
         pendingApprovals.length === 0 ? (
           <div className="bg-white rounded-2xl border border-gray-100 p-8 text-center text-gray-500 shadow-sm">
-            You're all caught up!
+            {t('emptyPending')}
           </div>
         ) : (
           <div className="space-y-3">
@@ -331,7 +340,7 @@ export function ApprovalCenter() {
       ) : (
         historyApprovals.length === 0 ? (
           <div className="bg-white rounded-2xl border border-gray-100 p-8 text-center text-gray-500 shadow-sm">
-            No approval history yet.
+            {t('emptyHistory')}
           </div>
         ) : (
           <div className="space-y-3">

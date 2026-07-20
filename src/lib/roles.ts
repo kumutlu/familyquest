@@ -1,3 +1,5 @@
+import i18n from '../i18n/config';
+
 export type FamilyRole = 'owner' | 'parent' | 'child';
 
 export function normalizeRole(role: unknown): FamilyRole | null {
@@ -23,8 +25,8 @@ export function isChildRole(role: unknown): boolean {
 
 export function getRoleLabel(role: unknown): string | null {
   const normalized = normalizeRole(role);
-  if (normalized === 'owner') return 'Owner';
-  if (normalized === 'parent') return 'Parent';
-  if (normalized === 'child') return 'Child';
+  if (normalized === 'owner') return i18n.t('common:roles.owner');
+  if (normalized === 'parent') return i18n.t('common:roles.parent');
+  if (normalized === 'child') return i18n.t('common:roles.child');
   return null;
 }

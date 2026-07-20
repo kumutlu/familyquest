@@ -1,3 +1,4 @@
+import { useTranslation } from 'react-i18next';
 import { useStore } from '../../store/useStore';
 import { Card, CardContent } from '../ui/Card';
 import { Avatar } from '../ui/Avatar';
@@ -21,6 +22,7 @@ import { PetBoxSummaryCard } from '../dashboard/PetBoxSummaryCard';
 const joinRequestProcessingKey = (request: { id: string; uid: string }) => `join:${request.id}:${request.uid}`;
 
 export function ParentDashboard() {
+  const { t } = useTranslation('dashboard');
   const { currentUser, familyMembers, joinRequests, loading, bootstrapError } = useStore();
 
   const [joinProcessing, setJoinProcessing] = useState<Record<string, 'approve' | 'reject'>>({});
@@ -32,7 +34,7 @@ export function ParentDashboard() {
   const [isEventModalOpen, setIsEventModalOpen] = useState(false);
 
   if (loading || !currentUser) {
-    return <div className="p-8 text-center text-gray-500 animate-pulse">Loading Dashboard...</div>;
+    return <div className="p-8 text-center text-gray-500 animate-pulse">{t('loading')}</div>;
   }
 
   if (bootstrapError) {
@@ -40,8 +42,8 @@ export function ParentDashboard() {
     console.error('[ParentDashboard] bootstrap failed:', bootstrapError);
     return (
       <div className="p-8 text-center" role="alert">
-        <p className="font-semibold text-gray-700">We couldn&rsquo;t load your family dashboard.</p>
-        <p className="mt-1 text-sm text-gray-500">Please try again in a moment.</p>
+        <p className="font-semibold text-gray-700">{t('loadError.title')}</p>
+        <p className="mt-1 text-sm text-gray-500">{t('loadError.subtitle')}</p>
       </div>
     );
   }
@@ -97,7 +99,7 @@ export function ParentDashboard() {
         <section className="rounded-2xl border border-primary-100 bg-primary-50 p-4">
           <h2 className="mb-3 flex items-center gap-2 text-lg font-bold text-primary-900">
             <UserPlus size={20} />
-            Pending Join Requests
+            {t('joinRequests.heading')}
           </h2>
           {joinError && <div className="mb-3 rounded-lg bg-danger-50 p-3 text-sm font-medium text-danger-600">{joinError}</div>}
           <div className="space-y-3">
@@ -111,17 +113,17 @@ export function ParentDashboard() {
                       <div>
                         <h4 className="font-semibold text-gray-900">{req.displayName}</h4>
                         <p className="text-xs font-medium text-gray-500">
-                          {req.claimCode ? 'Wants to claim a managed profile' : 'Wants to join the family'}
+                          {req.claimCode ? t('joinRequests.claimProfile') : t('joinRequests.joinFamily')}
                         </p>
                       </div>
                     </div>
                     <div className="flex gap-2">
                       <Button size="sm" variant="secondary" disabled={processingKey in joinProcessing} onClick={() => reviewJoin(req, 'reject')}>
-                        {joinProcessing[processingKey] === 'reject' ? 'Rejecting…' : 'Reject'}
+                        {joinProcessing[processingKey] === 'reject' ? t('joinRequests.rejecting') : t('joinRequests.reject')}
                       </Button>
                       {!req.claimCode && (
                         <Button size="sm" disabled={processingKey in joinProcessing} onClick={() => reviewJoin(req, 'approve')}>
-                          {joinProcessing[processingKey] === 'approve' ? 'Approving…' : 'Approve as Child'}
+                          {joinProcessing[processingKey] === 'approve' ? t('joinRequests.approving') : t('joinRequests.approve')}
                         </Button>
                       )}
                     </div>

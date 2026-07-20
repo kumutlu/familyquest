@@ -2,5 +2,59 @@
   "title": "Tasks",
   "complete": "Mark complete",
   "itemCount_one": "{{count}} task",
-  "itemCount_other": "{{count}} tasks"
+  "itemCount_other": "{{count}} tasks",
+  "loading": "Loading Tasks…",
+  "subtitle": "Earn points by completing your tasks.",
+  "addAria": "Add Task",
+  "updateSuccess": "Task updated successfully!",
+  "createSuccess": "Task created successfully!",
+  "filter": {
+    "all": "All Tasks",
+    "daily": "Daily",
+    "weekdays": "Weekdays",
+    "weekends": "Weekends",
+    "weekly": "Weekly",
+    "oneTime": "One Time"
+  },
+  "empty": "No active tasks found in this category.",
+  "viewDetailsAria": "View details for {{title}}",
+  "pointsBadge": "+{{count}} pts",
+  "waitingApproval": "Waiting for Approval",
+  "details": {
+    "title": "Task Details",
+    "reward": "Reward: {{points}} points",
+    "requiresApproval": "Requires Approval",
+    "markDone": "Mark as Done",
+    "submitting": "Submitting…",
+    "completedApproved": "Task completed and approved!",
+    "waitingParent": "Waiting for parent approval.",
+    "closeAria": "Close task details",
+    "edit": "Edit",
+    "archive": "Archive"
+  },
+  "form": {
+    "editTitle": "Edit Task",
+    "newTitle": "New Task",
+    "taskTitle": "Task Title",
+    "description": "Description (Optional)",
+    "pointsReward": "Points Reward",
+    "assignedChild": "Assigned Child",
+    "anyoneShared": "Anyone (Shared)",
+    "category": "Category",
+    "schedule": {
+      "daily": "Daily",
+      "weekdays": "Weekdays (Mon-Fri)",
+      "weekends": "Weekends (Sat-Sun)",
+      "weekly": "Weekly",
+      "custom": "Custom Days",
+      "oneTime": "One-Time"
+    },
+    "selectDays": "Select Days",
+    "requiresApproval": "Requires Parent Approval",
+    "active": "Active Status",
+    "save": "Save Task",
+    "saving": "Saving…",
+    "templateLabel": "Or choose a template:",
+    "templatePlaceholder": "Select a template..."
+  }
 }

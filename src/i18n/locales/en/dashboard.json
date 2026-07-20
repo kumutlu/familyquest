@@ -1,4 +1,60 @@
 {
   "greeting": "Hello, {{name}}",
-  "summary": "Your family summary"
+  "summary": "Your family summary",
+  "loading": "Loading Dashboard…",
+  "header": {
+    "morning": "Good morning, {{name}}",
+    "afternoon": "Good afternoon, {{name}}",
+    "evening": "Good evening, {{name}}",
+    "subtitle": "Here’s what’s happening with your family today.",
+    "family": "{{name}} family"
+  },
+  "quickActions": {
+    "heading": "Quick Actions",
+    "newTask": "New Task",
+    "newTaskHelper": "Assign a chore or goal",
+    "newReward": "New Reward",
+    "newRewardHelper": "Add something to redeem",
+    "logBehaviour": "Log Behaviour",
+    "logBehaviourHelper": "Record good or not-so-good",
+    "manageWallet": "Manage Wallet",
+    "manageWalletHelper": "Add or withdraw money",
+    "petBox": "Pet Box",
+    "petBoxHelper": "Family savings pot",
+    "inviteMember": "Invite Member",
+    "inviteMemberHelper": "Share the join code"
+  },
+  "childrenOverview": {
+    "heading": "Children Overview"
+  },
+  "childCard": {
+    "level": "Level {{level}}",
+    "points": "Points",
+    "wallet": "Wallet",
+    "streak": "Streak",
+    "unavailable": "Unavailable",
+    "pendingTasks_one": "{{count}} pending task",
+    "pendingTasks_other": "{{count}} pending tasks",
+    "viewProfile": "View Profile →",
+    "viewProfileAria": "View {{name}}’s profile"
+  },
+  "recentActivity": {
+    "heading": "Recent Family Activity",
+    "empty": "No family activity yet.",
+    "viewRequest": "View request",
+    "viewRequestAria": "View request: {{text}}"
+  },
+  "joinRequests": {
+    "heading": "Pending Join Requests",
+    "claimProfile": "Wants to claim a managed profile",
+    "joinFamily": "Wants to join the family",
+    "reject": "Reject",
+    "rejecting": "Rejecting…",
+    "approve": "Approve as Child",
+    "approving": "Approving…"
+  },
+  "loadError": {
+    "title": "We couldn’t load your family dashboard.",
+    "subtitle": "Please try again in a moment."
+  }
 }

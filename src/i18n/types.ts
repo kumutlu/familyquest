@@ -7,6 +7,7 @@ import type enWallet from './locales/en/wallet.json';
 import type enGoals from './locales/en/goals.json';
 import type enRewards from './locales/en/rewards.json';
 import type enDashboard from './locales/en/dashboard.json';
+import type enApprovals from './locales/en/approvals.json';
 import type enSettings from './locales/en/settings.json';
 import type enNotifications from './locales/en/notifications.json';
 import type enErrors from './locales/en/errors.json';
@@ -27,6 +28,7 @@ interface Resources {
   goals: typeof enGoals;
   rewards: typeof enRewards;
   dashboard: typeof enDashboard;
+  approvals: typeof enApprovals;
   settings: typeof enSettings;
   notifications: typeof enNotifications;
   errors: typeof enErrors;

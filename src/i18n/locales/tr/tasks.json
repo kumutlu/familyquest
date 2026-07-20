@@ -2,5 +2,59 @@
   "title": "Görevler",
   "complete": "Tamamlandı işaretle",
   "itemCount_one": "{{count}} görev",
-  "itemCount_other": "{{count}} görev"
+  "itemCount_other": "{{count}} görev",
+  "loading": "Görevler yükleniyor…",
+  "subtitle": "Görevleri tamamlayarak puan kazanın.",
+  "addAria": "Görev Ekle",
+  "updateSuccess": "Görev başarıyla güncellendi!",
+  "createSuccess": "Görev başarıyla oluşturuldu!",
+  "filter": {
+    "all": "Tüm Görevler",
+    "daily": "Günlük",
+    "weekdays": "Hafta içi",
+    "weekends": "Hafta sonu",
+    "weekly": "Haftalık",
+    "oneTime": "Tek Seferlik"
+  },
+  "empty": "Bu kategoride aktif görev bulunamadı.",
+  "viewDetailsAria": "{{title}} görevinin ayrıntılarını görüntüle",
+  "pointsBadge": "+{{count}} puan",
+  "waitingApproval": "Onay Bekliyor",
+  "details": {
+    "title": "Görev Ayrıntıları",
+    "reward": "Ödül: {{points}} puan",
+    "requiresApproval": "Onay Gerekli",
+    "markDone": "Tamamlandı Olarak İşaretle",
+    "submitting": "Gönderiliyor…",
+    "completedApproved": "Görev tamamlandı ve onaylandı!",
+    "waitingParent": "Ebeveyn onayı bekleniyor.",
+    "closeAria": "Görev ayrıntılarını kapat",
+    "edit": "Düzenle",
+    "archive": "Arşivle"
+  },
+  "form": {
+    "editTitle": "Görevi Düzenle",
+    "newTitle": "Yeni Görev",
+    "taskTitle": "Görev Başlığı",
+    "description": "Açıklama (İsteğe bağlı)",
+    "pointsReward": "Puan Ödülü",
+    "assignedChild": "Atanan Çocuk",
+    "anyoneShared": "Herkes (Paylaşımlı)",
+    "category": "Kategori",
+    "schedule": {
+      "daily": "Günlük",
+      "weekdays": "Hafta içi (Pzt-Cum)",
+      "weekends": "Hafta sonu (Cmt-Paz)",
+      "weekly": "Haftalık",
+      "custom": "Özel Günler",
+      "oneTime": "Tek Seferlik"
+    },
+    "selectDays": "Günleri Seç",
+    "requiresApproval": "Ebeveyn Onayı Gerekli",
+    "active": "Aktif Durum",
+    "save": "Görevi Kaydet",
+    "saving": "Kaydediliyor…",
+    "templateLabel": "Veya bir şablon seçin:",
+    "templatePlaceholder": "Şablon seçin..."
+  }
 }

@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { Button } from '../ui/Button';
 import { doc, updateDoc } from 'firebase/firestore';
 import { db } from '../../lib/firebase';
@@ -16,6 +17,7 @@ interface EditMemberModalProps {
  * avatar URLs are not accepted; legacy URLs are preserved via avatarId fallback.
  */
 export function EditMemberModal({ member, onClose }: EditMemberModalProps) {
+  const { t } = useTranslation(['family', 'common']);
   const [displayName, setDisplayName] = useState(member.displayName || '');
   const [selectedAvatarId, setSelectedAvatarId] = useState<string | null>(member.avatarId || null);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -27,7 +29,7 @@ export function EditMemberModal({ member, onClose }: EditMemberModalProps) {
 
     const def = selectedAvatarId ? getAvatarById(selectedAvatarId) : undefined;
     if (def && def.unlockType === 'points') {
-      setError('Adults can only use free starter avatars from the catalog.');
+      setError(t('family:editMember.freeAvatarError'));
       return;
     }
 
@@ -43,7 +45,7 @@ export function EditMemberModal({ member, onClose }: EditMemberModalProps) {
       onClose();
     } catch (err: any) {
       console.error(err);
-      setError('Failed to update member.');
+      setError(t('family:editMember.updateError'));
     } finally {
       setIsSubmitting(false);
     }
@@ -53,7 +55,7 @@ export function EditMemberModal({ member, onClose }: EditMemberModalProps) {
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-gray-900/40 backdrop-blur-sm p-4">
       <div className="bg-white w-full max-w-sm rounded-3xl shadow-xl overflow-hidden flex flex-col animate-in fade-in zoom-in-95 duration-200">
         <div className="px-6 py-4 border-b border-gray-100 flex justify-between items-center">
-          <h3 className="text-xl font-bold text-gray-900">Edit Member</h3>
+          <h3 className="text-xl font-bold text-gray-900">{t('family:editMember.title')}</h3>
           <button onClick={onClose} className="p-2 -mr-2 bg-gray-100 hover:bg-gray-200 rounded-full text-gray-500 transition-colors">
             ✕
           </button>
@@ -66,7 +68,7 @@ export function EditMemberModal({ member, onClose }: EditMemberModalProps) {
               </div>
             )}
             <div>
-              <label htmlFor="member-displayName" className="block text-sm font-medium text-gray-700 mb-1">Display Name</label>
+              <label htmlFor="member-displayName" className="block text-sm font-medium text-gray-700 mb-1">{t('family:editMember.displayName')}</label>
               <input
                 id="member-displayName"
                 type="text"
@@ -77,7 +79,7 @@ export function EditMemberModal({ member, onClose }: EditMemberModalProps) {
               />
             </div>
             <div>
-              <span className="block text-sm font-medium text-gray-700 mb-1">Choose Avatar</span>
+              <span className="block text-sm font-medium text-gray-700 mb-1">{t('family:editMember.chooseAvatar')}</span>
               <AvatarPicker
                 selectedAvatarId={selectedAvatarId}
                 ownedAvatarIds={[]}
@@ -89,10 +91,10 @@ export function EditMemberModal({ member, onClose }: EditMemberModalProps) {
             </div>
             <div className="pt-4 flex gap-3">
               <Button type="button" variant="outline" fullWidth onClick={onClose}>
-                Cancel
+                {t('common:cancel')}
               </Button>
               <Button type="submit" fullWidth disabled={isSubmitting} className="bg-primary-500">
-                {isSubmitting ? 'Saving...' : 'Save'}
+                {isSubmitting ? t('common:saving') : t('common:save')}
               </Button>
             </div>
           </form>

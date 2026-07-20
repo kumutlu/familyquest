@@ -3,9 +3,16 @@
   "loading": "Loading…",
   "save": "Save",
   "cancel": "Cancel",
+  "saving": "Saving…",
+  "creating": "Creating…",
   "language": "Language",
   "closeDialog": "Close dialog",
   "dismissNotification": "Dismiss notification",
   "back": "Back",
-  "continue": "Continue"
+  "continue": "Continue",
+  "roles": {
+    "owner": "Owner",
+    "parent": "Parent",
+    "child": "Child"
+  }
 }

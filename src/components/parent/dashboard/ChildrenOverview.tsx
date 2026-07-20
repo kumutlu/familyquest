@@ -1,3 +1,4 @@
+import { useTranslation } from 'react-i18next';
 import { useStore } from '../../../store/useStore';
 import { isChildRole } from '../../../lib/roles';
 import { ChildSummaryCard } from './ChildSummaryCard';
@@ -22,6 +23,7 @@ function ChildCardSkeleton() {
 }
 
 export function ChildrenOverview() {
+  const { t } = useTranslation('dashboard');
   const {
     familyMembers = [],
     childWallets = [],
@@ -41,7 +43,7 @@ export function ChildrenOverview() {
         id="children-overview-heading"
         className="mb-4 flex items-center gap-2 text-lg font-bold text-gray-900"
       >
-        Children Overview
+        {t('childrenOverview.heading')}
       </h2>
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3">
         {walletsLoading
