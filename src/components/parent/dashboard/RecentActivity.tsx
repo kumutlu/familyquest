@@ -84,7 +84,7 @@ export function RecentActivity() {
                   </div>
                 </div>
                 {linked && (
-                  <span className="ml-2 flex shrink-0 items-center gap-1 text-xs font-medium text-primary-600 opacity-0 transition-opacity group-hover:opacity-100 group-focus-within:opacity-100">
+                  <span className="ml-2 flex shrink-0 items-center gap-1 text-xs font-medium text-primary-600 opacity-70 transition-opacity group-hover:opacity-100 group-focus-within:opacity-100 sm:opacity-0 sm:group-hover:opacity-100 sm:group-focus-within:opacity-100">
                     View request
                     <ChevronRight size={14} />
                   </span>

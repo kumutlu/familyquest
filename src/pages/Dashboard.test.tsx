@@ -14,6 +14,11 @@ const store = vi.hoisted(() => ({
       { goalId: 'g-1', title: 'Bike', status: 'active', currentAmountPence: 500, targetAmountPence: 1000 },
     ],
     funds: [{ id: 'f-1', name: 'Rex', species: 'dog', balance: 1500, emergencyGoal: 5000 }],
+    tasks: [
+      { id: 't-1', title: 'Brush teeth', isActive: true, assigneeId: 'owner-1' },
+    ],
+    taskCompletions: [],
+    moneyRequests: [] as any[],
   } as any,
 }));
 
@@ -42,6 +47,9 @@ describe('Dashboard role routing', () => {
         { goalId: 'g-1', title: 'Bike', status: 'active', currentAmountPence: 500, targetAmountPence: 1000 },
       ],
       funds: [{ id: 'f-1', name: 'Rex', species: 'dog', balance: 1500, emergencyGoal: 5000 }],
+      tasks: [{ id: 't-1', title: 'Brush teeth', isActive: true, assigneeId: 'owner-1' }],
+      taskCompletions: [],
+      moneyRequests: [],
     };
   });
 
@@ -80,6 +88,9 @@ describe('Dashboard summary cards', () => {
         { goalId: 'g-1', title: 'Bike', status: 'active', currentAmountPence: 500, targetAmountPence: 1000 },
       ],
       funds: [{ id: 'f-1', name: 'Rex', species: 'dog', balance: 1500, emergencyGoal: 5000 }],
+      tasks: [{ id: 't-1', title: 'Brush teeth', isActive: true, assigneeId: 'owner-1' }],
+      taskCompletions: [],
+      moneyRequests: [],
     };
   });
 
@@ -120,11 +131,44 @@ describe('Dashboard summary cards', () => {
     expect(within(summary).getByText('1')).toBeInTheDocument();
   });
 
+  it('child dashboard renders the task summary as the first quick summary', () => {
+    store.state.currentUser.role = 'child';
+    render(<MemoryRouter><Dashboard /></MemoryRouter>);
+    const tasks = screen.getByTestId('task-summary');
+    const wallet = screen.getByTestId('wallet-summary');
+    expect(tasks.compareDocumentPosition(wallet) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  });
+
   it('summary cards are placed above Recent Activity', () => {
     store.state.currentUser.role = 'child';
     render(<MemoryRouter><Dashboard /></MemoryRouter>);
     const summary = screen.getByTestId('wallet-summary');
     const recent = screen.getByText('Recent Activity');
     expect(summary.compareDocumentPosition(recent) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  });
+
+  it('child dashboard renders summary cards in Tasks -> Wallet -> Goals -> Pet Box order', () => {
+    store.state.currentUser.role = 'child';
+    render(<MemoryRouter><Dashboard /></MemoryRouter>);
+    const tasks = screen.getByTestId('task-summary');
+    const wallet = screen.getByTestId('wallet-summary');
+    const goals = screen.getByTestId('goal-summary');
+    const petbox = screen.getByTestId('petbox-summary');
+    expect(tasks.compareDocumentPosition(wallet) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(wallet.compareDocumentPosition(goals) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(goals.compareDocumentPosition(petbox) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  });
+
+  it('places Your Requests between Quick summaries and Recent Activity', () => {
+    store.state.currentUser.role = 'child';
+    store.state.moneyRequests = [
+      { id: 'mr-1', category: 'money_request', requesterId: 'child-1', requestedFromId: 'owner-1', amountPence: 100, status: 'pending_acceptance', createdAt: { toDate: () => new Date() } },
+    ];
+    render(<MemoryRouter><Dashboard /></MemoryRouter>);
+    const petbox = screen.getByTestId('petbox-summary');
+    const requests = screen.getByText('Your Requests');
+    const recent = screen.getByText('Recent Activity');
+    expect(petbox.compareDocumentPosition(requests) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(requests.compareDocumentPosition(recent) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
   });
 });

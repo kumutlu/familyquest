@@ -1,0 +1,112 @@
+import { useMemo } from 'react';
+import { useNavigate } from 'react-router-dom';
+import { Card, CardContent, CardHeader, CardTitle } from '../ui/Card';
+import { Progress } from '../ui/Progress';
+import { useStore } from '../../store/useStore';
+import { ListTodo } from 'lucide-react';
+
+/**
+ * Compact task summary for the child Home dashboard.
+ *
+ * Reuses the existing bootstrap `tasks` + `taskCompletions` data (no new
+ * queries). Shows the count of active tasks assigned to the current child, a
+ * due-today count when tasks carry a `dueDate`, and a simple completion
+ * summary. The whole card is tappable and links to /tasks.
+ */
+export function TaskSummaryCard() {
+  const navigate = useNavigate();
+  const { currentUser, tasks, taskCompletions } = useStore();
+
+  const { activeCount, dueTodayCount, completedCount, totalCount, pct } = useMemo(() => {
+    const uid = currentUser?.id;
+    const active = (tasks || []).filter(
+      t => t.isActive !== false && (!t.assigneeId || t.assigneeId === uid),
+    );
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const tomorrow = new Date(today);
+    tomorrow.setDate(today.getDate() + 1);
+
+    const dueToday = active.filter(t => {
+      const d = t.dueDate;
+      if (!d) return false;
+      const date = d.toDate ? d.toDate() : new Date(d);
+      if (isNaN(date.getTime())) return false;
+      const time = date.getTime();
+      return time >= today.getTime() && time < tomorrow.getTime();
+    });
+
+    // Count completions submitted by this child for active tasks.
+    const activeIds = new Set(active.map(t => t.id));
+    const completed = (taskCompletions || []).filter(
+      c => c.assigneeId === uid && activeIds.has(c.taskId),
+    ).length;
+
+    const total = active.length;
+    const progress = total > 0 ? Math.min(100, (completed / total) * 100) : 0;
+
+    return {
+      activeCount: total,
+      dueTodayCount: dueToday.length,
+      completedCount: completed,
+      totalCount: total,
+      pct: progress,
+    };
+  }, [currentUser, tasks, taskCompletions]);
+
+  return (
+    <Card
+      data-testid="task-summary"
+      role="button"
+      tabIndex={0}
+      aria-label="View your tasks"
+      onClick={() => navigate('/tasks')}
+      onKeyDown={e => {
+        if (e.key === 'Enter' || e.key === ' ') {
+          e.preventDefault();
+          navigate('/tasks');
+        }
+      }}
+      className="cursor-pointer transition-all active:scale-[0.98] hover:border-primary-300 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-400"
+    >
+      <CardHeader className="flex-row items-center justify-between space-y-0 pb-2">
+        <CardTitle className="flex items-center gap-2 text-base">
+          <ListTodo size={18} className="text-primary-500" />
+          Tasks
+        </CardTitle>
+      </CardHeader>
+      <CardContent>
+        {activeCount === 0 ? (
+          <div className="py-2">
+            <p className="text-sm text-gray-500">No active tasks yet.</p>
+            <p className="mt-1 text-xs text-gray-400">Tap to see everything in Tasks.</p>
+          </div>
+        ) : (
+          <>
+            <div className="flex items-end justify-between mb-2">
+              <div>
+                <p className="text-xs font-medium uppercase text-gray-500">Active tasks</p>
+                <p className="text-2xl font-extrabold text-gray-900">{activeCount}</p>
+              </div>
+              <div className="text-right">
+                <p className="text-xs font-medium uppercase text-gray-500">Done</p>
+                <p className="font-bold text-gray-700">
+                  {completedCount}/{totalCount}
+                </p>
+              </div>
+            </div>
+
+            <Progress value={pct} max={100} color="primary" />
+
+            <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs">
+              {dueTodayCount > 0 && (
+                <span className="font-medium text-warning-600">{dueTodayCount} due today</span>
+              )}
+              <span className="text-gray-500">{Math.round(pct)}% complete</span>
+            </div>
+          </>
+        )}
+      </CardContent>
+    </Card>
+  );
+}

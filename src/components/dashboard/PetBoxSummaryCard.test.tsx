@@ -35,10 +35,21 @@ describe('PetBoxSummaryCard', () => {
     expect(screen.getByText('£23.00')).toBeInTheDocument();
   });
 
-  it('links to /pet-box', () => {
+  it('whole card links to /pet-box (no redundant ghost arrow)', () => {
     baseStore.funds = [{ id: 'f-1', name: 'Rex', species: 'dog', balance: 0, emergencyGoal: 0 }];
     render(<MemoryRouter><PetBoxSummaryCard /></MemoryRouter>);
-    fireEvent.click(screen.getByTestId('petbox-summary-link'));
+    expect(screen.queryByTestId('petbox-summary-link')).not.toBeInTheDocument();
+    const card = screen.getByTestId('petbox-summary');
+    expect(card).toHaveAttribute('role', 'button');
+    fireEvent.click(card);
+    expect(h.navigate).toHaveBeenCalledWith('/pet-box');
+  });
+
+  it('card is keyboard accessible', () => {
+    baseStore.funds = [{ id: 'f-1', name: 'Rex', species: 'dog', balance: 0, emergencyGoal: 0 }];
+    render(<MemoryRouter><PetBoxSummaryCard /></MemoryRouter>);
+    const card = screen.getByTestId('petbox-summary');
+    fireEvent.keyDown(card, { key: 'Enter' });
     expect(h.navigate).toHaveBeenCalledWith('/pet-box');
   });
 

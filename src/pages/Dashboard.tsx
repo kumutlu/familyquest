@@ -12,6 +12,7 @@ import { resolveFeedRequest } from '../lib/feedRequestResolver';
 import { WalletSummaryCard } from '../components/dashboard/WalletSummaryCard';
 import { GoalSummaryCard } from '../components/dashboard/GoalSummaryCard';
 import { PetBoxSummaryCard } from '../components/dashboard/PetBoxSummaryCard';
+import { TaskSummaryCard } from '../components/dashboard/TaskSummaryCard';
 
 export function Dashboard() {
   const {
@@ -114,6 +115,15 @@ export function Dashboard() {
         </Card>
       </div>
 
+      <section aria-label="Quick summaries">
+        <div className="grid grid-cols-1 gap-4">
+          <TaskSummaryCard />
+          <WalletSummaryCard />
+          <GoalSummaryCard />
+          <PetBoxSummaryCard />
+        </div>
+      </section>
+
       {sortedRequests.length > 0 && (
         <section>
           <h2 className="mb-4 flex items-center gap-2 text-lg font-bold text-gray-900">
@@ -131,14 +141,6 @@ export function Dashboard() {
           </div>
         </section>
       )}
-
-      <section aria-label="Quick summaries">
-        <div className="grid grid-cols-1 gap-4">
-          <WalletSummaryCard />
-          <GoalSummaryCard />
-          <PetBoxSummaryCard />
-        </div>
-      </section>
 
       <section>
         <h2 className="mb-4 flex items-center gap-2 text-lg font-bold text-gray-900">

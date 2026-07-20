@@ -37,14 +37,25 @@ describe('GoalSummaryCard', () => {
     expect(screen.getByText('£7.00')).toBeInTheDocument();
   });
 
-  it('links to /goals', () => {
+  it('whole card links to /goals (no redundant ghost arrow)', () => {
     baseStore.savingsGoals = [{ goalId: 'g-1', title: 'Bike', status: 'active', currentAmountPence: 0, targetAmountPence: 1000 }];
     render(<MemoryRouter><GoalSummaryCard /></MemoryRouter>);
-    fireEvent.click(screen.getByTestId('goal-summary-link'));
+    expect(screen.queryByTestId('goal-summary-link')).not.toBeInTheDocument();
+    const card = screen.getByTestId('goal-summary');
+    expect(card).toHaveAttribute('role', 'button');
+    fireEvent.click(card);
     expect(h.navigate).toHaveBeenCalledWith('/goals');
   });
 
-  it('clicking a goal navigates to its detail', () => {
+  it('card is keyboard accessible', () => {
+    baseStore.savingsGoals = [{ goalId: 'g-1', title: 'Bike', status: 'active', currentAmountPence: 0, targetAmountPence: 1000 }];
+    render(<MemoryRouter><GoalSummaryCard /></MemoryRouter>);
+    const card = screen.getByTestId('goal-summary');
+    fireEvent.keyDown(card, { key: 'Enter' });
+    expect(h.navigate).toHaveBeenCalledWith('/goals');
+  });
+
+  it('clicking a goal navigates to its detail (nested row)', () => {
     baseStore.savingsGoals = [{ goalId: 'g-1', title: 'Bike', status: 'active', currentAmountPence: 0, targetAmountPence: 1000 }];
     render(<MemoryRouter><GoalSummaryCard /></MemoryRouter>);
     fireEvent.click(screen.getByTestId('goal-summary-item'));

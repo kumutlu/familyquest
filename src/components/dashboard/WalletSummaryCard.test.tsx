@@ -30,12 +30,28 @@ describe('WalletSummaryCard', () => {
     baseStore.familyMembers = [];
   });
 
-  it('child sees own balance and links to /wallet', () => {
+  it('child sees own balance and the full card links to /wallet', () => {
     render(<MemoryRouter><WalletSummaryCard /></MemoryRouter>);
-    expect(screen.getByTestId('wallet-summary')).toBeInTheDocument();
+    const card = screen.getByTestId('wallet-summary');
+    expect(card).toBeInTheDocument();
     expect(screen.getByText('My Wallet')).toBeInTheDocument();
     expect(screen.getByText('£12.34')).toBeInTheDocument();
-    fireEvent.click(screen.getByTestId('wallet-summary-link'));
+    // No redundant ghost arrow button.
+    expect(screen.queryByTestId('wallet-summary-link')).not.toBeInTheDocument();
+    // Whole card is tappable.
+    expect(card).toHaveAttribute('role', 'button');
+    expect(card).toHaveAttribute('tabindex', '0');
+    fireEvent.click(card);
+    expect(h.navigate).toHaveBeenCalledWith('/wallet');
+  });
+
+  it('child card is keyboard accessible', () => {
+    render(<MemoryRouter><WalletSummaryCard /></MemoryRouter>);
+    const card = screen.getByTestId('wallet-summary');
+    fireEvent.keyDown(card, { key: 'Enter' });
+    expect(h.navigate).toHaveBeenCalledWith('/wallet');
+    h.navigate.mockClear();
+    fireEvent.keyDown(card, { key: ' ' });
     expect(h.navigate).toHaveBeenCalledWith('/wallet');
   });
 
@@ -52,7 +68,8 @@ describe('WalletSummaryCard', () => {
     render(<MemoryRouter><WalletSummaryCard /></MemoryRouter>);
     expect(screen.getByText('Family Wallets')).toBeInTheDocument();
     expect(screen.getByText('£7.50')).toBeInTheDocument();
-    fireEvent.click(screen.getByTestId('wallet-summary-link'));
+    const card = screen.getByTestId('wallet-summary');
+    fireEvent.click(card);
     expect(h.navigate).toHaveBeenCalledWith('/wallets');
   });
 
@@ -62,7 +79,8 @@ describe('WalletSummaryCard', () => {
     baseStore.familyMembers = [];
     render(<MemoryRouter><WalletSummaryCard /></MemoryRouter>);
     expect(screen.getByText('Family Wallets')).toBeInTheDocument();
-    fireEvent.click(screen.getByTestId('wallet-summary-link'));
+    const card = screen.getByTestId('wallet-summary');
+    fireEvent.click(card);
     expect(h.navigate).toHaveBeenCalledWith('/wallets');
   });
 });

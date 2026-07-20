@@ -1,19 +1,19 @@
 import { useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Card, CardContent, CardHeader, CardTitle } from '../ui/Card';
-import { Button } from '../ui/Button';
 import { Progress } from '../ui/Progress';
 import { CurrencyDisplay } from '../ui/CurrencyDisplay';
 import { useStore } from '../../store/useStore';
 import { normalizeGoalDoc } from '../../lib/goalContracts';
-import { Target, ArrowRight } from 'lucide-react';
+import { Target } from 'lucide-react';
 
 /**
  * Compact goals summary for the Home dashboard.
  *
  * Reuses the existing bootstrap `savingsGoals` data (no new queries). Shows the
  * count of active goals, the total saved across them, and a small progress
- * indicator. Clicking a goal navigates to its detail at /goals/:goalId.
+ * indicator. The whole card links to /goals; individual goal rows remain
+ * independently tappable and navigate to their detail at /goals/:goalId.
  */
 export function GoalSummaryCard() {
   const navigate = useNavigate();
@@ -27,22 +27,30 @@ export function GoalSummaryCard() {
     return { activeGoals: goals, totalSaved: saved, overallPct: pct };
   }, [savingsGoals]);
 
+  const goToGoals = () => navigate('/goals');
+
+  const cardProps = {
+    role: 'button' as const,
+    tabIndex: 0,
+    'aria-label': 'View all goals',
+    onClick: goToGoals,
+    onKeyDown: (e: React.KeyboardEvent) => {
+      if (e.key === 'Enter' || e.key === ' ') {
+        e.preventDefault();
+        goToGoals();
+      }
+    },
+    className:
+      'cursor-pointer transition-all active:scale-[0.98] hover:border-primary-300 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-400',
+  };
+
   return (
-    <Card data-testid="goal-summary">
+    <Card data-testid="goal-summary" {...cardProps}>
       <CardHeader className="flex-row items-center justify-between space-y-0 pb-2">
         <CardTitle className="flex items-center gap-2 text-base">
           <Target size={18} className="text-primary-500" />
           Goals
         </CardTitle>
-        <Button
-          variant="ghost"
-          size="sm"
-          className="text-primary-600"
-          onClick={() => navigate('/goals')}
-          data-testid="goal-summary-link"
-        >
-          View all <ArrowRight size={16} />
-        </Button>
       </CardHeader>
       <CardContent>
         <div className="flex items-end justify-between mb-2">
@@ -70,8 +78,17 @@ export function GoalSummaryCard() {
                 <li key={goal.goalId || goal.title}>
                   <button
                     type="button"
-                    className="w-full text-left rounded-lg px-2 py-1.5 hover:bg-gray-50 transition-colors"
-                    onClick={() => navigate(`/goals/${goal.goalId}`)}
+                    className="w-full text-left rounded-lg px-2 py-1.5 hover:bg-gray-50 transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-400"
+                    onClick={e => {
+                      e.stopPropagation();
+                      navigate(`/goals/${goal.goalId}`);
+                    }}
+                    onKeyDown={e => {
+                      if (e.key === 'Enter' || e.key === ' ') {
+                        e.stopPropagation();
+                        navigate(`/goals/${goal.goalId}`);
+                      }
+                    }}
                     data-testid="goal-summary-item"
                   >
                     <div className="flex items-center justify-between gap-2">

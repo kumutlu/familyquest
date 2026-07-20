@@ -1,10 +1,9 @@
 import { useNavigate } from 'react-router-dom';
 import { Card, CardContent, CardHeader, CardTitle } from '../ui/Card';
-import { Button } from '../ui/Button';
 import { CurrencyDisplay } from '../ui/CurrencyDisplay';
 import { useStore } from '../../store/useStore';
 import { isParentRole } from '../../lib/roles';
-import { Wallet as WalletIcon, ArrowRight } from 'lucide-react';
+import { Wallet as WalletIcon } from 'lucide-react';
 
 /**
  * Compact wallet summary for the Home dashboard.
@@ -14,6 +13,9 @@ import { Wallet as WalletIcon, ArrowRight } from 'lucide-react';
  *  - Parents/owners see an aggregate of the children's wallets and a link to
  *    /wallets (the parent wallet management screen). Children never see the
  *    parent management surface.
+ *
+ * The whole card is now tappable (keyboard accessible) and the redundant ghost
+ * arrow button has been removed.
  */
 export function WalletSummaryCard() {
   const navigate = useNavigate();
@@ -23,6 +25,23 @@ export function WalletSummaryCard() {
 
   const isParent = isParentRole(currentUser.role);
 
+  const go = () => navigate(isParent ? '/wallets' : '/wallet');
+
+  const cardProps = {
+    role: 'button' as const,
+    tabIndex: 0,
+    'aria-label': isParent ? 'Manage family wallets' : 'Open my wallet',
+    onClick: go,
+    onKeyDown: (e: React.KeyboardEvent) => {
+      if (e.key === 'Enter' || e.key === ' ') {
+        e.preventDefault();
+        go();
+      }
+    },
+    className:
+      'cursor-pointer transition-all active:scale-[0.98] hover:border-primary-300 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-400',
+  };
+
   if (isParent) {
     const wallets = childWallets || [];
     const totalBalance = wallets.reduce((sum: number, w: any) => sum + (w.balance || 0), 0);
@@ -30,21 +49,12 @@ export function WalletSummaryCard() {
     const memberCount = familyMembers.filter(m => m.role === 'child').length;
 
     return (
-      <Card data-testid="wallet-summary">
+      <Card data-testid="wallet-summary" {...cardProps}>
         <CardHeader className="flex-row items-center justify-between space-y-0 pb-2">
           <CardTitle className="flex items-center gap-2 text-base">
             <WalletIcon size={18} className="text-primary-500" />
             Family Wallets
           </CardTitle>
-          <Button
-            variant="ghost"
-            size="sm"
-            className="text-primary-600"
-            onClick={() => navigate('/wallets')}
-            data-testid="wallet-summary-link"
-          >
-            Manage <ArrowRight size={16} />
-          </Button>
         </CardHeader>
         <CardContent>
           <p className="text-xs font-medium uppercase text-gray-500">Total children balance</p>
@@ -63,21 +73,12 @@ export function WalletSummaryCard() {
   const balance = myWallet?.balance || 0;
 
   return (
-    <Card data-testid="wallet-summary">
+    <Card data-testid="wallet-summary" {...cardProps}>
       <CardHeader className="flex-row items-center justify-between space-y-0 pb-2">
         <CardTitle className="flex items-center gap-2 text-base">
           <WalletIcon size={18} className="text-primary-500" />
           My Wallet
         </CardTitle>
-        <Button
-          variant="ghost"
-          size="sm"
-          className="text-primary-600"
-          onClick={() => navigate('/wallet')}
-          data-testid="wallet-summary-link"
-        >
-          Open <ArrowRight size={16} />
-        </Button>
       </CardHeader>
       <CardContent>
         <p className="text-xs font-medium uppercase text-gray-500">Current balance</p>

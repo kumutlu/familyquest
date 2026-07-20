@@ -59,6 +59,17 @@ describe('Recent Family Activity', () => {
     expect(screen.getByText('View request')).toBeInTheDocument()
   })
 
+  it('keeps the "View request" affordance visible on mobile (not hover-only)', () => {
+    render(<RecentActivity />)
+    const affordance = screen.getByText('View request')
+    const className = affordance.className
+    // It must not rely on a bare opacity-0 that only reveals on hover/focus.
+    expect(className).not.toMatch(/(^|\s)opacity-0(\s|$)/)
+    // On mobile it should be visible by default (opacity-70), with hover emphasis on sm+.
+    expect(className).toContain('opacity-70')
+    expect(className).toContain('sm:opacity-0')
+  })
+
   it('does not make legacy (no entityId) activity tappable', () => {
     render(<RecentActivity />)
     const row = screen.getByText('Legacy request with no entity id.')

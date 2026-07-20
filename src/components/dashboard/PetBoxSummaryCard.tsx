@@ -1,18 +1,17 @@
 import { useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Card, CardContent, CardHeader, CardTitle } from '../ui/Card';
-import { Button } from '../ui/Button';
 import { Progress } from '../ui/Progress';
 import { CurrencyDisplay } from '../ui/CurrencyDisplay';
 import { useStore } from '../../store/useStore';
-import { PawPrint, ArrowRight } from 'lucide-react';
+import { PawPrint } from 'lucide-react';
 
 /**
  * Compact Pet Box summary for the Home dashboard.
  *
  * Reuses the existing bootstrap `funds` data (no new queries). Shows the number
  * of active funds and the combined balance, with a small progress indicator
- * against the sum of emergency goals. Links to /pet-box.
+ * against the sum of emergency goals. The whole card links to /pet-box.
  */
 export function PetBoxSummaryCard() {
   const navigate = useNavigate();
@@ -31,22 +30,30 @@ export function PetBoxSummaryCard() {
     };
   }, [funds]);
 
+  const goToPetBox = () => navigate('/pet-box');
+
+  const cardProps = {
+    role: 'button' as const,
+    tabIndex: 0,
+    'aria-label': 'Open Pet Box',
+    onClick: goToPetBox,
+    onKeyDown: (e: React.KeyboardEvent) => {
+      if (e.key === 'Enter' || e.key === ' ') {
+        e.preventDefault();
+        goToPetBox();
+      }
+    },
+    className:
+      'cursor-pointer transition-all active:scale-[0.98] hover:border-primary-300 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-400',
+  };
+
   return (
-    <Card data-testid="petbox-summary">
+    <Card data-testid="petbox-summary" {...cardProps}>
       <CardHeader className="flex-row items-center justify-between space-y-0 pb-2">
         <CardTitle className="flex items-center gap-2 text-base">
           <PawPrint size={18} className="text-primary-500" />
           Pet Box
         </CardTitle>
-        <Button
-          variant="ghost"
-          size="sm"
-          className="text-primary-600"
-          onClick={() => navigate('/pet-box')}
-          data-testid="petbox-summary-link"
-        >
-          Open <ArrowRight size={16} />
-        </Button>
       </CardHeader>
       <CardContent>
         <div className="flex items-end justify-between mb-2">
