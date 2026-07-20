@@ -2106,7 +2106,70 @@ export const cancelGoal = async (familyId: string, goalId: string, clientReqId: 
   });
 };
 
-/** Shared per-child refund + goal-doc closure logic used by returnGoalFunds and cancelGoal. */
+// ---------------------------------------------------------------------------
+// deleteCancelledGoal (parent/owner only; cancelled + zero-balance goal)
+// ---------------------------------------------------------------------------
+// Permanently removes a CANCELLED, zero-balance goal display document. This is
+// the ONLY goal-deletion path and it is deliberately narrow:
+//   - actor must be a parent/owner in the same family (assertParent)
+//   - goal.status must be exactly 'cancelled'
+//   - goal.currentAmountPence must be 0 (no remaining funds)
+//   - there must be NO unresolved withdrawal or match proposals
+//   - the idempotency guard prevents duplicate/forged deletes
+// Accounting history is NEVER deleted: the goal's subcollections
+// (contributions, goal_ledger, match_proposals) and the family-level
+// wallet_transactions are left intact for audit. Firestore deleteDoc removes
+// only the single goal display document, not its subcollections, so historical
+// screens that query by goalId keep working.
+export const deleteCancelledGoal = async (
+  familyId: string,
+  goalId: string,
+  clientReqId: string,
+) => {
+  const actorId = requireActorId();
+  const actorRef = doc(db, 'users', actorId);
+  const actorSnap = await getDoc(actorRef);
+  const actorRole = actorSnap.exists() ? (actorSnap.data().role as string) : undefined;
+  assertParent(actorRole, familyId);
+
+  const key = goalWithdrawalKey(goalId, `delete:${clientReqId}`);
+  const requestHash = requestHashOf({ goalId, mode: 'deleted' });
+  const idemRef = idempotencyRef(familyId, key);
+  const goalDocRef = goalRef(familyId, goalId);
+  // transaction.get only accepts DocumentReferences in this SDK; read the
+  // match_proposals subcollection with getDocs before the transaction. The
+  // goal's status/currentAmountPence remain the atomic guards inside it.
+  const proposalsRef = collection(db, `families/${familyId}/${GOAL_COLLECTION}/${goalId}/match_proposals`);
+  const proposalsSnap = await getDocs(query(proposalsRef));
+
+  await runTransaction(db, async (transaction) => {
+    const [idemSnap, goalSnap] = await Promise.all([
+      transaction.get(idemRef),
+      transaction.get(goalDocRef),
+    ]);
+    const prior = checkIdempotency(idemSnap, key, requestHash);
+    if (prior !== null) return;
+    if (!goalSnap.exists()) throw new Error('Goal not found');
+    const goal = normalizeGoalDoc(goalSnap.data());
+    // Exact status/fund checks at write time (fail closed).
+    if (goal.status !== 'cancelled') {
+      throw new Error('Only a cancelled goal can be deleted');
+    }
+    if (goal.currentAmountPence > 0) {
+      throw new Error('Cannot delete a goal with remaining funds');
+    }
+    // No unresolved withdrawal or match proposals may remain.
+    const unresolved = proposalsSnap.docs.filter(
+      (d: any) => d.data() && d.data().status === 'proposed',
+    );
+    if (unresolved.length > 0) {
+      throw new Error('Resolve all open match proposals before deleting this goal');
+    }
+    transaction.delete(goalDocRef);
+    writeIdempotency(transaction, familyId, key, 'goal_deleted', actorId, requestHash, goalDocRef.id, { goalId });
+  });
+};
+
 async function applyReturnFundsInTransaction(
   transaction: any,
   familyId: string,

@@ -1,10 +1,10 @@
-import { useMemo, useState } from 'react';
+import { useMemo, useState, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useStore } from '../store/useStore';
 import { GoalCard } from '../components/goals/GoalCard';
 import { Button } from '../components/ui/Button';
 import { Modal } from '../components/ui/Modal';
-import { createGoal } from '../lib/api';
+import { createGoal, deleteCancelledGoal } from '../lib/api';
 import { normalizeGoalDoc, type GoalKind, type ParentContributionInput } from '../lib/goalContracts';
 import { Target, Plus } from 'lucide-react';
 
@@ -23,7 +23,20 @@ export function Goals() {
   const [error, setError] = useState('');
   const [submitting, setSubmitting] = useState(false);
 
-  const goals = useMemo(() => savingsGoals.map(normalizeGoalDoc), [savingsGoals]);
+  // Cancelled-goal deletion state.
+  const [pendingDelete, setPendingDelete] = useState<{ goalId: string; title: string } | null>(null);
+  const [deleting, setDeleting] = useState(false);
+  const [deleteError, setDeleteError] = useState('');
+  // Guards against double-submit (duplicate requests) within a single confirmation.
+  const deleteInFlight = useRef(false);
+  // Locally removed goal ids so the card disappears immediately on success,
+  // independent of when the store reflects the Firestore deletion.
+  const [removedGoalIds, setRemovedGoalIds] = useState<string[]>([]);
+
+  const goals = useMemo(
+    () => savingsGoals.map(normalizeGoalDoc).filter(g => !removedGoalIds.includes(g.goalId!)),
+    [savingsGoals, removedGoalIds],
+  );
 
   const familyGoals = goals.filter(g => g.kind === 'family');
   const childGoals = goals.filter(g => g.kind === 'child');
@@ -86,6 +99,36 @@ export function Goals() {
     }
   };
 
+const openDelete = (goal: { goalId?: string; title: string }) => {
+  if (!goal.goalId) return;
+  setDeleteError('');
+  setPendingDelete({ goalId: goal.goalId, title: goal.title });
+};
+
+const closeDelete = () => {
+  if (deleting) return; // don't allow dismiss while submitting
+  setPendingDelete(null);
+  setDeleteError('');
+};
+
+const confirmDelete = async () => {
+    if (!pendingDelete || !familyData) return;
+    if (deleteInFlight.current) return; // prevent duplicate requests
+    deleteInFlight.current = true;
+    setDeleting(true);
+    setDeleteError('');
+    try {
+      await deleteCancelledGoal(familyData.id, pendingDelete.goalId, pendingDelete.goalId);
+      setRemovedGoalIds(prev => [...prev, pendingDelete.goalId]);
+      setPendingDelete(null);
+    } catch (err: any) {
+      setDeleteError(err?.message || 'Could not delete the goal. Please try again.');
+    } finally {
+      setDeleting(false);
+      deleteInFlight.current = false;
+    }
+  };
+
   return (
     <div className="space-y-6">
       <div className="flex justify-between items-center bg-white p-6 rounded-2xl shadow-sm border border-gray-100">
@@ -100,8 +143,8 @@ export function Goals() {
         </Button>
       </div>
 
-      <Section title="Family Goals" goals={familyGoals} onOpen={(id) => navigate(`/goals/${id}`)} emptyHint="No family goals yet. Create one to save together!" />
-      <Section title="Child Goals" goals={childGoals} onOpen={(id) => navigate(`/goals/${id}`)} emptyHint="No child goals yet." />
+      <Section title="Family Goals" goals={familyGoals} onOpen={(id) => navigate(`/goals/${id}`)} onDelete={openDelete} emptyHint="No family goals yet. Create one to save together!" />
+      <Section title="Child Goals" goals={childGoals} onOpen={(id) => navigate(`/goals/${id}`)} onDelete={openDelete} emptyHint="No child goals yet." />
 
       <Modal
         isOpen={showCreate}
@@ -246,14 +289,34 @@ export function Goals() {
           {error && <p className="text-sm text-danger-600 font-medium">{error}</p>}
         </div>
       </Modal>
+
+      <Modal
+        isOpen={pendingDelete !== null}
+        onClose={closeDelete}
+        title="Delete cancelled goal?"
+        footer={
+          <div className="flex gap-2">
+            <Button variant="ghost" fullWidth onClick={closeDelete} disabled={deleting}>Cancel</Button>
+            <Button variant="danger" fullWidth onClick={confirmDelete} disabled={deleting}>
+              {deleting ? 'Deleting…' : 'Delete'}
+            </Button>
+          </div>
+        }
+      >
+        <p className="text-sm text-gray-600">
+          This permanently removes the cancelled goal from the list. This cannot be undone.
+        </p>
+        {deleteError && <p className="mt-3 text-sm text-danger-600 font-medium">{deleteError}</p>}
+      </Modal>
     </div>
   );
 }
 
-function Section({ title, goals, onOpen, emptyHint }: {
+function Section({ title, goals, onOpen, onDelete, emptyHint }: {
   title: string;
   goals: ReturnType<typeof normalizeGoalDoc>[];
   onOpen: (id: string) => void;
+  onDelete?: (goal: any) => void;
   emptyHint: string;
 }) {
   return (
@@ -267,7 +330,7 @@ function Section({ title, goals, onOpen, emptyHint }: {
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           {goals.map(g => (
-            <GoalCard key={g.goalId} goal={g} onClick={() => onOpen(g.goalId!)} />
+            <GoalCard key={g.goalId} goal={g} onClick={() => onOpen(g.goalId!)} onDelete={onDelete ? () => onDelete(g) : undefined} />
           ))}
         </div>
       )}

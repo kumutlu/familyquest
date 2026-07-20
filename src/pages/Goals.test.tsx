@@ -1,4 +1,4 @@
-import { render, screen, fireEvent } from '@testing-library/react';
+import { render, screen, fireEvent, waitFor, within } from '@testing-library/react';
 import { describe, expect, it, vi, beforeEach } from 'vitest';
 import { MemoryRouter } from 'react-router-dom';
 
@@ -18,8 +18,10 @@ const mockStore: any = {
 };
 
 vi.mock('../store/useStore', () => ({ useStore: () => mockStore }));
+const deleteCancelledGoal = vi.fn().mockResolvedValue(undefined);
 vi.mock('../lib/api', () => ({
   createGoal: vi.fn().mockResolvedValue(undefined),
+  deleteCancelledGoal: (...args: any[]) => deleteCancelledGoal(...args),
 }));
 
 import { Goals } from './Goals';
@@ -33,6 +35,8 @@ beforeEach(() => {
     { id: 'child-2', role: 'child', displayName: 'Bob' },
   ];
   (createGoal as any).mockClear();
+  deleteCancelledGoal.mockClear();
+  deleteCancelledGoal.mockResolvedValue(undefined);
 });
 
 describe('Goals list page', () => {
@@ -210,4 +214,58 @@ describe('Goals — BUG 2 focus regression (Create Goal)', () => {
     // The modal opening must not steal focus onto the Title input.
     expect(document.activeElement).not.toBe(titleInput);
   });
+
+describe('Goals — delete cancelled goal', () => {
+  const cancelledGoal = { id: 'g-cancelled', goalId: 'g-cancelled', title: 'Old Bike', kind: 'child', childId: 'child-1', targetAmountPence: 5000, currentAmountPence: 0, status: 'cancelled', version: 1 };
+  const activeGoal = { id: 'g-active', goalId: 'g-active', title: 'Holiday', kind: 'family', targetAmountPence: 10000, currentAmountPence: 0, status: 'active', version: 1 };
+
+  it('shows the delete action only on cancelled cards', () => {
+    mockStore.savingsGoals = [activeGoal, cancelledGoal];
+    render(<MemoryRouter><Goals /></MemoryRouter>);
+    const activeCard = screen.getByText('Holiday').closest('[role="button"]') as HTMLElement;
+    expect(within(activeCard).queryByLabelText('Delete cancelled goal')).toBeNull();
+    const cancelledCard = screen.getByText('Old Bike').closest('[role="button"]') as HTMLElement;
+    expect(within(cancelledCard).getByLabelText('Delete cancelled goal')).toBeInTheDocument();
+  });
+
+  it('requires confirmation before deleting (cancel performs no write)', async () => {
+    mockStore.savingsGoals = [cancelledGoal];
+    render(<MemoryRouter><Goals /></MemoryRouter>);
+    fireEvent.click(screen.getByLabelText('Delete cancelled goal'));
+    expect(screen.getByText('Delete cancelled goal?')).toBeInTheDocument();
+    fireEvent.click(screen.getByText('Cancel'));
+    expect(deleteCancelledGoal).not.toHaveBeenCalled();
+    expect(screen.queryByText('Delete cancelled goal?')).toBeNull();
+  });
+
+  it('successful deletion removes the card and calls the API once', async () => {
+    mockStore.savingsGoals = [cancelledGoal];
+    render(<MemoryRouter><Goals /></MemoryRouter>);
+    fireEvent.click(screen.getByLabelText('Delete cancelled goal'));
+    fireEvent.click(screen.getByText('Delete'));
+    await waitFor(() => expect(deleteCancelledGoal).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(screen.queryByText('Old Bike')).toBeNull());
+  });
+
+  it('double-click does not send duplicate requests', async () => {
+    mockStore.savingsGoals = [cancelledGoal];
+    render(<MemoryRouter><Goals /></MemoryRouter>);
+    fireEvent.click(screen.getByLabelText('Delete cancelled goal'));
+    const delBtn = screen.getByText('Delete');
+    fireEvent.click(delBtn);
+    fireEvent.click(delBtn);
+    await waitFor(() => expect(deleteCancelledGoal).toHaveBeenCalledTimes(1));
+  });
+
+  it('shows a friendly error when deletion fails', async () => {
+    deleteCancelledGoal.mockRejectedValueOnce(new Error('Cannot delete a goal with remaining funds'));
+    mockStore.savingsGoals = [cancelledGoal];
+    render(<MemoryRouter><Goals /></MemoryRouter>);
+    fireEvent.click(screen.getByLabelText('Delete cancelled goal'));
+    fireEvent.click(screen.getByText('Delete'));
+    await waitFor(() => expect(screen.getByText(/Cannot delete a goal with remaining funds/i)).toBeInTheDocument());
+    expect(screen.getByText('Old Bike')).toBeInTheDocument();
+  });
+});
+
 });

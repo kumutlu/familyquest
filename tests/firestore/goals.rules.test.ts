@@ -67,6 +67,22 @@ beforeEach(async () => {
       matching: { mode: 'none', perX: 0, matchY: 0 },
       createdBy: 'parent1', createdAt: serverTimestamp(), version: 1,
     });
+    // A CANCELLED, zero-balance goal (the only deletable kind).
+    await setDoc(doc(db, `families/${FAMILY}/savings_goals/goalCancelled`), {
+      goalId: 'goalCancelled', title: 'Cancelled', kind: 'child', childId: 'child1',
+      targetAmountPence: 2000, currentAmountPence: 0, currency: 'GBP',
+      status: 'cancelled', completedMode: 'cancelled',
+      matching: { mode: 'none', perX: 0, matchY: 0 },
+      createdBy: 'parent1', createdAt: serverTimestamp(), version: 1,
+    });
+    // A CANCELLED goal WITH remaining funds (must NOT be deletable).
+    await setDoc(doc(db, `families/${FAMILY}/savings_goals/goalCancelledFunded`), {
+      goalId: 'goalCancelledFunded', title: 'CancelledFunded', kind: 'child', childId: 'child1',
+      targetAmountPence: 2000, currentAmountPence: 500, currency: 'GBP',
+      status: 'cancelled', completedMode: 'cancelled',
+      matching: { mode: 'none', perX: 0, matchY: 0 },
+      createdBy: 'parent1', createdAt: serverTimestamp(), version: 1,
+    });
     // A reached goal
     await setDoc(doc(db, `families/${FAMILY}/savings_goals/goalReached`), {
       goalId: 'goalReached', title: 'Reached', kind: 'child', childId: 'child1',
@@ -702,5 +718,64 @@ describe('Goals — reached->active security boundary (no arbitrary parent balan
     const db = testEnv.authenticatedContext('child1').firestore();
     await assertFails(updateDoc(doc(db, goalPath('goalReached')), { currentAmountPence: 1500, status: 'active' }));
     await assertFails(updateDoc(doc(db, goalPath('goalFunded')), { currentAmountPence: 100 }));
+  });
+});
+
+describe('Goals — deleteCancelledGoal security boundary', () => {
+  it('19. same-family parent can delete a cancelled zero-balance goal', async () => {
+    const db = testEnv.authenticatedContext('parent1').firestore();
+    await assertSucceeds(deleteDoc(doc(db, goalPath('goalCancelled'))));
+  });
+
+  it('19b. same-family owner can delete a cancelled zero-balance goal', async () => {
+    const db = testEnv.authenticatedContext('owner1').firestore();
+    await assertSucceeds(deleteDoc(doc(db, goalPath('goalCancelled'))));
+  });
+
+  it('20. child cannot delete a cancelled goal', async () => {
+    const db = testEnv.authenticatedContext('child1').firestore();
+    await assertFails(deleteDoc(doc(db, goalPath('goalCancelled'))));
+  });
+
+  it('21. unrelated-family parent cannot delete the goal', async () => {
+    const db = testEnv.authenticatedContext('parent2').firestore();
+    await assertFails(deleteDoc(doc(db, goalPath('goalCancelled'))));
+  });
+
+  it('22. active goal cannot be deleted', async () => {
+    const db = testEnv.authenticatedContext('parent1').firestore();
+    await assertFails(deleteDoc(doc(db, goalPath('goal1'))));
+  });
+
+  it('23. reached goal cannot be deleted', async () => {
+    const db = testEnv.authenticatedContext('parent1').firestore();
+    await assertFails(deleteDoc(doc(db, goalPath('goalReached'))));
+  });
+
+  it('24. completed_returned goal cannot be deleted', async () => {
+    const db = testEnv.authenticatedContext('parent1').firestore();
+    await assertFails(deleteDoc(doc(db, goalPath('goalDone'))));
+  });
+
+  it('25. cancelled goal WITH remaining funds cannot be deleted', async () => {
+    const db = testEnv.authenticatedContext('parent1').firestore();
+    await assertFails(deleteDoc(doc(db, goalPath('goalCancelledFunded'))));
+  });
+
+  it('26. forged direct delete of a contribution leg is denied', async () => {
+    const db = testEnv.authenticatedContext('parent1').firestore();
+    await assertFails(deleteDoc(doc(db, contribPath('goal1', 'c1'))));
+  });
+
+  it('27. forged direct delete of a goal_ledger entry is denied', async () => {
+    const db = testEnv.authenticatedContext('parent1').firestore();
+    await assertFails(deleteDoc(doc(db, ledgerPath('goal1', 'l1'))));
+  });
+
+  it('28. forged direct update of a cancelled goal (bypass delete) is denied', async () => {
+    const db = testEnv.authenticatedContext('parent1').firestore();
+    // A parent may not mutate a terminal goal's fields directly (isValidGoalReturnUpdate
+    // only permits the terminal transition, not arbitrary edits).
+    await assertFails(updateDoc(doc(db, goalPath('goalCancelled')), { title: 'hacked' }));
   });
 });

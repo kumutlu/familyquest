@@ -4,7 +4,7 @@ import { Badge } from '../ui/Badge';
 import { CurrencyDisplay } from '../ui/CurrencyDisplay';
 import { useStore } from '../../store/useStore';
 import { normalizeGoalDoc, type Goal, type GoalStatus } from '../../lib/goalContracts';
-import { Target, User, Users } from 'lucide-react';
+import { Target, User, Users, Trash2 } from 'lucide-react';
 
 const STATUS_LABEL: Record<GoalStatus, string> = {
   active: 'Active',
@@ -22,13 +22,21 @@ const STATUS_VARIANT: Record<GoalStatus, 'primary' | 'success' | 'warning' | 'da
   cancelled: 'danger',
 };
 
-export function GoalCard({ goal, onClick }: { goal: any; onClick?: () => void }) {
+export function GoalCard({ goal, onClick, onDelete }: { goal: any; onClick?: () => void; onDelete?: () => void }) {
   const { familyMembers } = useStore();
   const g: Goal = normalizeGoalDoc(goal);
   const pct = g.targetAmountPence > 0 ? Math.min(100, (g.currentAmountPence / g.targetAmountPence) * 100) : 0;
   const child = g.kind === 'child' && g.childId
     ? familyMembers.find(m => m.id === g.childId)
     : undefined;
+
+  const isCancelled = g.status === 'cancelled';
+
+  // Stop the delete click from also opening the goal detail.
+  const handleDelete = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    onDelete?.();
+  };
 
   return (
     <Card
@@ -51,6 +59,17 @@ export function GoalCard({ goal, onClick }: { goal: any; onClick?: () => void })
             </div>
           </div>
           <Badge variant={STATUS_VARIANT[g.status]}>{STATUS_LABEL[g.status]}</Badge>
+          {isCancelled && onDelete && (
+            <button
+              type="button"
+              aria-label="Delete cancelled goal"
+              title="Delete cancelled goal"
+              onClick={handleDelete}
+              className="p-1.5 rounded-lg text-gray-400 hover:text-danger-600 hover:bg-danger-50 transition-colors"
+            >
+              <Trash2 size={16} />
+            </button>
+          )}
         </div>
 
         <div className="flex items-end justify-between mb-2">

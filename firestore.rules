@@ -1252,6 +1252,20 @@ service cloud.firestore {
         && data.currentAmountPence == 0;
     }
 
+    // Lean validator for the goal-display-document DELETE performed by
+    // deleteCancelledGoal. A goal may be hard-deleted ONLY when it is a cancelled,
+    // zero-balance goal owned by the same family. Children can NEVER delete goals.
+    // The actual money/fund/proposal checks are enforced server-side in api.ts; the
+    // rule here is an independent, defense-in-depth boundary that refuses any delete
+    // of an active/reached/completed goal or any goal with remaining funds, and
+    // refuses deletes by non-parent/owner callers. Subcollections (contributions,
+    // goal_ledger, match_proposals) are NOT deletable (see their own allow rules).
+    function isValidGoalDelete(familyId) {
+      return isParent(familyId)
+        && resource.data.status == 'cancelled'
+        && resource.data.currentAmountPence == 0;
+    }
+
     // Lean validator for the auto_match contribution leg written by the Goals
     // transaction. Auto-match is deterministic from the child's contribution and
     // represents parent funds; it is written by the funding parent OR by the child
@@ -1617,7 +1631,13 @@ service cloud.firestore {
               : (isValidGoalChildContribution(familyId, goalId)
                 || isValidGoalParentUpdate(familyId, goalId)))
           : (isParent(familyId) || (isAuthenticated() && resource.data.childId == request.auth.uid));
-        allow delete: if isParent(familyId) || (isAuthenticated() && resource.data.childId == request.auth.uid);
+        // Strict delete guard: only a same-family parent/owner may delete a
+        // CANCELLED, zero-balance goal. Active/reached/completed goals and goals
+        // with remaining funds cannot be deleted. Children can never delete goals.
+        // Accounting subcollections (contributions, goal_ledger, match_proposals)
+        // remain non-deletable (their own allow rules below). This is the ONLY
+        // goal-deletion path; the component never calls deleteDoc directly.
+        allow delete: if isValidGoalDelete(familyId);
 
         match /contributions/{contribId} {
           allow read: if isFamilyMember(familyId);
