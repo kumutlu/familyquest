@@ -291,8 +291,11 @@ export async function markAllNotificationsRead(
   familyId: string,
   userId: string,
   notificationIds: string[],
+  alreadyRead: Set<string> = new Set(),
 ): Promise<void> {
-  const ids = notificationIds.filter(Boolean);
+  // Skip notifications the user has already read so we never re-write (and
+  // never risk a misleading success state for) read rows.
+  const ids = notificationIds.filter(Boolean).filter(id => !alreadyRead.has(id));
   if (ids.length === 0) return;
   const batch = writeBatch(db);
   for (const nid of ids) {
@@ -303,6 +306,9 @@ export async function markAllNotificationsRead(
       readAt: serverTimestamp(),
     });
   }
+  // writeBatch.commit() is atomic: either every write succeeds or the whole
+  // batch is rejected. On rejection it throws, so callers must surface the
+  // error rather than report success.
   await batch.commit();
 }
 

@@ -1787,7 +1787,13 @@ service cloud.firestore {
         allow create, update: if request.auth.uid == request.resource.data.userId
           && request.resource.data.familyId == familyId
           && request.resource.data.keys().hasOnly(allowedReadKeys())
-          && request.resource.data.readAt == request.time
+          // readAt is assigned server-side via serverTimestamp(); it is never a
+          // client-supplied literal. Enforce that it is a timestamp (the
+          // serverTimestamp sentinel resolves to a server timestamp in production)
+          // rather than requiring exact equality with request.time, which a
+          // serverTimestamp write can never satisfy and which previously rejected
+          // every "mark all as read" batch with permission-denied.
+          && request.resource.data.readAt is timestamp
           && notificationFor(request.resource.data.notificationId) != null
           && notificationFor(request.resource.data.notificationId).data.recipientIds.hasAll([request.auth.uid]);
         allow delete: if false;

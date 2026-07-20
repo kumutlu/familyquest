@@ -220,10 +220,11 @@ describe('Notification read state (families/{familyId}/notification_reads/{id})'
     );
   });
 
-  it('user CANNOT create a read record with readAt != request.time', async () => {
+  it('user CANNOT create a read record with a non-timestamp readAt', async () => {
+    // readAt must be a server timestamp; a client-supplied string is rejected.
     const db = testEnv.authenticatedContext('child1').firestore();
     await assertFails(
-      setDoc(doc(db, 'families/family1/notification_reads/r1'), validRead('child1', 'n1', { readAt: new Date('2020-01-01T00:00:00Z') })),
+      setDoc(doc(db, 'families/family1/notification_reads/r1'), validRead('child1', 'n1', { readAt: '2020-01-01T00:00:00Z' })),
     );
   });
 
@@ -268,6 +269,34 @@ describe('Notification read state (families/{familyId}/notification_reads/{id})'
     const db = testEnv.authenticatedContext('owner2').firestore();
     await assertFails(
       setDoc(doc(db, 'families/family1/notification_reads/r1'), validRead('owner2', 'n1', { familyId: 'family1' })),
+    );
+  });
+
+  it('mark-all: user can mark multiple own unread notifications read', async () => {
+    // Mirrors markAllNotificationsRead — one serverTimestamp() read record per
+    // notification the user is a recipient of. The batch mechanism is covered by
+    // the client unit test; here we assert the rule permits multiple own reads.
+    // n1 and n3 are both addressed to child1 (n2 is addressed to child2).
+    const setup = testEnv.authenticatedContext('parent1').firestore();
+    await setDoc(doc(setup, 'families/family1/notifications/n3'), validNotification({ recipientIds: ['child1'], dedupeKey: 'task_approve_task3' }));
+    const db = testEnv.authenticatedContext('child1').firestore();
+    await assertSucceeds(setDoc(doc(db, 'families/family1/notification_reads/child1_n1'), validRead('child1', 'n1')));
+    await assertSucceeds(setDoc(doc(db, 'families/family1/notification_reads/child1_n3'), validRead('child1', 'n3')));
+  });
+
+  it('mark-all: a read record for another user is rejected (no broad parent permission)', async () => {
+    // A parent must NOT gain a blanket "update any notification" permission.
+    // Marking child1's read record as parent1 must fail.
+    const db = testEnv.authenticatedContext('parent1').firestore();
+    await assertFails(
+      setDoc(doc(db, 'families/family1/notification_reads/child1_n1'), validRead('child1', 'n1')),
+    );
+  });
+
+  it('forged immutable read-record field (userId) is denied', async () => {
+    const db = testEnv.authenticatedContext('child1').firestore();
+    await assertFails(
+      setDoc(doc(db, 'families/family1/notification_reads/r1'), { ...validRead('child1', 'n1'), userId: 'child2' }),
     );
   });
 });

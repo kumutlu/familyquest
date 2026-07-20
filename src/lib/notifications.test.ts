@@ -38,6 +38,8 @@ import {
   getChildIds,
   getNotificationTitle,
   getNotificationBody,
+  markNotificationRead,
+  markAllNotificationsRead,
   NOTIFICATION_FALLBACK_TITLE,
   NOTIFICATION_FALLBACK_BODY,
   NOTIFICATION_PAGE_SIZE,
@@ -317,5 +319,60 @@ describe('realtime listener bounds', () => {
     expect(firestore.where).toHaveBeenCalledWith('recipientIds', 'array-contains', 'u1');
     expect(firestore.orderBy).toHaveBeenCalledWith('createdAt', 'desc');
     expect(firestore.limit).toHaveBeenCalledWith(NOTIFICATION_PAGE_SIZE);
+  });
+});
+
+describe('mark read (read-state writes)', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it('markNotificationRead writes the user own read record with a server timestamp', async () => {
+    await markNotificationRead('fam1', 'u1', 'n1');
+    expect(firestore.setDoc).toHaveBeenCalledTimes(1);
+    const [ref, data] = firestore.setDoc.mock.calls[0];
+    expect(ref.path).toBe('families/fam1/notification_reads/u1_n1');
+    expect(data).toEqual({
+      familyId: 'fam1',
+      userId: 'u1',
+      notificationId: 'n1',
+      readAt: { server: true },
+    });
+  });
+
+  it('markAllNotificationsRead writes one read record per own unread notification', async () => {
+    const batch = { set: vi.fn(), commit: vi.fn(async () => {}) };
+    firestore.writeBatch.mockReturnValue(batch as any);
+    await markAllNotificationsRead('fam1', 'u1', ['n1', 'n2', 'n3']);
+    expect(batch.set).toHaveBeenCalledTimes(3);
+    expect(batch.commit).toHaveBeenCalledTimes(1);
+    const paths = batch.set.mock.calls.map(c => c[0].path);
+    expect(paths).toEqual([
+      'families/fam1/notification_reads/u1_n1',
+      'families/fam1/notification_reads/u1_n2',
+      'families/fam1/notification_reads/u1_n3',
+    ]);
+  });
+
+  it('markAllNotificationsRead skips already-read notifications', async () => {
+    const batch = { set: vi.fn(), commit: vi.fn(async () => {}) };
+    firestore.writeBatch.mockReturnValue(batch as any);
+    await markAllNotificationsRead('fam1', 'u1', ['n1', 'n2'], new Set(['n2']));
+    expect(batch.set).toHaveBeenCalledTimes(1);
+    expect(batch.set.mock.calls[0][0].path).toBe('families/fam1/notification_reads/u1_n1');
+  });
+
+  it('markAllNotificationsRead is a no-op when every notification is already read', async () => {
+    const batch = { set: vi.fn(), commit: vi.fn(async () => {}) };
+    firestore.writeBatch.mockReturnValue(batch as any);
+    await markAllNotificationsRead('fam1', 'u1', ['n1'], new Set(['n1']));
+    expect(batch.set).not.toHaveBeenCalled();
+    expect(batch.commit).not.toHaveBeenCalled();
+  });
+
+  it('markAllNotificationsRead throws when the batch commit fails (no misleading success)', async () => {
+    const batch = { set: vi.fn(), commit: vi.fn(async () => { throw new Error('permission-denied'); }) };
+    firestore.writeBatch.mockReturnValue(batch as any);
+    await expect(markAllNotificationsRead('fam1', 'u1', ['n1'])).rejects.toThrow();
   });
 });

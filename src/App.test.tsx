@@ -17,6 +17,7 @@ vi.mock('./pages/Login', () => ({ Login: () => null }));
 vi.mock('./pages/Signup', () => ({ Signup: () => null }));
 vi.mock('./pages/Onboarding', () => ({ Onboarding: () => null }));
 vi.mock('./pages/FundsDashboard', () => ({ FundsDashboard: () => <span>Pet Box funds</span> }));
+vi.mock('./pages/Notifications', () => ({ Notifications: () => <span>Notifications page</span> }));
 
 import App from './App';
 
@@ -25,5 +26,11 @@ describe('application routes', () => {
     window.history.pushState({}, '', '/pet-box');
     render(<App />);
     expect(screen.getByText('Pet Box funds')).toBeInTheDocument();
+  });
+
+  it('mounts the notifications page at /notifications (no white screen)', () => {
+    window.history.pushState({}, '', '/notifications');
+    render(<App />);
+    expect(screen.getByText('Notifications page')).toBeInTheDocument();
   });
 });

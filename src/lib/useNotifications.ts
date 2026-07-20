@@ -119,11 +119,12 @@ export function useNotifications(
         familyId,
         userId,
         all.map(n => n.id),
+        readIds,
       );
     } catch (e) {
       throw new Error(mapNotificationError(e));
     }
-  }, [familyId, userId]);
+  }, [familyId, userId, readIds]);
 
   const loadMore = useCallback(async () => {
     if (!familyId || !userId || loadingMore || !hasMore) return;
