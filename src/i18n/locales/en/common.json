@@ -9,6 +9,7 @@
   "closeDialog": "Close dialog",
   "dismissNotification": "Dismiss notification",
   "back": "Back",
+  "errorOccurred": "Something went wrong. Please try again.",
   "continue": "Continue",
   "copy": "Copy",
   "copying": "Copying…",

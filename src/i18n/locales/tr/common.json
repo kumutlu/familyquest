@@ -9,6 +9,7 @@
   "closeDialog": "Kapat",
   "dismissNotification": "Bildirimi kapat",
   "back": "Geri",
+  "errorOccurred": "Bir şeyler ters gitti. Lütfen tekrar deneyin.",
   "continue": "Devam et",
   "copy": "Kopyala",
   "copying": "Kopyalanıyor…",

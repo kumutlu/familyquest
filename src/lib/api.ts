@@ -41,7 +41,7 @@ import {
 } from './notificationDedupe';
 import { useStore } from '../store/useStore';
 import { unregisterCurrentDevice } from './pushNotifications';
-import { getAvatarById, getAvatarCost } from '../config/avatarCatalog';
+import { getAvatarById, getAvatarCost, resolveAvatarImage } from '../config/avatarCatalog';
 import {
   periodKeyFor,
 } from './taskRecurrence';
@@ -328,27 +328,61 @@ export const removeMember = async (uid: string) => {
   });
 };
 
-export const createManagedMember = async (familyId: string, role: 'parent' | 'child', displayName: string) => {
+export interface CreateManagedMemberProfile {
+  /** Optional ISO date-of-birth string (YYYY-MM-DD). */
+  dob?: string | null;
+  /** Optional curated catalog avatar id (starter only for managed children). */
+  avatarId?: string | null;
+  /** Optional profile accent colour (hex string). */
+  colour?: string | null;
+}
+
+/**
+ * Creates a managed family member (child or parent). The optional `profile`
+ * carries the extra onboarding fields (date of birth, avatar, colour) without
+ * changing the core contract used elsewhere (e.g. the family-creation flow).
+ * Existing callers that omit `profile` are unaffected.
+ */
+export const createManagedMember = async (
+  familyId: string,
+  role: 'parent' | 'child',
+  displayName: string,
+  profile?: CreateManagedMemberProfile,
+) => {
   const userRef = doc(collection(db, 'users'));
-  const batch = writeBatch(db);
-  batch.set(doc(db, `families/${familyId}/wallets`, userRef.id), {
-    balance: 0,
-    createdAt: serverTimestamp(),
-    migratedFromLegacy: true
-  });
-  batch.set(userRef, {
+  const defaultAvatarUrl = `https://api.dicebear.com/7.x/${role === 'parent' ? 'avataaars' : 'bottts'}/svg?seed=${displayName}`;
+
+  const memberDoc: Record<string, unknown> = {
     uid: userRef.id,
     familyId,
     role,
     displayName,
     isManaged: true,
-    avatarUrl: `https://api.dicebear.com/7.x/${role === 'parent' ? 'avataaars' : 'bottts'}/svg?seed=${displayName}`,
+    avatarUrl: defaultAvatarUrl,
     rewardPoints: 0,
     lifetimeXP: 0,
     currentStreak: 0,
     longestStreak: 0,
-    lastActiveDate: serverTimestamp()
+    lastActiveDate: serverTimestamp(),
+  };
+
+  // Apply optional onboarding profile fields. Avatar resolution always goes
+  // through the curated catalog so a managed child can never store an arbitrary
+  // external URL.
+  if (profile?.avatarId) {
+    memberDoc.avatarId = profile.avatarId;
+    memberDoc.avatarUrl = resolveAvatarImage(profile.avatarId, defaultAvatarUrl) || defaultAvatarUrl;
+  }
+  if (profile?.dob) memberDoc.dob = profile.dob;
+  if (profile?.colour) memberDoc.colour = profile.colour;
+
+  const batch = writeBatch(db);
+  batch.set(doc(db, `families/${familyId}/wallets`, userRef.id), {
+    balance: 0,
+    createdAt: serverTimestamp(),
+    migratedFromLegacy: true,
   });
+  batch.set(userRef, memberDoc);
   await batch.commit();
   return userRef.id;
 };

@@ -149,6 +149,10 @@ describe('rendered bootstrap boundary', () => {
       appReady: true,
       loading: false,
       familyData: { id: 'fam1', currency: '£' },
+      // Give the family a child so the Parent First-Run Child Onboarding gate
+      // (zero children -> redirect) does not intercept this dashboard/reversals
+      // assertion. The test's intent is the reversals loader, not onboarding.
+      familyMembers: [{ id: 'child1', role: 'child', displayName: 'Ava' }],
       loadReversals,
     });
 

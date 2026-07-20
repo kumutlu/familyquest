@@ -4,6 +4,7 @@ import { useStore } from '../../store/useStore';
 import { getNavItems } from '../../config/navigation';
 import { ProfileDropdown } from './ProfileDropdown';
 import { NotificationCenter } from './NotificationCenter';
+import { shouldStartChildOnboarding } from '../../lib/childOnboarding';
 
 export function AppLayout() {
   const location = useLocation();
@@ -11,6 +12,7 @@ export function AppLayout() {
   const authUser = useStore(state => state.authUser);
   const currentUser = useStore(state => state.currentUser);
   const appReady = useStore(state => state.appReady);
+  const familyMembers = useStore(state => state.familyMembers);
   const bootstrapError = useStore(state => state.bootstrapError);
   const retryBootstrap = useStore(state => state.retryBootstrap);
 
@@ -61,6 +63,13 @@ export function AppLayout() {
 
   if (currentUser?.familyId && !appReady) {
     return <div className="min-h-screen bg-gray-50 flex items-center justify-center animate-pulse">Loading Dashboard...</div>;
+  }
+
+  // Logged in, family exists, but the family has zero child profiles -> start
+  // the Parent First-Run Child Onboarding. Once a child exists this never shows
+  // again (enforced inside shouldStartChildOnboarding).
+  if (shouldStartChildOnboarding({ currentUser, familyMembers, appReady, pathname: location.pathname })) {
+    return <Navigate to="/child-onboarding" replace />;
   }
 
   // Single source of truth for navigation, shared by the desktop header and the

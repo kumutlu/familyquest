@@ -11,6 +11,7 @@ import { Settings } from './pages/Settings';
 import { Login } from './pages/Login';
 import { Signup } from './pages/Signup';
 import { Onboarding } from './pages/Onboarding';
+import { ChildOnboarding } from './pages/ChildOnboarding';
 import { FundsDashboard } from './pages/FundsDashboard';
 import { Goals } from './pages/Goals';
 import { GoalDetail } from './pages/GoalDetail';
@@ -44,6 +45,7 @@ function App() {
           <Route path="/" element={<AppLayout />}>
             <Route index element={<Dashboard />} />
             <Route path="onboarding" element={<Onboarding />} />
+            <Route path="child-onboarding" element={<ChildOnboarding />} />
             <Route path="family" element={<Family />} />
             <Route path="family/:id" element={<MemberProfile />} />
             <Route path="tasks" element={<Tasks />} />
