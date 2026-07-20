@@ -1,0 +1,4 @@
+{
+  "greeting": "Merhaba, {{name}}",
+  "summary": "Aile özetiniz"
+}

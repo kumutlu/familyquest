@@ -1,0 +1,5 @@
+{
+  "generic": "Something went wrong",
+  "required": "This field is required",
+  "network": "Network error, please try again"
+}

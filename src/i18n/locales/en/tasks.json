@@ -1,0 +1,6 @@
+{
+  "title": "Tasks",
+  "complete": "Mark complete",
+  "itemCount_one": "{{count}} task",
+  "itemCount_other": "{{count}} tasks"
+}

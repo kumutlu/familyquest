@@ -1,0 +1,6 @@
+{
+  "title": "Görevler",
+  "complete": "Tamamlandı işaretle",
+  "itemCount_one": "{{count}} görev",
+  "itemCount_other": "{{count}} görev"
+}
