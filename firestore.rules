@@ -1442,7 +1442,7 @@ service cloud.firestore {
       // expensive in the rules expression budget); the operationType allow-list
       // uses `in` (cheap) and denies the colon-form forged doc from the
       // anti-forgery test (operationType "goalContribution" != "goal_contribution").
-      return data.operationType in ['goal_create', 'goal_contribution', 'goal_contribution_request', 'goal_parent_contribution', 'goal_withdrawal_request', 'goal_withdrawal_approve', 'goal_purchased', 'goal_returned', 'goal_cancelled', 'goal_match_approve']
+      return data.operationType in ['goal_create', 'goal_contribution', 'goal_contribution_request', 'goal_parent_contribution', 'goal_withdrawal_request', 'goal_withdrawal_approve', 'goal_purchased', 'goal_returned', 'goal_cancelled', 'goal_deleted', 'goal_match_approve']
         && data.status == 'completed'
         && data.createdAt == request.time
         && data.expiresAt == request.time;

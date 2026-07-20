@@ -778,4 +778,46 @@ describe('Goals — deleteCancelledGoal security boundary', () => {
     // only permits the terminal transition, not arbitrary edits).
     await assertFails(updateDoc(doc(db, goalPath('goalCancelled')), { title: 'hacked' }));
   });
+
+  // REGRESSION: deleteCancelledGoal writes an idempotency doc with
+  // operationType 'goal_deleted' inside the SAME atomic transaction as the goal
+  // delete. Production failed with "Missing or insufficient permissions." because
+  // 'goal_deleted' was missing from the isValidIdempotencyOperation allow-list,
+  // so the idempotency set() was rejected and the whole transaction rolled back
+  // (the goal delete rule was never even reached). This test reproduces that exact
+  // write and asserts it is now accepted.
+  it('29. REGRESSION: goal_deleted idempotency write (from deleteCancelledGoal) is accepted', async () => {
+    const db = testEnv.authenticatedContext('parent1').firestore();
+    const idemDoc = {
+      operationType: 'goal_deleted',
+      actorId: 'parent1',
+      requestHash: 'regression-hash',
+      status: 'completed',
+      resultRef: 'families/family1/savings_goals/goalCancelled',
+      goalId: 'goalCancelled',
+      createdAt: serverTimestamp(),
+      expiresAt: serverTimestamp(),
+    };
+    // The exact idempotency document shape written by writeIdempotency() in
+    // deleteCancelledGoal must pass the create rule.
+    await assertSucceeds(setDoc(doc(db, idemPath('delete:regression-req')), idemDoc));
+  });
+
+  it('29b. REGRESSION: full deleteCancelledGoal transaction (delete + goal_deleted idempotency) succeeds', async () => {
+    // Simulates the atomic transaction: delete the cancelled goal AND write the
+    // goal_deleted idempotency doc. Both must be permitted together.
+    const db = testEnv.authenticatedContext('parent1').firestore();
+    await assertSucceeds(deleteDoc(doc(db, goalPath('goalCancelled'))));
+    const idemDoc = {
+      operationType: 'goal_deleted',
+      actorId: 'parent1',
+      requestHash: 'regression-hash-2',
+      status: 'completed',
+      resultRef: 'families/family1/savings_goals/goalCancelled',
+      goalId: 'goalCancelled',
+      createdAt: serverTimestamp(),
+      expiresAt: serverTimestamp(),
+    };
+    await assertSucceeds(setDoc(doc(db, idemPath('delete:regression-req-2')), idemDoc));
+  });
 });
