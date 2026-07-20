@@ -8,7 +8,7 @@
 // is triggered, keeping the existing business notification system untouched.
 // ---------------------------------------------------------------------------
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.onUserWritten = exports.onNotificationCreated = void 0;
+exports.signInChild = exports.createChildLogin = exports.onUserWritten = exports.onNotificationCreated = void 0;
 const app_1 = require("firebase-admin/app");
 const firestore_1 = require("firebase-admin/firestore");
 const messaging_1 = require("firebase-admin/messaging");
@@ -94,4 +94,8 @@ exports.onUserWritten = (0, firestore_2.onDocumentWritten)('users/{userId}', asy
         }
     }
 });
+// Parent-created child login (Phase 1). Trusted callables; see childLogin.ts.
+var childLogin_1 = require("./childLogin");
+Object.defineProperty(exports, "createChildLogin", { enumerable: true, get: function () { return childLogin_1.createChildLogin; } });
+Object.defineProperty(exports, "signInChild", { enumerable: true, get: function () { return childLogin_1.signInChild; } });
 //# sourceMappingURL=index.js.map

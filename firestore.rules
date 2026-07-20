@@ -1456,7 +1456,10 @@ service cloud.firestore {
         isValidReversalPointsUpdate(uid) ||
         (request.auth.uid == uid && !request.resource.data.diff(resource.data).affectedKeys().hasAny([
           'role', 'familyId', 'rewardPoints', 'lifetimeXP', 'walletBalance', 'balance', 'lastFundTxId',
-          'displayName', 'avatarUrl', 'avatarId'
+          'displayName', 'avatarUrl', 'avatarId',
+          // Phase 1 child-login linking fields: server-only (Admin SDK). A client
+          // must never be able to set its own login link, username, or flags.
+          'hasLogin', 'username', 'loginEnabled', 'requiresPasswordChange', 'authUid'
         ])) ||
         // Owner/parent may self-edit only their own benign profile fields.
         // Children are not isParent, so they remain routed through the approval flow.
@@ -2000,6 +2003,31 @@ service cloud.firestore {
           // Immutable after creation.
           allow update, delete: if false;
         }
+      }
+
+      // =========================================================================
+      // PARENT-CREATED CHILD LOGIN (Phase 1) — SERVER-OWNED COLLECTIONS
+      // =========================================================================
+      // These collections are written ONLY by the trusted backend (Admin SDK /
+      // Cloud Functions) as part of createChildLogin / signInChild. They contain
+      // the synthetic email, the Auth uid link, immutable audit events, and
+      // idempotency records. Clients (parent, owner, or child) MUST NOT be able
+      // to read or write any of them. The Admin SDK bypasses rules, so the
+      // trusted backend remains the sole writer. This is defense-in-depth: even
+      // a compromised client token cannot read the synthetic email or forge a
+      // login record. We do NOT weaken any existing users/family/wallet/goals/
+      // tasks/rewards rules by adding these.
+      match /childLoginIndex/{normalizedUsername} {
+        allow read, write: if false;
+      }
+      match /childLogins/{childId} {
+        allow read, write: if false;
+      }
+      match /childLoginAudit/{auditId} {
+        allow read, write: if false;
+      }
+      match /childLoginIdempotency/{clientReqId} {
+        allow read, write: if false;
       }
     }
   }
