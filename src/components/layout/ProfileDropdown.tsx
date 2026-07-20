@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
+import { useTranslation } from 'react-i18next';
 import { User, Settings, Shield, LogOut } from 'lucide-react';
 import { Avatar } from '../ui/Avatar';
 import { useStore } from '../../store/useStore';
@@ -15,6 +16,7 @@ const menuItemClass =
  * Only the rendered menu items differ between roles; the component itself is shared.
  */
 export function ProfileDropdown() {
+  const { t } = useTranslation(['settings', 'common']);
   const currentUser = useStore(state => state.currentUser);
   const [isOpen, setIsOpen] = useState(false);
   const [editorOpen, setEditorOpen] = useState(false);
@@ -90,7 +92,7 @@ export function ProfileDropdown() {
       <button
         type="button"
         onClick={() => setIsOpen(o => !o)}
-        aria-label="Profile menu"
+        aria-label={t('profileMenuAria')}
         aria-haspopup="menu"
         aria-expanded={isOpen}
         className="rounded-full focus:outline-none focus:ring-2 focus:ring-primary-200"
@@ -107,7 +109,7 @@ export function ProfileDropdown() {
         <div
           ref={menuRef}
           role="menu"
-          aria-label="Profile menu"
+          aria-label={t('profileMenuAria')}
           onKeyDown={handleMenuKeyDown}
           className="absolute right-0 mt-2 w-56 bg-white rounded-2xl shadow-xl border border-gray-100 overflow-hidden z-50 origin-top-right"
         >
@@ -138,7 +140,7 @@ export function ProfileDropdown() {
               className={menuItemClass}
             >
               <User size={18} className="text-gray-400" />
-              <span>Edit Profile</span>
+              <span>{t('editProfile')}</span>
             </button>
 
             <Link
@@ -149,7 +151,7 @@ export function ProfileDropdown() {
               className={menuItemClass}
             >
               <Settings size={18} className="text-gray-400" />
-              <span>Settings</span>
+              <span>{t('menuSettings')}</span>
             </Link>
 
             {isOwner && (
@@ -161,7 +163,7 @@ export function ProfileDropdown() {
                 className={menuItemClass}
               >
                 <Shield size={18} className="text-gray-400" />
-                <span>Family Settings</span>
+                <span>{t('menuFamilySettings')}</span>
               </Link>
             )}
 
@@ -176,7 +178,7 @@ export function ProfileDropdown() {
               className={`${menuItemClass} hover:bg-red-50 hover:text-red-600 focus:bg-red-50 focus:text-red-600`}
             >
               <LogOut size={18} className="text-gray-400" />
-              <span>Sign Out</span>
+              <span>{t('signOut')}</span>
             </button>
           </div>
         </div>

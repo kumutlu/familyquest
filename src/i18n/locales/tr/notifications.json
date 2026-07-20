@@ -1,4 +1,21 @@
 {
   "title": "Bildirimler",
-  "empty": "Bildirim yok"
+  "empty": "Bildirim yok",
+  "emptyYet": "Henüz bildirim yok.",
+  "readError": "Bu bildirim güncellenemedi.",
+  "markAllRead": "Tümünü okundu işaretle",
+  "tabs": {
+    "all": "Tümü",
+    "unread": "Okunmamış",
+    "mentions": "Bahsedilenler"
+  },
+  "errorTitle": "Bildirimler yüklenemedi",
+  "emptyUnread": "Hepsi güncel.",
+  "emptyMentions": "Şu anda sizden bahseden bir şey yok.",
+  "emptyDefault": "Bir şey olduğunda size haber veririz.",
+  "loadMore": "Daha fazla yükle",
+  "unread": "Okunmamış",
+  "viewAll": "Tüm bildirimleri gör",
+  "close": "Bildirimleri kapat",
+  "ariaLabel": "Bildirimler, {{count}} okunmamış"
 }

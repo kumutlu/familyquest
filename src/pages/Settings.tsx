@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
+import { useTranslation } from 'react-i18next';
 import { Card, CardContent } from '../components/ui/Card';
 import { Button } from '../components/ui/Button';
 import { Avatar } from '../components/ui/Avatar';
@@ -15,7 +16,13 @@ import {
   CheckCircle2,
   Loader2,
   AlertTriangle,
+  Globe,
 } from 'lucide-react';
+import i18n, {
+  applyDocumentDirection,
+  SUPPORTED_LANGUAGES,
+  type SupportedLanguage,
+} from '../i18n';
 import {
   signOut,
   sendPasswordReset,
@@ -85,10 +92,11 @@ function NotificationHealth({
   state: NotificationConnectionState;
   onRetry: () => void;
 }) {
+  const { t } = useTranslation(['settings', 'common']);
   const config = {
-    connecting: { label: 'Connecting…', Icon: Loader2, tone: 'text-amber-600', bg: 'bg-amber-100', spin: true },
-    connected: { label: 'Connected', Icon: CheckCircle2, tone: 'text-green-600', bg: 'bg-green-100', spin: false },
-    unavailable: { label: 'Temporarily unavailable', Icon: AlertTriangle, tone: 'text-red-600', bg: 'bg-red-100', spin: false },
+    connecting: { label: t('healthConnecting'), Icon: Loader2, tone: 'text-amber-600', bg: 'bg-amber-100', spin: true },
+    connected: { label: t('healthConnected'), Icon: CheckCircle2, tone: 'text-green-600', bg: 'bg-green-100', spin: false },
+    unavailable: { label: t('common:unavailable'), Icon: AlertTriangle, tone: 'text-red-600', bg: 'bg-red-100', spin: false },
   } as const;
   const { label, Icon, tone, bg, spin } = config[state];
   return (
@@ -99,8 +107,8 @@ function NotificationHealth({
             <Icon size={14} className={spin ? 'animate-spin' : ''} />
           </span>
           <div>
-            <p className="text-sm font-semibold text-gray-900">Notification Center</p>
-            <p className="text-xs text-gray-500">Real-time connection status</p>
+            <p className="text-sm font-semibold text-gray-900">{t('healthTitle')}</p>
+            <p className="text-xs text-gray-500">{t('healthSubtitle')}</p>
           </div>
         </div>
         <span className={`text-xs font-semibold ${tone}`}>{label}</span>
@@ -113,7 +121,7 @@ function NotificationHealth({
           onClick={onRetry}
           className="mt-3 w-full text-center text-xs font-semibold text-primary-600 hover:text-primary-700 py-2 rounded-lg border border-primary-200 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-500"
         >
-          Retry connection
+          {t('healthRetry')}
         </button>
       )}
     </div>
@@ -131,6 +139,7 @@ function PushNotificationsSection({
   familyId: string | null;
   userId: string | null;
 }) {
+  const { t } = useTranslation(['settings', 'common']);
   const [state, setState] = useState<PushState | null>(null);
   const [busy, setBusy] = useState(false);
 
@@ -166,9 +175,9 @@ function PushNotificationsSection({
   if (!state) {
     return (
       <div className="pt-3 border-t border-gray-100">
-        <h3 className="text-sm font-semibold text-gray-900">Push notifications</h3>
+        <h3 className="text-sm font-semibold text-gray-900">{t('pushTitle')}</h3>
         <div className="mt-2 flex items-center gap-2 text-sm text-gray-500">
-          <Loader2 size={14} className="animate-spin" aria-hidden="true" /> Checking…
+          <Loader2 size={14} className="animate-spin" aria-hidden="true" /> {t('pushChecking')}
         </div>
       </div>
     );
@@ -179,12 +188,12 @@ function PushNotificationsSection({
   if (support === 'unsupported') {
     return (
       <div className="pt-3 border-t border-gray-100">
-        <h3 className="text-sm font-semibold text-gray-900">Push notifications</h3>
+        <h3 className="text-sm font-semibold text-gray-900">{t('pushTitle')}</h3>
         <span className="mt-2 inline-flex items-center rounded-full bg-gray-100 text-gray-500 px-2 py-0.5 text-xs font-semibold">
-          Not supported on this browser
+          {t('pushUnsupported')}
         </span>
         <p className="mt-2 text-sm text-gray-600">
-          This browser or device does not support FamilyQuest push notifications.
+          {t('pushUnsupportedDesc')}
         </p>
       </div>
     );
@@ -193,12 +202,12 @@ function PushNotificationsSection({
   if (status === 'blocked') {
     return (
       <div className="pt-3 border-t border-gray-100">
-        <h3 className="text-sm font-semibold text-gray-900">Push notifications</h3>
+        <h3 className="text-sm font-semibold text-gray-900">{t('pushTitle')}</h3>
         <span className="mt-2 inline-flex items-center rounded-full bg-red-100 text-red-700 px-2 py-0.5 text-xs font-semibold">
-          Blocked in browser settings
+          {t('pushBlocked')}
         </span>
         <p className="mt-2 text-sm text-gray-600">
-          Notifications are blocked. Enable them in your browser or device settings, then return here.
+          {t('pushBlockedDesc')}
         </p>
       </div>
     );
@@ -207,24 +216,24 @@ function PushNotificationsSection({
   if (status === 'enabled') {
     return (
       <div className="pt-3 border-t border-gray-100">
-        <h3 className="text-sm font-semibold text-gray-900">Push notifications</h3>
+        <h3 className="text-sm font-semibold text-gray-900">{t('pushTitle')}</h3>
         <div className="mt-2 flex items-center justify-between gap-3">
           <div>
             <span className="inline-flex items-center rounded-full bg-green-100 text-green-700 px-2 py-0.5 text-xs font-semibold">
-              Enabled on this device
+              {t('pushEnabled')}
             </span>
             {lastRegisteredAt ? (
               <p className="mt-1 text-xs text-gray-400">
-                Last registered {new Date(lastRegisteredAt).toLocaleString()}
+                {t('pushLastRegistered', { date: new Date(lastRegisteredAt).toLocaleString() })}
               </p>
             ) : null}
           </div>
           <Button variant="secondary" size="sm" onClick={onDisable} disabled={busy}>
-            Disable on this device
+            {t('pushDisable')}
           </Button>
         </div>
         <p className="mt-2 text-sm text-gray-600">
-          You'll receive FamilyQuest updates on this device even when the app is not open.
+          {t('pushEnabledDesc')}
         </p>
       </div>
     );
@@ -234,35 +243,36 @@ function PushNotificationsSection({
   const isUnavailable = status === 'unavailable';
   return (
     <div className="pt-3 border-t border-gray-100">
-      <h3 className="text-sm font-semibold text-gray-900">Push notifications</h3>
+      <h3 className="text-sm font-semibold text-gray-900">{t('pushTitle')}</h3>
       <div className="mt-2 flex items-center justify-between gap-3">
         <span
           className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-semibold ${
             isUnavailable ? 'bg-amber-100 text-amber-700' : 'bg-gray-100 text-gray-500'
           }`}
         >
-          {isUnavailable ? 'Temporarily unavailable' : 'Not enabled'}
+          {isUnavailable ? t('common:unavailable') : t('pushNotEnabled')}
         </span>
         <Button variant="primary" size="sm" onClick={onEnable} disabled={busy}>
           {busy ? (
             <Loader2 size={14} className="animate-spin" aria-hidden="true" />
           ) : isUnavailable ? (
-            'Try again'
+            t('common:tryAgain')
           ) : (
-            'Enable push notifications'
+            t('pushEnable')
           )}
         </Button>
       </div>
       <p className="mt-2 text-sm text-gray-600">
         {isUnavailable && error
           ? error
-          : 'Receive FamilyQuest updates even when the app is not open.'}
+          : t('pushEnabledDesc')}
       </p>
     </div>
   );
 }
 
 export function Settings() {
+  const { t } = useTranslation(['settings', 'notifications', 'common']);
   const currentUser = useStore(state => state.currentUser);
   const authUser = useStore(state => state.authUser);
   const familyData = useStore(state => state.familyData);
@@ -291,8 +301,8 @@ export function Settings() {
     ? profileUpdateRequests.find(r => r.childId === currentUser?.id && r.status === 'pending')
     : undefined;
   const roleNotificationCopy = isParentOrOwner
-    ? 'Approval requests — tasks, reward requests, and transfers — appear in your notification center.'
-    : 'Task results, wallet changes, transfers, and behaviour updates appear in your notification center.';
+    ? t('roleCopyParent')
+    : t('roleCopyChild');
   const { connectionState, retry } = useNotifications(currentUser?.familyId ?? null, currentUser?.uid ?? null);
 
   const inviteCode = familyData?.inviteCode;
@@ -308,9 +318,9 @@ export function Settings() {
       } else {
         throw new Error('Clipboard unavailable');
       }
-      setStatus({ type: 'success', message: 'Invite code copied to clipboard.' });
+      setStatus({ type: 'success', message: t('statusCopied') });
     } catch {
-      setStatus({ type: 'error', message: 'Could not copy the invite code. Please try again.' });
+      setStatus({ type: 'error', message: t('statusCopyFailed') });
     } finally {
       setCopying(false);
     }
@@ -320,7 +330,7 @@ export function Settings() {
     if (resetState.loading) return;
     const email = authUser?.email ?? currentUser?.email;
     if (!email) {
-      setResetState(s => ({ ...s, message: { type: 'error', text: 'No email is associated with this account.' } }));
+      setResetState(s => ({ ...s, message: { type: 'error', text: t('noEmail') } }));
       return;
     }
     setResetState({ loading: true, message: null });
@@ -328,7 +338,7 @@ export function Settings() {
       await sendPasswordReset(email);
       setResetState({
         loading: false,
-        message: { type: 'success', text: `We sent a password reset link to ${email}.` },
+        message: { type: 'success', text: t('resetSent', { email }) },
       });
     } catch (err) {
       setResetState({
@@ -342,20 +352,48 @@ export function Settings() {
     try {
       await signOut();
     } catch {
-      setStatus({ type: 'error', message: 'Could not sign out. Please try again.' });
+      setStatus({ type: 'error', message: t('statusSignOutFailed') });
     }
   };
 
   const providerInfo = getAuthProviderInfo();
   const canResetPassword = providerInfo.isEmailPassword;
 
+  // Language preference: persisted locally (no authenticated user preference yet).
+  const [language, setLanguage] = useState<SupportedLanguage>(() => {
+    const stored = (() => {
+      try {
+        return localStorage.getItem('familyquest.language');
+      } catch {
+        return null;
+      }
+    })();
+    const base = (stored ?? i18n.language ?? 'en').split('-')[0].toLowerCase();
+    return (SUPPORTED_LANGUAGES as readonly string[]).includes(base)
+      ? (base as SupportedLanguage)
+      : 'en';
+  });
+
+  const handleLanguageChange = (lang: SupportedLanguage) => {
+    const message = t('languageSaved');
+    setLanguage(lang);
+    i18n.changeLanguage(lang);
+    applyDocumentDirection(lang);
+    try {
+      localStorage.setItem('familyquest.language', lang);
+    } catch {
+      /* ignore persistence errors */
+    }
+    setStatus({ type: 'success', message });
+  };
+
   const notificationCategories = [
-    'Task updates',
-    'Reward requests',
-    'Wallet updates',
-    'Transfer updates',
-    'Behaviour updates',
-    'Pet Box updates',
+    t('categories.taskUpdates'),
+    t('categories.rewardRequests'),
+    t('categories.walletUpdates'),
+    t('categories.transferUpdates'),
+    t('categories.behaviourUpdates'),
+    t('categories.petBoxUpdates'),
   ];
 
   const buildTimestamp = (() => {
@@ -369,8 +407,8 @@ export function Settings() {
   return (
     <div className="max-w-2xl mx-auto space-y-8">
       <header>
-        <h1 className="text-2xl font-bold text-gray-900">Settings</h1>
-        <p className="text-sm text-gray-500 mt-1">Manage your profile, family and account.</p>
+        <h1 className="text-2xl font-bold text-gray-900">{t('title')}</h1>
+        <p className="text-sm text-gray-500 mt-1">{t('subtitle')}</p>
       </header>
 
       {/* Global status region */}
@@ -393,8 +431,8 @@ export function Settings() {
       <Section
         id="profile-section"
         icon={User}
-        title="Profile"
-        description="Your personal information and how you appear to the family."
+        title={t('profile')}
+        description={t('profileDesc')}
       >
         <Card>
           <CardContent className="p-5">
@@ -413,20 +451,20 @@ export function Settings() {
 
             <div className="mt-4 flex flex-col sm:flex-row gap-3">
               <Button onClick={() => setEditorOpen(true)} className="flex-1">
-                Edit Profile
+                {t('editProfile')}
               </Button>
               <Button variant="secondary" onClick={() => setEditorOpen(true)} className="flex-1">
-                Change Avatar
+                {t('changeAvatar')}
               </Button>
             </div>
             {child && pendingProfileUpdate && (
               <p className="mt-3 text-xs text-blue-700" role="status">
-                You have a pending profile update awaiting parent approval.
+                {t('pendingProfileUpdate')}
               </p>
             )}
             {child && !pendingProfileUpdate && (
               <p className="mt-3 text-xs text-amber-700">
-                Profile changes are sent to a parent for approval before they take effect.
+                {t('profileApprovalNote')}
               </p>
             )}
           </CardContent>
@@ -437,16 +475,16 @@ export function Settings() {
       <Section
         id="family-section"
         icon={Users}
-        title="Family"
-        description="Family details and member management."
+        title={t('familyTitle')}
+        description={t('familyDesc')}
       >
         <Card>
           <CardContent className="p-5 divide-y divide-gray-100">
-            <Row label="Family name" value={familyData?.name ?? '—'} />
+            <Row label={t('familyName')} value={familyData?.name ?? '—'} />
 
             {child ? (
               <div className="pt-3">
-                <p className="text-sm font-medium text-gray-500 mb-2">Family members</p>
+                <p className="text-sm font-medium text-gray-500 mb-2">{t('familyMembers')}</p>
                 <ul className="space-y-2">
                   {familyMembers.map(member => (
                     <li key={member.id} className="flex items-center justify-between gap-3">
@@ -463,7 +501,7 @@ export function Settings() {
             ) : (
               <>
                 <div className="py-3">
-                  <p className="text-sm font-medium text-gray-500 mb-2">Invite code</p>
+                  <p className="text-sm font-medium text-gray-500 mb-2">{t('inviteCode')}</p>
                   <div className="flex flex-col sm:flex-row gap-3">
                     <div className="flex-1 bg-gray-50 border border-gray-200 rounded-xl px-4 py-3 flex items-center justify-between">
                       <span className="font-mono text-lg font-bold tracking-widest text-primary-600">
@@ -475,14 +513,14 @@ export function Settings() {
                         variant="secondary"
                         onClick={handleCopy}
                         disabled={copying || !inviteCode}
-                        aria-label="Copy invite code"
+                        aria-label={t('copyInviteAria')}
                         className="flex-1 sm:flex-none justify-center"
                       >
                         {copying ? (
-                          'Copying…'
+                          t('common:copying')
                         ) : (
                           <>
-                            <Copy size={16} className="mr-2" aria-hidden="true" /> Copy
+                            <Copy size={16} className="mr-2" aria-hidden="true" /> {t('common:copy')}
                           </>
                         )}
                       </Button>
@@ -495,20 +533,19 @@ export function Settings() {
                     <Button
                       variant="outline"
                       disabled
-                      aria-label="Regenerate invite code"
+                      aria-label={t('regenerateInviteAria')}
                       className="w-full justify-center cursor-not-allowed"
-                      title="Regenerate invite code is not available yet"
+                      title={t('regenerateDisabledTitle')}
                     >
-                      <RefreshCw size={16} className="mr-2" aria-hidden="true" /> Regenerate invite code
+                      <RefreshCw size={16} className="mr-2" aria-hidden="true" /> {t('regenerateInvite')}
                     </Button>
                     <p className="mt-2 text-xs text-gray-400">
-                      Regenerating the invite code is not available yet. This action will
-                      invalidate the old code once enabled.
+                      {t('regenerateNote')}
                     </p>
                   </div>
                 )}
 
-                <Row label="Member count" value={memberCount} />
+                <Row label={t('memberCount')} value={memberCount} />
               </>
             )}
           </CardContent>
@@ -519,27 +556,27 @@ export function Settings() {
       <Section
         id="notifications-section"
         icon={Bell}
-        title="Notifications"
-        description="How FamilyQuest keeps you informed."
+        title={t('notificationsTitle')}
+        description={t('notificationsDesc')}
       >
         <Card>
           <CardContent className="p-5 space-y-4">
             {/* In-app notifications: real capability only */}
             <div>
-              <h3 className="text-sm font-semibold text-gray-900">In-app notifications</h3>
+              <h3 className="text-sm font-semibold text-gray-900">{t('inAppTitle')}</h3>
               <div className="mt-2">
                 <span className="inline-flex items-center rounded-full bg-green-100 text-green-700 px-2 py-0.5 text-xs font-semibold">
-                  Active
+                  {t('common:active')}
                 </span>
               </div>
               <p className="mt-2 text-sm text-gray-600">
-                Notifications appear in FamilyQuest while you are signed in.
+                {t('inAppDesc')}
               </p>
             </div>
 
             {/* Supported categories (informational rows, no toggles) */}
             <div className="pt-3 border-t border-gray-100">
-              <h3 className="text-sm font-semibold text-gray-900">Notification categories</h3>
+              <h3 className="text-sm font-semibold text-gray-900">{t('categoriesTitle')}</h3>
               <ul className="mt-2 space-y-1">
                 {notificationCategories.map(category => (
                   <li key={category} className="flex items-center gap-2 text-sm text-gray-700">
@@ -549,8 +586,7 @@ export function Settings() {
                 ))}
               </ul>
               <p className="mt-2 text-xs text-gray-400">
-                These categories are delivered as in-app notifications. Per-category preferences are
-                not available yet.
+                {t('categoriesNote')}
               </p>
             </div>
 
@@ -571,31 +607,64 @@ export function Settings() {
         </Card>
       </Section>
 
+      {/* 3.5 LANGUAGE */}
+      <Section
+        id="language-section"
+        icon={Globe}
+        title={t('languageTitle')}
+        description={t('languageDesc')}
+      >
+        <Card>
+          <CardContent className="p-5 space-y-2">
+            {SUPPORTED_LANGUAGES.map(lang => (
+              <label
+                key={lang}
+                className={`flex items-center gap-3 rounded-lg border px-4 py-3 cursor-pointer ${
+                  language === lang ? 'border-primary-500 bg-primary-50' : 'border-gray-200'
+                }`}
+              >
+                <input
+                  type="radio"
+                  name="language"
+                  value={lang}
+                  checked={language === lang}
+                  onChange={() => handleLanguageChange(lang as SupportedLanguage)}
+                  className="accent-primary-500"
+                />
+                <span className="text-sm font-medium text-gray-900">
+                  {lang === 'en' ? t('english') : t('turkish')}
+                </span>
+              </label>
+            ))}
+          </CardContent>
+        </Card>
+      </Section>
+
       {/* 4. SECURITY */}
       <Section
         id="security-section"
         icon={Shield}
-        title="Security"
-        description="Account access and sign-out."
+        title={t('securityTitle')}
+        description={t('securityDesc')}
       >
         <Card>
           <CardContent className="p-5 space-y-4">
             {canResetPassword ? (
               <div className="space-y-3">
                 <div>
-                  <h3 className="text-sm font-semibold text-gray-900">Change password</h3>
+                  <h3 className="text-sm font-semibold text-gray-900">{t('changePassword')}</h3>
                   <p className="text-sm text-gray-500 mt-1">
-                    We'll email you a secure link to reset your password.
+                    {t('changePasswordDesc')}
                   </p>
                 </div>
                 <Button
                   onClick={handlePasswordReset}
                   disabled={resetState.loading}
-                  aria-label="Send password reset email"
+                  aria-label={t('sendResetAria')}
                   className="w-full sm:w-auto"
                 >
                   <KeyRound size={16} className="mr-2" aria-hidden="true" />
-                  {resetState.loading ? 'Sending…' : 'Send password reset email'}
+                  {resetState.loading ? t('common:sending') : t('sendReset')}
                 </Button>
                 <div aria-live="polite" aria-atomic="true">
                   {resetState.message && (
@@ -616,11 +685,11 @@ export function Settings() {
               <div className="flex items-start gap-3">
                 <KeyRound size={18} className="mt-0.5 text-gray-400" aria-hidden="true" />
                 <div>
-                  <h3 className="text-sm font-semibold text-gray-900">Password</h3>
+                  <h3 className="text-sm font-semibold text-gray-900">{t('password')}</h3>
                   <p className="text-sm text-gray-500 mt-1">
                     {providerInfo.primaryProviderLabel
-                      ? `You sign in with ${providerInfo.primaryProviderLabel}. To change your password, manage it through your ${providerInfo.primaryProviderLabel} account.`
-                      : 'Password changes are managed through your sign-in provider.'}
+                      ? t('passwordProvider', { provider: providerInfo.primaryProviderLabel })
+                      : t('passwordProviderDefault')}
                   </p>
                 </div>
               </div>
@@ -630,10 +699,10 @@ export function Settings() {
               <Button
                 variant="danger"
                 onClick={handleSignOut}
-                aria-label="Sign Out"
+                aria-label={t('signOutAria')}
                 className="w-full sm:w-auto"
               >
-                <LogOut size={18} className="mr-2" aria-hidden="true" /> Sign Out
+                <LogOut size={18} className="mr-2" aria-hidden="true" /> {t('signOut')}
               </Button>
             </div>
           </CardContent>
@@ -644,16 +713,16 @@ export function Settings() {
       <Section
         id="about-section"
         icon={Info}
-        title="About"
-        description="App and build information."
+        title={t('aboutTitle')}
+        description={t('aboutDesc')}
       >
         <Card>
           <CardContent className="p-5 divide-y divide-gray-100">
-            <Row label="App version" value={FAMILYQUEST_BUILD.version} />
-            <Row label="Build commit" value={FAMILYQUEST_BUILD.sha.slice(0, 7)} />
-            <Row label="Build timestamp" value={buildTimestamp} />
-            <Row label="Environment" value={environment} />
-            <Row label="Firebase project" value={projectId ?? '—'} />
+            <Row label={t('appVersion')} value={FAMILYQUEST_BUILD.version} />
+            <Row label={t('buildCommit')} value={FAMILYQUEST_BUILD.sha.slice(0, 7)} />
+            <Row label={t('buildTimestamp')} value={buildTimestamp} />
+            <Row label={t('environment')} value={environment} />
+            <Row label={t('firebaseProject')} value={projectId ?? '—'} />
           </CardContent>
         </Card>
       </Section>

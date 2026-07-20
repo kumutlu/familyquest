@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { useNavigate } from 'react-router-dom';
 import {
   Bell,
@@ -64,9 +65,9 @@ function timeIso(value: unknown): string | undefined {
 type TabKey = 'all' | 'unread' | 'mentions';
 
 const TABS: { key: TabKey; label: string }[] = [
-  { key: 'all', label: 'All' },
-  { key: 'unread', label: 'Unread' },
-  { key: 'mentions', label: 'Mentions' },
+  { key: 'all', label: 'all' },
+  { key: 'unread', label: 'unread' },
+  { key: 'mentions', label: 'mentions' },
 ];
 
 const FOCUSABLE_SELECTOR =
@@ -107,6 +108,7 @@ export function NotificationCenter() {
   const closeRef = useRef<HTMLButtonElement>(null);
   const previouslyFocused = useRef<HTMLElement | null>(null);
   const dragState = useRef<{ startY: number; startT: number } | null>(null);
+  const { t } = useTranslation(['notifications', 'common']);
   const navigate = useNavigate();
 
   // Lock background scroll while the sheet is open (mobile + desktop).
@@ -133,7 +135,7 @@ export function NotificationCenter() {
       try {
         await markRead(n.id);
       } catch (e) {
-        setReadError((e as Error)?.message || "We couldn't update this notification.");
+        setReadError((e as Error)?.message || t('readError'));
       }
       close();
       try {
@@ -150,7 +152,7 @@ export function NotificationCenter() {
       await markAllRead();
       setReadError(null);
     } catch (e) {
-      setReadError((e as Error)?.message || "We couldn't update this notification.");
+      setReadError((e as Error)?.message || t('readError'));
     }
   }, [markAllRead]);
 
@@ -266,7 +268,7 @@ export function NotificationCenter() {
   );
 
   const badge = unreadCount > 0 ? (unreadCount > 9 ? '9+' : String(unreadCount)) : null;
-  const ariaLabel = `Notifications${unreadCount > 0 ? `, ${unreadCount} unread` : ''}`;
+  const ariaLabel = t('ariaLabel', { count: unreadCount });
 
   const sheetStyle: React.CSSProperties = dragging
     ? { transform: `translateY(${dragOffset}px)`, transition: 'none' }
@@ -329,7 +331,7 @@ export function NotificationCenter() {
                 <span className="h-1.5 w-10 rounded-full bg-gray-300" />
               </div>
               <div className="flex items-center justify-between gap-2 px-4 py-3">
-                <h2 className="font-bold text-gray-900 text-sm">Notifications</h2>
+                <h2 className="font-bold text-gray-900 text-sm">{t('title')}</h2>
                 <div className="flex items-center gap-1">
                   <button
                     type="button"
@@ -337,13 +339,13 @@ export function NotificationCenter() {
                     disabled={unreadCount === 0}
                     className="text-xs font-semibold text-primary-600 hover:text-primary-700 disabled:text-gray-300 disabled:cursor-not-allowed px-2 py-1 rounded-lg focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-500"
                   >
-                    Mark all as read
+                    {t('markAllRead')}
                   </button>
                   <button
                     ref={closeRef}
                     type="button"
                     onClick={close}
-                    aria-label="Close notifications"
+                    aria-label={t('close')}
                     className="p-1.5 text-gray-400 hover:text-gray-600 rounded-lg focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-500"
                   >
                     <X size={18} aria-hidden="true" />
@@ -358,25 +360,25 @@ export function NotificationCenter() {
               aria-label="Notification filters"
               className="shrink-0 flex gap-1 px-4 pb-2 pt-2 border-b border-gray-100 overflow-x-auto [-webkit-overflow-scrolling:touch]"
             >
-              {TABS.map(t => {
-                const selected = tab === t.key;
+              {TABS.map(tabItem => {
+                const selected = tab === tabItem.key;
                 const count =
-                  t.key === 'unread'
+                  tabItem.key === 'unread'
                     ? unreadCount
-                    : t.key === 'mentions'
+                    : tabItem.key === 'mentions'
                       ? notifications.filter(
                           n => n.actorId === userId || (n.recipientIds?.length ?? 0) === 1,
                         ).length
                       : notifications.length;
                 return (
                   <button
-                    key={t.key}
+                    key={tabItem.key}
                     role="tab"
                     type="button"
-                    id={`notif-tab-${t.key}`}
+                    id={`notif-tab-${tabItem.key}`}
                     aria-selected={selected}
                     aria-controls="notif-tabpanel"
-                    onClick={() => setTab(t.key)}
+                    onClick={() => setTab(tabItem.key)}
                     className={cn(
                       'shrink-0 px-3 py-1.5 rounded-full text-xs font-semibold transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-500',
                       selected
@@ -384,7 +386,7 @@ export function NotificationCenter() {
                         : 'bg-gray-100 text-gray-600 hover:bg-gray-200',
                     )}
                   >
-                    {t.label}
+                    {t(`tabs.${tabItem.key}`)}
                     {count > 0 && (
                       <span className={cn('ml-1', selected ? 'text-white/80' : 'text-gray-400')}>
                         {count > 99 ? '99+' : count}
@@ -411,14 +413,14 @@ export function NotificationCenter() {
               {error ? (
                 <div className="p-8 text-center">
                   <AlertTriangle size={28} className="mx-auto text-red-400 mb-2" aria-hidden="true" />
-                  <p className="text-sm font-semibold text-gray-700">Couldn't load notifications</p>
+                  <p className="text-sm font-semibold text-gray-700">{t('errorTitle')}</p>
                   <p className="text-xs text-gray-400 mt-1">{error}</p>
                   <button
                     type="button"
                     onClick={retry}
                     className="mt-3 text-xs font-semibold text-primary-600 hover:text-primary-700 px-3 py-1.5 rounded-lg border border-primary-200 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-500"
                   >
-                    Retry
+                    {t('common:retry')}
                   </button>
                 </div>
               ) : loading ? (
@@ -437,13 +439,13 @@ export function NotificationCenter() {
               ) : filtered.length === 0 ? (
                 <div className="p-8 text-center">
                   <Inbox size={32} className="mx-auto text-gray-300 mb-2" aria-hidden="true" />
-                  <p className="text-sm font-semibold text-gray-700">No notifications yet.</p>
+                  <p className="text-sm font-semibold text-gray-700">{t('emptyYet')}</p>
                   <p className="text-xs text-gray-400 mt-1">
                     {tab === 'unread'
-                      ? 'You are all caught up.'
+                      ? t('emptyUnread')
                       : tab === 'mentions'
-                        ? 'Nothing mentions you right now.'
-                        : 'We will let you know when something happens.'}
+                        ? t('emptyMentions')
+                        : t('emptyDefault')}
                   </p>
                 </div>
               ) : (
@@ -458,7 +460,7 @@ export function NotificationCenter() {
                         <button
                           type="button"
                           onClick={() => handleRowClick(n)}
-                          aria-label={`${title}. ${body}.${isUnread ? ' Unread.' : ''}`}
+                          aria-label={`${title}. ${body}.${isUnread ? ` ${t('unread')}.` : ''}`}
                           className={cn(
                             'w-full text-left flex gap-3 p-4 transition-colors hover:bg-gray-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-primary-500',
                             isUnread ? 'bg-primary-50/50' : 'bg-white',
@@ -490,10 +492,10 @@ export function NotificationCenter() {
                             <span className="block text-xs text-gray-500 mt-0.5">{body}</span>
                             <time dateTime={timeIso(n.createdAt)} className="block text-[10px] text-gray-400 mt-1">
                               {formatRelativeTime(n.createdAt)}
-                              {isUnread && <span className="sr-only"> (unread)</span>}
+                              {isUnread && <span className="sr-only"> ({t('unread')})</span>}
                             </time>
                           </span>
-                          {isUnread && <span className="sr-only">Unread</span>}
+                          {isUnread && <span className="sr-only">{t('unread')}</span>}
                         </button>
                       </li>
                     );
@@ -509,7 +511,7 @@ export function NotificationCenter() {
                     disabled={loadingMore}
                     className="w-full text-center text-xs font-semibold text-primary-600 hover:text-primary-700 disabled:text-gray-300 py-2 rounded-lg focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-500"
                   >
-                    {loadingMore ? 'Loading…' : 'Load more'}
+                    {loadingMore ? t('common:loading') : t('loadMore')}
                   </button>
                 </div>
               )}
@@ -525,7 +527,7 @@ export function NotificationCenter() {
                 }}
                 className="text-xs font-semibold text-primary-600 hover:text-primary-700 py-1 rounded-lg focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-500"
               >
-                View all notifications
+                {t('viewAll')}
               </button>
             </div>
           </div>

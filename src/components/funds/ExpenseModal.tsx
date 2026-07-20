@@ -1,16 +1,18 @@
 import { useState } from 'react';
+import { useTranslation } from 'react-i18next';
+import type { TFunction } from 'i18next';
 import { addFundExpense } from '../../lib/api';
 import { Button } from '../ui/Button';
 
 // Map genuine (non-balance) failures to friendly, non-technical messages.
 // Insufficient balance is intentionally NOT an error: parents may record
 // expenses that overdraw the Pet Box, and children later cover the deficit.
-function mapExpenseError(err: any): string {
+function mapExpenseError(err: any, t: TFunction<'funds'>): string {
   const message = err?.message || '';
-  if (/not authenticated|fund not found/i.test(message)) return 'You no longer have permission to manage this fund.';
-  if (/amount must be a positive integer/i.test(message)) return 'The amount entered is not valid.';
-  if (/already been recorded|duplicate/i.test(message)) return 'This expense has already been recorded.';
-  return 'We could not save this expense. Please try again.';
+  if (/not authenticated|fund not found/i.test(message)) return t('expenseNoPermission');
+  if (/amount must be a positive integer/i.test(message)) return t('expenseInvalidAmount');
+  if (/already been recorded|duplicate/i.test(message)) return t('expenseDuplicate');
+  return t('expenseGeneric');
 }
 
 interface ExpenseModalProps {
@@ -21,6 +23,7 @@ interface ExpenseModalProps {
 }
 
 export function ExpenseModal({ fund, familyId, onClose, currencySymbol }: ExpenseModalProps) {
+  const { t } = useTranslation(['funds', 'common']);
   const [amount, setAmount] = useState('');
   const [category, setCategory] = useState('Food');
   const [description, setDescription] = useState('');
@@ -30,7 +33,7 @@ export function ExpenseModal({ fund, familyId, onClose, currencySymbol }: Expens
     e.preventDefault();
     const numAmount = Math.round(parseFloat(amount) * 100);
     if (!numAmount || numAmount <= 0) {
-      alert('The amount entered is not valid.');
+      alert(t('invalidAmount'));
       return;
     }
 
@@ -44,7 +47,7 @@ export function ExpenseModal({ fund, familyId, onClose, currencySymbol }: Expens
       });
       onClose();
     } catch (err: any) {
-      alert(mapExpenseError(err));
+      alert(mapExpenseError(err, t));
     } finally {
       setIsSubmitting(false);
     }
@@ -55,25 +58,25 @@ export function ExpenseModal({ fund, familyId, onClose, currencySymbol }: Expens
   return (
     <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50">
       <div className="bg-white rounded-2xl w-full max-w-md p-6">
-        <h3 className="text-xl font-bold mb-4">Add Expense for {fund.name}</h3>
+        <h3 className="text-xl font-bold mb-4">{t('addExpenseTitle', { name: fund.name })}</h3>
         <form onSubmit={handleSubmit} className="space-y-4">
           <div>
-            <label className="block text-sm font-bold text-gray-700">Amount ({currencySymbol})</label>
+            <label className="block text-sm font-bold text-gray-700">{t('amount', { symbol: currencySymbol })}</label>
             <input type="number" step="0.01" min="0.01" required value={amount} onChange={e => setAmount(e.target.value)} className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md" />
           </div>
           <div>
-            <label className="block text-sm font-bold text-gray-700">Category</label>
+            <label className="block text-sm font-bold text-gray-700">{t('category')}</label>
             <select value={category} onChange={e => setCategory(e.target.value)} className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md bg-white">
-              {categories.map(c => <option key={c} value={c}>{c}</option>)}
+              {categories.map(c => <option key={c} value={c.toLowerCase()}>{t(`expenseCategories.${c.toLowerCase()}` as any)}</option>)}
             </select>
           </div>
           <div>
-            <label className="block text-sm font-bold text-gray-700">Description</label>
-            <input type="text" required placeholder="e.g. Dry Cat Food" value={description} onChange={e => setDescription(e.target.value)} className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md" />
+            <label className="block text-sm font-bold text-gray-700">{t('description')}</label>
+            <input type="text" required placeholder={t('descriptionPlaceholder')} value={description} onChange={e => setDescription(e.target.value)} className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md" />
           </div>
           <div className="flex gap-3 pt-4">
-            <Button type="button" variant="secondary" onClick={onClose} fullWidth>Cancel</Button>
-            <Button type="submit" fullWidth disabled={isSubmitting}>Save Expense</Button>
+            <Button type="button" variant="secondary" onClick={onClose} fullWidth>{t('common:cancel')}</Button>
+            <Button type="submit" fullWidth disabled={isSubmitting}>{t('saveExpense')}</Button>
           </div>
         </form>
       </div>

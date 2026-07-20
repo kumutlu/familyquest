@@ -11,6 +11,9 @@ import type enApprovals from './locales/en/approvals.json';
 import type enSettings from './locales/en/settings.json';
 import type enNotifications from './locales/en/notifications.json';
 import type enErrors from './locales/en/errors.json';
+import type enBehaviour from './locales/en/behaviour.json';
+import type enProfile from './locales/en/profile.json';
+import type enFunds from './locales/en/funds.json';
 
 /**
  * Strongly-typed resource shape, keyed by NAMESPACE (not language). `en` is the
@@ -32,6 +35,9 @@ interface Resources {
   settings: typeof enSettings;
   notifications: typeof enNotifications;
   errors: typeof enErrors;
+  behaviour: typeof enBehaviour;
+  profile: typeof enProfile;
+  funds: typeof enFunds;
 }
 
 declare module 'i18next' {

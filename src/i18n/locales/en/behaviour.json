@@ -1,0 +1,18 @@
+{
+  "logTitle": "Log Behaviour",
+  "type": "Type",
+  "typePositive": "Positive",
+  "typeNegative": "Negative",
+  "typePenalty": "Penalty",
+  "child": "Child",
+  "selectChild": "Select a child",
+  "reason": "Reason",
+  "reasonPlaceholder": "e.g. Helped with groceries",
+  "points": "Points",
+  "pointsPlaceholder": "e.g. 50",
+  "penaltyAmount": "Penalty Amount ({{symbol}})",
+  "penaltyPlaceholder": "e.g. 5.00",
+  "saving": "Saving…",
+  "logEvent": "Log Event",
+  "errorFailed": "Failed to log behaviour event."
+}

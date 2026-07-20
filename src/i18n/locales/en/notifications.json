@@ -1,4 +1,21 @@
 {
   "title": "Notifications",
-  "empty": "No notifications"
+  "empty": "No notifications",
+  "emptyYet": "No notifications yet.",
+  "readError": "We couldn't update this notification.",
+  "markAllRead": "Mark all as read",
+  "tabs": {
+    "all": "All",
+    "unread": "Unread",
+    "mentions": "Mentions"
+  },
+  "errorTitle": "Couldn't load notifications",
+  "emptyUnread": "You are all caught up.",
+  "emptyMentions": "Nothing mentions you right now.",
+  "emptyDefault": "We will let you know when something happens.",
+  "loadMore": "Load more",
+  "unread": "Unread",
+  "viewAll": "View all notifications",
+  "close": "Close notifications",
+  "ariaLabel": "Notifications, {{count}} unread"
 }

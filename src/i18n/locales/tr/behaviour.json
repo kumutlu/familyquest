@@ -1,0 +1,18 @@
+{
+  "logTitle": "Davranış Ekle",
+  "type": "Tür",
+  "typePositive": "Olumlu",
+  "typeNegative": "Olumsuz",
+  "typePenalty": "Ceza",
+  "child": "Çocuk",
+  "selectChild": "Bir çocuk seçin",
+  "reason": "Sebep",
+  "reasonPlaceholder": "örn. Market alışverişinde yardım etti",
+  "points": "Puan",
+  "pointsPlaceholder": "örn. 50",
+  "penaltyAmount": "Ceza Tutarı ({{symbol}})",
+  "penaltyPlaceholder": "örn. 5,00",
+  "saving": "Kaydediliyor…",
+  "logEvent": "Olayı Kaydet",
+  "errorFailed": "Davranış olayı kaydedilemedi."
+}

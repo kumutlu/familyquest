@@ -1,5 +1,6 @@
 import { Card, CardContent } from '../ui/Card';
 import { Avatar } from '../ui/Avatar';
+import { useTranslation } from 'react-i18next';
 
 export function PetLeaderboard({
   fundTransactions,
@@ -12,6 +13,7 @@ export function PetLeaderboard({
   reversals?: any[];
   currencySymbol: string;
 }) {
+  const { t } = useTranslation('funds');
   // Build a set of reversed petbox_request source IDs
   // A petbox_request reversal has sourceKind === 'petbox_request'
   const reversedPetboxIds = new Set<string>(
@@ -42,7 +44,7 @@ export function PetLeaderboard({
     return (
       <Card>
         <CardContent className="p-8 text-center text-gray-500 font-medium">
-          No contributions yet. Start helping out to appear on the leaderboard!
+          {t('noContributions')}
         </CardContent>
       </Card>
     );

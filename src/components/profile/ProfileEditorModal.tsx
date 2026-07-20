@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { Modal } from '../ui/Modal';
 import { Button } from '../ui/Button';
 import { doc, updateDoc } from 'firebase/firestore';
@@ -35,6 +36,7 @@ interface ProfileEditorModalProps {
  *   and then selected for the profile change.
  */
 export function ProfileEditorModal({ user, onClose }: ProfileEditorModalProps) {
+  const { t } = useTranslation(['profile', 'common']);
   const [displayName, setDisplayName] = useState(user?.displayName || '');
   const [selectedAvatarId, setSelectedAvatarId] = useState<string | null>(user?.avatarId || null);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -71,7 +73,7 @@ export function ProfileEditorModal({ user, onClose }: ProfileEditorModalProps) {
   const statusMessage =
     error ||
     success ||
-    (hasPending ? 'You have a pending profile update awaiting parent approval.' : null);
+    (hasPending ? t('pendingUpdate') : null);
 
   const handleUnlockConfirm = async () => {
     if (!unlockTarget || !user?.familyId) return;
@@ -81,9 +83,9 @@ export function ProfileEditorModal({ user, onClose }: ProfileEditorModalProps) {
       await unlockAvatar(user.familyId, unlockTarget);
       setSelectedAvatarId(unlockTarget);
       setUnlockTarget(null);
-      setSuccess('Avatar unlocked! You can now select it for your profile.');
+      setSuccess(t('unlockedAvatar'));
     } catch (err: any) {
-      setUnlockError(err?.message || 'We could not unlock this avatar. Please try again.');
+      setUnlockError(err?.message || t('cannotUnlock'));
     } finally {
       setUnlockProcessing(false);
     }
@@ -97,12 +99,12 @@ export function ProfileEditorModal({ user, onClose }: ProfileEditorModalProps) {
     // Owner / Parent: immediate update (free starter avatars only; no child points spent).
     if (canEdit) {
       if (!displayName.trim()) {
-        setError('Display name cannot be empty.');
+        setError(t('emptyName'));
         return;
       }
       const def = selectedAvatarId ? getAvatarById(selectedAvatarId) : undefined;
       if (def && def.unlockType === 'points') {
-        setError('Adults can only use free starter avatars from the catalog.');
+        setError(t('adultFreeAvatar'));
         return;
       }
       setIsSubmitting(true);
@@ -113,10 +115,10 @@ export function ProfileEditorModal({ user, onClose }: ProfileEditorModalProps) {
           update.avatarUrl = resolveAvatarImage(selectedAvatarId, user?.avatarUrl) || '';
         }
         await updateDoc(doc(db, 'users', user.id), update);
-        setSuccess('Profile updated.');
+        setSuccess(t('saveSuccess'));
         window.setTimeout(onClose, 900);
       } catch {
-        setError('We could not save your profile. Please try again.');
+        setError(t('saveFailed'));
       } finally {
         setIsSubmitting(false);
       }
@@ -126,7 +128,7 @@ export function ProfileEditorModal({ user, onClose }: ProfileEditorModalProps) {
     // Child: submit for parent approval (never writes to users/{childId} here).
     if (isChild) {
       if (hasPending) {
-        setError('You already have a profile change waiting for approval.');
+        setError(t('alreadyPending'));
         return;
       }
       setIsSubmitting(true);
@@ -139,7 +141,7 @@ export function ProfileEditorModal({ user, onClose }: ProfileEditorModalProps) {
           ownedAvatarIds,
           legacyAvatarUrl: user?.avatarUrl || null,
         });
-        setSuccess('Changes submitted for parent approval.');
+        setSuccess(t('submittedForApproval'));
         window.setTimeout(onClose, 1400);
       } catch (err: any) {
         // Map internal Firestore / transaction-order errors to a friendly message.
@@ -157,10 +159,10 @@ export function ProfileEditorModal({ user, onClose }: ProfileEditorModalProps) {
 
   const header = (
     <div className="shrink-0 px-6 py-4 border-b border-gray-50 flex items-center justify-between">
-      <h3 id="modal-title" className="text-lg font-bold text-gray-900">Edit Profile</h3>
+      <h3 id="modal-title" className="text-lg font-bold text-gray-900">{t('editTitle')}</h3>
       <button
         onClick={onClose}
-        aria-label="Close dialog"
+        aria-label={t('common:closeDialog')}
         className="p-2 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-full transition-colors ml-auto"
       >
         <span aria-hidden="true" className="text-xl leading-none">×</span>
@@ -171,23 +173,23 @@ export function ProfileEditorModal({ user, onClose }: ProfileEditorModalProps) {
   const footer = (
     <div className="flex gap-3">
       <Button type="button" variant="outline" fullWidth onClick={onClose}>
-        Cancel
+        {t('cancel')}
       </Button>
       {canEdit && (
         <Button type="submit" form="profile-editor-form" fullWidth disabled={isSubmitting || !displayName.trim()}>
-          {isSubmitting ? 'Saving…' : 'Save'}
+          {isSubmitting ? t('saving') : t('save')}
         </Button>
       )}
       {isChild && (
         <Button type="submit" form="profile-editor-form" fullWidth disabled={isSubmitting || locked || selectedIsLockedPremium}>
-          {isSubmitting ? 'Submitting…' : 'Submit for approval'}
+          {isSubmitting ? t('submitting') : t('submitForApproval')}
         </Button>
       )}
     </div>
   );
 
   return (
-    <Modal isOpen onClose={onClose} title="Edit Profile" header={header} footer={footer}>
+    <Modal isOpen onClose={onClose} title={t('editTitle')} header={header} footer={footer}>
       <form id="profile-editor-form" onSubmit={handleSave} noValidate className="space-y-4">
         <div aria-live="polite" aria-atomic="true" className="sr-only">
           {statusMessage}
@@ -198,7 +200,7 @@ export function ProfileEditorModal({ user, onClose }: ProfileEditorModalProps) {
             role="status"
             className="p-3 bg-amber-50 text-amber-800 rounded-xl text-sm font-medium border border-amber-200"
           >
-            Profile changes are sent to a parent for approval before they take effect.
+            {t('pendingApprovalNote')}
           </div>
         )}
 
@@ -207,7 +209,7 @@ export function ProfileEditorModal({ user, onClose }: ProfileEditorModalProps) {
             role="status"
             className="p-3 bg-blue-50 text-blue-800 rounded-xl text-sm font-medium border border-blue-200"
           >
-            Pending profile update — awaiting parent approval. You cannot submit another change yet.
+            {t('pendingApproval')}
           </div>
         )}
 
@@ -224,7 +226,7 @@ export function ProfileEditorModal({ user, onClose }: ProfileEditorModalProps) {
 
         <div>
           <label htmlFor="profile-displayName" className="block text-sm font-medium text-gray-700 mb-1">
-            Display Name
+            {t('displayName')}
           </label>
           <input
             id="profile-displayName"
@@ -241,7 +243,7 @@ export function ProfileEditorModal({ user, onClose }: ProfileEditorModalProps) {
         </div>
 
         <div>
-          <span className="block text-sm font-medium text-gray-700 mb-1">Choose Avatar</span>
+          <span className="block text-sm font-medium text-gray-700 mb-1">{t('chooseAvatar')}</span>
           <AvatarPicker
             selectedAvatarId={selectedAvatarId}
             ownedAvatarIds={ownedAvatarIds}
@@ -255,13 +257,12 @@ export function ProfileEditorModal({ user, onClose }: ProfileEditorModalProps) {
           />
           {isChild && (
             <p className="mt-2 text-xs text-gray-500">
-              You have <span className="font-semibold text-gray-700">{pointsBalance}</span> points.
-              Unlocking a premium avatar costs points once; selecting an owned avatar is free.
+              {t('pointsNote', { count: pointsBalance })}
             </p>
           )}
           {selectedIsLockedPremium && (
             <p role="alert" className="mt-2 text-xs text-red-500 font-medium">
-              This avatar has not been unlocked yet. Unlock it before submitting.
+              {t('lockedPremium')}
             </p>
           )}
         </div>
