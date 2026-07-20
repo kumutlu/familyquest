@@ -1,6 +1,7 @@
 import { initializeApp } from 'firebase/app';
 import { getAuth, GoogleAuthProvider, connectAuthEmulator } from 'firebase/auth';
 import { getFirestore, connectFirestoreEmulator } from 'firebase/firestore';
+import { getFunctions, connectFunctionsEmulator } from 'firebase/functions';
 
 // Required VITE_FIREBASE_* variables. If any are missing the app must fail
 // loudly at startup instead of letting Firebase throw auth/invalid-api-key
@@ -50,8 +51,10 @@ export const app = initializeApp(firebaseConfig);
 export const auth = getAuth(app);
 export const db = getFirestore(app);
 export const googleProvider = new GoogleAuthProvider();
+export const functions = getFunctions(app);
 
 if (import.meta.env.VITE_USE_FIREBASE_EMULATOR === 'true') {
   connectAuthEmulator(auth, 'http://127.0.0.1:9099', { disableWarnings: true });
   connectFirestoreEmulator(db, '127.0.0.1', 8080);
+  connectFunctionsEmulator(functions, '127.0.0.1', 5001);
 }

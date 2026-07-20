@@ -10,12 +10,21 @@ import { Progress } from '../components/ui/Progress';
 import { createChallenge, claimChallenge } from '../lib/api';
 import { isChildRole, isParentRole, getRoleLabel } from '../lib/roles';
 import { EditMemberModal } from '../components/family/EditMemberModal';
+import { ChildLoginSection, type ChildLoginMember } from '../components/family/ChildLoginSection';
+import { CreateChildLoginDialog } from '../components/family/CreateChildLoginDialog';
+import { Toast, type ToastData } from '../components/ui/Toast';
 
 export function Family() {
   const { currentUser, familyMembers, loading, tasks, taskCompletions, behaviourEvents, challenges } = useStore();
   const [activeTab, setActiveTab] = useState<'current' | 'history'>('current');
   
   const [editingMember, setEditingMember] = useState<any>(null);
+
+  const [createLoginFor, setCreateLoginFor] = useState<ChildLoginMember | null>(null);
+  const [toast, setToast] = useState<ToastData | null>(null);
+
+  const showToast = (message: string, type: 'success' | 'error' | 'info' = 'success') =>
+    setToast({ id: Date.now(), message, type });
 
   const [isChallengeModalOpen, setIsChallengeModalOpen] = useState(false);
   const [challengeData, setChallengeData] = useState({ title: 'Weekend Warriors', targetXP: 500, rewardPoints: 100 });
@@ -214,32 +223,37 @@ export function Family() {
             return (
               <Link key={member.id} to={`/family/${member.id}`} className="block">
                 <Card className={`hover:border-primary-300 transition-all active:scale-[0.98] ${isChampion ? 'border-reward-400 shadow-md ring-1 ring-reward-400' : ''}`}>
-                  <CardContent className="p-4 flex items-center justify-between">
-                    <div className="flex items-center gap-4">
-                      <div className="font-bold text-gray-400 w-4 text-center">{idx + 1}</div>
-                      <Avatar src={member.avatarUrl} fallback={member.displayName[0]} />
-                      <div>
-                        <h4 className="font-semibold text-gray-900 flex items-center gap-2">
-                          {member.displayName}
-                          {!isChildRole(member.role) && getRoleLabel(member.role) && (
-                            <Badge variant="default" className="text-[10px]">{getRoleLabel(member.role)}</Badge>
-                          )}
-                          {isChildRole(member.role) && member.isManaged && (
-                            <Badge variant="outline" className="text-[10px] border-gray-300 text-gray-500 bg-gray-50">Managed</Badge>
-                          )}
-                        </h4>
-                        <p className="text-sm text-gray-500 font-medium mt-0.5">{member.weeklyXP.toLocaleString()} pts this week</p>
+                  <CardContent className="p-4">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-4">
+                        <div className="font-bold text-gray-400 w-4 text-center">{idx + 1}</div>
+                        <Avatar src={member.avatarUrl} fallback={member.displayName[0]} />
+                        <div>
+                          <h4 className="font-semibold text-gray-900 flex items-center gap-2">
+                            {member.displayName}
+                            {!isChildRole(member.role) && getRoleLabel(member.role) && (
+                              <Badge variant="default" className="text-[10px]">{getRoleLabel(member.role)}</Badge>
+                            )}
+                            {isChildRole(member.role) && member.isManaged && (
+                              <Badge variant="outline" className="text-[10px] border-gray-300 text-gray-500 bg-gray-50">Managed</Badge>
+                            )}
+                          </h4>
+                          <p className="text-sm text-gray-500 font-medium mt-0.5">{member.weeklyXP.toLocaleString()} pts this week</p>
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-3">
+                        {isChampion && <Crown size={20} className="text-reward-500 fill-reward-500" />}
+                        <ChevronRight size={20} className="text-gray-300" />
+                        {isParentRole(currentUser?.role) && (
+                          <Button variant="ghost" size="sm" onClick={(e) => { e.preventDefault(); setEditingMember(member); }} className="text-gray-500 hover:text-gray-700 ml-2 relative z-20">
+                            Edit
+                          </Button>
+                        )}
                       </div>
                     </div>
-                    <div className="flex items-center gap-3">
-                      {isChampion && <Crown size={20} className="text-reward-500 fill-reward-500" />}
-                      <ChevronRight size={20} className="text-gray-300" />
-                      {isParentRole(currentUser?.role) && (
-                        <Button variant="ghost" size="sm" onClick={(e) => { e.preventDefault(); setEditingMember(member); }} className="text-gray-500 hover:text-gray-700 ml-2 relative z-20">
-                          Edit
-                        </Button>
-                      )}
-                    </div>
+                    {isChildRole(member.role) && member.isManaged && (
+                      <ChildLoginSection member={member} onRequestCreate={(m) => setCreateLoginFor(m)} />
+                    )}
                   </CardContent>
                 </Card>
               </Link>
@@ -290,11 +304,27 @@ export function Family() {
       )}
       {/* Edit Member Modal */}
       {editingMember && (
-        <EditMemberModal 
-          member={editingMember} 
-          onClose={() => setEditingMember(null)} 
+        <EditMemberModal
+          member={editingMember}
+          onClose={() => setEditingMember(null)}
         />
       )}
+
+      {/* Create Child Login Dialog */}
+      {createLoginFor && (
+        <CreateChildLoginDialog
+          member={createLoginFor}
+          onClose={() => setCreateLoginFor(null)}
+          onSuccess={() => {
+            const name = createLoginFor?.displayName ?? 'child';
+            setCreateLoginFor(null);
+            showToast(`Login created for ${name}.`);
+          }}
+        />
+      )}
+
+      {/* Toast / snackbar */}
+      <Toast toast={toast} onDismiss={() => setToast(null)} />
     </div>
   );
 }
