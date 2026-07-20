@@ -119,5 +119,15 @@ export const onUserWritten = onDocumentWritten(
   },
 );
 
-// Parent-created child login (Phase 1). Trusted callables; see childLogin.ts.
-export { createChildLogin, signInChild } from './childLogin';
+// Parent-created child login (Phase 1) + managed login lifecycle (Phase 4A).
+// Trusted callables; see childLogin.ts.
+export {
+  createChildLogin,
+  signInChild,
+  resetChildPassword,
+  disableChildLogin,
+  enableChildLogin,
+  revokeChildSessions,
+  changeChildUsername,
+  completeChildPasswordChange,
+} from './childLogin';

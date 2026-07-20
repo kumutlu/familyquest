@@ -8,7 +8,7 @@
 // is triggered, keeping the existing business notification system untouched.
 // ---------------------------------------------------------------------------
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.signInChild = exports.createChildLogin = exports.onUserWritten = exports.onNotificationCreated = void 0;
+exports.completeChildPasswordChange = exports.changeChildUsername = exports.revokeChildSessions = exports.enableChildLogin = exports.disableChildLogin = exports.resetChildPassword = exports.signInChild = exports.createChildLogin = exports.onUserWritten = exports.onNotificationCreated = void 0;
 const app_1 = require("firebase-admin/app");
 const firestore_1 = require("firebase-admin/firestore");
 const messaging_1 = require("firebase-admin/messaging");
@@ -94,8 +94,15 @@ exports.onUserWritten = (0, firestore_2.onDocumentWritten)('users/{userId}', asy
         }
     }
 });
-// Parent-created child login (Phase 1). Trusted callables; see childLogin.ts.
+// Parent-created child login (Phase 1) + managed login lifecycle (Phase 4A).
+// Trusted callables; see childLogin.ts.
 var childLogin_1 = require("./childLogin");
 Object.defineProperty(exports, "createChildLogin", { enumerable: true, get: function () { return childLogin_1.createChildLogin; } });
 Object.defineProperty(exports, "signInChild", { enumerable: true, get: function () { return childLogin_1.signInChild; } });
+Object.defineProperty(exports, "resetChildPassword", { enumerable: true, get: function () { return childLogin_1.resetChildPassword; } });
+Object.defineProperty(exports, "disableChildLogin", { enumerable: true, get: function () { return childLogin_1.disableChildLogin; } });
+Object.defineProperty(exports, "enableChildLogin", { enumerable: true, get: function () { return childLogin_1.enableChildLogin; } });
+Object.defineProperty(exports, "revokeChildSessions", { enumerable: true, get: function () { return childLogin_1.revokeChildSessions; } });
+Object.defineProperty(exports, "changeChildUsername", { enumerable: true, get: function () { return childLogin_1.changeChildUsername; } });
+Object.defineProperty(exports, "completeChildPasswordChange", { enumerable: true, get: function () { return childLogin_1.completeChildPasswordChange; } });
 //# sourceMappingURL=index.js.map
