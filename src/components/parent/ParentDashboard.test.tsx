@@ -1,6 +1,7 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import i18n from '../../i18n/config';
 
 const api = vi.hoisted(() => ({
   approveJoinRequest: vi.fn(), rejectJoinRequest: vi.fn(),
@@ -57,6 +58,15 @@ function baseState() {
     taskCompletions: [], bootstrapStatus: { wallets: 'ready' },
   } as any;
 }
+
+beforeEach(async () => {
+  await i18n.loadNamespaces([
+    'common', 'auth', 'family', 'tasks', 'wallet', 'goals', 'rewards',
+    'dashboard', 'approvals', 'settings', 'notifications', 'errors',
+    'behaviour', 'profile', 'funds', 'requests', 'reversals',
+  ]);
+  await i18n.changeLanguage('en');
+});
 
 describe('ParentDashboard', () => {
   beforeEach(() => {

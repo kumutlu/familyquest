@@ -1,6 +1,7 @@
 import { render, screen, fireEvent } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import i18n from '../../i18n/config';
 
 const h = vi.hoisted(() => ({ navigate: vi.fn() }));
 vi.mock('react-router-dom', async () => {
@@ -25,8 +26,10 @@ function dueDate(d: Date) {
 }
 
 describe('TaskSummaryCard', () => {
-  beforeEach(() => {
+  beforeEach(async () => {
     h.navigate.mockClear();
+    await i18n.loadNamespaces(['dashboard']);
+    await i18n.changeLanguage('en');
     baseStore.currentUser = { id: 'u-1', familyId: 'f-1', role: 'child', displayName: 'Kid' };
     baseStore.tasks = [];
     baseStore.taskCompletions = [];

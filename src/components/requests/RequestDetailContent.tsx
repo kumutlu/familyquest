@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { AlertTriangle, ArrowRight } from 'lucide-react';
 import { Avatar } from '../ui/Avatar';
 import { Button } from '../ui/Button';
@@ -9,6 +10,7 @@ import { RequestOutcomeExplanation } from './RequestOutcomeExplanation';
 import { getRequestActions } from '../../lib/requestActions';
 import { isParentRole } from '../../lib/roles';
 import { cn } from '../../lib/utils';
+import { formatDate } from '../../i18n/format';
 import { resolveAvatarImage } from '../../config/avatarCatalog';
 import {
   canApproveMoneyRequest,
@@ -37,7 +39,7 @@ function InfoRow({ label, children }: { label: string; children: React.ReactNode
 
 function formatDateTime(value: number | null): string {
   if (value == null) return '—';
-  return new Date(value).toLocaleString(undefined, {
+  return formatDate(value, undefined, {
     day: '2-digit',
     month: 'short',
     year: 'numeric',
@@ -57,6 +59,7 @@ export function RequestDetailContent({
   const [rejectComment, setRejectComment] = useState('');
   const [processing, setProcessing] = useState(false);
   const [error, setError] = useState('');
+  const { t } = useTranslation(['requests', 'approvals']);
 
   const actions = getRequestActions(request.category);
   const isApprover = isParentRole(currentUser?.role);
@@ -93,7 +96,7 @@ export function RequestDetailContent({
     comment?: string,
   ) => {
     if (!familyId) {
-      setError('Family not found.');
+      setError(t('requests:detail.familyNotFound'));
       return;
     }
     setProcessing(true);
@@ -108,7 +111,7 @@ export function RequestDetailContent({
       onResolved?.();
       onClose();
     } catch (err: any) {
-      setError(`${err?.code ? `${err.code}: ` : ''}${err?.message || 'Something went wrong.'}`);
+      setError(`${err?.code ? `${err.code}: ` : ''}${err?.message || t('requests:detail.somethingWentWrong')}`);
     } finally {
       setProcessing(false);
     }
@@ -121,11 +124,11 @@ export function RequestDetailContent({
       {/* Request Information */}
       <section>
         <h4 className="text-sm font-bold text-gray-700 uppercase tracking-wider mb-1">
-          Request Information
+          {t('requests:detail.information')}
         </h4>
         <div className="divide-y divide-gray-50">
           {request.requestedBy && (
-            <InfoRow label="Requested By">
+            <InfoRow label={t('requests:detail.requestedBy')}>
               <span className="inline-flex items-center gap-2">
                 <Avatar src={request.requestedBy.avatarUrl} fallback={(request.requestedBy.name || '?')[0]} size="sm" />
                 {request.requestedBy.name}
@@ -133,7 +136,7 @@ export function RequestDetailContent({
             </InfoRow>
           )}
           {request.recipient && (
-            <InfoRow label="Recipient">
+            <InfoRow label={t('requests:detail.recipient')}>
               <span className="inline-flex items-center gap-2">
                 {request.recipient.avatarUrl && (
                   <Avatar src={request.recipient.avatarUrl} fallback={(request.recipient.name || '?')[0]} size="sm" />
@@ -142,8 +145,8 @@ export function RequestDetailContent({
               </span>
             </InfoRow>
           )}
-          <InfoRow label="Request Type">{request.typeLabel}</InfoRow>
-          <InfoRow label="Created">{formatDateTime(request.createdAt)}</InfoRow>
+          <InfoRow label={t('requests:detail.requestType')}>{request.typeLabel}</InfoRow>
+          <InfoRow label={t('requests:detail.created')}>{formatDateTime(request.createdAt)}</InfoRow>
           <InfoRow label="Status">
             <RequestStatusBadge statusKind={request.statusKind} statusLabel={request.statusLabel} />
           </InfoRow>
@@ -153,16 +156,16 @@ export function RequestDetailContent({
       {/* Profile change diff */}
       {request.profileChange && (
         <section>
-          <h4 className="text-sm font-bold text-gray-700 uppercase tracking-wider mb-2">Profile Changes</h4>
+          <h4 className="text-sm font-bold text-gray-700 uppercase tracking-wider mb-2">{t('requests:detail.profileChanges')}</h4>
           <div className="rounded-xl bg-gray-50 p-3 space-y-2">
             <div className="flex items-center gap-2 text-sm">
-              <span className="text-gray-500 w-24 shrink-0">Display name</span>
+              <span className="text-gray-500 w-24 shrink-0">{t('requests:detail.displayName')}</span>
               <span className="line-through text-gray-400">{request.profileChange.currentDisplayName || '—'}</span>
               <ArrowRight size={14} className="text-gray-400" />
               <span className="font-semibold text-gray-900">{request.profileChange.requestedDisplayName}</span>
             </div>
             <div className="flex items-center gap-2 text-sm">
-              <span className="text-gray-500 w-24 shrink-0">Avatar</span>
+              <span className="text-gray-500 w-24 shrink-0">{t('requests:detail.avatar')}</span>
               <Avatar
                 src={resolveAvatarImage(request.profileChange.currentAvatarId, request.profileChange.currentAvatar)}
                 fallback={(request.profileChange.currentDisplayName || '?')[0]}
@@ -182,21 +185,21 @@ export function RequestDetailContent({
       {/* Money Details */}
       {hasMoneyDetails && (
         <section>
-          <h4 className="text-sm font-bold text-gray-700 uppercase tracking-wider mb-1">Money Details</h4>
+          <h4 className="text-sm font-bold text-gray-700 uppercase tracking-wider mb-1">{t('requests:detail.moneyDetails')}</h4>
           <div className="divide-y divide-gray-50">
-            <InfoRow label="Amount">
+            <InfoRow label={t('requests:detail.amount')}>
               <span className="font-bold text-gray-900">
                 <CurrencyDisplay amountPence={request.amountPence!} forceColor={false} />
               </span>
             </InfoRow>
             {request.message && (
-              <InfoRow label="Message">
+              <InfoRow label={t('requests:detail.message')}>
                 <span className="break-words">{request.message}</span>
               </InfoRow>
             )}
-            <InfoRow label="Money moved?">
+            <InfoRow label={t('requests:detail.moneyMoved')}>
               <span className={cn(request.moneyMoved ? 'text-success-600' : 'text-gray-500')}>
-                {request.moneyMoved ? 'Yes' : 'No'}
+                {request.moneyMoved ? t('requests:detail.yes') : t('requests:detail.no')}
               </span>
             </InfoRow>
           </div>
@@ -208,7 +211,7 @@ export function RequestDetailContent({
 
       {/* Timeline */}
       <section>
-        <h4 className="text-sm font-bold text-gray-700 uppercase tracking-wider mb-3">Timeline</h4>
+        <h4 className="text-sm font-bold text-gray-700 uppercase tracking-wider mb-3">{t('requests:detail.timeline')}</h4>
         <RequestTimeline events={request.timeline} />
       </section>
 
@@ -224,12 +227,12 @@ export function RequestDetailContent({
                   onClick={() => runAction('accept')}
                   disabled={processing}
                 >
-                  Accept Request
+                  {t('requests:detail.acceptRequest')}
                 </Button>
               )}
               {canCancel && !canApprove && !canReject && (
                 <Button variant="outline" fullWidth onClick={() => runAction('cancel')} disabled={processing}>
-                  Cancel Request
+                  {t('requests:detail.cancelRequest')}
                 </Button>
               )}
               {canApprove && canReject && (
@@ -239,20 +242,20 @@ export function RequestDetailContent({
                     fullWidth
                     onClick={() => setConfirm('reject')}
                   >
-                    Reject
+                    {t('approvals:reject')}
                   </Button>
                   <Button
                     className="bg-success-500 hover:bg-success-600 text-white"
                     fullWidth
                     onClick={() => setConfirm('approve')}
                   >
-                    Approve
+                    {t('approvals:approve')}
                   </Button>
                 </>
               )}
               {canCancel && (canApprove || canReject) && (
                 <Button variant="ghost" fullWidth onClick={() => runAction('cancel')}>
-                  Cancel Request
+                  {t('requests:detail.cancelRequest')}
                 </Button>
               )}
             </div>
@@ -264,7 +267,7 @@ export function RequestDetailContent({
               <div className="flex items-start gap-2">
                 <AlertTriangle size={18} className="mt-0.5 shrink-0 text-warning-500" />
                 <p className="text-sm text-gray-800 break-words">
-                  You are about to approve:{' '}
+                  {t('requests:detail.approveConfirmPrefix')}
                   <span className="font-semibold">
                     {request.amountPence != null ? (
                       <CurrencyDisplay amountPence={request.amountPence} forceColor={false} />
@@ -272,12 +275,12 @@ export function RequestDetailContent({
                       request.typeLabel
                     )}
                   </span>
-                  . Money will move immediately.
+                  {t('requests:detail.approveConfirmSuffix')}
                 </p>
               </div>
               <div className="flex gap-2">
                 <Button variant="ghost" fullWidth onClick={() => setConfirm(null)} disabled={processing}>
-                  Back
+                  {t('requests:detail.back')}
                 </Button>
                 <Button
                   className="bg-success-500 hover:bg-success-600 text-white"
@@ -285,7 +288,7 @@ export function RequestDetailContent({
                   onClick={() => runAction('approve')}
                   disabled={processing}
                 >
-                  {processing ? 'Approving…' : 'Approve'}
+                  {processing ? t('approvals:approving') : t('approvals:approve')}
                 </Button>
               </div>
             </div>
@@ -294,17 +297,17 @@ export function RequestDetailContent({
           {/* Reject confirmation */}
           {confirm === 'reject' && (
             <div className="rounded-2xl bg-red-50 border border-red-200 p-4 space-y-3">
-              <p className="text-sm font-semibold text-gray-800">Reject this request?</p>
+              <p className="text-sm font-semibold text-gray-800">{t('requests:detail.rejectConfirm')}</p>
               <textarea
                 className="w-full rounded-xl border border-gray-200 p-3 text-sm text-gray-900 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-400"
                 rows={3}
-                placeholder="Add an optional comment (visible to the requester)…"
+                placeholder={t('requests:detail.commentPlaceholder')}
                 value={rejectComment}
                 onChange={event => setRejectComment(event.target.value)}
               />
               <div className="flex gap-2">
                 <Button variant="ghost" fullWidth onClick={() => setConfirm(null)} disabled={processing}>
-                  Back
+                  {t('requests:detail.back')}
                 </Button>
                 <Button
                   variant="danger"
@@ -312,7 +315,7 @@ export function RequestDetailContent({
                   onClick={() => runAction('reject', rejectComment)}
                   disabled={processing}
                 >
-                  {processing ? 'Rejecting…' : 'Reject'}
+                  {processing ? t('approvals:rejecting') : t('approvals:reject')}
                 </Button>
               </div>
             </div>

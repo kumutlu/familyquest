@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { X } from 'lucide-react';
 import { useStore } from '../../store/useStore';
 import { Button } from '../ui/Button';
@@ -28,6 +29,7 @@ export function RequestDetailSheet({ request, onClose, onResolved }: RequestDeta
   const rewards = useStore(state => state.rewards);
 
   const [retry, setRetry] = useState(0);
+  const { t } = useTranslation(['requests', 'common']);
 
   const { normalized, failed } = useMemo<{ normalized: NormalizedRequest | null; failed: boolean }>(() => {
     if (!request) return { normalized: null, failed: false };
@@ -87,29 +89,29 @@ export function RequestDetailSheet({ request, onClose, onResolved }: RequestDeta
         <div className="request-detail-panel relative w-full md:max-w-md bg-white md:rounded-3xl rounded-t-3xl max-h-[90dvh] md:max-h-[85dvh] overflow-y-auto shadow-xl p-6 pb-[calc(1.5rem+env(safe-area-inset-bottom))]">
           <div className="flex items-start justify-between gap-3 mb-4">
             <h3 id="request-detail-error-title" className="text-lg font-bold text-gray-900">
-              Request unavailable
+              {t('requests:error.title')}
             </h3>
             <button
               onClick={onClose}
-              aria-label="Close dialog"
+              aria-label={t('common:closeDialog')}
               className="p-2 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-full transition-colors ml-auto shrink-0"
             >
               <X size={20} />
             </button>
           </div>
           <p className="text-sm text-gray-600 mb-4">
-            We couldn&rsquo;t load this request.
+            {t('requests:error.body')}
           </p>
           <div className="flex gap-2">
             <Button variant="ghost" fullWidth onClick={onClose}>
-              Close
+              {t('requests:error.close')}
             </Button>
             <Button
               className="bg-primary-500 hover:bg-primary-600 text-white"
               fullWidth
               onClick={() => setRetry(r => r + 1)}
             >
-              Try again
+              {t('common:tryAgain')}
             </Button>
           </div>
         </div>
@@ -141,7 +143,7 @@ export function RequestDetailSheet({ request, onClose, onResolved }: RequestDeta
           </div>
           <button
             onClick={onClose}
-            aria-label="Close dialog"
+            aria-label={t('common:closeDialog')}
             className="p-2 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-full transition-colors ml-auto shrink-0"
           >
             <X size={20} />

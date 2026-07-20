@@ -1,5 +1,6 @@
 import { render, screen, fireEvent, waitFor } from '@testing-library/react'
-import { describe, it, expect, vi } from 'vitest'
+import { describe, it, expect, vi, beforeEach } from 'vitest'
+import i18n from '../../i18n/config'
 import { RequestDetailProvider, useRequestDetail } from './RequestDetailContext'
 
 const request = {
@@ -36,6 +37,11 @@ function Harness() {
 }
 
 describe('RequestDetailContext focus return', () => {
+  beforeEach(async () => {
+    await i18n.loadNamespaces(['requests']);
+    await i18n.changeLanguage('en');
+  });
+
   it('returns focus to the triggering element after the sheet closes', async () => {
     render(
       <RequestDetailProvider>

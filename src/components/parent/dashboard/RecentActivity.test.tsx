@@ -1,6 +1,7 @@
 import { render, screen, fireEvent } from '@testing-library/react'
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { RecentActivity } from './RecentActivity'
+import i18n from '../../../i18n/config'
 
 const openRequest = vi.fn()
 
@@ -35,7 +36,11 @@ vi.mock('../../../store/useStore', () => ({
 }))
 
 describe('Recent Family Activity', () => {
-  beforeEach(() => vi.clearAllMocks())
+  beforeEach(async () => {
+    vi.clearAllMocks();
+    await i18n.loadNamespaces(['dashboard']);
+    await i18n.changeLanguage('en');
+  })
 
   it('renders the section heading', () => {
     render(<RecentActivity />)

@@ -1,5 +1,6 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
+import i18n from '../../i18n/config'
 
 const api = vi.hoisted(() => ({
   approveTaskCompletion: vi.fn(), rejectTaskCompletion: vi.fn(),
@@ -53,8 +54,10 @@ function deferred() {
 }
 
 describe('ApprovalCenter interaction contract', () => {
-  beforeEach(() => {
+  beforeEach(async () => {
     vi.clearAllMocks()
+    await i18n.loadNamespaces(['approvals', 'requests', 'common']);
+    await i18n.changeLanguage('en');
     state.current = {
       currentUser: { id: 'owner-1', familyId: 'family-1', role: 'owner' },
       tasks: [{ id: 'task-1', title: 'Tidy room', pointsReward: 10 }],

@@ -23,6 +23,7 @@ interface InsightCardProps {
 }
 
 function InsightCard({ label, amount, currency, icon, iconBg, valueClass, spanTwo }: InsightCardProps) {
+  const { t } = useTranslation('wallet');
   const isUnavailable = amount === null;
   return (
     <div
@@ -39,7 +40,7 @@ function InsightCard({ label, amount, currency, icon, iconBg, valueClass, spanTw
         {isUnavailable ? (
           <p
             className="text-base font-bold tabular-nums text-gray-400"
-            aria-label={`${label} amount unavailable`}
+            aria-label={t('insights.amountUnavailable', { label })}
           >
             —
           </p>

@@ -1,8 +1,10 @@
 import { useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { cancelPendingApproval, type PendingApprovalKind } from '../../lib/api';
 import { historyActionContext, normalizeHistoryAction, type HistoryAction } from '../../lib/reversalHistory';
 import type { ReversalSourceKind } from '../../lib/reversalApi';
 import { useStore } from '../../store/useStore';
+import { formatDate } from '../../i18n/format';
 import { Badge } from '../ui/Badge';
 import { Button } from '../ui/Button';
 import { ReversalActionModal } from './ReversalActionModal';
@@ -13,10 +15,11 @@ const cancelKinds: Partial<Record<ReversalSourceKind, PendingApprovalKind>> = {
 
 const auditDate = (value: any) => {
   const date = value?.toDate ? value.toDate() : value instanceof Date ? value : new Date(value || 0);
-  return date.toLocaleString();
+  return formatDate(date);
 };
 
 export function HistoryActionControl({ sourceKind, source }: { sourceKind: ReversalSourceKind; source: any }) {
+  const { t } = useTranslation('reversals');
   const state = useStore();
   const [selected, setSelected] = useState<HistoryAction | null>(null);
   const [optimisticReversal, setOptimisticReversal] = useState<any>(null);
@@ -28,8 +31,8 @@ export function HistoryActionControl({ sourceKind, source }: { sourceKind: Rever
     reversals: optimisticReversal ? [...context.reversals, optimisticReversal] : context.reversals,
   });
 
-  if (cancelled || source.status === 'cancelled') return <Badge variant="danger">Cancelled</Badge>;
-  if (action.isLegacy) return <span className="text-xs text-gray-500">Legacy donation — refund unavailable</span>;
+  if (cancelled || source.status === 'cancelled') return <Badge variant="danger">{t('cancelled')}</Badge>;
+  if (action.isLegacy) return <span className="text-xs text-gray-500">{t('legacyDonation')}</span>;
   if (!action.action && !action.reversal) return null;
 
   const cancel = async (historyAction: HistoryAction) => {
@@ -43,9 +46,9 @@ export function HistoryActionControl({ sourceKind, source }: { sourceKind: Rever
     <div className="flex flex-col items-end gap-1">
       {action.reversal ? (
         <div className="text-right text-xs text-gray-600">
-          <Badge variant="danger">{sourceKind === 'petbox_request' ? 'Refunded' : 'Reversed'}</Badge>
+          <Badge variant="danger">{sourceKind === 'petbox_request' ? t('refunded') : t('reversed')}</Badge>
           <p className="mt-1 font-medium">{action.reversal.reason}</p>
-          <p>by {action.reversal.actorName} · {auditDate(action.reversal.occurredAt)}</p>
+          <p>{t('byActor', { actor: action.reversal.actorName, date: auditDate(action.reversal.occurredAt) })}</p>
         </div>
       ) : action.action ? (
         <Button size="sm" variant={action.action === 'cancel' ? 'danger' : 'secondary'} onClick={() => {
@@ -55,7 +58,7 @@ export function HistoryActionControl({ sourceKind, source }: { sourceKind: Rever
             setSelected(action);
           }
         }}>
-          {action.actionLabel}
+          {t(`actionLabel.${action.actionLabel}`)}
         </Button>
       ) : null}
       <ReversalActionModal

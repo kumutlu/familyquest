@@ -1,4 +1,5 @@
 import { useMemo, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { useStore } from '../../store/useStore';
 import { cancelPendingApproval, type PendingApprovalKind } from '../../lib/api';
 import { normalizeHistoryAction, type HistoryAction } from '../../lib/reversalHistory';
@@ -16,6 +17,7 @@ const sourceDate = (source: any) => {
 const reversalDate = (value: any) => value?.toDate ? value.toDate() : value instanceof Date ? value : new Date(value || 0);
 
 export function ReversalHistoryPanel() {
+  const { t } = useTranslation('reversals');
   const state = useStore();
   const [selected, setSelected] = useState<HistoryAction | null>(null);
   const [optimisticReversals, setOptimisticReversals] = useState<any[]>([]);
@@ -66,7 +68,7 @@ export function ReversalHistoryPanel() {
 
   return (
     <section>
-      <h2 className="mb-4 text-lg font-bold text-gray-900">Reversible history</h2>
+      <h2 className="mb-4 text-lg font-bold text-gray-900">{t('title')}</h2>
       <div className="space-y-3">
         {actions.map(action => (
           <Card key={`${action.sourceKind}:${action.sourceId}`}>
@@ -76,13 +78,13 @@ export function ReversalHistoryPanel() {
                 <p className="mt-1 text-xs text-gray-500">{action.sourceKind.replaceAll('_', ' ')}</p>
                 {action.reversal && (
                   <div className="mt-2 text-xs text-gray-600">
-                    <Badge variant="danger">Reversed</Badge>
+                    <Badge variant="danger">{t('reversed')}</Badge>
                     <p className="mt-1 font-medium">{action.reversal.reason}</p>
-                    <p>by {action.reversal.actorName} · {reversalDate(action.reversal.occurredAt).toLocaleString()}</p>
+                    <p>{t('byActor', { actor: action.reversal.actorName, date: reversalDate(action.reversal.occurredAt) })}</p>
                   </div>
                 )}
               </div>
-              {action.action && <Button size="sm" variant={action.action === 'cancel' ? 'danger' : 'secondary'} onClick={() => setSelected(action)}>{action.actionLabel}</Button>}
+              {action.action && <Button size="sm" variant={action.action === 'cancel' ? 'danger' : 'secondary'} onClick={() => setSelected(action)}>{t(`actionLabel.${action.actionLabel}`)}</Button>}
             </CardContent>
           </Card>
         ))}

@@ -1,6 +1,7 @@
 import { render, screen, within } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import i18n from '../i18n/config';
 
 const store = vi.hoisted(() => ({
   state: {
@@ -76,7 +77,9 @@ describe('Dashboard role routing', () => {
 });
 
 describe('Dashboard summary cards', () => {
-  beforeEach(() => {
+  beforeEach(async () => {
+    await i18n.loadNamespaces(['dashboard', 'requests', 'wallet']);
+    await i18n.changeLanguage('en');
     store.state = {
       currentUser: { id: 'owner-1', familyId: 'family-1', role: 'owner', displayName: 'Kemal' },
       feed: [],

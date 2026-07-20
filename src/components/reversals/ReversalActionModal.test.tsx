@@ -6,14 +6,19 @@ const api = vi.hoisted(() => ({ reverseTransaction: vi.fn() }));
 vi.mock('../../lib/reversalApi', () => api);
 
 import { ReversalActionModal } from './ReversalActionModal';
+import i18n from '../../i18n/config';
 
 const action: HistoryAction = {
   sourceKind: 'wallet_transaction', sourceId: 'tx-1', source: {}, summary: 'Pocket money',
-  action: 'reverse', actionLabel: 'Undo', targets: [{ id: 'child-1', label: 'Alex wallet', originalDelta: 300, predictedBalance: 200, unit: 'money' }],
+  action: 'reverse', actionLabel: 'undo', targets: [{ id: 'child-1', label: 'Alex wallet', originalDelta: 300, predictedBalance: 200, unit: 'money' }],
 };
 
 describe('ReversalActionModal', () => {
-  beforeEach(() => vi.clearAllMocks());
+  beforeEach(async () => {
+    vi.clearAllMocks();
+    await i18n.loadNamespaces(['reversals']);
+    await i18n.changeLanguage('en');
+  });
 
   it('shows the exact warning, signed original effect, target, and prediction', () => {
     render(<ReversalActionModal open familyId="family-1" historyAction={action} onClose={vi.fn()} />);

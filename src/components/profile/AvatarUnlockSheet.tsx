@@ -1,5 +1,6 @@
 import { AlertTriangle } from 'lucide-react';
-import { getAvatarById, TIER_LABELS } from '../../config/avatarCatalog';
+import { useTranslation } from 'react-i18next';
+import { getAvatarById } from '../../config/avatarCatalog';
 import { Avatar } from '../ui/Avatar';
 import { Button } from '../ui/Button';
 
@@ -25,6 +26,7 @@ export function AvatarUnlockSheet({
   processing,
   error,
 }: AvatarUnlockSheetProps) {
+  const { t } = useTranslation('profile');
   const avatar = getAvatarById(avatarId);
   if (!avatar) return null;
 
@@ -37,38 +39,38 @@ export function AvatarUnlockSheet({
     <div
       role="dialog"
       aria-modal="true"
-      aria-label={`Unlock ${avatar.name}`}
+      aria-label={t('avatar.unlockAria', { name: avatar.name })}
       className="fixed inset-0 z-50 flex items-end justify-center bg-gray-900/40 backdrop-blur-sm p-0 sm:items-center sm:p-4"
     >
       <div className="bg-white w-full sm:max-w-sm rounded-t-3xl sm:rounded-3xl shadow-xl overflow-hidden flex flex-col animate-in fade-in zoom-in-95 duration-200 pb-[calc(1rem+env(safe-area-inset-bottom))]">
         <div className="px-6 pt-5 pb-4 border-b border-gray-100 flex flex-col items-center text-center gap-2">
           <Avatar src={avatar.imageUrl} fallback={avatar.name[0]} size="xl" />
-          <h3 className="text-lg font-bold text-gray-900">Unlock {avatar.name}?</h3>
+          <h3 className="text-lg font-bold text-gray-900">{t('avatar.unlockTitle', { name: avatar.name })}</h3>
           <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-amber-100 text-amber-700">
-            {TIER_LABELS[avatar.tier]}
+            {t(`avatar.tier.${avatar.tier}`)}
           </span>
         </div>
 
         <div className="px-6 py-4 space-y-2 text-sm">
           <div className="flex justify-between">
-            <span className="text-gray-500">Cost</span>
-            <span className="font-semibold text-gray-900">{cost} points</span>
+            <span className="text-gray-500">{t('avatar.cost')}</span>
+            <span className="font-semibold text-gray-900">{t('avatar.points', { count: cost })}</span>
           </div>
           <div className="flex justify-between">
-            <span className="text-gray-500">Your balance</span>
-            <span className="font-semibold text-gray-900">{pointsBalance} points</span>
+            <span className="text-gray-500">{t('avatar.yourBalance')}</span>
+            <span className="font-semibold text-gray-900">{t('avatar.points', { count: pointsBalance })}</span>
           </div>
           <div className="flex justify-between border-t border-gray-100 pt-2">
-            <span className="text-gray-500">Balance after unlock</span>
+            <span className="text-gray-500">{t('avatar.balanceAfter')}</span>
             <span className={insufficient ? 'font-semibold text-red-600' : 'font-semibold text-green-700'}>
-              {after} points
+              {t('avatar.points', { count: after })}
             </span>
           </div>
 
           {insufficient && (
             <div role="alert" className="flex items-start gap-2 p-3 bg-red-50 text-red-600 rounded-xl mt-2">
               <AlertTriangle size={16} className="mt-0.5 shrink-0" />
-              <span>You need {needed} more points to unlock this avatar.</span>
+              <span>{t('avatar.needMorePoints', { count: needed })}</span>
             </div>
           )}
 
@@ -79,13 +81,13 @@ export function AvatarUnlockSheet({
           )}
 
           <p className="text-xs text-gray-500 pt-1">
-            Once unlocked, it stays in your collection even if a profile change is rejected.
+            {t('avatar.staysInCollection')}
           </p>
         </div>
 
         <div className="px-6 pb-2 flex gap-3">
           <Button type="button" variant="outline" fullWidth onClick={onCancel} disabled={processing}>
-            Cancel
+            {t('cancel')}
           </Button>
           <Button
             type="button"
@@ -93,7 +95,7 @@ export function AvatarUnlockSheet({
             disabled={processing || insufficient}
             onClick={onConfirm}
           >
-            {processing ? 'Unlocking…' : `Unlock for ${cost} points`}
+            {processing ? t('avatar.unlocking') : t('avatar.unlockFor', { cost })}
           </Button>
         </div>
       </div>

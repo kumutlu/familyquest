@@ -1,5 +1,6 @@
 import { useTranslation } from 'react-i18next';
 import { Button } from '../ui/Button';
+import { formatDate } from '../../i18n/format';
 
 export interface ChildLoginMember {
   id: string;
@@ -30,7 +31,7 @@ function formatLastLogin(value: unknown, neverLabel: string): string {
       date = new Date((value as { toMillis: () => number }).toMillis());
     }
     if (date && !Number.isNaN(date.getTime())) {
-      return date.toLocaleString();
+      return formatDate(date);
     }
   } catch {
     /* fall through */

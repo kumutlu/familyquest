@@ -14,6 +14,8 @@ import type enErrors from './locales/en/errors.json';
 import type enBehaviour from './locales/en/behaviour.json';
 import type enProfile from './locales/en/profile.json';
 import type enFunds from './locales/en/funds.json';
+import type enRequests from './locales/en/requests.json';
+import type enReversals from './locales/en/reversals.json';
 
 /**
  * Strongly-typed resource shape, keyed by NAMESPACE (not language). `en` is the
@@ -38,6 +40,8 @@ interface Resources {
   behaviour: typeof enBehaviour;
   profile: typeof enProfile;
   funds: typeof enFunds;
+  requests: typeof enRequests;
+  reversals: typeof enReversals;
 }
 
 declare module 'i18next' {

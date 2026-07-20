@@ -38,8 +38,19 @@
     "viewProfile": "Profili Gör →",
     "viewProfileAria": "{{name}} profilini görüntüle"
   },
+  "taskSummary": {
+    "viewAria": "Görevlerinizi görüntüleyin",
+    "title": "Görevler",
+    "empty": "Henüz aktif görev yok.",
+    "emptyHint": "Her şeyi Görevler'de görmek için dokunun.",
+    "active": "Aktif görevler",
+    "done": "Tamamlanan",
+    "dueToday": "{{count}} bugün vadesi",
+    "complete": "%{{pct}} tamamlandı"
+  },
   "recentActivity": {
     "heading": "Son Aile Etkinliği",
+    "dashboardHeading": "Son Etkinlik",
     "empty": "Henüz aile etkinliği yok.",
     "viewRequest": "İsteği gör",
     "viewRequestAria": "İsteği gör: {{text}}"

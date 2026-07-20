@@ -4,6 +4,7 @@ import { RequestCard } from './RequestCard'
 import { RequestStatusBadge } from './RequestStatusBadge'
 import { RequestDetailSheet } from './RequestDetailSheet'
 import { normalizeRequest, type NormalizedRequest, type RequestContext } from '../../lib/requestModel'
+import i18n from '../../i18n/config'
 
 const api = vi.hoisted(() => ({
   approveTaskCompletion: vi.fn(),
@@ -98,8 +99,10 @@ function setCurrentUser(user: any) {
   }
 }
 
-beforeEach(() => {
+beforeEach(async () => {
   vi.clearAllMocks()
+  await i18n.loadNamespaces(['requests', 'approvals', 'common'])
+  await i18n.changeLanguage('en')
   storeState.current = {
     currentUser: { id: 'parent-1', familyId: 'family-1', role: 'owner', displayName: 'Kemal' },
     familyMembers: [

@@ -1,5 +1,6 @@
 import { useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { useTranslation } from 'react-i18next';
 import { Card, CardContent, CardHeader, CardTitle } from '../ui/Card';
 import { Progress } from '../ui/Progress';
 import { useStore } from '../../store/useStore';
@@ -15,6 +16,7 @@ import { ListTodo } from 'lucide-react';
  * summary. The whole card is tappable and links to /tasks.
  */
 export function TaskSummaryCard() {
+  const { t } = useTranslation('dashboard');
   const navigate = useNavigate();
   const { currentUser, tasks, taskCompletions } = useStore();
 
@@ -60,7 +62,7 @@ export function TaskSummaryCard() {
       data-testid="task-summary"
       role="button"
       tabIndex={0}
-      aria-label="View your tasks"
+      aria-label={t('taskSummary.viewAria')}
       onClick={() => navigate('/tasks')}
       onKeyDown={e => {
         if (e.key === 'Enter' || e.key === ' ') {
@@ -73,24 +75,24 @@ export function TaskSummaryCard() {
       <CardHeader className="flex-row items-center justify-between space-y-0 pb-2">
         <CardTitle className="flex items-center gap-2 text-base">
           <ListTodo size={18} className="text-primary-500" />
-          Tasks
+          {t('taskSummary.title')}
         </CardTitle>
       </CardHeader>
       <CardContent>
         {activeCount === 0 ? (
           <div className="py-2">
-            <p className="text-sm text-gray-500">No active tasks yet.</p>
-            <p className="mt-1 text-xs text-gray-400">Tap to see everything in Tasks.</p>
+            <p className="text-sm text-gray-500">{t('taskSummary.empty')}</p>
+            <p className="mt-1 text-xs text-gray-400">{t('taskSummary.emptyHint')}</p>
           </div>
         ) : (
           <>
             <div className="flex items-end justify-between mb-2">
               <div>
-                <p className="text-xs font-medium uppercase text-gray-500">Active tasks</p>
+                <p className="text-xs font-medium uppercase text-gray-500">{t('taskSummary.active')}</p>
                 <p className="text-2xl font-extrabold text-gray-900">{activeCount}</p>
               </div>
               <div className="text-right">
-                <p className="text-xs font-medium uppercase text-gray-500">Done</p>
+                <p className="text-xs font-medium uppercase text-gray-500">{t('taskSummary.done')}</p>
                 <p className="font-bold text-gray-700">
                   {completedCount}/{totalCount}
                 </p>
@@ -101,9 +103,9 @@ export function TaskSummaryCard() {
 
             <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs">
               {dueTodayCount > 0 && (
-                <span className="font-medium text-warning-600">{dueTodayCount} due today</span>
+                <span className="font-medium text-warning-600">{t('taskSummary.dueToday', { count: dueTodayCount })}</span>
               )}
-              <span className="text-gray-500">{Math.round(pct)}% complete</span>
+              <span className="text-gray-500">{t('taskSummary.complete', { pct: Math.round(pct) })}</span>
             </div>
           </>
         )}

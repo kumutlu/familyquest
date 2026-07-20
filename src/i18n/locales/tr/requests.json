@@ -1,0 +1,88 @@
+{
+  "type": {
+    "taskCompletion": "Görev Tamamlama",
+    "transferRequest": "Transfer İsteği",
+    "moneyRequest": "Para İsteği",
+    "siblingMoneyRequest": "Kardeş Para İsteği",
+    "petBoxDonation": "Pet Box Bağışı",
+    "profileUpdateRequest": "Profil Güncelleme İsteği",
+    "rewardRequest": "Ödül İsteği",
+    "joinRequest": "Aileye Katılma İsteği"
+  },
+  "summary": {
+    "taskCompletion": "{{childName}} \"{{taskTitle}}\" görevini tamamladı",
+    "transferRequest": "{{fromName}}, {{toName}} kullanıcısına {{amount}} göndermek istedi",
+    "moneyRequest": "{{requesterName}} istedi {{amount}}",
+    "petBoxDonation": "{{childName}}, {{fundName}} için {{amount}} bağışlamak istiyor",
+    "profileUpdateRequest": "{{childName}} profilini güncellemek istiyor",
+    "rewardRequest": "{{childName}}, \"{{rewardTitle}}\" ödülünü istedi",
+    "joinRequest": "{{name}} aileye katılmak istiyor"
+  },
+  "status": {
+    "waiting": "Onay bekliyor",
+    "approved": "Onaylandı",
+    "rejected": "Reddedildi",
+    "cancelled": "İptal edildi",
+    "completed": "Tamamlandı",
+    "unknown": "Bilinmiyor"
+  },
+  "timeline": {
+    "created": "İstek oluşturuldu",
+    "approved": "Onaylandı",
+    "rejected": "Reddedildi",
+    "cancelled": "İptal edildi",
+    "comment": "Yorum: {{reason}}",
+    "pendingDate": "Beklemede"
+  },
+  "timelineAria": "İstek zaman çizelgesi",
+  "outcome": {
+    "moneyMove": "{{amount}}, {{from}} cüzdanından {{to}} cüzdanına taşınacak.",
+    "noMoneyMove": "Para hareket etmeyecek.",
+    "joinApproved": "{{name}} aileye eklenecek.",
+    "joinRejected": "{{name}} aileye eklenmeyecek.",
+    "taskApproved": "{{childName}}'in bakiyesine {{points}} puan eklenecek.",
+    "taskRejected": "Hiç puan verilmeyecek.",
+    "profileApproved": "{{childName}}'in profili \"{{requestedDisplayName}}\" olarak güncellenecek.",
+    "profileRejected": "Profil \"{{currentDisplayName}}\" olarak kalacak.",
+    "rewardApproved": "\"{{rewardTitle}}\" ödülü yerine getirilmeye hazır olarak işaretlenecek.",
+    "rewardRejected": "Hiç ödül verilmeyecek."
+  },
+  "detail": {
+    "information": "İstek Bilgileri",
+    "requestedBy": "İsteyen",
+    "recipient": "Alıcı",
+    "recipientParent": "Ebeveyn",
+    "recipientOwner": "Aile Sahibi",
+    "requestType": "İstek Türü",
+    "created": "Oluşturulma",
+    "status": "Durum",
+    "profileChanges": "Profil Değişiklikleri",
+    "displayName": "Görünen ad",
+    "avatar": "Avatar",
+    "moneyDetails": "Para Detayları",
+    "amount": "Tutar",
+    "message": "Mesaj",
+    "moneyMoved": "Para taşındı mı?",
+    "yes": "Evet",
+    "no": "Hayır",
+    "timeline": "Zaman Çizelgesi",
+    "whatHappensNext": "Sıradaki adım",
+    "ifApproved": "Onaylanırsa: ",
+    "ifRejected": "Reddedilirse: ",
+    "acceptRequest": "İsteği Kabul Et",
+    "cancelRequest": "İsteği İptal Et",
+    "approveConfirmPrefix": "Onaylamak üzeresiniz: ",
+    "approveConfirmSuffix": ". Para anında taşınacak.",
+    "rejectConfirm": "Bu istek reddedilsin mi?",
+    "back": "Geri",
+    "familyNotFound": "Aile bulunamadı.",
+    "somethingWentWrong": "Bir şeyler ters gitti.",
+    "commentPlaceholder": "İsteyen kişiye görünecek isteğe bağlı bir yorum ekleyin…"
+  },
+  "error": {
+    "title": "İstek kullanılamıyor",
+    "body": "Bu istek yüklenemedi.",
+    "close": "Kapat",
+    "tryAgain": "Tekrar dene"
+  }
+}

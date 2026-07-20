@@ -3,6 +3,7 @@ import { cn } from '../../lib/utils';
 import { Avatar } from '../ui/Avatar';
 import { CurrencyDisplay } from '../ui/CurrencyDisplay';
 import { RequestStatusBadge } from './RequestStatusBadge';
+import { formatDate } from '../../i18n/format';
 import type { NormalizedRequest } from '../../lib/requestModel';
 
 interface RequestCardProps {
@@ -15,8 +16,7 @@ interface RequestCardProps {
 
 function formatDateTime(value: number | null): string {
   if (value == null) return '';
-  const date = new Date(value);
-  return date.toLocaleString(undefined, {
+  return formatDate(value, undefined, {
     day: '2-digit',
     month: 'short',
     year: 'numeric',

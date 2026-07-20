@@ -1,5 +1,6 @@
 {
   "title": "Bildirimler",
+  "filtersLabel": "Bildirim filtreleri",
   "empty": "Bildirim yok",
   "emptyYet": "Henüz bildirim yok.",
   "readError": "Bu bildirim güncellenemedi.",

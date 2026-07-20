@@ -1,6 +1,7 @@
 import { render, screen, fireEvent } from '@testing-library/react'
-import { describe, it, expect, vi } from 'vitest'
+import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { RequestDetailSheet } from './RequestDetailSheet'
+import i18n from '../../i18n/config'
 
 vi.mock('../../store/useStore', () => ({
   useStore: (selector?: any) => {
@@ -24,6 +25,10 @@ vi.mock('../../lib/requestModel', async () => {
 })
 
 describe('RequestDetailSheet error safety', () => {
+  beforeEach(async () => {
+    await i18n.loadNamespaces(['requests', 'approvals', 'common']);
+    await i18n.changeLanguage('en');
+  });
   it('shows a friendly error instead of crashing when a request cannot be loaded', () => {
     render(<RequestDetailSheet request={{ id: 'x', category: 'money_request' }} onClose={() => {}} />)
     expect(screen.getByText(/We couldn.t load this request/i)).toBeInTheDocument()

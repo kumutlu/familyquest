@@ -1,0 +1,88 @@
+{
+  "type": {
+    "taskCompletion": "Task Completion",
+    "transferRequest": "Transfer Request",
+    "moneyRequest": "Money Request",
+    "siblingMoneyRequest": "Sibling Money Request",
+    "petBoxDonation": "Pet Box Donation",
+    "profileUpdateRequest": "Profile Update Request",
+    "rewardRequest": "Reward Request",
+    "joinRequest": "Join Request"
+  },
+  "summary": {
+    "taskCompletion": "{{childName}} completed \"{{taskTitle}}\"",
+    "transferRequest": "{{fromName}} requested to send {{amount}} to {{toName}}",
+    "moneyRequest": "{{requesterName}} requested {{amount}}",
+    "petBoxDonation": "{{childName}} wants to donate {{amount}} to {{fundName}}",
+    "profileUpdateRequest": "{{childName}} wants to update their profile",
+    "rewardRequest": "{{childName}} requested the \"{{rewardTitle}}\" reward",
+    "joinRequest": "{{name}} wants to join the family"
+  },
+  "status": {
+    "waiting": "Waiting for approval",
+    "approved": "Approved",
+    "rejected": "Rejected",
+    "cancelled": "Cancelled",
+    "completed": "Completed",
+    "unknown": "Unknown"
+  },
+  "timeline": {
+    "created": "Request created",
+    "approved": "Approved",
+    "rejected": "Rejected",
+    "cancelled": "Cancelled",
+    "comment": "Comment: {{reason}}",
+    "pendingDate": "Pending"
+  },
+  "timelineAria": "Request timeline",
+  "outcome": {
+    "moneyMove": "{{amount}} will move from {{from}}'s wallet to {{to}}'s wallet.",
+    "noMoneyMove": "No money will move.",
+    "joinApproved": "{{name}} will be added to the family.",
+    "joinRejected": "{{name}} will not be added to the family.",
+    "taskApproved": "{{points}} points will be added to {{childName}}'s balance.",
+    "taskRejected": "No points will be awarded.",
+    "profileApproved": "{{childName}}'s profile will be updated to \"{{requestedDisplayName}}\".",
+    "profileRejected": "The profile will stay as \"{{currentDisplayName}}\".",
+    "rewardApproved": "The \"{{rewardTitle}}\" reward will be marked ready to fulfil.",
+    "rewardRejected": "No reward will be given."
+  },
+  "detail": {
+    "information": "Request Information",
+    "requestedBy": "Requested By",
+    "recipient": "Recipient",
+    "recipientParent": "Parent",
+    "recipientOwner": "Family Owner",
+    "requestType": "Request Type",
+    "created": "Created",
+    "status": "Status",
+    "profileChanges": "Profile Changes",
+    "displayName": "Display name",
+    "avatar": "Avatar",
+    "moneyDetails": "Money Details",
+    "amount": "Amount",
+    "message": "Message",
+    "moneyMoved": "Money moved?",
+    "yes": "Yes",
+    "no": "No",
+    "timeline": "Timeline",
+    "whatHappensNext": "What happens next",
+    "ifApproved": "If approved: ",
+    "ifRejected": "If rejected: ",
+    "acceptRequest": "Accept Request",
+    "cancelRequest": "Cancel Request",
+    "approveConfirmPrefix": "You are about to approve: ",
+    "approveConfirmSuffix": ". Money will move immediately.",
+    "rejectConfirm": "Reject this request?",
+    "back": "Back",
+    "familyNotFound": "Family not found.",
+    "somethingWentWrong": "Something went wrong.",
+    "commentPlaceholder": "Add an optional comment (visible to the requester)…"
+  },
+  "error": {
+    "title": "Request unavailable",
+    "body": "We couldn't load this request.",
+    "close": "Close",
+    "tryAgain": "Try again"
+  }
+}

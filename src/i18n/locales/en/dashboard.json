@@ -38,8 +38,19 @@
     "viewProfile": "View Profile →",
     "viewProfileAria": "View {{name}}’s profile"
   },
+  "taskSummary": {
+    "viewAria": "View your tasks",
+    "title": "Tasks",
+    "empty": "No active tasks yet.",
+    "emptyHint": "Tap to see everything in Tasks.",
+    "active": "Active tasks",
+    "done": "Done",
+    "dueToday": "{{count}} due today",
+    "complete": "{{pct}}% complete"
+  },
   "recentActivity": {
     "heading": "Recent Family Activity",
+    "dashboardHeading": "Recent Activity",
     "empty": "No family activity yet.",
     "viewRequest": "View request",
     "viewRequestAria": "View request: {{text}}"

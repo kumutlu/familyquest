@@ -1,6 +1,7 @@
 import { useMemo, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { Lock, Check } from 'lucide-react';
-import { AVATAR_CATALOG, TIER_LABELS, type AvatarTier } from '../../config/avatarCatalog';
+import { AVATAR_CATALOG, type AvatarTier } from '../../config/avatarCatalog';
 import { Avatar } from '../ui/Avatar';
 import { cn } from '../../lib/utils';
 
@@ -38,6 +39,7 @@ export function AvatarPicker({
   onRequestUnlock,
   disabled,
 }: AvatarPickerProps) {
+  const { t } = useTranslation('profile');
   const [filter, setFilter] = useState<Filter>('all');
 
   const avatars = useMemo(() => {
@@ -55,32 +57,32 @@ export function AvatarPicker({
   }, [filter, ownedAvatarIds]);
 
   const tabs: { key: Filter; label: string }[] = [
-    { key: 'all', label: 'All' },
-    { key: 'owned', label: 'Owned' },
-    { key: 'starter', label: 'Starter' },
-    { key: 'premium', label: 'Premium' },
+    { key: 'all', label: t('avatar.tabs.all') },
+    { key: 'owned', label: t('avatar.tabs.owned') },
+    { key: 'starter', label: t('avatar.tabs.starter') },
+    { key: 'premium', label: t('avatar.tabs.premium') },
   ];
 
   return (
     <div>
       {/* Filter tabs */}
-      <div role="tablist" aria-label="Filter avatars" className="flex gap-2 mb-3 overflow-x-auto">
-        {tabs.map(t => (
+      <div role="tablist" aria-label={t('avatar.filterLabel')} className="flex gap-2 mb-3 overflow-x-auto">
+        {tabs.map(tab => (
           <button
-            key={t.key}
+            key={tab.key}
             role="tab"
-            aria-selected={filter === t.key}
+            aria-selected={filter === tab.key}
             disabled={disabled}
-            onClick={() => setFilter(t.key)}
+            onClick={() => setFilter(tab.key)}
             className={cn(
               'px-3 py-1.5 rounded-full text-sm font-medium whitespace-nowrap transition-colors',
-              filter === t.key
+              filter === tab.key
                 ? 'bg-primary-500 text-white'
                 : 'bg-gray-100 text-gray-600 hover:bg-gray-200',
               disabled && 'opacity-50 cursor-not-allowed',
             )}
           >
-            {t.label}
+            {tab.label}
           </button>
         ))}
       </div>
@@ -89,7 +91,7 @@ export function AvatarPicker({
           widths, no horizontal overflow, cards use min-w-0 so names wrap. */}
       <div
         role="grid"
-        aria-label="Choose an avatar"
+        aria-label={t('avatar.chooseLabel')}
         className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3 max-h-72 overflow-y-auto overscroll-contain pr-1"
       >
         {avatars.map(avatar => {
@@ -97,6 +99,7 @@ export function AvatarPicker({
           const isLocked = !isOwned;
           const isSelected = selectedAvatarId === avatar.id;
           const affordable = pointsBalance >= avatar.costPoints;
+          const tierLabel = t(`avatar.tier.${avatar.tier}`);
 
           return (
             <button
@@ -105,7 +108,7 @@ export function AvatarPicker({
               type="button"
               disabled={disabled}
               aria-pressed={isSelected}
-              aria-label={`${avatar.name}, ${TIER_LABELS[avatar.tier]} tier${isLocked ? `, locked, costs ${avatar.costPoints} points` : ', owned'}${isSelected ? ', selected' : ''}`}
+              aria-label={`${avatar.name}, ${tierLabel}${isLocked ? t('avatar.lockedSuffix', { cost: avatar.costPoints }) : t('avatar.ownedSuffix')}${isSelected ? t('avatar.selectedSuffix') : ''}`}
               onClick={() => (isLocked ? onRequestUnlock(avatar.id) : onSelect(avatar.id))}
               className={cn(
                 'relative flex flex-col items-center gap-1.5 rounded-2xl p-2 min-w-0 border-2 transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-500',
@@ -130,13 +133,13 @@ export function AvatarPicker({
                 {avatar.name}
               </span>
               <span className={cn('text-[10px] font-semibold px-1.5 py-0.5 rounded-full', TIER_BADGE[avatar.tier])}>
-                {TIER_LABELS[avatar.tier]}
+                {tierLabel}
               </span>
               <span className="text-[10px] text-gray-500">
-                {isOwned ? 'Free' : `${avatar.costPoints} pts`}
+                {isOwned ? t('avatar.free') : t('avatar.points', { count: avatar.costPoints })}
               </span>
               {isLocked && !affordable && (
-                <span className="text-[10px] text-red-500 font-medium">Need {avatar.costPoints - pointsBalance} more</span>
+                <span className="text-[10px] text-red-500 font-medium">{t('avatar.needMore', { count: avatar.costPoints - pointsBalance })}</span>
               )}
             </button>
           );

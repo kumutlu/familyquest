@@ -5,6 +5,7 @@ import { Zap, ArrowRightLeft, Gift, Coins, PawPrint, CheckCircle2, Activity, Che
 import type { ReactNode } from 'react';
 import { useRequestDetail } from '../../requests/RequestDetailContext';
 import { resolveFeedRequest } from '../../../lib/feedRequestResolver';
+import { formatDate } from '../../../i18n/format';
 
 const TYPE_ICONS: Record<string, ReactNode> = {
   behaviour: <Zap size={16} className="text-warning-500" />,
@@ -24,7 +25,7 @@ function formatTimestamp(timestamp: any): string {
   if (!timestamp) return '';
   const date = timestamp.toDate ? timestamp.toDate() : new Date();
   if (isNaN(date.getTime())) return '';
-  return date.toLocaleString();
+  return formatDate(date);
 }
 
 export function RecentActivity() {

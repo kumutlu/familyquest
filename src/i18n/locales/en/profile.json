@@ -32,5 +32,36 @@
   "saveFailed": "We could not save your profile. Please try again.",
   "alreadyPending": "You already have a profile change waiting for approval.",
   "lockedPremium": "This avatar has not been unlocked yet. Unlock it before submitting.",
-  "pointsNote": "You have {{count}} points. Unlocking a premium avatar costs points once; selecting an owned avatar is free."
+  "pointsNote": "You have {{count}} points. Unlocking a premium avatar costs points once; selecting an owned avatar is free.",
+  "avatar": {
+    "filterLabel": "Filter avatars",
+    "chooseLabel": "Choose an avatar",
+    "tabs": {
+      "all": "All",
+      "owned": "Owned",
+      "starter": "Starter",
+      "premium": "Premium"
+    },
+    "tier": {
+      "starter": "Starter",
+      "rare": "Rare",
+      "epic": "Epic",
+      "legendary": "Legendary"
+    },
+    "free": "Free",
+    "points": "{{count}} pts",
+    "needMore": "Need {{count}} more",
+    "lockedSuffix": ", locked, costs {{cost}} points",
+    "ownedSuffix": ", owned",
+    "selectedSuffix": ", selected",
+    "unlockAria": "Unlock {{name}}",
+    "unlockTitle": "Unlock {{name}}?",
+    "cost": "Cost",
+    "yourBalance": "Your balance",
+    "balanceAfter": "Balance after unlock",
+    "needMorePoints": "You need {{count}} more points to unlock this avatar.",
+    "staysInCollection": "Once unlocked, it stays in your collection even if a profile change is rejected.",
+    "unlocking": "Unlocking…",
+    "unlockFor": "Unlock for {{cost}} points"
+  }
 }

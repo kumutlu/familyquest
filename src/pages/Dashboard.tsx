@@ -2,6 +2,7 @@ import { Card, CardHeader, CardTitle, CardContent } from '../components/ui/Card'
 import { Stat } from '../components/ui/Stat';
 import { Progress } from '../components/ui/Progress';
 import { Flame, Star, MessageCircle, Inbox } from 'lucide-react';
+import { useTranslation } from 'react-i18next';
 import { useStore } from '../store/useStore';
 import { isParentRole } from '../lib/roles';
 import { ParentDashboard } from '../components/parent/ParentDashboard';
@@ -9,12 +10,14 @@ import { RequestCard } from '../components/requests/RequestCard';
 import { useRequestDetail } from '../components/requests/RequestDetailContext';
 import { normalizeRequest, type RequestContext, type RequestCategory } from '../lib/requestModel';
 import { resolveFeedRequest } from '../lib/feedRequestResolver';
+import { formatDate } from '../i18n/format';
 import { WalletSummaryCard } from '../components/dashboard/WalletSummaryCard';
 import { GoalSummaryCard } from '../components/dashboard/GoalSummaryCard';
 import { PetBoxSummaryCard } from '../components/dashboard/PetBoxSummaryCard';
 import { TaskSummaryCard } from '../components/dashboard/TaskSummaryCard';
 
 export function Dashboard() {
+  const { t } = useTranslation('dashboard');
   const {
     currentUser,
     feed,
@@ -32,7 +35,7 @@ export function Dashboard() {
   } = useStore();
   const { openRequest } = useRequestDetail();
 
-  if (loading || !currentUser) return <div className="p-8 text-center text-gray-500 animate-pulse">Loading Dashboard...</div>;
+  if (loading || !currentUser) return <div className="p-8 text-center text-gray-500 animate-pulse">{t('loading')}</div>;
 
   if (isParentRole(currentUser.role)) {
     return <ParentDashboard />;
@@ -145,11 +148,11 @@ export function Dashboard() {
       <section>
         <h2 className="mb-4 flex items-center gap-2 text-lg font-bold text-gray-900">
           <MessageCircle size={20} className="text-gray-400" />
-          Recent Activity
+          {t('recentActivity.dashboardHeading')}
         </h2>
         {feed.length === 0 ? (
           <div className="rounded-2xl border border-gray-100 bg-white p-8 text-center text-gray-500">
-            No recent activity.
+            {t('recentActivity.empty')}
           </div>
         ) : (
           <div className="rounded-2xl border border-gray-100 bg-white p-1">
@@ -168,7 +171,7 @@ export function Dashboard() {
                     <div className="mt-2 h-2 w-2 shrink-0 rounded-full bg-primary-400"></div>
                     <div>
                       <p className="text-sm font-medium text-gray-900 break-words">{item.text}</p>
-                      <span className="mt-1 text-xs text-gray-400">{date.toLocaleString()}</span>
+                      <span className="mt-1 text-xs text-gray-400">{formatDate(date)}</span>
                     </div>
                   </div>
                 </Wrapper>

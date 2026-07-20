@@ -32,5 +32,36 @@
   "saveFailed": "Profiliniz kaydedilemedi. Lütfen tekrar deneyin.",
   "alreadyPending": "Onayınızı bekleyen zaten bir profil değişikliğiniz var.",
   "lockedPremium": "Bu avatar henüz açılmadı. Göndermeden önce açın.",
-  "pointsNote": "{{count}} puanınız var. Premium bir avatarı açmak yalnızca bir kez puan harcar; sahip olunan bir avatarı seçmek ücretsizdir."
+  "pointsNote": "{{count}} puanınız var. Premium bir avatarı açmak yalnızca bir kez puan harcar; sahip olunan bir avatarı seçmek ücretsizdir.",
+  "avatar": {
+    "filterLabel": "Avatarları filtrele",
+    "chooseLabel": "Avatar seç",
+    "tabs": {
+      "all": "Tümü",
+      "owned": "Sahip olunanlar",
+      "starter": "Başlangıç",
+      "premium": "Premium"
+    },
+    "tier": {
+      "starter": "Başlangıç",
+      "rare": "Nadir",
+      "epic": "Destansı",
+      "legendary": "Efsanevi"
+    },
+    "free": "Ücretsiz",
+    "points": "{{count}} puan",
+    "needMore": "{{count}} daha gerekiyor",
+    "lockedSuffix": ", kilitli, maliyeti {{cost}} puan",
+    "ownedSuffix": ", sahip olunan",
+    "selectedSuffix": ", seçili",
+    "unlockAria": "{{name}} avatarını aç",
+    "unlockTitle": "{{name}} açılsın mı?",
+    "cost": "Maliyet",
+    "yourBalance": "Bakiyeniz",
+    "balanceAfter": "Açtıktan sonra bakiye",
+    "needMorePoints": "Bu avatarı açmak için {{count}} puana daha ihtiyacınız var.",
+    "staysInCollection": "Açıldıktan sonra, bir profil değişikliği reddedilse bile koleksiyonunuzda kalır.",
+    "unlocking": "Açılıyor…",
+    "unlockFor": "{{cost}} puan karşılığında aç"
+  }
 }

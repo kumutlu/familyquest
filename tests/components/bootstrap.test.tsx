@@ -1,5 +1,6 @@
 import { act, render, screen } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import i18n from '../../src/i18n/config';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 
 const bootstrapListeners: Array<{ target: string; next: (snapshot: any) => void }> = [];
@@ -46,7 +47,13 @@ function renderApp(path = '/') {
 }
 
 describe('rendered bootstrap boundary', () => {
-  beforeEach(() => {
+  beforeEach(async () => {
+    await i18n.loadNamespaces([
+      'common', 'auth', 'family', 'tasks', 'wallet', 'goals', 'rewards',
+      'dashboard', 'approvals', 'settings', 'notifications', 'errors',
+      'behaviour', 'profile', 'funds', 'requests', 'reversals',
+    ]);
+    await i18n.changeLanguage('en');
     useStore.getState().cleanup();
     bootstrapListeners.length = 0;
     componentAuthNext = undefined;

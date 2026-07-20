@@ -1,0 +1,48 @@
+{
+  "title": "Geri alınabilir geçmiş",
+  "cancelled": "İptal edildi",
+  "legacyDonation": "Eski bağış — iade kullanılamıyor",
+  "reversed": "Geri alındı",
+  "refunded": "İade edildi",
+  "byActor": "{{actor}} tarafından · {{date}}",
+  "summary": {
+    "taskCompleted": "Görev tamamlandı: {{name}}",
+    "rewardRedeemed": "Ödül kullanıldı: {{name}}",
+    "transfer": "{{from}} → {{to}}",
+    "moneyRequest": "{{requester}}, {{target}} kullanıcısından para istedi",
+    "petBoxDonation": "{{child}}, {{fund}} için bağışladı",
+    "profileUpdate": "{{child}} profil güncellemesi istedi",
+    "goalWithdrawal": "{{child}} hedef için çekim",
+    "goalContribution": "{{child}} hedef için katkı",
+    "recordedAction": "Kayıtlı işlem"
+  },
+  "actionLabel": {
+    "cancelRequest": "İsteği iptal et",
+    "undo": "Geri al",
+    "refund": "İade et"
+  },
+  "target": {
+    "wallet": "{{name}} cüzdanı",
+    "points": "{{name}} puanı",
+    "fund": "Fon"
+  },
+  "modal": {
+    "reasonRequired": "Sebep en az 3 karakter olmalı.",
+    "donationRefunded": "Bağış iade edildi",
+    "actionFailed": "İşlem başarısız oldu.",
+    "refundDonation": "Bağışı iade et",
+    "actionTitle": "{{actionLabel}} işlemi",
+    "reasonOptional": "Sebep (isteğe bağlı)",
+    "reason": "Sebep",
+    "original": "Orijinal: {{value}}",
+    "predictedBalance": "Tahmini bakiye: {{value}}",
+    "loading": {
+      "cancelRequest": "İptal ediliyor…",
+      "undo": "Geri alınıyor…",
+      "refund": "İade ediliyor…"
+    },
+    "cancelNoBalance": "Bekleyen bir işlemi iptal etmek bakiyeleri değiştirmez.",
+    "createsReversal": "Bu, bağlı bir geri alma kaydı oluşturur. Orijinal işlem geçmişte kalır.",
+    "keepAction": "İşlemi koru"
+  }
+}

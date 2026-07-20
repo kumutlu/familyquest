@@ -10,6 +10,8 @@
  */
 
 import { isPendingApprovalStatus, isApprovedStatus, isRejectedStatus, isCancelledStatus } from './requestStatus';
+import i18n from '../i18n/config';
+import { formatPence, currencyCodeFromSymbol } from '../i18n/format';
 
 export type RequestCategory =
   | 'task'
@@ -117,9 +119,7 @@ export function toMillis(value: unknown): number | null {
 }
 
 export function formatAmount(amountPence: number, currency = '£'): string {
-  const negative = amountPence < 0;
-  const absolute = Math.abs(amountPence) / 100;
-  return `${negative ? '-' : ''}${currency}${absolute.toFixed(2)}`;
+  return formatPence(amountPence, currencyCodeFromSymbol(currency));
 }
 
 export function statusKindOf(status: string | undefined): RequestStatusKind {
@@ -135,17 +135,17 @@ export function statusLabelOf(status: string | undefined): string {
     case 'pending':
     case 'pending_approval':
     case 'pending_acceptance':
-      return 'Waiting for approval';
+      return i18n.t('requests:status.waiting');
     case 'approved':
-      return 'Approved';
+      return i18n.t('requests:status.approved');
     case 'rejected':
-      return 'Rejected';
+      return i18n.t('requests:status.rejected');
     case 'cancelled':
-      return 'Cancelled';
+      return i18n.t('requests:status.cancelled');
     case 'completed':
-      return 'Completed';
+      return i18n.t('requests:status.completed');
     default:
-      return status ? status.charAt(0).toUpperCase() + status.slice(1) : 'Unknown';
+      return status ? status.charAt(0).toUpperCase() + status.slice(1) : i18n.t('requests:status.unknown');
   }
 }
 
@@ -153,7 +153,7 @@ function buildTimeline(raw: any): RequestTimelineEvent[] {
   const events: RequestTimelineEvent[] = [
     {
       id: 'created',
-      label: 'Request created',
+      label: i18n.t('requests:timeline.created'),
       timestamp: toMillis(raw.createdAt),
       kind: 'created',
     },
@@ -170,21 +170,21 @@ function buildTimeline(raw: any): RequestTimelineEvent[] {
   } else if (status === 'approved') {
     events.push({
       id: 'approved',
-      label: 'Approved',
+      label: i18n.t('requests:timeline.approved'),
       timestamp: toMillis(raw.reviewedAt ?? raw.approvedAt),
       kind: 'approved',
     });
   } else if (status === 'rejected') {
     events.push({
       id: 'rejected',
-      label: 'Rejected',
+      label: i18n.t('requests:timeline.rejected'),
       timestamp: toMillis(raw.reviewedAt),
       kind: 'rejected',
     });
     if (raw.rejectionReason) {
       events.push({
         id: 'comment',
-        label: `Comment: ${raw.rejectionReason}`,
+        label: i18n.t('requests:timeline.comment', { reason: raw.rejectionReason }),
         timestamp: toMillis(raw.reviewedAt),
         kind: 'comment',
       });
@@ -192,7 +192,7 @@ function buildTimeline(raw: any): RequestTimelineEvent[] {
   } else if (status === 'cancelled') {
     events.push({
       id: 'cancelled',
-      label: 'Cancelled',
+      label: i18n.t('requests:timeline.cancelled'),
       timestamp: toMillis(raw.cancelledAt),
       kind: 'cancelled',
     });
@@ -216,20 +216,20 @@ const taskAdapter: RequestAdapter = (raw, ctx) => {
   return {
     id: raw.id,
     category: 'task',
-    typeLabel: 'Task Completion',
+    typeLabel: i18n.t('requests:type.taskCompletion'),
     status: raw.status,
     statusKind: statusKindOf(raw.status),
     statusLabel: statusLabelOf(raw.status),
     requestedBy: { id: raw.assigneeId, name: childName, avatarUrl: child?.avatarUrl },
-    recipient: { name: 'Parent' },
+    recipient: { name: i18n.t('requests:detail.recipientParent') },
     createdAt: toMillis(raw.completedAt ?? raw.createdAt),
-    primarySummary: `${childName} completed “${taskTitle}”`,
+    primarySummary: i18n.t('requests:summary.taskCompletion', { childName, taskTitle }),
     amountPence: undefined,
     message: raw.note,
     moneyMoved: raw.status === 'approved',
     outcome: {
-      ifApproved: `${points} points will be added to ${childName}'s balance.`,
-      ifRejected: 'No points will be awarded.',
+      ifApproved: i18n.t('requests:outcome.taskApproved', { points, childName }),
+      ifRejected: i18n.t('requests:outcome.taskRejected'),
     },
     timeline: buildTimeline(raw),
   };
@@ -244,21 +244,29 @@ const transferAdapter: RequestAdapter = (raw, ctx) => {
   return {
     id: raw.id,
     category: 'transfer',
-    typeLabel: 'Transfer Request',
+    typeLabel: i18n.t('requests:type.transferRequest'),
     status: raw.status,
     statusKind: statusKindOf(raw.status),
     statusLabel: statusLabelOf(raw.status),
     requestedBy: { id: raw.fromChildId, name: fromName, avatarUrl: from?.avatarUrl },
     recipient: { id: raw.toChildId, name: toName, avatarUrl: to?.avatarUrl },
     createdAt: toMillis(raw.createdAt),
-    primarySummary: `${fromName} requested to send ${formatAmount(raw.amountPence, currency)} to ${toName}`,
+    primarySummary: i18n.t('requests:summary.transferRequest', {
+      fromName,
+      toName,
+      amount: formatAmount(raw.amountPence, currency),
+    }),
     secondarySummary: raw.message,
     amountPence: raw.amountPence,
     message: raw.message,
     moneyMoved: raw.status === 'approved',
     outcome: {
-      ifApproved: `${formatAmount(raw.amountPence, currency)} will move from ${fromName}'s wallet to ${toName}'s wallet.`,
-      ifRejected: 'No money will move.',
+      ifApproved: i18n.t('requests:outcome.moneyMove', {
+        amount: formatAmount(raw.amountPence, currency),
+        from: fromName,
+        to: toName,
+      }),
+      ifRejected: i18n.t('requests:outcome.noMoneyMove'),
     },
     timeline: buildTimeline(raw),
   };
@@ -275,7 +283,9 @@ const moneyRequestAdapter: RequestAdapter = (raw, ctx) => {
     requestedFrom?.role === 'owner' ||
     raw.requestedFromRole === 'parent' ||
     raw.requestedFromRole === 'owner';
-  const typeLabel = isFromParent ? 'Money Request' : 'Sibling Money Request';
+  const typeLabel = isFromParent
+    ? i18n.t('requests:type.moneyRequest')
+    : i18n.t('requests:type.siblingMoneyRequest');
   return {
     id: raw.id,
     category: 'money_request',
@@ -286,14 +296,21 @@ const moneyRequestAdapter: RequestAdapter = (raw, ctx) => {
     requestedBy: { id: raw.requesterId, name: requesterName, avatarUrl: requester?.avatarUrl },
     recipient: { id: raw.requestedFromId, name: requestedFromName, avatarUrl: requestedFrom?.avatarUrl },
     createdAt: toMillis(raw.createdAt),
-    primarySummary: `${requesterName} requested ${formatAmount(raw.amountPence, currency)}`,
+    primarySummary: i18n.t('requests:summary.moneyRequest', {
+      requesterName,
+      amount: formatAmount(raw.amountPence, currency),
+    }),
     secondarySummary: raw.message,
     amountPence: raw.amountPence,
     message: raw.message,
     moneyMoved: raw.status === 'approved',
     outcome: {
-      ifApproved: `${formatAmount(raw.amountPence, currency)} will move from ${requestedFromName}'s wallet to ${requesterName}'s wallet.`,
-      ifRejected: 'No money will move.',
+      ifApproved: i18n.t('requests:outcome.moneyMove', {
+        amount: formatAmount(raw.amountPence, currency),
+        from: requestedFromName,
+        to: requesterName,
+      }),
+      ifRejected: i18n.t('requests:outcome.noMoneyMove'),
     },
     timeline: buildTimeline(raw),
   };
@@ -307,21 +324,29 @@ const petboxAdapter: RequestAdapter = (raw, ctx) => {
   return {
     id: raw.id,
     category: 'petbox',
-    typeLabel: 'Pet Box Donation',
+    typeLabel: i18n.t('requests:type.petBoxDonation'),
     status: raw.status,
     statusKind: statusKindOf(raw.status),
     statusLabel: statusLabelOf(raw.status),
     requestedBy: { id: raw.childId, name: childName, avatarUrl: child?.avatarUrl },
     recipient: { name: fundName },
     createdAt: toMillis(raw.createdAt),
-    primarySummary: `${childName} wants to donate ${formatAmount(raw.amountPence, currency)} to ${fundName}`,
+    primarySummary: i18n.t('requests:summary.petBoxDonation', {
+      childName,
+      amount: formatAmount(raw.amountPence, currency),
+      fundName,
+    }),
     secondarySummary: raw.message,
     amountPence: raw.amountPence,
     message: raw.message,
     moneyMoved: raw.status === 'approved',
     outcome: {
-      ifApproved: `${formatAmount(raw.amountPence, currency)} will move from ${childName}'s wallet to ${fundName}.`,
-      ifRejected: 'No money will move.',
+      ifApproved: i18n.t('requests:outcome.moneyMove', {
+        amount: formatAmount(raw.amountPence, currency),
+        from: childName,
+        to: fundName,
+      }),
+      ifRejected: i18n.t('requests:outcome.noMoneyMove'),
     },
     timeline: buildTimeline(raw),
   };
@@ -333,14 +358,14 @@ const profileUpdateAdapter: RequestAdapter = (raw, ctx) => {
   return {
     id: raw.id,
     category: 'profile_update',
-    typeLabel: 'Profile Update Request',
+    typeLabel: i18n.t('requests:type.profileUpdateRequest'),
     status: raw.status,
     statusKind: statusKindOf(raw.status),
     statusLabel: statusLabelOf(raw.status),
     requestedBy: { id: raw.childId, name: childName, avatarUrl: child?.avatarUrl },
-    recipient: { name: 'Parent' },
+    recipient: { name: i18n.t('requests:detail.recipientParent') },
     createdAt: toMillis(raw.createdAt),
-    primarySummary: `${childName} wants to update their profile`,
+    primarySummary: i18n.t('requests:summary.profileUpdateRequest', { childName }),
     profileChange: {
       currentDisplayName: raw.currentDisplayName,
       requestedDisplayName: raw.requestedDisplayName,
@@ -351,8 +376,8 @@ const profileUpdateAdapter: RequestAdapter = (raw, ctx) => {
     },
     moneyMoved: false,
     outcome: {
-      ifApproved: `${childName}'s profile will be updated to “${raw.requestedDisplayName}”.`,
-      ifRejected: `The profile will stay as “${raw.currentDisplayName}”.`,
+      ifApproved: i18n.t('requests:outcome.profileApproved', { childName, requestedDisplayName: raw.requestedDisplayName }),
+      ifRejected: i18n.t('requests:outcome.profileRejected', { currentDisplayName: raw.currentDisplayName }),
     },
     timeline: buildTimeline(raw),
   };
@@ -366,19 +391,19 @@ const rewardAdapter: RequestAdapter = (raw, ctx) => {
   return {
     id: raw.id,
     category: 'reward',
-    typeLabel: 'Reward Request',
+    typeLabel: i18n.t('requests:type.rewardRequest'),
     status: raw.status,
     statusKind: statusKindOf(raw.status),
     statusLabel: statusLabelOf(raw.status),
     requestedBy: { id: raw.userId, name: childName, avatarUrl: child?.avatarUrl },
-    recipient: { name: 'Parent' },
+    recipient: { name: i18n.t('requests:detail.recipientParent') },
     createdAt: toMillis(raw.createdAt ?? raw.redeemedAt),
-    primarySummary: `${childName} requested the “${rewardTitle}” reward`,
+    primarySummary: i18n.t('requests:summary.rewardRequest', { childName, rewardTitle }),
     amountPence: raw.costPaid != null ? raw.costPaid * 100 : undefined,
     moneyMoved: raw.status === 'approved' || raw.status === 'completed',
     outcome: {
-      ifApproved: `The “${rewardTitle}” reward will be marked ready to fulfil.`,
-      ifRejected: 'No reward will be given.',
+      ifApproved: i18n.t('requests:outcome.rewardApproved', { rewardTitle }),
+      ifRejected: i18n.t('requests:outcome.rewardRejected'),
     },
     timeline: buildTimeline(raw),
   };
@@ -389,18 +414,18 @@ const joinAdapter: RequestAdapter = (raw) => {
   return {
     id: raw.id,
     category: 'join',
-    typeLabel: 'Join Request',
+    typeLabel: i18n.t('requests:type.joinRequest'),
     status: raw.status,
     statusKind: statusKindOf(raw.status),
     statusLabel: statusLabelOf(raw.status),
     requestedBy: { id: raw.requestedBy, name, avatarUrl: raw.avatarUrl },
-    recipient: { name: 'Family Owner' },
+    recipient: { name: i18n.t('requests:detail.recipientOwner') },
     createdAt: toMillis(raw.createdAt),
-    primarySummary: `${name} wants to join the family`,
+    primarySummary: i18n.t('requests:summary.joinRequest', { name }),
     moneyMoved: false,
     outcome: {
-      ifApproved: `${name} will be added to the family.`,
-      ifRejected: `${name} will not be added to the family.`,
+      ifApproved: i18n.t('requests:outcome.joinApproved', { name }),
+      ifRejected: i18n.t('requests:outcome.joinRejected', { name }),
     },
     timeline: buildTimeline(raw),
   };

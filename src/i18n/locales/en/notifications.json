@@ -1,5 +1,6 @@
 {
   "title": "Notifications",
+  "filtersLabel": "Notification filters",
   "empty": "No notifications",
   "emptyYet": "No notifications yet.",
   "readError": "We couldn't update this notification.",

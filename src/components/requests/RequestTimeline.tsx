@@ -1,4 +1,7 @@
+import { useTranslation } from 'react-i18next';
 import { cn } from '../../lib/utils';
+import { formatDate } from '../../i18n/format';
+import i18n from '../../i18n/config';
 import type { RequestTimelineEvent, RequestTimelineKind } from '../../lib/requestModel';
 
 interface RequestTimelineProps {
@@ -15,8 +18,8 @@ const dotColor: Record<RequestTimelineKind, string> = {
 };
 
 function formatTimestamp(value: number | null): string {
-  if (value == null) return 'Pending';
-  return new Date(value).toLocaleString(undefined, {
+  if (value == null) return i18n.t('requests:timeline.pendingDate');
+  return formatDate(value, undefined, {
     day: '2-digit',
     month: 'short',
     year: 'numeric',
@@ -26,10 +29,11 @@ function formatTimestamp(value: number | null): string {
 }
 
 export function RequestTimeline({ events }: RequestTimelineProps) {
+  const { t } = useTranslation('requests');
   if (!events || events.length === 0) return null;
 
   return (
-    <ol className="relative space-y-4" aria-label="Request timeline">
+    <ol className="relative space-y-4" aria-label={t('timelineAria')}>
       {events.map((event, index) => {
         const isLast = index === events.length - 1;
         return (

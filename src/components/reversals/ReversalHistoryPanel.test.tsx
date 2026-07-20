@@ -15,9 +15,15 @@ vi.mock('../../store/useStore', () => ({
 }));
 
 import { ReversalHistoryPanel } from './ReversalHistoryPanel';
+import i18n from '../../i18n/config';
 
 describe('ReversalHistoryPanel', () => {
-  beforeEach(() => { vi.clearAllMocks(); api.reverseTransaction.mockResolvedValue({ status: 'completed' }); });
+  beforeEach(async () => {
+    vi.clearAllMocks();
+    await i18n.loadNamespaces(['reversals']);
+    await i18n.changeLanguage('en');
+    api.reverseTransaction.mockResolvedValue({ status: 'completed' });
+  });
 
   it('updates a completed action to Reversed immediately with audit metadata', async () => {
     render(<ReversalHistoryPanel />);

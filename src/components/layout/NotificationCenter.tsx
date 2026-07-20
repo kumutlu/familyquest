@@ -307,7 +307,7 @@ export function NotificationCenter() {
             ref={sheetRef}
             role="dialog"
             aria-modal="true"
-            aria-label="Notifications"
+            aria-label={t('title')}
             tabIndex={-1}
             style={sheetStyle}
             className={cn(
@@ -357,7 +357,7 @@ export function NotificationCenter() {
             {/* Tabs (fixed height, sibling of scrollable content) */}
             <div
               role="tablist"
-              aria-label="Notification filters"
+              aria-label={t('filtersLabel')}
               className="shrink-0 flex gap-1 px-4 pb-2 pt-2 border-b border-gray-100 overflow-x-auto [-webkit-overflow-scrolling:touch]"
             >
               {TABS.map(tabItem => {

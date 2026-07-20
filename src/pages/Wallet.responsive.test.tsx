@@ -1,6 +1,7 @@
 import { fireEvent, render, screen } from '@testing-library/react';
 import { describe, expect, it, vi, beforeEach } from 'vitest';
 import { MemoryRouter } from 'react-router-dom';
+import i18n from '../i18n/config';
 
 // Mutable store so each test can supply its own slice of state.
 const mockStore: any = {
@@ -36,7 +37,9 @@ import { PENDING_TRANSFER_STATUSES, isPendingTransferStatus } from '../lib/reque
 
 const daysAgo = (n: number) => ({ toDate: () => new Date(Date.now() - n * 86_400_000) });
 
-beforeEach(() => {
+beforeEach(async () => {
+  await i18n.loadNamespaces(['wallet']);
+  await i18n.changeLanguage('en');
   mockStore.currentUser = { id: 'child-1', familyId: 'family-1', role: 'child', displayName: 'Muhammed Osman' };
   mockStore.myWallet = { balance: 0 };
   mockStore.walletTransactions = [];
@@ -75,7 +78,7 @@ describe('A. Insight labels and amounts are fully visible (no truncation)', () =
       { id: 'tr-1', fromChildId: 'child-1', toChildId: 'child-2', toChildName: 'Osman', amountPence: 9999999, status: 'pending', createdAt: daysAgo(0) },
     ];
     render(<MemoryRouter><Wallet /></MemoryRouter>);
-    expect(screen.getAllByText('£99999.99').length).toBeGreaterThan(0);
+    expect(screen.getAllByText('£99,999.99').length).toBeGreaterThan(0);
   });
 
   it('uses tabular numbers and never renders a clipped £… amount', () => {

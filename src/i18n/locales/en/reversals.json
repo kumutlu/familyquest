@@ -1,0 +1,48 @@
+{
+  "title": "Reversible history",
+  "cancelled": "Cancelled",
+  "legacyDonation": "Legacy donation — refund unavailable",
+  "reversed": "Reversed",
+  "refunded": "Refunded",
+  "byActor": "by {{actor}} · {{date}}",
+  "summary": {
+    "taskCompleted": "Task completed: {{name}}",
+    "rewardRedeemed": "Reward redeemed: {{name}}",
+    "transfer": "{{from}} → {{to}}",
+    "moneyRequest": "{{requester}} requested money from {{target}}",
+    "petBoxDonation": "{{child}} donated to {{fund}}",
+    "profileUpdate": "{{child}} requested a profile update",
+    "goalWithdrawal": "{{child}} withdrawal for goal",
+    "goalContribution": "{{child}} contribution for goal",
+    "recordedAction": "Recorded action"
+  },
+  "actionLabel": {
+    "cancelRequest": "Cancel request",
+    "undo": "Undo",
+    "refund": "Refund"
+  },
+  "target": {
+    "wallet": "{{name}} wallet",
+    "points": "{{name}} points",
+    "fund": "Fund"
+  },
+  "modal": {
+    "reasonRequired": "Reason must be at least 3 characters.",
+    "donationRefunded": "Donation refunded",
+    "actionFailed": "Action failed.",
+    "refundDonation": "Refund donation",
+    "actionTitle": "{{actionLabel}} action",
+    "reasonOptional": "Reason (optional)",
+    "reason": "Reason",
+    "original": "Original: {{value}}",
+    "predictedBalance": "Predicted balance: {{value}}",
+    "loading": {
+      "cancelRequest": "Cancelling…",
+      "undo": "Undoing…",
+      "refund": "Refunding…"
+    },
+    "cancelNoBalance": "Cancelling a pending action does not change balances.",
+    "createsReversal": "This creates a linked reversal record. The original action will remain in history.",
+    "keepAction": "Keep action"
+  }
+}

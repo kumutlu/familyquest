@@ -8,6 +8,7 @@ vi.mock('../../lib/api', () => ({ cancelPendingApproval: api.cancelPendingApprov
 vi.mock('../../store/useStore', () => ({ useStore: () => store.state }));
 
 import { HistoryActionControl } from './HistoryActionControl';
+import i18n from '../../i18n/config';
 
 const baseState = () => ({
   currentUser: { id: 'parent-1', familyId: 'family-1', role: 'parent', displayName: 'Parent' },
@@ -16,7 +17,12 @@ const baseState = () => ({
 });
 
 describe('HistoryActionControl', () => {
-  beforeEach(() => { vi.clearAllMocks(); store.state = baseState(); });
+  beforeEach(async () => {
+    vi.clearAllMocks();
+    await i18n.loadNamespaces(['reversals']);
+    await i18n.changeLanguage('en');
+    store.state = baseState();
+  });
 
   it('renders persisted reversal reason, actor, and completedAt rather than epoch time', () => {
     store.state.reversals = [{ sourceKind: 'wallet_transaction', sourceId: 'tx-1', reason: 'Duplicate', actorName: 'Owner', completedAt: { toDate: () => new Date('2026-07-13T10:00:00Z') } }];

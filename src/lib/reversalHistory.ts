@@ -1,5 +1,6 @@
 import { assertTraceableSource, type EffectSnapshot } from './reversalContracts';
 import type { ReversalSourceKind } from './reversalApi';
+import i18n from '../i18n/config';
 
 export type HistoryActionType = 'cancel' | 'reverse';
 export type HistoryActionUnit = 'money' | 'points';
@@ -17,7 +18,7 @@ export interface HistoryAction {
   sourceId: string;
   summary: string;
   action?: HistoryActionType;
-  actionLabel: 'Cancel request' | 'Undo' | 'Refund';
+  actionLabel: 'cancelRequest' | 'undo' | 'refund';
   targets: HistoryActionTarget[];
   reversal?: any;
   source: any;
@@ -61,14 +62,14 @@ export function findReversal(reversals: any[], sourceKind: ReversalSourceKind, s
 
 const summaryFor = (sourceKind: ReversalSourceKind, source: any, names: Record<string, string>) => {
   if (source.note || source.reason || source.message || source.title) return source.note || source.reason || source.message || source.title;
-  if (sourceKind === 'task_completion') return `Task completed: ${names[source.taskId] || 'Task'}`;
-  if (sourceKind === 'reward_redemption') return `Reward redeemed: ${names[source.rewardId] || 'Reward'}`;
-  if (sourceKind === 'transfer_request') return `${names[source.fromChildId] || 'Child'} → ${names[source.toChildId] || 'Child'}`;
-  if (sourceKind === 'money_request') return `${names[source.requesterId] || 'Child'} requested money from ${names[source.requestedFromId] || 'family'}`;
-  if (sourceKind === 'petbox_request') return `${names[source.childId] || 'Child'} donated to ${names[source.fundId] || 'fund'}`;
-  if (sourceKind === 'profile_update') return `${names[source.childId] || 'Child'} requested a profile update`;
-  if (sourceKind === 'goal_request') return `${names[source.childId] || 'Child'} ${source.requestType === 'withdrawal' ? 'withdrawal' : 'contribution'} for goal`;
-  return source.type?.replaceAll('_', ' ') || 'Recorded action';
+  if (sourceKind === 'task_completion') return i18n.t('reversals:summary.taskCompleted', { name: names[source.taskId] || 'Task' });
+  if (sourceKind === 'reward_redemption') return i18n.t('reversals:summary.rewardRedeemed', { name: names[source.rewardId] || 'Reward' });
+  if (sourceKind === 'transfer_request') return i18n.t('reversals:summary.transfer', { from: names[source.fromChildId] || 'Child', to: names[source.toChildId] || 'Child' });
+  if (sourceKind === 'money_request') return i18n.t('reversals:summary.moneyRequest', { requester: names[source.requesterId] || 'Child', target: names[source.requestedFromId] || 'family' });
+  if (sourceKind === 'petbox_request') return i18n.t('reversals:summary.petBoxDonation', { child: names[source.childId] || 'Child', fund: names[source.fundId] || 'fund' });
+  if (sourceKind === 'profile_update') return i18n.t('reversals:summary.profileUpdate', { child: names[source.childId] || 'Child' });
+  if (sourceKind === 'goal_request') return i18n.t(source.requestType === 'withdrawal' ? 'reversals:summary.goalWithdrawal' : 'reversals:summary.goalContribution', { child: names[source.childId] || 'Child' });
+  return source.type?.replaceAll('_', ' ') || i18n.t('reversals:summary.recordedAction');
 };
 
 const canonicalEntityTypes: Record<ReversalSourceKind, readonly string[]> = {
@@ -91,10 +92,10 @@ function targetsFor(snapshot: EffectSnapshot | undefined, balances: NormalizeHis
     if (!id || delta === undefined) return;
     targets.push({ id, label, originalDelta: delta, ...(balance !== undefined ? { predictedBalance: balance - delta } : {}), unit });
   };
-  add(snapshot.childId, `${names[snapshot.childId || ''] || 'Child'} wallet`, snapshot.walletDeltaPence, balances.wallets?.[snapshot.childId || ''], 'money');
-  add(snapshot.counterpartyChildId, `${names[snapshot.counterpartyChildId || ''] || 'Child'} wallet`, snapshot.counterpartyWalletDeltaPence, balances.wallets?.[snapshot.counterpartyChildId || ''], 'money');
-  add(snapshot.fundId, names[snapshot.fundId || ''] || 'Fund', snapshot.fundDeltaPence, balances.funds?.[snapshot.fundId || ''], 'money');
-  add(snapshot.childId, `${names[snapshot.childId || ''] || 'Child'} points`, snapshot.pointsDelta, balances.points?.[snapshot.childId || ''], 'points');
+  add(snapshot.childId, i18n.t('reversals:target.wallet', { name: names[snapshot.childId || ''] || 'Child' }), snapshot.walletDeltaPence, balances.wallets?.[snapshot.childId || ''], 'money');
+  add(snapshot.counterpartyChildId, i18n.t('reversals:target.wallet', { name: names[snapshot.counterpartyChildId || ''] || 'Child' }), snapshot.counterpartyWalletDeltaPence, balances.wallets?.[snapshot.counterpartyChildId || ''], 'money');
+  add(snapshot.fundId, i18n.t('reversals:target.fund'), snapshot.fundDeltaPence, balances.funds?.[snapshot.fundId || ''], 'money');
+  add(snapshot.childId, i18n.t('reversals:target.points', { name: names[snapshot.childId || ''] || 'Child' }), snapshot.pointsDelta, balances.points?.[snapshot.childId || ''], 'points');
   return targets;
 }
 
@@ -118,13 +119,13 @@ export function normalizeHistoryAction(input: NormalizeHistoryActionInput): Hist
   const refund = targets.some(target => target.originalDelta < 0);
   const normalized: HistoryAction = {
     sourceKind, sourceId: source.id, source, targets, reversal, isLegacy,
-    summary: summaryFor(sourceKind, source, names), actionLabel: refund ? 'Refund' : 'Undo',
+    summary: summaryFor(sourceKind, source, names), actionLabel: refund ? 'refund' : 'undo',
   };
   if (!actor || !['parent', 'owner'].includes(actor.role)) return normalized;
 
   if (source.status === 'pending' || source.status === 'pending_acceptance' || source.status === 'pending_approval') {
     if (['task_completion', 'transfer_request', 'money_request', 'petbox_request'].includes(sourceKind)) {
-      return { ...normalized, action: 'cancel', actionLabel: 'Cancel request' };
+      return { ...normalized, action: 'cancel', actionLabel: 'cancelRequest' };
     }
     return normalized;
   }

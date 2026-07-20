@@ -24,6 +24,7 @@ import {
 } from '../../lib/api';
 import { HistoryActionControl } from '../reversals/HistoryActionControl';
 import type { ReversalSourceKind } from '../../lib/reversalApi';
+import { formatDate } from '../../i18n/format';
 
 export function ApprovalCenter() {
   const { t } = useTranslation('approvals');
@@ -270,7 +271,7 @@ export function ApprovalCenter() {
                 )}
                 {badge}
               </div>
-              <p className="text-xs text-gray-400 mt-2">{item.sortDate.toLocaleString()}</p>
+              <p className="text-xs text-gray-400 mt-2">{formatDate(item.sortDate)}</p>
             </div>
           </div>
 

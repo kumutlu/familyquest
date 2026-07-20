@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useTranslation } from 'react-i18next';
+import { formatDate } from '../i18n/format';
 import { Card, CardContent } from '../components/ui/Card';
 import { Button } from '../components/ui/Button';
 import { Avatar } from '../components/ui/Avatar';
@@ -224,7 +225,7 @@ function PushNotificationsSection({
             </span>
             {lastRegisteredAt ? (
               <p className="mt-1 text-xs text-gray-400">
-                {t('pushLastRegistered', { date: new Date(lastRegisteredAt).toLocaleString() })}
+                {t('pushLastRegistered', { date: formatDate(new Date(lastRegisteredAt)) })}
               </p>
             ) : null}
           </div>
@@ -398,7 +399,7 @@ export function Settings() {
 
   const buildTimestamp = (() => {
     const date = new Date(FAMILYQUEST_BUILD.builtAt);
-    return Number.isNaN(date.getTime()) ? FAMILYQUEST_BUILD.builtAt : date.toLocaleString();
+    return Number.isNaN(date.getTime()) ? FAMILYQUEST_BUILD.builtAt : formatDate(date);
   })();
 
   const environment = (import.meta.env.MODE || 'development').toUpperCase();

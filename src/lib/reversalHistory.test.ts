@@ -1,8 +1,14 @@
-import { describe, expect, it } from 'vitest';
+import { beforeEach, describe, expect, it } from 'vitest';
+import i18n from '../i18n/config';
 import { normalizeHistoryAction } from './reversalHistory';
 import { effectSnapshot } from './reversalContracts';
 
 const parent = { id: 'parent-1', role: 'parent' };
+
+beforeEach(async () => {
+  await i18n.loadNamespaces(['reversals']);
+  await i18n.changeLanguage('en');
+});
 
 describe('reversal history normalization', () => {
   it('builds a signed wallet reversal preview for a traceable completed source', () => {
@@ -10,7 +16,7 @@ describe('reversal history normalization', () => {
       sourceKind: 'wallet_transaction', source: { id: 'tx-1', type: 'deposit', status: 'completed', note: 'Pocket money', effectSnapshot: effectSnapshot({ entityType: 'wallet_transaction', familyId: 'family-1', actorId: 'parent-1', childId: 'child-1', walletDeltaPence: 300 }) },
       actor: parent, reversals: [], balances: { wallets: { 'child-1': 500 } }, names: { 'child-1': 'Alex' },
     });
-    expect(action).toMatchObject({ sourceId: 'tx-1', action: 'reverse', actionLabel: 'Undo', summary: 'Pocket money' });
+    expect(action).toMatchObject({ sourceId: 'tx-1', action: 'reverse', actionLabel: 'undo', summary: 'Pocket money' });
     expect(action.targets).toEqual([{ id: 'child-1', label: 'Alex wallet', originalDelta: 300, predictedBalance: 200, unit: 'money' }]);
   });
 
@@ -19,7 +25,7 @@ describe('reversal history normalization', () => {
     const completedAt = { toDate: () => new Date('2026-07-13T10:00:00Z') };
     const reversed = normalizeHistoryAction({ sourceKind: 'fund_transaction', source, actor: parent, balances: { funds: { 'fund-1': 500 } }, names: { 'fund-1': 'Vet fund' }, reversals: [{ sourceKind: 'fund_transaction', sourceId: 'expense-1', reason: 'Duplicate', actorName: 'Owner', completedAt }] });
     expect(reversed.action).toBeUndefined();
-    expect(reversed.actionLabel).toBe('Refund');
+    expect(reversed.actionLabel).toBe('refund');
     expect(reversed.reversal).toMatchObject({ reason: 'Duplicate', actorName: 'Owner' });
     expect(reversed.reversal.occurredAt).toBe(completedAt);
     expect(reversed.targets[0]).toMatchObject({ originalDelta: -250, predictedBalance: 750 });
@@ -90,7 +96,7 @@ describe('reversal history normalization', () => {
     ['petbox_request', { id: 'pet-pending', status: 'pending', childId: 'child-1' }],
   ] as const)('offers parent cancellation for a real child-created %s', (sourceKind, source) => {
     expect(normalizeHistoryAction({ sourceKind, source, actor: parent, reversals: [], balances: {}, names: {} }))
-      .toMatchObject({ action: 'cancel', actionLabel: 'Cancel request' });
+      .toMatchObject({ action: 'cancel', actionLabel: 'cancelRequest' });
   });
 
   it.each([
