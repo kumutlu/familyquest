@@ -109,6 +109,51 @@ export async function createChildLogin(params: {
   return result.data;
 }
 
+// --- Sign-in (Phase 3) ------------------------------------------------------
+
+export interface SignInChildInput {
+  familyCode: string;
+  username: string;
+  password: string;
+}
+
+export interface SignInChildResult {
+  customToken: string;
+}
+
+/**
+ * Invoke the existing `signInChild` callable. The backend resolves the private
+ * synthetic email server-side and returns ONLY a Firebase custom token. The
+ * frontend never sees, constructs, or infers any email address.
+ *
+ * Inputs are trimmed/normalized to match the backend's normalization so the
+ * child does not have to type the username in an exact case/spacing. The
+ * password is passed verbatim: the backend does NOT trim passwords, so trimming
+ * here would risk a silent mismatch and could alter a secret.
+ */
+export async function signInChild(params: SignInChildInput): Promise<SignInChildResult> {
+  const callable = httpsCallable<SignInChildInput, SignInChildResult>(
+    functions,
+    'signInChild',
+  );
+  const result = await callable({
+    familyCode: params.familyCode.trim(),
+    username: normalizeUsernamePreview(params.username),
+    password: params.password,
+  });
+  return result.data;
+}
+
+/**
+ * Map ANY signInChild failure to a single, generic, friendly message. The
+ * backend already returns a generic failure for every error class; this guard
+ * ensures the client never leaks whether the family, username, or password was
+ * the problem. No raw error codes or server messages are ever surfaced.
+ */
+export function mapSignInChildError(_err: unknown): string {
+  return 'We could not sign you in. Please check your Family Code, username, and password, then try again.';
+}
+
 // --- Friendly error mapping -------------------------------------------------
 
 /**
