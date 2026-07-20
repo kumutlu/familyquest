@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
+import { useTranslation } from 'react-i18next';
 import { Button } from '../components/ui/Button';
 import { signIn, signInWithGoogle } from '../lib/api';
 import { signInChild, mapSignInChildError, normalizeUsernamePreview } from '../lib/childLoginApi';
@@ -10,6 +11,7 @@ import { useStore } from '../store/useStore';
 type LoginTab = 'parent' | 'child';
 
 export function Login() {
+  const { t } = useTranslation(['auth', 'common']);
   const [tab, setTab] = useState<LoginTab>('parent');
 
   // Parent credentials
@@ -86,7 +88,7 @@ export function Login() {
     const trimmedFamily = familyCode.trim();
     const trimmedUsername = username.trim();
     if (!trimmedFamily || !trimmedUsername || !childPassword) {
-      setError('Please enter your Family Code, username, and password.');
+      setError(t('auth:childFieldsRequired'));
       return;
     }
 
@@ -124,13 +126,13 @@ export function Login() {
     <div className="min-h-screen bg-gray-50 flex flex-col justify-center py-12 sm:px-6 lg:px-8">
       <div className="sm:mx-auto sm:w-full sm:max-w-md text-center">
         <div className="mx-auto w-12 h-12 bg-primary-500 rounded-xl flex items-center justify-center text-white font-bold text-2xl">F</div>
-        <h2 className="mt-6 text-3xl font-extrabold text-gray-900">Sign in to FamilyQuest</h2>
+        <h2 className="mt-6 text-3xl font-extrabold text-gray-900">{t('auth:signInTitle', { appName: t('common:appName') })}</h2>
       </div>
 
       <div className="mt-8 sm:mx-auto sm:w-full sm:max-w-md">
         <div className="bg-white py-8 px-4 shadow sm:rounded-lg sm:px-10">
           {/* Tab switcher */}
-          <div role="tablist" aria-label="Choose how to sign in" className="flex border-b border-gray-200 mb-6">
+          <div role="tablist" aria-label={t('auth:chooseSignInMethod')} className="flex border-b border-gray-200 mb-6">
             <button
               type="button"
               role="tab"
@@ -144,7 +146,7 @@ export function Login() {
                   : 'border-transparent text-gray-500 hover:text-gray-700'
               }`}
             >
-              Parent
+              {t('auth:parent')}
             </button>
             <button
               type="button"
@@ -159,7 +161,7 @@ export function Login() {
                   : 'border-transparent text-gray-500 hover:text-gray-700'
               }`}
             >
-              Child
+              {t('auth:child')}
             </button>
           </div>
 
@@ -174,7 +176,7 @@ export function Login() {
             <div role="tabpanel" id="panel-parent" aria-labelledby="tab-parent">
               <form className="space-y-6" onSubmit={handleParentLogin}>
                 <div>
-                  <label htmlFor="parent-email" className="block text-sm font-medium text-gray-700">Email address</label>
+                  <label htmlFor="parent-email" className="block text-sm font-medium text-gray-700">{t('auth:emailAddress')}</label>
                   <div className="mt-1">
                     <input
                       id="parent-email"
@@ -189,7 +191,7 @@ export function Login() {
                 </div>
 
                 <div>
-                  <label htmlFor="parent-password" className="block text-sm font-medium text-gray-700">Password</label>
+                  <label htmlFor="parent-password" className="block text-sm font-medium text-gray-700">{t('auth:password')}</label>
                   <div className="mt-1">
                     <input
                       id="parent-password"
@@ -204,7 +206,7 @@ export function Login() {
                 </div>
 
                 <Button type="submit" fullWidth disabled={signingIn}>
-                  {signingIn ? 'Signing in…' : 'Sign in'}
+                  {signingIn ? t('auth:signingIn') : t('auth:signIn')}
                 </Button>
               </form>
 
@@ -214,7 +216,7 @@ export function Login() {
                     <div className="w-full border-t border-gray-300" />
                   </div>
                   <div className="relative flex justify-center text-sm">
-                    <span className="px-2 bg-white text-gray-500">Or continue with</span>
+                    <span className="px-2 bg-white text-gray-500">{t('auth:orContinueWith')}</span>
                   </div>
                 </div>
 
@@ -231,13 +233,13 @@ export function Login() {
                       <path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z" fill="#FBBC05"/>
                       <path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" fill="#EA4335"/>
                     </svg>
-                    Sign in with Google
+                    {t('auth:signInWithGoogle')}
                   </button>
                 </div>
               </div>
 
               <div className="mt-6 text-center">
-                <Link to="/signup" className="text-sm font-medium text-primary-600 hover:text-primary-500">Don't have an account? Sign up</Link>
+                <Link to="/signup" className="text-sm font-medium text-primary-600 hover:text-primary-500">{t('auth:noAccount')} {t('auth:signUp')}</Link>
               </div>
             </div>
           )}
@@ -247,7 +249,7 @@ export function Login() {
             <div role="tabpanel" id="panel-child" aria-labelledby="tab-child">
               <form className="space-y-6" onSubmit={handleChildLogin} noValidate>
                 <div>
-                  <label htmlFor="child-family-code" className="block text-sm font-medium text-gray-700">Family Code</label>
+                  <label htmlFor="child-family-code" className="block text-sm font-medium text-gray-700">{t('auth:familyCode')}</label>
                   <div className="mt-1">
                     <input
                       id="child-family-code"
@@ -263,7 +265,7 @@ export function Login() {
                 </div>
 
                 <div>
-                  <label htmlFor="child-username" className="block text-sm font-medium text-gray-700">Username</label>
+                  <label htmlFor="child-username" className="block text-sm font-medium text-gray-700">{t('auth:username')}</label>
                   <div className="mt-1">
                     <input
                       id="child-username"
@@ -278,7 +280,7 @@ export function Login() {
                 </div>
 
                 <div>
-                  <label htmlFor="child-password" className="block text-sm font-medium text-gray-700">Password</label>
+                  <label htmlFor="child-password" className="block text-sm font-medium text-gray-700">{t('auth:password')}</label>
                   <div className="mt-1">
                     <input
                       id="child-password"
@@ -293,12 +295,12 @@ export function Login() {
                 </div>
 
                 <Button type="submit" fullWidth disabled={signingIn}>
-                  {signingIn ? 'Signing in…' : 'Sign in'}
+                  {signingIn ? t('auth:signingIn') : t('auth:signIn')}
                 </Button>
               </form>
 
               <div className="mt-6 text-center">
-                <Link to="/signup" className="text-sm font-medium text-primary-600 hover:text-primary-500">Don't have an account? Sign up</Link>
+                <Link to="/signup" className="text-sm font-medium text-primary-600 hover:text-primary-500">{t('auth:noAccount')} {t('auth:signUp')}</Link>
               </div>
             </div>
           )}

@@ -3,5 +3,9 @@
   "loading": "Yükleniyor…",
   "save": "Kaydet",
   "cancel": "İptal",
-  "language": "Dil"
+  "language": "Dil",
+  "closeDialog": "Kapat",
+  "dismissNotification": "Bildirimi kapat",
+  "back": "Geri",
+  "continue": "Devam et"
 }

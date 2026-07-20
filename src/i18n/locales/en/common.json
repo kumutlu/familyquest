@@ -3,5 +3,9 @@
   "loading": "Loading…",
   "save": "Save",
   "cancel": "Cancel",
-  "language": "Language"
+  "language": "Language",
+  "closeDialog": "Close dialog",
+  "dismissNotification": "Dismiss notification",
+  "back": "Back",
+  "continue": "Continue"
 }

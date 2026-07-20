@@ -1,5 +1,5 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen, waitFor } from '@testing-library/react';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { render, screen, waitFor, act } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter } from 'react-router-dom';
 
@@ -48,6 +48,7 @@ vi.mock('../store/useStore', () => ({
 }));
 
 import { Login } from './Login';
+import i18n from '../i18n/config';
 
 function renderLogin() {
   return render(
@@ -68,6 +69,17 @@ beforeEach(() => {
   // Default: success path.
   childApiMocks.signInChild.mockResolvedValue({ customToken: 'tok-123' });
   authMocks.signInWithCustomToken.mockResolvedValue({ user: {} });
+});
+
+// Ensure the `auth` namespace is loaded and the language is English before each
+// test so the migrated strings render synchronously (matching prior behaviour).
+beforeEach(async () => {
+  await i18n.loadNamespaces(['auth']);
+  await act(async () => { await i18n.changeLanguage('en'); });
+});
+
+afterEach(async () => {
+  await act(async () => { await i18n.changeLanguage('en'); });
 });
 
 describe('Login — Parent tab unchanged', () => {
@@ -262,5 +274,40 @@ describe('Login — Parent login unaffected by child flow', () => {
     await user.click(screen.getByRole('button', { name: /^sign in$/i }));
     await waitFor(() => expect(childApiMocks.signInChild).toHaveBeenCalled());
     expect(apiMocks.signIn).not.toHaveBeenCalled();
+  });
+});
+
+describe('Login — i18n (English + Turkish + switching)', () => {
+  it('renders English strings by default', () => {
+    renderLogin();
+    expect(screen.getByRole('heading', { name: /sign in to familyquest/i })).toBeInTheDocument();
+    expect(screen.getByRole('tab', { name: 'Parent' })).toBeInTheDocument();
+    expect(screen.getByRole('tab', { name: 'Child' })).toBeInTheDocument();
+    expect(screen.getByLabelText(/email address/i)).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /sign in with google/i })).toBeInTheDocument();
+  });
+
+  it('renders Turkish strings when the language is switched to tr', async () => {
+    await act(async () => { await i18n.changeLanguage('tr'); });
+    renderLogin();
+    expect(screen.getByRole('heading', { name: /familyquest'e giriş yap/i })).toBeInTheDocument();
+    expect(screen.getByRole('tab', { name: 'Ebeveyn' })).toBeInTheDocument();
+    expect(screen.getByRole('tab', { name: 'Çocuk' })).toBeInTheDocument();
+    expect(screen.getByLabelText(/e-posta adresi/i)).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /google ile giriş yap/i })).toBeInTheDocument();
+  });
+
+  it('switches from English to Turkish on an already-mounted instance', async () => {
+    const { rerender } = renderLogin();
+    expect(screen.getByRole('tab', { name: 'Parent' })).toBeInTheDocument();
+    await act(async () => {
+      await i18n.changeLanguage('tr');
+      rerender(
+        <MemoryRouter>
+          <Login />
+        </MemoryRouter>,
+      );
+    });
+    expect(screen.getByRole('tab', { name: 'Ebeveyn' })).toBeInTheDocument();
   });
 });

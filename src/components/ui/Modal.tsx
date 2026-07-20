@@ -1,6 +1,7 @@
 import React, { useEffect, useRef } from 'react';
 
 import { X } from 'lucide-react';
+import { useTranslation } from 'react-i18next';
 import { useBodyScrollLock } from '../../lib/useBodyScrollLock';
 
 export interface ModalProps {
@@ -38,6 +39,7 @@ export function Modal({
   zIndex = 50,
   lockScroll = true,
 }: ModalProps) {
+  const { t } = useTranslation('common');
   const previouslyFocused = useRef<HTMLElement | null>(null);
   const titleId = title ? 'modal-title' : undefined;
   // Keep the latest onClose without making it an effect dependency. Passing a
@@ -91,7 +93,7 @@ export function Modal({
             {title && <h3 id={titleId} className="text-lg font-bold text-gray-900">{title}</h3>}
             <button
               onClick={onClose}
-              aria-label="Close dialog"
+              aria-label={t('closeDialog')}
               className="p-2 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-full transition-colors ml-auto"
             >
               <X size={20} />

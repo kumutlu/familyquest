@@ -1,5 +1,6 @@
 import { useEffect } from 'react';
 import { CheckCircle2, AlertCircle, Info, X } from 'lucide-react';
+import { useTranslation } from 'react-i18next';
 import { cn } from '../../lib/utils';
 
 export type ToastType = 'success' | 'error' | 'info';
@@ -22,6 +23,7 @@ export interface ToastProps {
  * aria-live so screen readers are notified. Rendered above the bottom nav.
  */
 export function Toast({ toast, onDismiss, duration = 4000 }: ToastProps) {
+  const { t } = useTranslation('common');
   useEffect(() => {
     if (!toast) return;
     const timer = setTimeout(onDismiss, duration);
@@ -55,7 +57,7 @@ export function Toast({ toast, onDismiss, duration = 4000 }: ToastProps) {
         <button
           type="button"
           onClick={onDismiss}
-          aria-label="Dismiss notification"
+          aria-label={t('dismissNotification')}
           className="shrink-0 opacity-80 hover:opacity-100 transition-opacity"
         >
           <X size={16} />
