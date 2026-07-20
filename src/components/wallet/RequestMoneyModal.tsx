@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { Button } from '../ui/Button';
 import { createMoneyRequest } from '../../lib/api';
 import { useStore } from '../../store/useStore';
@@ -18,6 +19,9 @@ export function RequestMoneyModal({ onClose, onSuccess }: RequestMoneyModalProps
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState(false);
 
+  const { t } = useTranslation('wallet');
+  const currency = '£';
+
   const candidates = (familyMembers || [])
     .filter(m => m.id !== currentUser?.id)
     .sort((a, b) => {
@@ -34,17 +38,17 @@ export function RequestMoneyModal({ onClose, onSuccess }: RequestMoneyModalProps
     if (!currentUser) return;
 
     if (!requestedFromId) {
-      setError('Please choose who to request money from.');
+      setError(t('request.choose'));
       return;
     }
     const amountFloat = parseFloat(amountGBP);
     if (!Number.isFinite(amountFloat) || amountFloat <= 0) {
-      setError('Please enter an amount greater than zero.');
+      setError(t('request.greaterThanZero'));
       return;
     }
     const amountPence = Math.round(amountFloat * 100);
     if (!Number.isInteger(amountPence)) {
-      setError('Amount must be a whole number of pence.');
+      setError(t('request.wholePence'));
       return;
     }
 
@@ -59,7 +63,7 @@ export function RequestMoneyModal({ onClose, onSuccess }: RequestMoneyModalProps
       }, 1400);
     } catch (err: any) {
       console.error(err);
-      setError(err?.message || 'Failed to request money.');
+      setError(t('request.generic'));
     } finally {
       setIsSubmitting(false);
     }
@@ -69,8 +73,8 @@ export function RequestMoneyModal({ onClose, onSuccess }: RequestMoneyModalProps
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-gray-900/40 backdrop-blur-sm p-4">
       <div className="bg-white w-full max-w-sm rounded-3xl shadow-xl overflow-hidden flex flex-col animate-in fade-in zoom-in-95 duration-200">
         <div className="px-6 py-4 border-b border-gray-100 flex justify-between items-center">
-          <h3 className="text-xl font-bold text-gray-900">Request Money</h3>
-          <button onClick={onClose} className="p-2 -mr-2 bg-gray-100 hover:bg-gray-200 rounded-full text-gray-500 transition-colors">
+          <h3 className="text-xl font-bold text-gray-900">{t('request.title')}</h3>
+          <button onClick={onClose} aria-label={t('request.close')} className="p-2 -mr-2 bg-gray-100 hover:bg-gray-200 rounded-full text-gray-500 transition-colors">
             ✕
           </button>
         </div>
@@ -80,10 +84,11 @@ export function RequestMoneyModal({ onClose, onSuccess }: RequestMoneyModalProps
               <div className="mx-auto w-12 h-12 rounded-full bg-success-50 text-success-600 flex items-center justify-center mb-3">
                 <HandCoins size={22} />
               </div>
-              <p className="font-semibold text-gray-900">Request sent!</p>
+              <p className="font-semibold text-gray-900">{t('request.success')}</p>
               <p className="text-sm text-gray-500 mt-1">
-                {requestedFrom ? `To ${requestedFrom.displayName}. ` : ''}
-                Awaiting approval.
+                {requestedFrom
+                  ? t('request.successWithName', { name: requestedFrom.displayName })
+                  : t('request.successNoName')}
               </p>
             </div>
           ) : (
@@ -95,26 +100,26 @@ export function RequestMoneyModal({ onClose, onSuccess }: RequestMoneyModalProps
               )}
 
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Request from</label>
+                <label className="block text-sm font-medium text-gray-700 mb-1">{t('request.from')}</label>
                 <select
                   required
                   value={requestedFromId}
                   onChange={e => setRequestedFromId(e.target.value)}
                   className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-primary-500 focus:border-transparent outline-none transition-all"
                 >
-                  <option value="" disabled>Select a parent or sibling…</option>
+                  <option value="" disabled>{t('request.selectParent')}</option>
                   {candidates.map(c => (
                     <option key={c.id} value={c.id}>
-                      {c.displayName}{c.role === 'parent' || c.role === 'owner' ? ' (Parent)' : ''}
+                      {c.displayName}{c.role === 'parent' || c.role === 'owner' ? ` (${t('request.parentLabel')})` : ''}
                     </option>
                   ))}
                 </select>
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Amount (£)</label>
+                <label className="block text-sm font-medium text-gray-700 mb-1">{t('request.amount', { currency })}</label>
                 <div className="relative">
-                  <span className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-500 font-bold">£</span>
+                  <span className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-500 font-bold">{currency}</span>
                   <input
                     type="number"
                     required
@@ -129,22 +134,22 @@ export function RequestMoneyModal({ onClose, onSuccess }: RequestMoneyModalProps
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Note (Optional)</label>
+                <label className="block text-sm font-medium text-gray-700 mb-1">{t('request.noteOptional')}</label>
                 <input
                   type="text"
                   value={note}
                   onChange={e => setNote(e.target.value)}
                   className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-primary-500 focus:border-transparent outline-none transition-all"
-                  placeholder="e.g. For a school trip"
+                  placeholder={t('request.notePlaceholder')}
                 />
               </div>
 
               <div className="pt-4 flex gap-3">
                 <Button type="button" variant="outline" fullWidth onClick={onClose}>
-                  Cancel
+                  {t('request.cancel')}
                 </Button>
                 <Button type="submit" fullWidth disabled={isSubmitting || candidates.length === 0} className="bg-primary-600 hover:bg-primary-700">
-                  {isSubmitting ? 'Sending…' : 'Send Request'}
+                  {isSubmitting ? t('request.sending') : t('request.submit')}
                 </Button>
               </div>
             </form>

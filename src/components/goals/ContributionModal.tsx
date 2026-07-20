@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { Modal } from '../ui/Modal';
 import { Button } from '../ui/Button';
 import { CurrencyDisplay } from '../ui/CurrencyDisplay';
@@ -17,6 +18,7 @@ export function ContributionModal({ goal, isOpen, onClose, onDone }: {
   onDone?: () => void;
 }) {
   const { currentUser, myWallet, familyData } = useStore();
+  const { t } = useTranslation('goals');
   const g: Goal = normalizeGoalDoc(goal);
   const [amount, setAmount] = useState('');
   const [approvalRequired, setApprovalRequired] = useState(false);
@@ -30,7 +32,7 @@ export function ContributionModal({ goal, isOpen, onClose, onDone }: {
   const handleSubmit = async () => {
     if (!currentUser || !familyData) return;
     if (!valid) {
-      setError('Enter an amount up to your available balance.');
+      setError(t('contribution.errorUpToBalance'));
       return;
     }
     setSubmitting(true);
@@ -44,7 +46,7 @@ export function ContributionModal({ goal, isOpen, onClose, onDone }: {
       onDone?.();
       onClose();
     } catch (err: any) {
-      setError(err?.message || 'Could not contribute.');
+      setError(t('contribution.errorGeneric'));
     } finally {
       setSubmitting(false);
     }
@@ -54,24 +56,24 @@ export function ContributionModal({ goal, isOpen, onClose, onDone }: {
     <Modal
       isOpen={isOpen}
       onClose={onClose}
-      title={`Contribute to ${g.title}`}
+      title={t('contribution.title', { title: g.title })}
       footer={
         <div className="flex gap-2">
-          <Button variant="ghost" fullWidth onClick={onClose} disabled={submitting}>Cancel</Button>
+          <Button variant="ghost" fullWidth onClick={onClose} disabled={submitting}>{t('contribution.cancel')}</Button>
           <Button fullWidth onClick={handleSubmit} disabled={!valid || submitting}>
-            {submitting ? 'Contributing…' : approvalRequired ? 'Request' : 'Contribute'}
+            {submitting ? t('contribution.contributing') : approvalRequired ? t('contribution.request') : t('contribution.contribute')}
           </Button>
         </div>
       }
     >
       <div className="space-y-4">
         <div className="bg-gray-50 rounded-xl p-4 flex items-center justify-between">
-          <span className="text-sm text-gray-500 font-medium">Your balance</span>
+          <span className="text-sm text-gray-500 font-medium">{t('contribution.yourBalance')}</span>
           <span className="font-bold text-gray-900"><CurrencyDisplay amountPence={balance} forceColor={false} /></span>
         </div>
 
         <div>
-          <label className="block text-sm font-semibold text-gray-700 mb-1">Amount</label>
+          <label className="block text-sm font-semibold text-gray-700 mb-1">{t('contribution.amount')}</label>
           <div className="relative">
             <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 font-bold">{familyData?.currency || '£'}</span>
             <input
@@ -95,7 +97,7 @@ export function ContributionModal({ goal, isOpen, onClose, onDone }: {
             onChange={(e) => setApprovalRequired(e.target.checked)}
             className="h-4 w-4 rounded border-gray-300 text-primary-600"
           />
-          Require parent approval before contributing
+          {t('contribution.requireApproval')}
         </label>
 
         {error && <p className="text-sm text-danger-600 font-medium">{error}</p>}

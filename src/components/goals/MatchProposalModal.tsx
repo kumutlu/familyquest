@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { Modal } from '../ui/Modal';
 import { Button } from '../ui/Button';
 import { CurrencyDisplay } from '../ui/CurrencyDisplay';
@@ -19,6 +20,7 @@ export function MatchProposalModal({ goal, contributions, isOpen, onClose, onDon
   onDone?: () => void;
 }) {
   const { currentUser, familyData, familyMembers } = useStore();
+  const { t } = useTranslation('goals');
   const g: Goal = normalizeGoalDoc(goal);
 
   const childContribs = contributions.filter(
@@ -37,7 +39,7 @@ export function MatchProposalModal({ goal, contributions, isOpen, onClose, onDon
   const handleSubmit = async () => {
     if (!currentUser || !familyData || !selected) return;
     if (!valid) {
-      setError('Pick a contribution and enter a match amount greater than zero.');
+      setError(t('matchProposal.errorPick'));
       return;
     }
     setSubmitting(true);
@@ -55,7 +57,7 @@ export function MatchProposalModal({ goal, contributions, isOpen, onClose, onDon
       onDone?.();
       onClose();
     } catch (err: any) {
-      setError(err?.message || 'Could not create match proposal.');
+      setError(t('matchProposal.errorGeneric'));
     } finally {
       setSubmitting(false);
     }
@@ -65,35 +67,34 @@ export function MatchProposalModal({ goal, contributions, isOpen, onClose, onDon
     <Modal
       isOpen={isOpen}
       onClose={onClose}
-      title={`Propose Match · ${g.title}`}
+      title={t('matchProposal.title', { title: g.title })}
       footer={
         <div className="flex gap-2">
-          <Button variant="ghost" fullWidth onClick={onClose} disabled={submitting}>Cancel</Button>
+          <Button variant="ghost" fullWidth onClick={onClose} disabled={submitting}>{t('matchProposal.cancel')}</Button>
           <Button fullWidth onClick={handleSubmit} disabled={!valid || submitting}>
-            {submitting ? 'Proposing…' : 'Propose Match'}
+            {submitting ? t('matchProposal.proposing') : t('matchProposal.propose')}
           </Button>
         </div>
       }
     >
       <div className="space-y-4">
         <p className="text-sm text-gray-500">
-          Propose a parent match for a child contribution. The proposal is sent to the Approval
-          Center for a parent to approve.
+          {t('matchProposal.description')}
         </p>
 
         <div>
-          <label className="block text-sm font-semibold text-gray-700 mb-1">Child contribution</label>
+          <label className="block text-sm font-semibold text-gray-700 mb-1">{t('matchProposal.contributionLabel')}</label>
           <select
             value={sourceId}
             onChange={(e) => setSourceId(e.target.value)}
             className="w-full px-3 py-3 border-2 border-gray-200 rounded-xl focus:border-primary-500 focus:outline-none font-medium bg-white"
           >
-            <option value="">Select a contribution…</option>
+            <option value="">{t('matchProposal.selectContribution')}</option>
             {childContribs.map(c => {
               const child = familyMembers.find(m => m.id === c.ownerId);
               return (
                 <option key={c.contribId} value={c.contribId}>
-                  {child?.displayName ?? 'Child'} · <CurrencyDisplay amountPence={c.amountPence} forceColor={false} />
+                  {child?.displayName ?? t('matchProposal.childLabel')} · <CurrencyDisplay amountPence={c.amountPence} forceColor={false} />
                 </option>
               );
             })}
@@ -101,7 +102,7 @@ export function MatchProposalModal({ goal, contributions, isOpen, onClose, onDon
         </div>
 
         <div>
-          <label className="block text-sm font-semibold text-gray-700 mb-1">Match amount</label>
+          <label className="block text-sm font-semibold text-gray-700 mb-1">{t('matchProposal.matchAmount')}</label>
           <div className="relative">
             <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 font-bold">{familyData?.currency || '£'}</span>
             <input

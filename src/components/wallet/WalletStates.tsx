@@ -1,4 +1,5 @@
 import { AlertTriangle, Inbox, RefreshCw } from 'lucide-react';
+import { useTranslation } from 'react-i18next';
 
 interface EmptyStateProps {
   title: string;
@@ -27,6 +28,7 @@ interface ErrorStateProps {
 
 // Friendly, non-technical error. Raw Firebase error text must never be passed here.
 export function ErrorState({ message, onRetry }: ErrorStateProps) {
+  const { t } = useTranslation('wallet');
   return (
     <div
       role="alert"
@@ -43,7 +45,7 @@ export function ErrorState({ message, onRetry }: ErrorStateProps) {
           className="mt-3 inline-flex items-center gap-2 rounded-xl border border-gray-200 px-4 py-2 text-sm font-semibold text-gray-700 transition-colors hover:border-primary-300 hover:text-primary-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-400"
         >
           <RefreshCw size={16} aria-hidden="true" />
-          Try again
+          {t('pendingTransfers.tryAgain')}
         </button>
       )}
     </div>

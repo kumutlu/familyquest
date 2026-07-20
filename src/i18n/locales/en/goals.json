@@ -1,4 +1,141 @@
 {
   "title": "Goals",
-  "create": "Create goal"
+  "newGoal": "New Goal",
+  "page": {
+    "subtitle": "Save together for what matters"
+  },
+  "list": {
+    "familyGoals": "Family Goals",
+    "childGoals": "Child Goals",
+    "emptyFamily": "No family goals yet. Create one to save together!",
+    "emptyChild": "No child goals yet."
+  },
+  "create": {
+    "title": "Create a Goal",
+    "submit": "Create Goal",
+    "creating": "Creating…",
+    "cancel": "Cancel",
+    "titleLabel": "Title",
+    "titlePlaceholder": "e.g. Family Holiday",
+    "typeLabel": "Type",
+    "family": "Family",
+    "child": "Child",
+    "childLabel": "Child",
+    "selectChild": "Select a child…",
+    "targetLabel": "Target amount",
+    "targetPlaceholder": "0.00",
+    "parentContributionTitle": "Parent contribution (optional, external money)",
+    "parentContributionHint": "Seed the goal with parent money. This is never taken from a wallet. Choose one mode.",
+    "none": "None",
+    "fixed": "Fixed amount",
+    "percentage": "Percentage",
+    "fixedLabel": "Fixed amount",
+    "percentLabel": "Percentage of target",
+    "percentPlaceholder": "0",
+    "errorTitle": "Give the goal a title.",
+    "errorTarget": "Target must be greater than zero.",
+    "errorChild": "Pick a child for this goal.",
+    "errorCreate": "Could not create goal."
+  },
+  "delete": {
+    "title": "Delete cancelled goal?",
+    "body": "This permanently removes the cancelled goal from the list. This cannot be undone.",
+    "cancel": "Cancel",
+    "delete": "Delete",
+    "deleting": "Deleting…",
+    "error": "Could not delete the goal. Please try again."
+  },
+  "card": {
+    "familyGoal": "Family goal",
+    "childGoal": "Child goal",
+    "saved": "Saved",
+    "target": "Target",
+    "matchingAuto": "Matching auto",
+    "matchingAvailable": "Matching available",
+    "deleteCancelled": "Delete cancelled goal"
+  },
+  "status": {
+    "active": "Active",
+    "reached": "Reached 🎉",
+    "purchased": "Purchased",
+    "returned": "Returned",
+    "cancelled": "Cancelled"
+  },
+  "detail": {
+    "back": "Goals",
+    "backToList": "Back",
+    "saved": "Saved",
+    "target": "Target",
+    "targetReached": "Target reached! You can keep saving or complete this goal.",
+    "closed": "This goal is {{status}} and is now closed.",
+    "contribute": "Contribute",
+    "addParentMoney": "Add Parent Money",
+    "withdraw": "Withdraw",
+    "proposeMatch": "Propose Match",
+    "markPurchased": "Mark Purchased",
+    "returnFunds": "Return Funds",
+    "cancel": "Cancel",
+    "pendingMatchProposals": "Pending Match Proposals",
+    "match": "{{amount}} match",
+    "approve": "Approve",
+    "reject": "Reject",
+    "notFound": "Goal not found.",
+    "errorPrefix": "Could not {{label}}."
+  },
+  "contribution": {
+    "title": "Contribute to {{title}}",
+    "yourBalance": "Your balance",
+    "amount": "Amount",
+    "requireApproval": "Require parent approval before contributing",
+    "cancel": "Cancel",
+    "contribute": "Contribute",
+    "request": "Request",
+    "contributing": "Contributing…",
+    "errorUpToBalance": "Enter an amount up to your available balance.",
+    "errorGeneric": "Could not contribute."
+  },
+  "parentContribution": {
+    "title": "Add to {{title}}",
+    "description": "This adds money from a parent (e.g. cash, bank transfer) directly to the goal. It is not taken from any child wallet.",
+    "amount": "Amount",
+    "cancel": "Cancel",
+    "add": "Add Contribution",
+    "adding": "Adding…",
+    "errorGreaterThanZero": "Enter an amount greater than zero.",
+    "errorGeneric": "Could not add contribution."
+  },
+  "matchProposal": {
+    "title": "Propose Match · {{title}}",
+    "description": "Propose a parent match for a child contribution. The proposal is sent to the Approval Center for a parent to approve.",
+    "contributionLabel": "Child contribution",
+    "selectContribution": "Select a contribution…",
+    "matchAmount": "Match amount",
+    "cancel": "Cancel",
+    "propose": "Propose Match",
+    "proposing": "Proposing…",
+    "errorPick": "Pick a contribution and enter a match amount greater than zero.",
+    "errorGeneric": "Could not create match proposal.",
+    "childLabel": "Child"
+  },
+  "withdrawal": {
+    "title": "Withdraw from {{title}}",
+    "yourNet": "Your net contribution",
+    "noWithdrawable": "You have no withdrawable balance in this goal yet.",
+    "amountToWithdraw": "Amount to withdraw",
+    "cancel": "Cancel",
+    "request": "Request Withdrawal",
+    "requesting": "Requesting…",
+    "errorUpToNet": "Enter an amount up to your net contribution of {{amount}}.",
+    "errorGeneric": "Could not request withdrawal."
+  },
+  "breakdown": {
+    "title": "Contribution Breakdown",
+    "childSavings": "Child savings",
+    "parentContributions": "Parent contributions",
+    "autoMatches": "Auto matches",
+    "manualMatches": "Manual matches",
+    "yourNet": "Your net (withdrawable)",
+    "perChild": "Per child",
+    "child": "Child"
+  }
 }

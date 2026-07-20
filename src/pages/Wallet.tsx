@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { useStore } from '../store/useStore';
 import { isChildRole } from '../lib/roles';
 import {
@@ -43,6 +44,8 @@ export function Wallet() {
     retryBootstrap,
   } = useStore();
 
+  const { t } = useTranslation('wallet');
+
   const [selectedTransaction, setSelectedTransaction] = useState<any>(null);
   const [activeModal, setActiveModal] = useState<null | 'send' | 'request'>(null);
   const [visibleCount, setVisibleCount] = useState(INITIAL_VISIBLE);
@@ -64,7 +67,7 @@ export function Wallet() {
         <div className="rounded-2xl bg-white border border-gray-100 overflow-hidden">
           <TransactionSkeletonRows />
         </div>
-        <span className="sr-only" role="status">Loading wallet</span>
+        <span className="sr-only" role="status">{t('page.loading')}</span>
       </div>
     );
   }
@@ -79,7 +82,7 @@ export function Wallet() {
   if (bootstrapError) {
     return (
       <div className="mx-auto max-w-2xl w-full px-4 pb-[calc(2.5rem+env(safe-area-inset-bottom))]">
-        <ErrorState message="We couldn’t load your wallet." onRetry={retryBootstrap} />
+        <ErrorState message={t('error.loadWallet')} onRetry={retryBootstrap} />
       </div>
     );
   }
@@ -112,15 +115,15 @@ export function Wallet() {
     <div className="mx-auto max-w-2xl w-full px-4 space-y-5 pb-[calc(2.5rem+env(safe-area-inset-bottom))] animate-in fade-in duration-300">
       {isChild ? (
         <AccountHeader
-          name={currentUser.displayName || 'Member'}
+          name={currentUser.displayName || t('accountHeader.member')}
           avatarUrl={currentUser.avatarUrl}
-          subtitle="My Wallet"
-          accountStatus="Family account"
+          subtitle={t('accountHeader.subtitle')}
+          accountStatus={t('accountHeader.accountStatus')}
         />
       ) : (
         <header>
-          <h1 className="text-2xl font-bold text-gray-900 tracking-tight">Wallet</h1>
-          <p className="text-gray-500 mt-1">Your family wallet overview.</p>
+          <h1 className="text-2xl font-bold text-gray-900 tracking-tight">{t('page.title')}</h1>
+          <p className="text-gray-500 mt-1">{t('page.subtitle')}</p>
         </header>
       )}
 

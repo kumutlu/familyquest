@@ -14,6 +14,10 @@ import enApprovals from '../i18n/locales/en/approvals.json';
 import trApprovals from '../i18n/locales/tr/approvals.json';
 import enErrors from '../i18n/locales/en/errors.json';
 import trErrors from '../i18n/locales/tr/errors.json';
+import enWallet from '../i18n/locales/en/wallet.json';
+import trWallet from '../i18n/locales/tr/wallet.json';
+import enGoals from '../i18n/locales/en/goals.json';
+import trGoals from '../i18n/locales/tr/goals.json';
 
 // Preload the UI namespaces used by the Parent Core experience so that
 // components render with real translations synchronously in tests (the
@@ -27,6 +31,8 @@ const UI_BUNDLES: Record<string, { en: unknown; tr: unknown }> = {
   rewards: { en: enRewards, tr: trRewards },
   approvals: { en: enApprovals, tr: trApprovals },
   errors: { en: enErrors, tr: trErrors },
+  wallet: { en: enWallet, tr: trWallet },
+  goals: { en: enGoals, tr: trGoals },
 };
 
 for (const [ns, { en, tr }] of Object.entries(UI_BUNDLES)) {

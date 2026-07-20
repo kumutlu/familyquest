@@ -1,9 +1,10 @@
+import { useTranslation } from 'react-i18next';
 import {
-  formatMoney,
   signedTransactionAmount,
   transactionPresentation,
   transactionRowDate,
 } from '../../lib/walletPresentation';
+import { formatPence, currencyCodeFromSymbol } from '../../i18n/format';
 
 interface TransactionRowProps {
   tx: any;
@@ -17,14 +18,15 @@ interface TransactionRowProps {
 // keyboard-actionable and focusable for free. Direction is conveyed by the
 // +/- prefix AND colour AND an aria-label (never colour alone).
 export function TransactionRow({ tx, currency, nameResolver, currentUserId, onSelect }: TransactionRowProps) {
-  const p = transactionPresentation(tx, { nameResolver, currentUserId });
+  const { t } = useTranslation('wallet');
+  const p = transactionPresentation(tx, { nameResolver, currentUserId, t });
   const Icon = p.icon;
   const abs = Math.abs(signedTransactionAmount(tx));
   const prefix = p.direction === 'in' ? '+' : p.direction === 'out' ? '-' : '';
   const amountColor =
     p.direction === 'in' ? 'text-success-600' : p.direction === 'out' ? 'text-gray-900' : 'text-gray-500';
-  const date = transactionRowDate(tx);
-  const ariaLabel = `${p.title}. ${p.subtitle ? `${p.subtitle}. ` : ''}${prefix}${formatMoney(abs, currency)}.`;
+  const date = transactionRowDate(tx, new Date(), t);
+  const ariaLabel = `${p.title}. ${p.subtitle ? `${p.subtitle}. ` : ''}${prefix}${formatPence(abs, currencyCodeFromSymbol(currency))}.`;
 
   return (
     <button
@@ -50,7 +52,7 @@ export function TransactionRow({ tx, currency, nameResolver, currentUserId, onSe
       <div className="flex flex-col items-end shrink-0 text-right">
         <span className={`font-bold tabular-nums ${amountColor}`}>
           {prefix}
-          {formatMoney(abs, currency)}
+          {formatPence(abs, currencyCodeFromSymbol(currency))}
         </span>
         {p.statusLabel && <span className="text-xs text-gray-400 mt-0.5">{p.statusLabel}</span>}
       </div>

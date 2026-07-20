@@ -1,5 +1,7 @@
 import { Clock, Inbox, RefreshCw } from 'lucide-react';
-import { formatMoney, requestTime } from '../../lib/walletPresentation';
+import { useTranslation } from 'react-i18next';
+import { requestTime } from '../../lib/walletPresentation';
+import { formatPence, currencyCodeFromSymbol, formatDate } from '../../i18n/format';
 import { EmptyState, ErrorState, TransactionSkeletonRows } from './WalletStates';
 
 interface PendingTransfersProps {
@@ -17,7 +19,7 @@ interface PendingTransfersProps {
 function requestDateLabel(value: any): string {
   const ms = requestTime(value);
   if (!ms) return '';
-  return new Date(ms).toLocaleDateString(undefined, { day: 'numeric', month: 'short' });
+  return formatDate(new Date(ms), undefined, { day: 'numeric', month: 'short' });
 }
 
 // Pending transfer requests are kept SEPARATE from settled transactions.
@@ -30,10 +32,11 @@ export function PendingTransfers({
   unavailable = false,
   onRetry,
 }: PendingTransfersProps) {
+  const { t } = useTranslation('wallet');
   return (
     <section aria-labelledby="pending-transfers-heading" data-testid="transfer-requests-section">
       <h2 id="pending-transfers-heading" className="text-lg font-bold text-gray-900 mb-3">
-        Pending transfers
+        {t('pendingTransfers.title')}
       </h2>
 
       {loading ? (
@@ -41,7 +44,7 @@ export function PendingTransfers({
           <TransactionSkeletonRows count={2} />
         </div>
       ) : error ? (
-        <ErrorState message="We couldn’t load your pending transfers." onRetry={onRetry} />
+        <ErrorState message={t('pendingTransfers.error')} onRetry={onRetry} />
       ) : unavailable ? (
         // Partial failure: the pending source failed but the rest of the wallet
         // is fine. Show a non-blocking notice with a retry; do NOT blank the page.
@@ -50,7 +53,7 @@ export function PendingTransfers({
           className="rounded-2xl bg-white border border-gray-100 p-4 flex items-center justify-between gap-3"
         >
           <p className="text-sm text-gray-500">
-            We couldn’t load your pending transfers right now.
+            {t('pendingTransfers.unavailable')}
           </p>
           {onRetry && (
             <button
@@ -59,14 +62,14 @@ export function PendingTransfers({
               className="shrink-0 inline-flex items-center gap-2 rounded-xl border border-gray-200 px-3 py-1.5 text-sm font-semibold text-gray-700 transition-colors hover:border-primary-300 hover:text-primary-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-400"
             >
               <RefreshCw size={15} aria-hidden="true" />
-              Try again
+              {t('pendingTransfers.tryAgain')}
             </button>
           )}
         </div>
       ) : requests.length === 0 ? (
         <EmptyState
-          title="No pending transfers"
-          description="Everything is up to date."
+          title={t('pendingTransfers.emptyTitle')}
+          description={t('pendingTransfers.emptyDescription')}
           icon={<Inbox size={22} aria-hidden="true" />}
         />
       ) : (
@@ -85,7 +88,7 @@ export function PendingTransfers({
                   </div>
                   <div className="min-w-0">
                     <p className="font-semibold text-gray-900 text-sm truncate">
-                      {formatMoney(amount, currency)} to {r.toChildName || 'another child'}
+                      {t('pendingTransfers.to', { amount: formatPence(amount, currencyCodeFromSymbol(currency)), name: r.toChildName || t('tx.anotherChild') })}
                     </p>
                     <p className="text-xs text-gray-400 mt-0.5 truncate">
                       {requestDateLabel(r.createdAt)}
@@ -95,9 +98,9 @@ export function PendingTransfers({
                 </div>
                 <span
                   className="shrink-0 inline-flex items-center rounded-full bg-warning-50 px-2.5 py-0.5 text-xs font-semibold uppercase tracking-wider text-warning-600"
-                  aria-label="Waiting for parent approval"
+                  aria-label={t('pendingTransfers.waitingApproval')}
                 >
-                  Waiting for parent approval
+                  {t('pendingTransfers.waitingApproval')}
                 </span>
               </div>
             );

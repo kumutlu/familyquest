@@ -1,5 +1,6 @@
 import { ArrowDownRight, ArrowUpRight, Clock } from 'lucide-react';
-import { formatMoney } from '../../lib/walletPresentation';
+import { useTranslation } from 'react-i18next';
+import { formatPence, currencyCodeFromSymbol } from '../../i18n/format';
 
 interface MoneyInsightsProps {
   moneyIn: number;
@@ -44,7 +45,7 @@ function InsightCard({ label, amount, currency, icon, iconBg, valueClass, spanTw
           </p>
         ) : (
           <p className={`text-base font-bold tabular-nums ${valueClass} break-words`}>
-            {formatMoney(amount as number, currency)}
+            {formatPence(amount as number, currencyCodeFromSymbol(currency))}
           </p>
         )}
       </div>
@@ -68,10 +69,11 @@ export function MoneyInsights({
   currency = '£',
   pendingUnavailable = false,
 }: MoneyInsightsProps) {
+  const { t } = useTranslation('wallet');
   return (
-    <section aria-label="Money insights" className="grid grid-cols-2 gap-3 sm:grid-cols-3">
+    <section aria-label={t('insights.title')} className="grid grid-cols-2 gap-3 sm:grid-cols-3">
       <InsightCard
-        label="Money In"
+        label={t('insights.moneyIn')}
         amount={moneyIn}
         currency={currency}
         icon={<ArrowDownRight size={18} aria-hidden="true" />}
@@ -79,7 +81,7 @@ export function MoneyInsights({
         valueClass="text-success-600"
       />
       <InsightCard
-        label="Money Out"
+        label={t('insights.moneyOut')}
         amount={moneyOut}
         currency={currency}
         icon={<ArrowUpRight size={18} aria-hidden="true" />}
@@ -87,7 +89,7 @@ export function MoneyInsights({
         valueClass="text-gray-900"
       />
       <InsightCard
-        label="Pending"
+        label={t('insights.pending')}
         amount={pendingUnavailable ? null : pending}
         currency={currency}
         icon={<Clock size={18} aria-hidden="true" />}

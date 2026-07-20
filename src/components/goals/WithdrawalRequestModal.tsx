@@ -1,8 +1,10 @@
 import { useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { Modal } from '../ui/Modal';
 import { Button } from '../ui/Button';
 import { CurrencyDisplay } from '../ui/CurrencyDisplay';
 import { useStore } from '../../store/useStore';
+import { formatPence, currencyCodeFromSymbol } from '../../i18n/format';
 import { requestGoalWithdrawal } from '../../lib/api';
 import { normalizeGoalDoc, computeNetChild, type Goal, type ContributionLeg } from '../../lib/goalContracts';
 
@@ -19,6 +21,8 @@ export function WithdrawalRequestModal({ goal, contributions, isOpen, onClose, o
   onDone?: () => void;
 }) {
   const { currentUser, familyData } = useStore();
+  const { t } = useTranslation('goals');
+  const currency = familyData?.currency || '£';
   const g: Goal = normalizeGoalDoc(goal);
   const childId = currentUser?.id ?? g.childId ?? '';
   const netChild = computeNetChild(contributions, childId);
@@ -33,7 +37,7 @@ export function WithdrawalRequestModal({ goal, contributions, isOpen, onClose, o
   const handleSubmit = async () => {
     if (!currentUser || !familyData) return;
     if (!valid) {
-      setError(`Enter an amount up to your net contribution of ${netChild / 100}.`);
+      setError(t('withdrawal.errorUpToNet', { amount: formatPence(netChild, currencyCodeFromSymbol(currency)) }));
       return;
     }
     setSubmitting(true);
@@ -44,7 +48,7 @@ export function WithdrawalRequestModal({ goal, contributions, isOpen, onClose, o
       onDone?.();
       onClose();
     } catch (err: any) {
-      setError(err?.message || 'Could not request withdrawal.');
+      setError(t('withdrawal.errorGeneric'));
     } finally {
       setSubmitting(false);
     }
@@ -54,26 +58,26 @@ export function WithdrawalRequestModal({ goal, contributions, isOpen, onClose, o
     <Modal
       isOpen={isOpen}
       onClose={onClose}
-      title={`Withdraw from ${g.title}`}
+      title={t('withdrawal.title', { title: g.title })}
       footer={
         <div className="flex gap-2">
-          <Button variant="ghost" fullWidth onClick={onClose} disabled={submitting}>Cancel</Button>
+          <Button variant="ghost" fullWidth onClick={onClose} disabled={submitting}>{t('withdrawal.cancel')}</Button>
           <Button fullWidth onClick={handleSubmit} disabled={!valid || submitting || netChild <= 0}>
-            {submitting ? 'Requesting…' : 'Request Withdrawal'}
+            {submitting ? t('withdrawal.requesting') : t('withdrawal.request')}
           </Button>
         </div>
       }
     >
       <div className="space-y-4">
         <div className="bg-gray-50 rounded-xl p-4 flex items-center justify-between">
-          <span className="text-sm text-gray-500 font-medium">Your net contribution</span>
+          <span className="text-sm text-gray-500 font-medium">{t('withdrawal.yourNet')}</span>
           <span className="font-bold text-gray-900"><CurrencyDisplay amountPence={netChild} forceColor={false} /></span>
         </div>
         {netChild <= 0 && (
-          <p className="text-sm text-gray-500">You have no withdrawable balance in this goal yet.</p>
+          <p className="text-sm text-gray-500">{t('withdrawal.noWithdrawable')}</p>
         )}
         <div>
-          <label className="block text-sm font-semibold text-gray-700 mb-1">Amount to withdraw</label>
+          <label className="block text-sm font-semibold text-gray-700 mb-1">{t('withdrawal.amountToWithdraw')}</label>
           <div className="relative">
             <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 font-bold">{familyData?.currency || '£'}</span>
             <input

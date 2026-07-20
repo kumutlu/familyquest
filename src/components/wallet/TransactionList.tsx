@@ -1,4 +1,5 @@
 import { Inbox } from 'lucide-react';
+import { useTranslation } from 'react-i18next';
 import { groupTransactionsByDate } from '../../lib/walletPresentation';
 import { TransactionRow } from './TransactionRow';
 import { EmptyState, ErrorState, TransactionSkeletonRows } from './WalletStates';
@@ -30,12 +31,13 @@ export function TransactionList({
   error,
   onRetry,
 }: TransactionListProps) {
-  const groups = groupTransactionsByDate(transactions);
+  const { t } = useTranslation('wallet');
+  const groups = groupTransactionsByDate(transactions, new Date(), t);
 
   return (
     <section aria-labelledby="recent-transactions-heading">
       <h2 id="recent-transactions-heading" className="text-lg font-bold text-gray-900 mb-3">
-        Recent Transactions
+        {t('ledger.recent')}
       </h2>
 
       {loading ? (
@@ -43,11 +45,11 @@ export function TransactionList({
           <TransactionSkeletonRows />
         </div>
       ) : error ? (
-        <ErrorState message="We couldn’t load recent activity." onRetry={onRetry} />
+        <ErrorState message={t('ledger.error')} onRetry={onRetry} />
       ) : transactions.length === 0 ? (
         <EmptyState
-          title="No wallet activity yet"
-          description="Money added or sent will appear here."
+          title={t('ledger.emptyTitle')}
+          description={t('ledger.emptyDescription')}
           icon={<Inbox size={22} aria-hidden="true" />}
         />
       ) : (
@@ -78,7 +80,7 @@ export function TransactionList({
                 onClick={onLoadMore}
                 className="w-full rounded-xl border border-gray-200 px-4 py-2.5 text-sm font-semibold text-gray-700 transition-colors hover:border-primary-300 hover:text-primary-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-400"
               >
-                Load more
+                {t('ledger.loadMore')}
               </button>
             </div>
           )}

@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { Modal } from '../ui/Modal';
 import { Button } from '../ui/Button';
 import { useStore } from '../../store/useStore';
@@ -16,6 +17,7 @@ export function ParentContributionModal({ goal, isOpen, onClose, onDone }: {
   onDone?: () => void;
 }) {
   const { currentUser, familyData } = useStore();
+  const { t } = useTranslation('goals');
   const g: Goal = normalizeGoalDoc(goal);
   const [amount, setAmount] = useState('');
   const [error, setError] = useState('');
@@ -27,7 +29,7 @@ export function ParentContributionModal({ goal, isOpen, onClose, onDone }: {
   const handleSubmit = async () => {
     if (!currentUser || !familyData) return;
     if (!valid) {
-      setError('Enter an amount greater than zero.');
+      setError(t('parentContribution.errorGreaterThanZero'));
       return;
     }
     setSubmitting(true);
@@ -38,7 +40,7 @@ export function ParentContributionModal({ goal, isOpen, onClose, onDone }: {
       onDone?.();
       onClose();
     } catch (err: any) {
-      setError(err?.message || 'Could not add contribution.');
+      setError(t('parentContribution.errorGeneric'));
     } finally {
       setSubmitting(false);
     }
@@ -48,23 +50,22 @@ export function ParentContributionModal({ goal, isOpen, onClose, onDone }: {
     <Modal
       isOpen={isOpen}
       onClose={onClose}
-      title={`Add to ${g.title}`}
+      title={t('parentContribution.title', { title: g.title })}
       footer={
         <div className="flex gap-2">
-          <Button variant="ghost" fullWidth onClick={onClose} disabled={submitting}>Cancel</Button>
+          <Button variant="ghost" fullWidth onClick={onClose} disabled={submitting}>{t('parentContribution.cancel')}</Button>
           <Button fullWidth onClick={handleSubmit} disabled={!valid || submitting}>
-            {submitting ? 'Adding…' : 'Add Contribution'}
+            {submitting ? t('parentContribution.adding') : t('parentContribution.add')}
           </Button>
         </div>
       }
     >
       <div className="space-y-4">
         <p className="text-sm text-gray-500">
-          This adds money from a parent (e.g. cash, bank transfer) directly to the goal. It is not
-          taken from any child wallet.
+          {t('parentContribution.description')}
         </p>
         <div>
-          <label className="block text-sm font-semibold text-gray-700 mb-1">Amount</label>
+          <label className="block text-sm font-semibold text-gray-700 mb-1">{t('parentContribution.amount')}</label>
           <div className="relative">
             <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 font-bold">{familyData?.currency || '£'}</span>
             <input

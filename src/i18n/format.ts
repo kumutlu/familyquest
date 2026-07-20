@@ -35,6 +35,20 @@ export function formatCurrency(
   }).format(amount);
 }
 
+/**
+ * Convenience wrapper for the canonical storage unit used across the app:
+ * amounts are kept in integer pence. Divides by 100 before delegating to
+ * `formatCurrency` so callers can pass the raw stored value directly.
+ */
+export function formatPence(
+  pence: number,
+  currency: string,
+  locale?: string,
+  options?: Intl.NumberFormatOptions,
+): string {
+  return formatCurrency(pence / 100, currency, locale, options);
+}
+
 export function formatDate(
   value: Date | number | string,
   locale?: string,
@@ -68,4 +82,22 @@ export function formatRelativeTime(
     }
   }
   return rtf.format(Math.round(diffSeconds), 'second');
+}
+
+/**
+ * Map a display currency symbol (as stored on `familyData.currency`) to its
+ * ISO 4217 code so `Intl.NumberFormat` can format amounts locale-aware.
+ * Unknown / missing symbols fall back to GBP to keep the UI functional.
+ */
+const SYMBOL_TO_CURRENCY_CODE: Record<string, string> = {
+  '£': 'GBP',
+  $: 'USD',
+  '€': 'EUR',
+  '₺': 'TRY',
+  '¥': 'JPY',
+};
+
+export function currencyCodeFromSymbol(symbol?: string): string {
+  if (symbol && SYMBOL_TO_CURRENCY_CODE[symbol]) return SYMBOL_TO_CURRENCY_CODE[symbol];
+  return 'GBP';
 }

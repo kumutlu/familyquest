@@ -1,4 +1,5 @@
 import { useMemo } from 'react';
+import { useTranslation } from 'react-i18next';
 import { Card, CardContent } from '../ui/Card';
 import { CurrencyDisplay } from '../ui/CurrencyDisplay';
 import { useStore } from '../../store/useStore';
@@ -18,6 +19,7 @@ export function ContributionBreakdown({ goal, contributions }: {
   contributions: ContributionLeg[];
 }) {
   const { familyMembers, currentUser } = useStore();
+  const { t } = useTranslation('goals');
 
   const breakdown = useMemo(() => {
     let childTotal = 0;
@@ -52,21 +54,21 @@ export function ContributionBreakdown({ goal, contributions }: {
     return { childTotal, parentTotal, autoMatch, manualMatch, perChild };
   }, [contributions]);
 
-  const nameOf = (id: string) => familyMembers.find(m => m.id === id)?.displayName ?? 'Child';
+  const nameOf = (id: string) => familyMembers.find(m => m.id === id)?.displayName ?? t('breakdown.child');
 
   return (
     <Card>
       <CardContent className="p-5 space-y-3">
-        <h3 className="font-bold text-gray-900">Contribution Breakdown</h3>
+        <h3 className="font-bold text-gray-900">{t('breakdown.title')}</h3>
 
-        <Row label="Child savings" value={breakdown.childTotal} tone="child" />
-        <Row label="Parent contributions" value={breakdown.parentTotal} tone="parent" />
-        <Row label="Auto matches" value={breakdown.autoMatch} tone="match" />
-        <Row label="Manual matches" value={breakdown.manualMatch} tone="match" />
+        <Row label={t('breakdown.childSavings')} value={breakdown.childTotal} tone="child" />
+        <Row label={t('breakdown.parentContributions')} value={breakdown.parentTotal} tone="parent" />
+        <Row label={t('breakdown.autoMatches')} value={breakdown.autoMatch} tone="match" />
+        <Row label={t('breakdown.manualMatches')} value={breakdown.manualMatch} tone="match" />
 
         {goal.kind === 'child' && goal.childId && (
           <div className="pt-2 border-t border-gray-100">
-            <p className="text-xs text-gray-500 font-medium uppercase mb-1">Your net (withdrawable)</p>
+            <p className="text-xs text-gray-500 font-medium uppercase mb-1">{t('breakdown.yourNet')}</p>
             <p className="font-bold text-gray-900">
               <CurrencyDisplay amountPence={computeNetChild(contributions, goal.childId)} forceColor={false} />
             </p>
@@ -75,7 +77,7 @@ export function ContributionBreakdown({ goal, contributions }: {
 
         {breakdown.perChild.size > 1 && (
           <div className="pt-2 border-t border-gray-100 space-y-1">
-            <p className="text-xs text-gray-500 font-medium uppercase mb-1">Per child</p>
+            <p className="text-xs text-gray-500 font-medium uppercase mb-1">{t('breakdown.perChild')}</p>
             {[...breakdown.perChild.entries()].map(([id, amt]) => (
               <div key={id} className="flex justify-between text-sm">
                 <span className="text-gray-600">{nameOf(id)}</span>

@@ -1,4 +1,141 @@
 {
   "title": "Hedefler",
-  "create": "Hedef oluştur"
+  "newGoal": "Yeni Hedef",
+  "page": {
+    "subtitle": "Önemli olan için birlikte biriktirin"
+  },
+  "list": {
+    "familyGoals": "Aile Hedefleri",
+    "childGoals": "Çocuk Hedefleri",
+    "emptyFamily": "Henüz aile hedefi yok. Bir tane oluşturup birlikte biriktirin!",
+    "emptyChild": "Henüz çocuk hedefi yok."
+  },
+  "create": {
+    "title": "Hedef Oluştur",
+    "submit": "Hedef Oluştur",
+    "creating": "Oluşturuluyor…",
+    "cancel": "İptal",
+    "titleLabel": "Başlık",
+    "titlePlaceholder": "örn. Aile Tatili",
+    "typeLabel": "Tür",
+    "family": "Aile",
+    "child": "Çocuk",
+    "childLabel": "Çocuk",
+    "selectChild": "Bir çocuk seçin…",
+    "targetLabel": "Hedef tutarı",
+    "targetPlaceholder": "0,00",
+    "parentContributionTitle": "Veli katkısı (isteğe bağlı, harici para)",
+    "parentContributionHint": "Hedefi veli parasıyla başlatın. Bu para asla bir cüzdandan alınmaz. Bir mod seçin.",
+    "none": "Yok",
+    "fixed": "Sabit tutar",
+    "percentage": "Yüzde",
+    "fixedLabel": "Sabit tutar",
+    "percentLabel": "Hedefin yüzdesi",
+    "percentPlaceholder": "0",
+    "errorTitle": "Hedefe bir başlık verin.",
+    "errorTarget": "Hedef sıfırdan büyük olmalıdır.",
+    "errorChild": "Bu hedef için bir çocuk seçin.",
+    "errorCreate": "Hedef oluşturulamadı."
+  },
+  "delete": {
+    "title": "İptal edilen hedef silinsin mi?",
+    "body": "Bu işlem, iptal edilen hedefi listeden kalıcı olarak kaldırır. Bu geri alınamaz.",
+    "cancel": "İptal",
+    "delete": "Sil",
+    "deleting": "Siliniyor…",
+    "error": "Hedef silinemedi. Lütfen tekrar deneyin."
+  },
+  "card": {
+    "familyGoal": "Aile hedefi",
+    "childGoal": "Çocuk hedefi",
+    "saved": "Biriken",
+    "target": "Hedef",
+    "matchingAuto": "Otomatik eşleşme",
+    "matchingAvailable": "Eşleşme mevcut",
+    "deleteCancelled": "İptal edilen hedefi sil"
+  },
+  "status": {
+    "active": "Aktif",
+    "reached": "Ulaşıldı 🎉",
+    "purchased": "Satın Alındı",
+    "returned": "İade Edildi",
+    "cancelled": "İptal Edildi"
+  },
+  "detail": {
+    "back": "Hedefler",
+    "backToList": "Geri",
+    "saved": "Biriken",
+    "target": "Hedef",
+    "targetReached": "Hedefe ulaşıldı! Biriktirmeye devam edebilir veya bu hedefi tamamlayabilirsiniz.",
+    "closed": "Bu hedef {{status}} durumunda ve artık kapalı.",
+    "contribute": "Katkı Yap",
+    "addParentMoney": "Veli Parası Ekle",
+    "withdraw": "Para Çek",
+    "proposeMatch": "Eşleşme Öner",
+    "markPurchased": "Satın Alındı İşaretle",
+    "returnFunds": "Paraları İade Et",
+    "cancel": "İptal",
+    "pendingMatchProposals": "Bekleyen Eşleşme Önerileri",
+    "match": "{{amount}} eşleşme",
+    "approve": "Onayla",
+    "reject": "Reddet",
+    "notFound": "Hedef bulunamadı.",
+    "errorPrefix": "{{label}} yapılamadı."
+  },
+  "contribution": {
+    "title": "{{title}} hedefine katkı yap",
+    "yourBalance": "Bakiyeniz",
+    "amount": "Tutar",
+    "requireApproval": "Katkı yapmadan önce veli onayı gerektir",
+    "cancel": "İptal",
+    "contribute": "Katkı Yap",
+    "request": "İste",
+    "contributing": "Katkı yapılıyor…",
+    "errorUpToBalance": "Kullanılabilir bakiyenize kadar bir tutar girin.",
+    "errorGeneric": "Katkı yapılamadı."
+  },
+  "parentContribution": {
+    "title": "{{title}} hedefine ekle",
+    "description": "Bu, veliden (örn. nakit, banka havalesi) gelen parayı doğrudan hedefe ekler. Hiçbir çocuk cüzdanından alınmaz.",
+    "amount": "Tutar",
+    "cancel": "İptal",
+    "add": "Katkı Ekle",
+    "adding": "Ekleniyor…",
+    "errorGreaterThanZero": "Sıfırdan büyük bir tutar girin.",
+    "errorGeneric": "Katkı eklenemedi."
+  },
+  "matchProposal": {
+    "title": "Eşleşme Öner · {{title}}",
+    "description": "Bir çocuk katkısı için veli eşleşmesi önerin. Öneri, bir velinin onaylaması için Onay Merkezi'ne gönderilir.",
+    "contributionLabel": "Çocuk katkısı",
+    "selectContribution": "Bir katkı seçin…",
+    "matchAmount": "Eşleşme tutarı",
+    "cancel": "İptal",
+    "propose": "Eşleşme Öner",
+    "proposing": "Öneriliyor…",
+    "errorPick": "Bir katkı seçin ve sıfırdan büyük bir eşleşme tutarı girin.",
+    "errorGeneric": "Eşleşme önerisi oluşturulamadı.",
+    "childLabel": "Çocuk"
+  },
+  "withdrawal": {
+    "title": "{{title}} hedefinden çek",
+    "yourNet": "Net katkınız",
+    "noWithdrawable": "Bu hedefte henüz çekilebilir bakiyeniz yok.",
+    "amountToWithdraw": "Çekilecek tutar",
+    "cancel": "İptal",
+    "request": "Para Çekme İste",
+    "requesting": "İsteniyor…",
+    "errorUpToNet": "Net katkınız olan {{amount}} tutarına kadar bir tutar girin.",
+    "errorGeneric": "Para çekme istenemedi."
+  },
+  "breakdown": {
+    "title": "Katkı Dağılımı",
+    "childSavings": "Çocuk birikimi",
+    "parentContributions": "Veli katkıları",
+    "autoMatches": "Otomatik eşleşmeler",
+    "manualMatches": "Manuel eşleşmeler",
+    "yourNet": "Net (çekilebilir)",
+    "perChild": "Çocuk başına",
+    "child": "Çocuk"
+  }
 }

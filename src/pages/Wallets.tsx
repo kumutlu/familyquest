@@ -1,4 +1,5 @@
 import { useStore } from '../store/useStore';
+import { useTranslation } from 'react-i18next';
 import { Card, CardContent } from '../components/ui/Card';
 import { Avatar } from '../components/ui/Avatar';
 import { Badge } from '../components/ui/Badge';
@@ -7,12 +8,15 @@ import { Navigate } from 'react-router-dom';
 import { useState } from 'react';
 import { AddMoneyModal } from '../components/wallet/AddMoneyModal';
 import { signedTransactionAmount } from '../lib/walletPresentation';
+import { formatPence, currencyCodeFromSymbol, formatDate as i18nFormatDate } from '../i18n/format';
 
 export function Wallets() {
   const { currentUser, familyMembers, loading, walletTransactions, childWallets } = useStore();
+  const { t } = useTranslation('wallet');
+  const currency = '£';
   const [selectedChildId, setSelectedChildId] = useState<string | null>(null);
 
-  if (loading) return <div className="p-8 text-center text-gray-500 animate-pulse">Loading Wallets...</div>;
+  if (loading) return <div className="p-8 text-center text-gray-500 animate-pulse">{t('allowance.loading')}</div>;
 
   if (!isParentRole(currentUser?.role)) {
     return <Navigate to="/" replace />;
@@ -22,7 +26,7 @@ export function Wallets() {
 
   const formatDate = (ts: any) => {
     if (!ts) return '';
-    return ts.toDate().toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
+    return i18nFormatDate(ts.toDate(), undefined, { day: 'numeric', month: 'short', year: 'numeric' });
   };
 
   const getRecentTransactions = (childId: string) => {
@@ -37,36 +41,36 @@ export function Wallets() {
   };
 
   const formatAmount = (amountPence: number) => {
-    return `£${(Math.abs(amountPence) / 100).toFixed(2)}`;
+    return formatPence(amountPence, currencyCodeFromSymbol(currency));
   };
 
   const formatTransactionLabel = (tx: any) => {
     if (tx.description) return tx.description;
     const amountPence = signedTransactionAmount(tx);
     const abs = formatAmount(amountPence);
-    if (tx.type === 'deposit') return `Added ${abs}`;
-    if (tx.type === 'allowance') return `Allowance ${abs}`;
-    if (tx.type === 'transfer_out') return `Transfer sent -${abs}`;
-    if (tx.type === 'transfer_in') return `Transfer received ${abs}`;
-    if (tx.type === 'behaviour_penalty') return `Behaviour penalty -${abs}`;
-    if (tx.type === 'fund_contribution') return `Fund donation -${abs}`;
-    if (tx.type === 'withdrawal') return `Withdrawal -${abs}`;
+    if (tx.type === 'deposit') return t('allowance.added', { amount: abs });
+    if (tx.type === 'allowance') return t('allowance.allowance', { amount: abs });
+    if (tx.type === 'transfer_out') return t('allowance.transferSent', { amount: abs });
+    if (tx.type === 'transfer_in') return t('allowance.transferReceived', { amount: abs });
+    if (tx.type === 'behaviour_penalty') return t('allowance.behaviourPenalty', { amount: abs });
+    if (tx.type === 'fund_contribution') return t('allowance.fundDonation', { amount: abs });
+    if (tx.type === 'withdrawal') return t('allowance.withdrawal', { amount: abs });
 
     // Fallbacks
-    if (amountPence > 0) return `Added ${abs}`;
-    return `Deducted -${abs}`;
+    if (amountPence > 0) return t('allowance.added', { amount: abs });
+    return t('allowance.deducted', { amount: abs });
   };
 
   return (
     <div className="space-y-6 animate-in fade-in duration-300 pb-8">
       <header>
-        <h1 className="text-2xl font-bold text-gray-900 tracking-tight">Child Wallets</h1>
-        <p className="text-gray-500 mt-1">Manage balances, add or withdraw money.</p>
+        <h1 className="text-2xl font-bold text-gray-900 tracking-tight">{t('allowance.title')}</h1>
+        <p className="text-gray-500 mt-1">{t('allowance.subtitle')}</p>
       </header>
 
       {children.length === 0 ? (
         <div className="bg-white rounded-2xl border border-gray-100 p-8 text-center text-gray-500 shadow-sm">
-          No children found in this family.
+          {t('allowance.noChildren')}
         </div>
       ) : (
         <div className="space-y-4">
@@ -89,11 +93,11 @@ export function Wallets() {
                         <h4 className="font-semibold text-gray-900 flex items-center gap-2 text-lg">
                           {child.displayName}
                           {child.isManaged && (
-                            <Badge variant="outline" className="text-[10px] border-gray-300 text-gray-500 bg-gray-50">Managed</Badge>
+                            <Badge variant="outline" className="text-[10px] border-gray-300 text-gray-500 bg-gray-50">{t('allowance.managed')}</Badge>
                           )}
                         </h4>
                         <div className="mt-1">
-                          <span className="text-xs text-gray-500 uppercase font-bold tracking-wider mr-2">Balance</span>
+                          <span className="text-xs text-gray-500 uppercase font-bold tracking-wider mr-2">{t('allowance.balance')}</span>
                           <span className="text-xl font-extrabold text-success-600">{formatAmount(balance)}</span>
                         </div>
                       </div>
@@ -103,14 +107,14 @@ export function Wallets() {
                       onClick={() => setSelectedChildId(child.id)}
                       className="bg-primary-50 hover:bg-primary-100 text-primary-700 font-bold py-2 px-4 rounded-xl transition-colors text-sm"
                     >
-                      Manage Wallet
+                      {t('allowance.manageWallet')}
                     </button>
                   </div>
                   
                   <div className="bg-gray-50 p-4">
-                    <h5 className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-3">Recent Activity</h5>
+                    <h5 className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-3">{t('allowance.recentActivity')}</h5>
                     {recentTxs.length === 0 ? (
-                      <p className="text-sm text-gray-500">No recent transactions.</p>
+                      <p className="text-sm text-gray-500">{t('allowance.noRecent')}</p>
                     ) : (
                       <div className="space-y-2">
                         {recentTxs.map(tx => (

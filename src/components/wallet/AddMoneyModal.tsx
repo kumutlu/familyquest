@@ -1,7 +1,9 @@
 import { useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { Button } from '../ui/Button';
 import { depositToWallet, withdrawFromWallet } from '../../lib/api';
 import { useStore } from '../../store/useStore';
+import { formatPence, currencyCodeFromSymbol } from '../../i18n/format';
 
 interface AddMoneyModalProps {
   child: any;
@@ -10,6 +12,8 @@ interface AddMoneyModalProps {
 
 export function AddMoneyModal({ child, onClose }: AddMoneyModalProps) {
   const { currentUser } = useStore();
+  const { t } = useTranslation('wallet');
+  const currency = '£';
   const [amountGBP, setAmountGBP] = useState('');
   const [note, setNote] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -22,7 +26,7 @@ export function AddMoneyModal({ child, onClose }: AddMoneyModalProps) {
 
     const amountFloat = parseFloat(amountGBP);
     if (isNaN(amountFloat) || amountFloat <= 0) {
-      setError('Please enter a valid amount.');
+      setError(t('manage.invalid'));
       return;
     }
 
@@ -39,7 +43,7 @@ export function AddMoneyModal({ child, onClose }: AddMoneyModalProps) {
       onClose();
     } catch (err: any) {
       console.error(err);
-      setError(err.message || 'Failed to update wallet.');
+      setError(t('manage.generic'));
     } finally {
       setIsSubmitting(false);
     }
@@ -51,19 +55,22 @@ export function AddMoneyModal({ child, onClose }: AddMoneyModalProps) {
   // - Otherwise: "Add Money" / "Withdraw Money" (never an empty string).
   const amountFloat = parseFloat(amountGBP);
   const hasValidAmount = !isNaN(amountFloat) && amountFloat > 0;
-  const formattedAmount = hasValidAmount ? amountFloat.toFixed(2) : '';
+  const amountPence = hasValidAmount ? Math.round(amountFloat * 100) : 0;
+  const formattedAmount = hasValidAmount
+    ? formatPence(amountPence, currencyCodeFromSymbol(currency))
+    : '';
 
   const submitLabel = isSubmitting
     ? mode === 'add'
-      ? 'Adding...'
-      : 'Withdrawing...'
+      ? t('manage.adding')
+      : t('manage.withdrawing')
     : hasValidAmount
       ? mode === 'add'
-        ? `Add £${formattedAmount}`
-        : `Withdraw £${formattedAmount}`
+        ? t('manage.addAmount', { amount: formattedAmount })
+        : t('manage.withdrawAmount', { amount: formattedAmount })
       : mode === 'add'
-        ? 'Add Money'
-        : 'Withdraw Money';
+        ? t('manage.add')
+        : t('manage.withdraw');
 
   return (
     <div
@@ -82,12 +89,12 @@ export function AddMoneyModal({ child, onClose }: AddMoneyModalProps) {
             id="manage-wallet-title"
             className="text-xl font-bold text-gray-900 leading-tight break-words min-w-0"
           >
-            Manage {child.displayName}'s Wallet
+            {t('manage.title', { name: child.displayName })}
           </h3>
           <button
             type="button"
             onClick={onClose}
-            aria-label="Close"
+            aria-label={t('manage.close')}
             className="shrink-0 p-2 -mr-2 bg-gray-100 hover:bg-gray-200 rounded-full text-gray-500 transition-colors"
           >
             ✕
@@ -96,7 +103,7 @@ export function AddMoneyModal({ child, onClose }: AddMoneyModalProps) {
 
         <form onSubmit={handleSave} className="flex flex-col flex-1 min-h-0">
           <div data-testid="manage-wallet-content" className="flex-1 overflow-y-auto p-6 space-y-4">
-            <div role="tablist" aria-label="Wallet action" className="flex bg-gray-100 p-1 rounded-lg">
+            <div role="tablist" aria-label={t('manage.tabsAria')} className="flex bg-gray-100 p-1 rounded-lg">
               <button
                 type="button"
                 role="tab"
@@ -108,7 +115,7 @@ export function AddMoneyModal({ child, onClose }: AddMoneyModalProps) {
                     : 'text-gray-500 hover:text-gray-700 border-transparent'
                 }`}
               >
-                Add Money
+                {t('manage.addTab')}
               </button>
               <button
                 type="button"
@@ -121,7 +128,7 @@ export function AddMoneyModal({ child, onClose }: AddMoneyModalProps) {
                     : 'text-gray-500 hover:text-gray-700 border-transparent'
                 }`}
               >
-                Withdraw
+                {t('manage.withdrawTab')}
               </button>
             </div>
 
@@ -133,10 +140,10 @@ export function AddMoneyModal({ child, onClose }: AddMoneyModalProps) {
 
             <div>
               <label htmlFor="manage-wallet-amount" className="block text-sm font-medium text-gray-700 mb-1">
-                Amount (£)
+                {t('manage.amount', { currency })}
               </label>
               <div className="relative">
-                <span className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-500 font-bold">£</span>
+                <span className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-500 font-bold">{currency}</span>
                 <input
                   id="manage-wallet-amount"
                   type="number"
@@ -153,7 +160,7 @@ export function AddMoneyModal({ child, onClose }: AddMoneyModalProps) {
 
             <div>
               <label htmlFor="manage-wallet-note" className="block text-sm font-medium text-gray-700 mb-1">
-                Note (Optional)
+                {t('manage.noteOptional')}
               </label>
               <input
                 id="manage-wallet-note"
@@ -161,7 +168,7 @@ export function AddMoneyModal({ child, onClose }: AddMoneyModalProps) {
                 value={note}
                 onChange={e => setNote(e.target.value)}
                 className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-primary-500 focus:border-transparent outline-none transition-all"
-                placeholder="e.g. Pocket money"
+                placeholder={t('manage.notePlaceholder')}
               />
             </div>
           </div>
@@ -171,7 +178,7 @@ export function AddMoneyModal({ child, onClose }: AddMoneyModalProps) {
             className="shrink-0 px-6 pt-4 pb-[max(1rem,env(safe-area-inset-bottom))] border-t border-gray-100 bg-white flex gap-3"
           >
             <Button type="button" variant="outline" fullWidth onClick={onClose}>
-              Cancel
+              {t('manage.cancel')}
             </Button>
             <Button
               type="submit"

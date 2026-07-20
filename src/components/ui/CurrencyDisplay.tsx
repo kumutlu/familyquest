@@ -1,5 +1,6 @@
 import { useStore } from '../../store/useStore';
 import { cn } from '../../lib/utils';
+import { formatPence, currencyCodeFromSymbol } from '../../i18n/format';
 
 interface CurrencyDisplayProps {
   amountPence: number;
@@ -12,10 +13,10 @@ export function CurrencyDisplay({ amountPence, className, forceColor = true }: C
   const currencySymbol = familyData?.currency || '£';
 
   const isNegative = amountPence < 0;
-  const absoluteAmount = Math.abs(amountPence) / 100;
 
-  // Format exactly like: -£5.00 or £5.00
-  const formatted = `${isNegative ? '-' : ''}${currencySymbol}${absoluteAmount.toFixed(2)}`;
+  // Locale-aware currency formatting via Intl (no manual string building).
+  // Amounts are stored in pence; formatPence converts to major units.
+  const formatted = formatPence(amountPence, currencyCodeFromSymbol(currencySymbol));
 
   const finalClassName = cn(
     className,

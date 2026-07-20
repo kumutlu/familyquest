@@ -7,7 +7,9 @@ import {
   Clock,
   type LucideIcon,
 } from 'lucide-react';
+import type { TFunction } from 'i18next';
 import { isPendingTransferStatus } from './requestStatus';
+import { formatDate } from '../i18n/format';
 
 // ---------------------------------------------------------------------------
 // Signed amount + period helpers (canonical ledger maths)
@@ -123,12 +125,16 @@ export interface PresentationOptions {
   nameResolver?: (id: string) => string | undefined;
   // The viewing child's id, used to decide direction for the legacy `transfer` type.
   currentUserId?: string;
+  // Optional translation function. When provided, user-facing labels are
+  // localized; when omitted the original English strings are returned so the
+  // helper stays usable outside React (tests, server contexts).
+  t?: TFunction<'wallet'>;
 }
 
 // Build a display model for a single ledger transaction. Pure + safe: missing fields
 // never throw, they degrade to neutral labels.
 export function transactionPresentation(tx: any, opts: PresentationOptions = {}): TxPresentation {
-  const { nameResolver, currentUserId } = opts;
+  const { nameResolver, currentUserId, t } = opts;
   const amount = signedTransactionAmount(tx);
   const status = tx?.status;
   const statusLabel = status && status !== 'completed' ? capitalize(String(status)) : null;
@@ -139,56 +145,68 @@ export function transactionPresentation(tx: any, opts: PresentationOptions = {})
   let icon: LucideIcon = ArrowRightLeft;
   let iconBg = 'bg-gray-100 text-gray-600';
 
+  const parent = t ? t('tx.parent') : 'Parent';
+  const anotherChild = t ? t('tx.anotherChild') : 'another child';
+
   switch (tx?.type) {
     case 'deposit': {
-      const actor = nameResolver?.(tx?.parentRef) || 'Parent';
-      title = tx?.description || tx?.note || 'Money added';
-      subtitle = `From ${actor}`;
+      const actor = nameResolver?.(tx?.parentRef) || parent;
+      title = tx?.description || tx?.note || (t ? t('tx.deposit') : 'Money added');
+      subtitle = t ? t('tx.depositFrom', { actor }) : `From ${actor}`;
       icon = ArrowDownRight;
       iconBg = 'bg-success-50 text-success-600';
       break;
     }
     case 'withdrawal': {
-      const actor = nameResolver?.(tx?.parentRef) || 'Parent';
-      title = tx?.description || tx?.note || 'Money withdrawn';
-      subtitle = `By ${actor}`;
+      const actor = nameResolver?.(tx?.parentRef) || parent;
+      title = tx?.description || tx?.note || (t ? t('tx.withdrawn') : 'Money withdrawn');
+      subtitle = t ? t('tx.withdrawnBy', { actor }) : `By ${actor}`;
       icon = ArrowUpRight;
       iconBg = 'bg-gray-100 text-gray-600';
       break;
     }
     case 'transfer_in': {
-      const name = nameResolver?.(tx?.counterpartyChildId) || 'another child';
-      title = tx?.description || 'Received';
-      subtitle = status === 'completed' ? 'Approved' : statusLabel || `From ${name}`;
+      const name = nameResolver?.(tx?.counterpartyChildId) || anotherChild;
+      title = tx?.description || (t ? t('tx.received') : 'Received');
+      subtitle = status === 'completed'
+        ? (t ? t('tx.approved') : 'Approved')
+        : statusLabel || (t ? t('tx.from', { name }) : `From ${name}`);
       icon = ArrowDownRight;
       iconBg = 'bg-success-50 text-success-600';
       break;
     }
     case 'transfer_out': {
-      const name = nameResolver?.(tx?.counterpartyChildId) || 'another child';
-      title = tx?.description || 'Sent';
-      subtitle = status === 'completed' ? 'Approved' : statusLabel || `To ${name}`;
+      const name = nameResolver?.(tx?.counterpartyChildId) || anotherChild;
+      title = tx?.description || (t ? t('tx.sent') : 'Sent');
+      subtitle = status === 'completed'
+        ? (t ? t('tx.approved') : 'Approved')
+        : statusLabel || (t ? t('tx.to', { name }) : `To ${name}`);
       icon = ArrowUpRight;
       iconBg = 'bg-gray-100 text-gray-600';
       break;
     }
     case 'request_payment': {
-      title = tx?.note || 'Money received';
-      subtitle = status === 'completed' ? 'Request approved' : statusLabel || 'Request';
+      title = tx?.note || (t ? t('tx.moneyReceived') : 'Money received');
+      subtitle = status === 'completed'
+        ? (t ? t('tx.requestApproved') : 'Request approved')
+        : statusLabel || (t ? t('tx.request') : 'Request');
       icon = ArrowDownRight;
       iconBg = 'bg-success-50 text-success-600';
       break;
     }
     case 'financial_penalty': {
-      title = tx?.reason ? `Penalty: ${tx.reason}` : 'Penalty';
-      subtitle = `By ${tx?.createdByName || 'Parent'}`;
+      const actor = tx?.createdByName || parent;
+      title = tx?.reason
+        ? (t ? t('tx.penaltyReason', { reason: tx.reason }) : `Penalty: ${tx.reason}`)
+        : (t ? t('tx.penalty') : 'Penalty');
+      subtitle = t ? t('tx.by', { actor }) : `By ${actor}`;
       icon = Ban;
       iconBg = 'bg-danger-50 text-danger-600';
       break;
     }
     case 'petbox_donation': {
-      title = tx?.note || 'Pet Box donation';
-      subtitle = 'Pet Box';
+      title = tx?.note || (t ? t('tx.petBoxDonation') : 'Pet Box donation');
+      subtitle = t ? t('tx.petBox') : 'Pet Box';
       icon = PiggyBank;
       iconBg = 'bg-gray-100 text-gray-600';
       break;
@@ -197,14 +215,16 @@ export function transactionPresentation(tx: any, opts: PresentationOptions = {})
       // Legacy parent-initiated direct transfer. Direction depends on the viewing child.
       const isRecipient = currentUserId ? tx?.childId === currentUserId : amount > 0;
       direction = isRecipient ? 'in' : 'out';
-      title = tx?.description || (isRecipient ? 'Received' : 'Sent');
-      subtitle = status === 'completed' ? 'Approved' : statusLabel || '';
+      title = tx?.description || (isRecipient ? (t ? t('tx.received') : 'Received') : (t ? t('tx.sent') : 'Sent'));
+      subtitle = status === 'completed'
+        ? (t ? t('tx.approved') : 'Approved')
+        : statusLabel || '';
       icon = ArrowRightLeft;
       iconBg = direction === 'in' ? 'bg-success-50 text-success-600' : 'bg-gray-100 text-gray-600';
       break;
     }
     default: {
-      title = title || tx?.type || 'Transaction';
+      title = title || tx?.type || (t ? t('tx.transaction') : 'Transaction');
       subtitle = statusLabel || '';
     }
   }
@@ -213,7 +233,7 @@ export function transactionPresentation(tx: any, opts: PresentationOptions = {})
 }
 
 // Short, human date label for a transaction row (e.g. "15 Jul" or "14:32" for today).
-export function transactionRowDate(tx: any, now: Date = new Date()): string {
+export function transactionRowDate(tx: any, now: Date = new Date(), t?: TFunction<'wallet'>): string {
   const date = transactionTimestamp(tx);
   if (!date) return '';
   const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
@@ -221,10 +241,10 @@ export function transactionRowDate(tx: any, now: Date = new Date()): string {
   const dayMs = 86_400_000;
   const diffDays = Math.round((startOfToday - startOfTx) / dayMs);
   if (diffDays <= 0) {
-    return date.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' });
+    return formatDate(date, undefined, { hour: '2-digit', minute: '2-digit' });
   }
-  if (diffDays === 1) return 'Yesterday';
-  return date.toLocaleDateString(undefined, { day: 'numeric', month: 'short' });
+  if (diffDays === 1) return t ? t('ledger.groups.yesterday') : 'Yesterday';
+  return formatDate(date, undefined, { day: 'numeric', month: 'short' });
 }
 
 // ---------------------------------------------------------------------------
@@ -236,11 +256,23 @@ export interface TxGroup {
   items: any[];
 }
 
-const GROUP_ORDER = ['Today', 'Yesterday', 'Earlier this week', 'Older'];
+const GROUP_KEYS = ['today', 'yesterday', 'earlierThisWeek', 'older'] as const;
+type GroupKey = (typeof GROUP_KEYS)[number];
+
+const GROUP_FALLBACK: Record<GroupKey, string> = {
+  today: 'Today',
+  yesterday: 'Yesterday',
+  earlierThisWeek: 'Earlier this week',
+  older: 'Older',
+};
+
+function groupLabel(key: GroupKey, t?: TFunction<'wallet'>): string {
+  return t ? t(`ledger.groups.${key}`) : GROUP_FALLBACK[key];
+}
 
 // Group transactions into banking-statement buckets, newest first. Transactions
 // without a parseable date are placed in "Older" so they are never silently dropped.
-export function groupTransactionsByDate(transactions: any[], now: Date = new Date()): TxGroup[] {
+export function groupTransactionsByDate(transactions: any[], now: Date = new Date(), t?: TFunction<'wallet'>): TxGroup[] {
   const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
   const dayMs = 86_400_000;
   const buckets: Record<string, any[]> = {};
@@ -248,27 +280,27 @@ export function groupTransactionsByDate(transactions: any[], now: Date = new Dat
 
   for (const tx of transactions || []) {
     const date = transactionTimestamp(tx);
-    let label: string;
+    let key: GroupKey;
     if (!date) {
-      label = 'Older';
+      key = 'older';
     } else {
       const startOfTx = new Date(date.getFullYear(), date.getMonth(), date.getDate()).getTime();
       const diffDays = Math.floor((startOfToday - startOfTx) / dayMs);
-      if (diffDays <= 0) label = 'Today';
-      else if (diffDays === 1) label = 'Yesterday';
-      else if (diffDays <= 7) label = 'Earlier this week';
-      else label = 'Older';
+      if (diffDays <= 0) key = 'today';
+      else if (diffDays === 1) key = 'yesterday';
+      else if (diffDays <= 7) key = 'earlierThisWeek';
+      else key = 'older';
     }
 
-    if (!buckets[label]) {
-      buckets[label] = [];
-      seen.push(label);
+    if (!buckets[key]) {
+      buckets[key] = [];
+      seen.push(key);
     }
-    buckets[label].push(tx);
+    buckets[key].push(tx);
   }
 
-  seen.sort((a, b) => GROUP_ORDER.indexOf(a) - GROUP_ORDER.indexOf(b));
-  return seen.map(label => ({ label, items: buckets[label] }));
+  seen.sort((a, b) => GROUP_KEYS.indexOf(a as GroupKey) - GROUP_KEYS.indexOf(b as GroupKey));
+  return seen.map(key => ({ label: groupLabel(key as GroupKey, t), items: buckets[key] }));
 }
 
 // Sort a list of transactions newest-first (defensive; the store already normalises).

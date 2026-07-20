@@ -3,15 +3,16 @@ import { Progress } from '../ui/Progress';
 import { Badge } from '../ui/Badge';
 import { CurrencyDisplay } from '../ui/CurrencyDisplay';
 import { useStore } from '../../store/useStore';
+import { useTranslation } from 'react-i18next';
 import { normalizeGoalDoc, type Goal, type GoalStatus } from '../../lib/goalContracts';
 import { Target, User, Users, Trash2 } from 'lucide-react';
 
-const STATUS_LABEL: Record<GoalStatus, string> = {
-  active: 'Active',
-  reached: 'Reached 🎉',
-  completed_purchased: 'Purchased',
-  completed_returned: 'Returned',
-  cancelled: 'Cancelled',
+const STATUS_KEY: Record<GoalStatus, 'active' | 'reached' | 'purchased' | 'returned' | 'cancelled'> = {
+  active: 'active',
+  reached: 'reached',
+  completed_purchased: 'purchased',
+  completed_returned: 'returned',
+  cancelled: 'cancelled',
 };
 
 const STATUS_VARIANT: Record<GoalStatus, 'primary' | 'success' | 'warning' | 'danger' | 'default'> = {
@@ -23,6 +24,7 @@ const STATUS_VARIANT: Record<GoalStatus, 'primary' | 'success' | 'warning' | 'da
 };
 
 export function GoalCard({ goal, onClick, onDelete }: { goal: any; onClick?: () => void; onDelete?: () => void }) {
+  const { t } = useTranslation('goals');
   const { familyMembers } = useStore();
   const g: Goal = normalizeGoalDoc(goal);
   const pct = g.targetAmountPence > 0 ? Math.min(100, (g.currentAmountPence / g.targetAmountPence) * 100) : 0;
@@ -54,16 +56,16 @@ export function GoalCard({ goal, onClick, onDelete }: { goal: any; onClick?: () 
               <h3 className="font-bold text-gray-900 truncate">{g.title}</h3>
               <p className="text-xs text-gray-500 flex items-center gap-1 mt-0.5">
                 {g.kind === 'family' ? <Users size={12} /> : <User size={12} />}
-                {g.kind === 'family' ? 'Family goal' : child?.displayName ?? 'Child goal'}
+                {g.kind === 'family' ? t('card.familyGoal') : child?.displayName ?? t('card.childGoal')}
               </p>
             </div>
           </div>
-          <Badge variant={STATUS_VARIANT[g.status]}>{STATUS_LABEL[g.status]}</Badge>
+          <Badge variant={STATUS_VARIANT[g.status]}>{t(`status.${STATUS_KEY[g.status]}`)}</Badge>
           {isCancelled && onDelete && (
             <button
               type="button"
-              aria-label="Delete cancelled goal"
-              title="Delete cancelled goal"
+              aria-label={t('card.deleteCancelled')}
+              title={t('card.deleteCancelled')}
               onClick={handleDelete}
               className="p-1.5 rounded-lg text-gray-400 hover:text-danger-600 hover:bg-danger-50 transition-colors"
             >
@@ -74,13 +76,13 @@ export function GoalCard({ goal, onClick, onDelete }: { goal: any; onClick?: () 
 
         <div className="flex items-end justify-between mb-2">
           <div>
-            <p className="text-xs text-gray-500 font-medium uppercase">Saved</p>
+            <p className="text-xs text-gray-500 font-medium uppercase">{t('card.saved')}</p>
             <p className="text-xl font-extrabold text-gray-900">
               <CurrencyDisplay amountPence={g.currentAmountPence} forceColor={false} />
             </p>
           </div>
           <div className="text-right">
-            <p className="text-xs text-gray-500 font-medium uppercase">Target</p>
+            <p className="text-xs text-gray-500 font-medium uppercase">{t('card.target')}</p>
             <p className="font-bold text-gray-700">
               <CurrencyDisplay amountPence={g.targetAmountPence} forceColor={false} />
             </p>
@@ -91,7 +93,7 @@ export function GoalCard({ goal, onClick, onDelete }: { goal: any; onClick?: () 
 
         {g.matching && g.matching.mode !== 'none' && (
           <p className="text-[11px] text-primary-600 font-medium mt-2 flex items-center gap-1">
-            <Target size={12} /> Matching {g.matching.mode === 'auto' ? 'auto' : 'available'}
+            <Target size={12} /> {g.matching.mode === 'auto' ? t('card.matchingAuto') : t('card.matchingAvailable')}
           </p>
         )}
       </CardContent>

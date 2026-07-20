@@ -1,9 +1,11 @@
 import { useEffect, useRef } from 'react';
+import { useTranslation } from 'react-i18next';
 import { CurrencyDisplay } from '../ui/CurrencyDisplay';
 import { ArrowDownRight, ArrowUpRight, ArrowRightLeft } from 'lucide-react';
 import { HistoryActionControl } from '../reversals/HistoryActionControl';
 import type { ReversalSourceKind } from '../../lib/reversalApi';
-import { signedTransactionAmount } from '../../lib/walletPresentation';
+import { signedTransactionAmount, transactionPresentation } from '../../lib/walletPresentation';
+import { formatDate } from '../../i18n/format';
 
 interface TransactionDetailsModalProps {
   isOpen: boolean;
@@ -18,7 +20,7 @@ function formatDateTime(value: any): string {
   if (typeof value?.toMillis === 'function') date = new Date(value.toMillis());
   else if (typeof value?.seconds === 'number') date = new Date(value.seconds * 1000);
   else if (value instanceof Date) date = value;
-  return date ? date.toLocaleString() : '';
+  return date ? formatDate(date, undefined, { dateStyle: 'medium', timeStyle: 'short' }) : '';
 }
 
 export function TransactionDetailsModal({
@@ -27,6 +29,7 @@ export function TransactionDetailsModal({
   transaction,
   nameResolver,
 }: TransactionDetailsModalProps) {
+  const { t } = useTranslation('wallet');
   const previouslyFocused = useRef<HTMLElement | null>(null);
 
   // Capture the trigger element when the sheet opens and restore focus on close.
@@ -50,6 +53,7 @@ export function TransactionDetailsModal({
     transaction.type === 'transfer_in' ||
     transaction.type === 'transfer_out';
   const txAmount = Math.abs(amount);
+  const txTitle = transactionPresentation(transaction, { t, nameResolver }).title;
 
   const date = formatDateTime(transaction.timestamp ?? transaction.createdAt);
   const sourceKind: ReversalSourceKind =
@@ -62,33 +66,36 @@ export function TransactionDetailsModal({
           : 'wallet_transaction';
 
   const resolve = (id?: string) => (id ? nameResolver?.(id) : undefined);
+  const parent = t('tx.parent');
+  const anotherChild = t('tx.anotherChild');
+  const petBox = t('tx.petBox');
 
   // Build a from/to line from available fields (no raw IDs leaked).
   let fromTo: string | null = null;
   if (transaction.type === 'deposit') {
-    fromTo = `From ${resolve(transaction.parentRef) || 'Parent'}`;
+    fromTo = t('tx.from', { name: resolve(transaction.parentRef) || parent });
   } else if (transaction.type === 'withdrawal') {
-    fromTo = `By ${resolve(transaction.parentRef) || 'Parent'}`;
+    fromTo = t('tx.by', { actor: resolve(transaction.parentRef) || parent });
   } else if (transaction.type === 'transfer_out') {
-    fromTo = `To ${resolve(transaction.counterpartyChildId) || 'another child'}`;
+    fromTo = t('tx.to', { name: resolve(transaction.counterpartyChildId) || anotherChild });
   } else if (transaction.type === 'transfer_in') {
-    fromTo = `From ${resolve(transaction.counterpartyChildId) || 'another child'}`;
+    fromTo = t('tx.from', { name: resolve(transaction.counterpartyChildId) || anotherChild });
   } else if (transaction.type === 'request_payment') {
-    fromTo = `From ${resolve(transaction.actorId) || 'Parent'}`;
+    fromTo = t('tx.from', { name: resolve(transaction.actorId) || parent });
   } else if (transaction.type === 'petbox_donation') {
-    fromTo = 'To Pet Box';
+    fromTo = t('tx.to', { name: petBox });
   }
 
   const actor =
     transaction.createdByName ||
     transaction.reviewedByName ||
-    (transaction.parentRef ? resolve(transaction.parentRef) || 'Parent' : null);
+    (transaction.parentRef ? resolve(transaction.parentRef) || parent : null);
 
   const detailRows: { label: string; value: string }[] = [];
-  if (fromTo) detailRows.push({ label: 'From / To', value: fromTo });
-  if (actor) detailRows.push({ label: 'Actor', value: actor });
+  if (fromTo) detailRows.push({ label: t('details.fromTo'), value: fromTo });
+  if (actor) detailRows.push({ label: t('details.actor'), value: actor });
   if (transaction.note || transaction.message) {
-    detailRows.push({ label: 'Note', value: transaction.note || transaction.message });
+    detailRows.push({ label: t('details.note'), value: transaction.note || transaction.message });
   }
 
   return (
@@ -108,12 +115,12 @@ export function TransactionDetailsModal({
           style={{ paddingTop: 'calc(1rem + env(safe-area-inset-top))' }}
         >
           <h3 id="transaction-details-title" className="text-xl font-bold text-gray-900">
-            Transaction Details
+            {t('details.title')}
           </h3>
           <button
             type="button"
             onClick={onClose}
-            aria-label="Close"
+            aria-label={t('details.close')}
             className="p-2 -mr-2 bg-gray-100 hover:bg-gray-200 rounded-full text-gray-500 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-400"
           >
             ✕
@@ -144,20 +151,20 @@ export function TransactionDetailsModal({
               <CurrencyDisplay amountPence={txAmount} forceColor={false} />
             </h2>
             <p className="text-gray-500 font-medium mt-1 uppercase tracking-wider text-xs">
-              {String(transaction.type || 'transaction').replace('_', ' ')}
+              {txTitle}
             </p>
           </div>
 
           <div className="bg-gray-50 rounded-2xl p-4 space-y-3">
             <div className="flex justify-between">
-              <span className="text-gray-500 text-sm">Status</span>
+              <span className="text-gray-500 text-sm">{t('details.status')}</span>
               <span className="font-bold text-gray-900 text-sm capitalize">
-                {transaction.status || 'Completed'}
+                {transaction.status || t('details.completed')}
               </span>
             </div>
             {date && (
               <div className="flex justify-between">
-                <span className="text-gray-500 text-sm">Date</span>
+                <span className="text-gray-500 text-sm">{t('details.date')}</span>
                 <span className="font-medium text-gray-900 text-sm text-right">{date}</span>
               </div>
             )}
@@ -168,7 +175,7 @@ export function TransactionDetailsModal({
               </div>
             ))}
             <div className="flex justify-between border-t border-gray-200 pt-3 mt-3">
-              <span className="text-gray-400 text-xs">Reference</span>
+              <span className="text-gray-400 text-xs">{t('details.reference')}</span>
               <span className="font-mono text-gray-400 text-xs">
                 {String(transaction.id).slice(-6).toUpperCase()}
               </span>

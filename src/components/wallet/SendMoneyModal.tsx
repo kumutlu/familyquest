@@ -1,10 +1,13 @@
 import { useEffect, useRef, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { Button } from '../ui/Button';
 import { Avatar } from '../ui/Avatar';
 import { createTransferRequest } from '../../lib/api';
 import { useStore } from '../../store/useStore';
 import { isChildRole } from '../../lib/roles';
 import { Send } from 'lucide-react';
+import { formatPence, currencyCodeFromSymbol } from '../../i18n/format';
+import type { TFunction } from 'i18next';
 
 interface SendMoneyModalProps {
   onClose: () => void;
@@ -18,31 +21,31 @@ const FOCUSABLE_SELECTOR =
  * Map raw API / Firebase errors to friendly, non-technical messages.
  * Raw Firebase error text must never reach the UI.
  */
-function friendlyError(err: any): string {
+function friendlyError(err: any, t: TFunction<'wallet'>): string {
   const code = err?.code;
   const message = typeof err?.message === 'string' ? err.message : '';
   const lowered = message.toLowerCase();
 
   if (code === 'WALLET_NOT_FOUND') {
-    return 'We could not find your wallet. Please refresh and try again.';
+    return t('send.walletNotFound');
   }
   if (lowered.includes('insufficient')) {
-    return 'You do not have enough money for this transfer.';
+    return t('send.notEnough');
   }
   if (lowered.includes('not authenticated') || code === 'unauthenticated') {
-    return 'You have been signed out. Please sign in again.';
+    return t('send.signedOut');
   }
   if (lowered.includes('recipient must differ') || lowered.includes('sender and recipient must differ')) {
-    return 'You cannot send money to yourself.';
+    return t('send.selfTransfer');
   }
   if (lowered.includes('same family')) {
-    return 'You can only send money to another child in your family.';
+    return t('send.sameFamily');
   }
   if (lowered.includes('both participants must be children')) {
-    return 'Transfers can only be sent between children.';
+    return t('send.childrenOnly');
   }
   // Never surface raw Firebase error text.
-  return 'Something went wrong. Please try again.';
+  return t('send.generic');
 }
 
 export function SendMoneyModal({ onClose, onSuccess }: SendMoneyModalProps) {
@@ -54,6 +57,9 @@ export function SendMoneyModal({ onClose, onSuccess }: SendMoneyModalProps) {
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState(false);
   const [submittedAmountPence, setSubmittedAmountPence] = useState(0);
+
+  const { t } = useTranslation('wallet');
+  const currency = '£';
 
   const dialogRef = useRef<HTMLDivElement>(null);
   const previouslyFocused = useRef<HTMLElement | null>(null);
@@ -132,21 +138,21 @@ export function SendMoneyModal({ onClose, onSuccess }: SendMoneyModalProps) {
   // Penny-based validation. Returns integer pence or a friendly error.
   const validateAmount = (raw: string): { pence: number; error: string | null } => {
     const trimmed = (raw ?? '').trim();
-    if (trimmed === '') return { pence: 0, error: 'Please enter an amount.' };
+    if (trimmed === '') return { pence: 0, error: t('send.enterAmount') };
     const value = Number(trimmed);
     if (!Number.isFinite(value) || Number.isNaN(value)) {
-      return { pence: 0, error: 'Please enter a valid amount.' };
+      return { pence: 0, error: t('send.validAmount') };
     }
     if (value <= 0) {
-      return { pence: 0, error: 'Please enter an amount greater than zero.' };
+      return { pence: 0, error: t('send.greaterThanZero') };
     }
     // Reject more than two decimal places.
     const pence = Math.round(value * 100);
     if (Math.abs(value * 100 - pence) > 1e-6) {
-      return { pence: 0, error: 'Amount can have at most two decimal places.' };
+      return { pence: 0, error: t('send.twoDecimals') };
     }
     if (pence > canonicalBalance) {
-      return { pence: 0, error: 'You do not have enough money for this transfer.' };
+      return { pence: 0, error: t('send.notEnough') };
     }
     return { pence, error: null };
   };
@@ -157,7 +163,7 @@ export function SendMoneyModal({ onClose, onSuccess }: SendMoneyModalProps) {
     if (!currentUser || isSubmitting) return;
 
     if (!recipientId) {
-      setError('Please choose who to send money to.');
+      setError(t('send.chooseRecipient'));
       return;
     }
     const { pence, error: amountError } = validateAmount(amountGBP);
@@ -179,13 +185,13 @@ export function SendMoneyModal({ onClose, onSuccess }: SendMoneyModalProps) {
       }, 1400);
     } catch (err: any) {
       console.error(err);
-      setError(friendlyError(err));
+      setError(friendlyError(err, t));
     } finally {
       setIsSubmitting(false);
     }
   };
 
-  const submitLabel = isSubmitting ? 'Sending...' : 'Send Request';
+  const submitLabel = isSubmitting ? t('send.sending') : t('send.submit');
 
   return (
     <div
@@ -210,12 +216,12 @@ export function SendMoneyModal({ onClose, onSuccess }: SendMoneyModalProps) {
             id="send-money-title"
             className="text-xl font-bold text-gray-900 leading-tight break-words min-w-0"
           >
-            Send Money
+            {t('send.title')}
           </h3>
           <button
             type="button"
             onClick={onClose}
-            aria-label="Close"
+            aria-label={t('send.close')}
             className="shrink-0 p-2 -mr-2 bg-gray-100 hover:bg-gray-200 rounded-full text-gray-500 transition-colors"
           >
             ✕
@@ -228,12 +234,14 @@ export function SendMoneyModal({ onClose, onSuccess }: SendMoneyModalProps) {
               <div className="mx-auto w-12 h-12 rounded-full bg-success-50 text-success-600 flex items-center justify-center mb-3">
                 <Send size={22} />
               </div>
-              <p className="font-semibold text-gray-900">Request sent!</p>
+              <p className="font-semibold text-gray-900">{t('send.success')}</p>
               <p className="text-sm text-gray-500 mt-1">
                 {recipient
-                  ? `£${(submittedAmountPence / 100).toFixed(2)} to ${recipient.displayName}. `
-                  : ''}
-                Awaiting parent approval.
+                  ? t('send.successDetail', {
+                      amount: formatPence(submittedAmountPence, currencyCodeFromSymbol(currency)),
+                      name: recipient.displayName,
+                    })
+                  : t('send.successDetailNoName')}
               </p>
             </div>
           </div>
@@ -249,7 +257,7 @@ export function SendMoneyModal({ onClose, onSuccess }: SendMoneyModalProps) {
 
               <div>
                 <label htmlFor="send-money-recipient" className="block text-sm font-medium text-gray-700 mb-1">
-                  To
+                  {t('send.to')}
                 </label>
                 <select
                   id="send-money-recipient"
@@ -258,28 +266,28 @@ export function SendMoneyModal({ onClose, onSuccess }: SendMoneyModalProps) {
                   onChange={e => setRecipientId(e.target.value)}
                   className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-primary-500 focus:border-transparent outline-none transition-all"
                 >
-                  <option value="" disabled>Select a sibling…</option>
+                  <option value="" disabled>{t('send.selectSibling')}</option>
                   {recipients.map(r => (
                     <option key={r.id} value={r.id}>{r.displayName}</option>
                   ))}
                 </select>
                 {recipients.length === 0 && (
-                  <p className="text-xs text-gray-400 mt-1">No other children in this family yet.</p>
+                  <p className="text-xs text-gray-400 mt-1">{t('send.noSiblings')}</p>
                 )}
                 {recipient && (
                   <div className="mt-2 flex items-center gap-2 text-sm text-gray-600">
                     <Avatar src={recipient.avatarUrl} fallback={(recipient.displayName || '?')[0]} size="sm" />
-                    <span>Sending to {recipient.displayName}</span>
+                    <span>{t('send.sendingTo', { name: recipient.displayName })}</span>
                   </div>
                 )}
               </div>
 
               <div>
                 <label htmlFor="send-money-amount" className="block text-sm font-medium text-gray-700 mb-1">
-                  Amount (£)
+                  {t('send.amount', { currency })}
                 </label>
                 <div className="relative">
-                  <span className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-500 font-bold">£</span>
+                  <span className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-500 font-bold">{currency}</span>
                   <input
                     id="send-money-amount"
                     type="number"
@@ -294,13 +302,13 @@ export function SendMoneyModal({ onClose, onSuccess }: SendMoneyModalProps) {
                   />
                 </div>
                 <p className="text-xs text-gray-400 mt-1">
-                  Your balance stays the same until a parent approves.
+                  {t('send.balanceStays')}
                 </p>
               </div>
 
               <div>
                 <label htmlFor="send-money-note" className="block text-sm font-medium text-gray-700 mb-1">
-                  Note (Optional)
+                  {t('send.noteOptional')}
                 </label>
                 <input
                   id="send-money-note"
@@ -308,7 +316,7 @@ export function SendMoneyModal({ onClose, onSuccess }: SendMoneyModalProps) {
                   value={note}
                   onChange={e => setNote(e.target.value)}
                   className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-primary-500 focus:border-transparent outline-none transition-all"
-                  placeholder="e.g. Thanks for the book!"
+                  placeholder={t('send.notePlaceholder')}
                 />
               </div>
             </div>
@@ -320,7 +328,7 @@ export function SendMoneyModal({ onClose, onSuccess }: SendMoneyModalProps) {
               className="shrink-0 sticky bottom-0 px-6 pt-4 border-t border-gray-100 bg-white flex gap-3"
             >
               <Button type="button" variant="outline" fullWidth onClick={onClose}>
-                Cancel
+                {t('send.cancel')}
               </Button>
               <Button
                 type="submit"
