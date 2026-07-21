@@ -5,6 +5,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '../ui/Card';
 import { Progress } from '../ui/Progress';
 import { useStore } from '../../store/useStore';
 import { isTaskDoneThisPeriod } from '../../lib/taskRecurrence';
+import { useRecurrenceClock } from '../../lib/useRecurrenceClock';
 import { ListTodo } from 'lucide-react';
 
 /**
@@ -19,6 +20,9 @@ export function TaskSummaryCard() {
   const { t } = useTranslation('dashboard');
   const navigate = useNavigate();
   const { currentUser, tasks, taskCompletions } = useStore();
+  // Open-session clock: re-derives completion counts when the day/week
+  // boundary crosses while the dashboard stays open.
+  const now = useRecurrenceClock();
 
   const { activeCount, dueTodayCount, completedCount, totalCount, pct } = useMemo(() => {
     const uid = currentUser?.id;
@@ -42,7 +46,7 @@ export function TaskSummaryCard() {
     // Count active tasks the child has completed/submitted in the current
     // recurrence period (resets for recurring schedules, permanent for one-time).
     const completed = active.filter(t =>
-      isTaskDoneThisPeriod(t, taskCompletions || [], new Date(), uid),
+      isTaskDoneThisPeriod(t, taskCompletions || [], now, uid),
     ).length;
 
     const total = active.length;
@@ -55,7 +59,7 @@ export function TaskSummaryCard() {
       totalCount: total,
       pct: progress,
     };
-  }, [currentUser, tasks, taskCompletions]);
+  }, [currentUser, tasks, taskCompletions, now]);
 
   return (
     <Card

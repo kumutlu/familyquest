@@ -67,6 +67,32 @@ export function localWeekKey(date: Date): string {
 }
 
 /**
+ * Monday 00:00:00 (local wall-clock) of the week containing `date`.
+ * DST-safe: built from calendar fields with `setDate` arithmetic, never from
+ * millisecond math that would drift across a DST transition.
+ */
+export function weekStart(date: Date): Date {
+  const d = new Date(date.getFullYear(), date.getMonth(), date.getDate());
+  const dow = d.getDay(); // 0 = Sunday .. 6 = Saturday
+  const diffToMonday = (dow + 6) % 7; // days since Monday
+  d.setDate(d.getDate() - diffToMonday);
+  d.setHours(0, 0, 0, 0);
+  return d;
+}
+
+/**
+ * True when `date` falls within the local Monday–Sunday week that contains
+ * `now`. Shared with recurring weekly tasks (same Monday-based week identity)
+ * so the weekly scoreboard and weekly recurrence always agree on "this week".
+ */
+export function isInCurrentWeek(date: Date, now: Date = new Date()): boolean {
+  const weekStartNow = weekStart(now);
+  const nextWeekStart = new Date(weekStartNow);
+  nextWeekStart.setDate(nextWeekStart.getDate() + 7);
+  return date.getTime() >= weekStartNow.getTime() && date.getTime() < nextWeekStart.getTime();
+}
+
+/**
  * Period key for a schedule type at a given local date.
  *  - daily / weekdays / weekends: local YYYY-MM-DD
  *  - weekly: "week:" + Monday's date key

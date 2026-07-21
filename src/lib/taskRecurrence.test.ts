@@ -8,6 +8,8 @@ import {
   completionPeriodKey,
   deriveTaskAvailability,
   isTaskDoneThisPeriod,
+  weekStart,
+  isInCurrentWeek,
   type CompletionRecordLike,
 } from './taskRecurrence';
 
@@ -388,5 +390,41 @@ describe('completionPeriodKey', () => {
   });
   it('derives from completedAt when missing', () => {
     expect(completionPeriodKey({ completedAt: new Date(2026, 6, 20) }, 'daily')).toBe('2026-07-20');
+  });
+});
+
+describe('weekStart and isInCurrentWeek (shared with weekly scoreboard)', () => {
+  it('weekStart returns Monday 00:00:00 of the week containing the date', () => {
+    // Sunday 2026-07-26 -> Monday 2026-07-20 00:00:00
+    const sun = new Date(2026, 6, 26, 15, 30);
+    const ws = weekStart(sun);
+    expect(ws.getFullYear()).toBe(2026);
+    expect(ws.getMonth()).toBe(6); // July
+    expect(ws.getDate()).toBe(20);
+    expect(ws.getHours()).toBe(0);
+    expect(ws.getMinutes()).toBe(0);
+  });
+
+  it('isInCurrentWeek returns true for dates in the current local week', () => {
+    // 2026-07-20 is a Monday.
+    const now = new Date(2026, 6, 22, 10, 0); // Wednesday
+    const thisWeekMon = new Date(2026, 6, 20);
+    const thisWeekSun = new Date(2026, 6, 26);
+    const lastWeek = new Date(2026, 6, 19);
+    const nextWeek = new Date(2026, 6, 27);
+
+    expect(isInCurrentWeek(thisWeekMon, now)).toBe(true);
+    expect(isInCurrentWeek(thisWeekSun, now)).toBe(true);
+    expect(isInCurrentWeek(lastWeek, now)).toBe(false);
+    expect(isInCurrentWeek(nextWeek, now)).toBe(false);
+  });
+
+  it('isInCurrentWeek is DST-safe (uses calendar arithmetic)', () => {
+    // London springs forward on 2026-03-29.
+    // 2026-03-28 late and 2026-03-29 early are different local days.
+    const lateSat = new Date(2026, 2, 28, 23, 30);
+    const earlySun = new Date(2026, 2, 29, 1, 30);
+    // Both are in the same local week (Mon 2026-03-23 .. Sun 2026-03-29)
+    expect(isInCurrentWeek(lateSat, earlySun)).toBe(true);
   });
 });

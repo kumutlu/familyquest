@@ -11,6 +11,8 @@ import { Progress } from '../components/ui/Progress';
 import { createChallenge, claimChallenge } from '../lib/api';
 import { isChildRole, isParentRole, getRoleLabel } from '../lib/roles';
 import { formatNumber } from '../i18n/format';
+import { localWeekKey } from '../lib/taskRecurrence';
+import { useRecurrenceClock } from '../lib/useRecurrenceClock';
 import { EditMemberModal } from '../components/family/EditMemberModal';
 import { ChildLoginSection, type ChildLoginMember } from '../components/family/ChildLoginSection';
 import { CreateChildLoginDialog } from '../components/family/CreateChildLoginDialog';
@@ -33,33 +35,39 @@ export function Family() {
   const [challengeData, setChallengeData] = useState({ title: 'Weekend Warriors', targetXP: 500, rewardPoints: 100 });
   const [isSubmitting, setIsSubmitting] = useState(false);
 
+  // Open-session clock: rolls the weekly scoreboard over on Monday while the
+  // app stays open (no full reload needed).
+  const now = useRecurrenceClock();
+
   if (loading) return <div className="p-8 text-center text-gray-500 animate-pulse">{t('loading')}</div>;
 
-  // Calculate "Weekly XP" for each member (last 7 days)
-  const sevenDaysAgo = new Date();
-  sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
+  // Calculate "Weekly XP" for each member — the current local Mon–Sun week.
+  // Uses the SAME Monday-based week key as recurring weekly tasks, so the
+  // scoreboard rolls over every Monday by derivation (no destructive reset
+  // job, and lifetime XP / wallet balances are never touched).
+  const currentWeekKey = localWeekKey(now);
 
   const children = familyMembers.filter(m => isChildRole(m.role));
   const membersWithWeeklyXP = children.map(member => {
     let weeklyXP = 0;
-    
-    // Add approved task points
-    const memberTasks = taskCompletions.filter(c => 
-      c.assigneeId === member.id && 
+
+    // Add approved task points earned this week
+    const memberTasks = taskCompletions.filter(c =>
+      c.assigneeId === member.id &&
       c.status === 'approved' &&
       c.approvedAt &&
-      c.approvedAt.toDate() > sevenDaysAgo
+      localWeekKey(c.approvedAt.toDate()) === currentWeekKey
     );
     memberTasks.forEach(c => {
       const task = tasks.find(t => t.id === c.taskId);
       if (task) weeklyXP += (task.pointsReward || 0);
     });
 
-    // Add behaviour event points
-    const memberEvents = behaviourEvents.filter(e => 
+    // Add behaviour event points earned this week
+    const memberEvents = behaviourEvents.filter(e =>
       e.userId === member.id &&
       e.timestamp &&
-      e.timestamp.toDate() > sevenDaysAgo
+      localWeekKey(e.timestamp.toDate()) === currentWeekKey
     );
     memberEvents.forEach(e => {
       weeklyXP += (e.pointsDelta || 0);
@@ -110,7 +118,7 @@ export function Family() {
   };
 
   return (
-    <div className="space-y-6 animate-in fade-in duration-300 pb-8">
+    <div className="space-y-6 animate-in fade-in duration-300">
       <header className="flex justify-between items-center">
         <div>
           <h1 className="text-2xl font-bold text-gray-900 tracking-tight">{t('title')}</h1>

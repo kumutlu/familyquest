@@ -7,6 +7,7 @@ import { Plus, CheckCircle2 } from 'lucide-react';
 import { useStore } from '../store/useStore';
 import { completeTask, createTask, updateTask } from '../lib/api';
 import { deriveTaskAvailability } from '../lib/taskRecurrence';
+import { useRecurrenceClock } from '../lib/useRecurrenceClock';
 import { cn } from '../lib/utils';
 import { isParentRole } from '../lib/roles';
 import { TaskDetailsModal } from '../components/tasks/TaskDetailsModal';
@@ -24,6 +25,10 @@ export function Tasks() {
   const [error, setError] = useState<string | null>(null);
   const [successMsg, setSuccessMsg] = useState<string | null>(null);
 
+  // Open-session clock: re-derives availability when the local day/week
+  // boundary crosses while the app stays open (no full reload needed).
+  const now = useRecurrenceClock();
+
   if (loading) return <div className="p-8 text-center text-gray-500 animate-pulse">{t('tasks:loading')}</div>;
 
   // Filter out archived tasks first
@@ -34,7 +39,7 @@ export function Tasks() {
   // with the parent view, so recurring tasks reset correctly instead of staying
   // permanently completed.
   const mappedTasks = activeTasks.map(task => {
-    const av = deriveTaskAvailability(task, taskCompletions, new Date(), currentUser?.id);
+    const av = deriveTaskAvailability(task, taskCompletions, now, currentUser?.id);
     return {
       ...task,
       status: av.status,
@@ -151,7 +156,7 @@ export function Tasks() {
         <Button variant={filter === 'one-time' ? 'primary' : 'secondary'} size="sm" onClick={() => setFilter('one-time')} className="rounded-full whitespace-nowrap">{t('tasks:filter.oneTime')}</Button>
       </div>
 
-      <div className="space-y-3 pb-24">
+      <div className="space-y-3">
         {filteredTasks.length === 0 ? (
           <div className="bg-white rounded-2xl border border-gray-100 p-8 text-center text-gray-500">
             {t('tasks:empty')}

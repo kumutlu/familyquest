@@ -28,7 +28,7 @@ export function MemberProfile() {
   const userEvents = behaviourEvents.filter(e => e.userId === id).slice(0, 10);
 
   return (
-    <div className="space-y-6 animate-in fade-in slide-in-from-right-4 duration-300 pb-8">
+    <div className="space-y-6 animate-in fade-in slide-in-from-right-4 duration-300">
       <header className="flex items-center gap-4">
         <Link to="/family" className="p-2 -ml-2 text-gray-400 hover:text-gray-900 bg-gray-100 rounded-full transition-colors">
           <ChevronLeft size={24} />

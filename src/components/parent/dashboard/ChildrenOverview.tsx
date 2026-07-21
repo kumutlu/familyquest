@@ -2,6 +2,7 @@ import { useTranslation } from 'react-i18next';
 import { useStore } from '../../../store/useStore';
 import { isChildRole } from '../../../lib/roles';
 import { isTaskDoneThisPeriod } from '../../../lib/taskRecurrence';
+import { useRecurrenceClock } from '../../../lib/useRecurrenceClock';
 import { ChildSummaryCard } from './ChildSummaryCard';
 
 function ChildCardSkeleton() {
@@ -34,6 +35,10 @@ export function ChildrenOverview() {
   } = useStore();
   const walletsLoading = (bootstrapStatus as any)?.wallets === 'loading';
 
+  // Open-session clock: re-derives "done this period" when the day/week
+  // boundary crosses while the dashboard stays open.
+  const now = useRecurrenceClock();
+
   const children = familyMembers.filter(member => isChildRole(member.role));
 
   if (children.length === 0) return null;
@@ -60,7 +65,7 @@ export function ChildrenOverview() {
                 task =>
                   task.isActive !== false &&
                   task.assigneeId === child.id &&
-                  !isTaskDoneThisPeriod(task, taskCompletions, new Date(), child.id),
+                  !isTaskDoneThisPeriod(task, taskCompletions, now, child.id),
               ).length;
 
               return (
