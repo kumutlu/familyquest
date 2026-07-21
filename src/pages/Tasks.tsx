@@ -62,7 +62,7 @@ export function Tasks() {
     setError(null);
     
     try {
-      await completeTask(currentUser.familyId, selectedTask.id, currentUser.id, selectedTask.requiresApproval);
+      await completeTask(currentUser.familyId, selectedTask.id, currentUser.id, selectedTask.requiresApproval, now);
       setTimeout(() => {
         setSelectedTask(null);
         setIsSubmitting(false);

@@ -464,7 +464,7 @@ export const createTask = async (familyId: string, taskData: any) => {
   return taskRef;
 };
 
-export const completeTask = async (familyId: string, taskId: string, userId: string, requiresApproval: boolean) => {
+export const completeTask = async (familyId: string, taskId: string, userId: string, requiresApproval: boolean, now: Date = new Date()) => {
   const actorId = auth.currentUser?.uid;
   if (!actorId) throw new Error('Not authenticated');
   if (actorId !== userId) throw new Error('Cannot complete a task for another user');
@@ -488,7 +488,7 @@ export const completeTask = async (familyId: string, taskId: string, userId: str
     // period. We store this on the immutable completion record and use it (with
     // the task schedule type) to derive availability without mutating history.
     const taskType = taskSnap.exists() ? (taskSnap.data().type as string | undefined) : undefined;
-    const currentPeriodKey = periodKeyFor(taskType, new Date());
+    const currentPeriodKey = periodKeyFor(taskType, now);
 
     // Server-side guard: do not create a second completion / award points again
     // for the same task+assignee within the current period. This keeps the
