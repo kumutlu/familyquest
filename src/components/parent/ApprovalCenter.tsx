@@ -9,29 +9,32 @@ import { CurrencyDisplay } from '../ui/CurrencyDisplay';
 import { Clock } from 'lucide-react';
 import { approvalKey, type ApprovalType } from '../../lib/approvalContracts';
 import {
-  approveTaskCompletion,
-  rejectTaskCompletion,
-  approveTransferRequest,
-  rejectTransferRequest,
-  approveMoneyRequest,
-  rejectMoneyRequest,
-  approvePetBoxDonation,
-  rejectPetBoxDonation,
-  approveProfileUpdateRequest,
-  rejectProfileUpdateRequest,
   approveGoalWithdrawal,
   rejectGoalWithdrawal,
+  mapApprovalError,
 } from '../../lib/api';
 import { HistoryActionControl } from '../reversals/HistoryActionControl';
 import type { ReversalSourceKind } from '../../lib/reversalApi';
-import { formatDate } from '../../i18n/format';
+import { currencySymbolFromCode, formatDate, resolveFamilyCurrencyCode } from '../../i18n/format';
+import { RequestCard } from '../requests/RequestCard';
+import { useRequestDetail } from '../requests/RequestDetailContext';
+import { normalizeRequest, type RequestCategory, type RequestContext } from '../../lib/requestModel';
+import { isPendingApprovalStatus } from '../../lib/requestStatus';
+import { getRequestActions } from '../../lib/requestActions';
+import {
+  canAcceptMoneyRequest,
+  canApproveMoneyRequest,
+  canRejectMoneyRequest,
+  type MoneyRequestIdentity,
+} from '../../lib/moneyRequestContracts';
 
 export function ApprovalCenter() {
   const { t } = useTranslation('approvals');
-  const { currentUser, tasks, familyMembers, taskCompletions, transferRequests, moneyRequests, petboxRequests, profileUpdateRequests, goalRequests, savingsGoals } = useStore();
+  const { currentUser, tasks, familyMembers, familyData, rewards, taskCompletions, transferRequests, moneyRequests, petboxRequests, profileUpdateRequests, goalRequests, savingsGoals } = useStore();
+  const { openRequest } = useRequestDetail();
 
   const [activeTab, setActiveTab] = useState<'pending' | 'history'>('pending');
-  const [processing, setProcessing] = useState<Record<string, 'approve' | 'reject'>>({});
+  const [processing, setProcessing] = useState<Record<string, 'approve' | 'reject' | 'accept'>>({});
   const inFlightKeys = useRef(new Set<string>());
   const [optimisticallyRemovedIds, setOptimisticallyRemovedIds] = useState<Set<string>>(new Set());
   const [error, setError] = useState('');
@@ -60,7 +63,7 @@ export function ApprovalCenter() {
       ...r,
       category: 'money_request',
       sortDate: r.createdAt?.toDate ? r.createdAt.toDate() : new Date(),
-      isPending: r.status === 'pending'
+      isPending: isPendingApprovalStatus(r.status)
     })));
 
     // 4. Pet Box Requests
@@ -107,8 +110,6 @@ export function ApprovalCenter() {
     });
   }, [timeline]);
 
-  const errorText = (err: any) => `${err?.code ? `${err.code}: ` : ''}${err?.message || 'An error occurred.'}`;
-
   const handleApprove = async (item: any) => {
     if (!currentUser) return;
     const key = itemKey(item);
@@ -117,24 +118,16 @@ export function ApprovalCenter() {
     setProcessing(previous => ({ ...previous, [key]: 'approve' }));
     setError('');
     try {
-      if (item.category === 'task') {
-        await approveTaskCompletion(currentUser.familyId, item.id, '');
-      } else if (item.category === 'transfer') {
-        await approveTransferRequest(currentUser.familyId, item.id);
-      } else if (item.category === 'money_request') {
-        await approveMoneyRequest(currentUser.familyId, item.id);
-      } else if (item.category === 'petbox') {
-        await approvePetBoxDonation(currentUser.familyId, item.id);
-      } else if (item.category === 'profile_update') {
-        await approveProfileUpdateRequest(currentUser.familyId, item.id);
-      } else if (item.category === 'goal') {
+      if (item.category === 'goal') {
         // Only withdrawal requests require parent approval; contribution
         // requests are also surfaced here when approvalRequired was set.
         await approveGoalWithdrawal(currentUser.familyId, item.id, `${Date.now()}-${item.id}`);
+      } else {
+        await getRequestActions(item.category as RequestCategory).approve?.(currentUser.familyId, item.id);
       }
       setOptimisticallyRemovedIds(prev => new Set(prev).add(key));
-    } catch (err: any) {
-      setError(errorText(err));
+    } catch (err: unknown) {
+      setError(mapApprovalError(err).message);
     } finally {
       inFlightKeys.current.delete(key);
       setProcessing(previous => { const next = { ...previous }; delete next[key]; return next; });
@@ -150,29 +143,104 @@ export function ApprovalCenter() {
     setProcessing(previous => ({ ...previous, [key]: 'reject' }));
     setError('');
     try {
-      if (item.category === 'task') {
-        await rejectTaskCompletion(currentUser.familyId, item.id, rejectionReason);
-      } else if (item.category === 'transfer') {
-        await rejectTransferRequest(currentUser.familyId, item.id, rejectionReason);
-      } else if (item.category === 'money_request') {
-        await rejectMoneyRequest(currentUser.familyId, item.id, rejectionReason);
-      } else if (item.category === 'petbox') {
-        await rejectPetBoxDonation(currentUser.familyId, item.id, rejectionReason);
-      } else if (item.category === 'profile_update') {
-        await rejectProfileUpdateRequest(currentUser.familyId, item.id, rejectionReason);
-      } else if (item.category === 'goal') {
+      if (item.category === 'goal') {
         await rejectGoalWithdrawal(currentUser.familyId, item.id, rejectionReason);
+      } else {
+        await getRequestActions(item.category as RequestCategory).reject?.(currentUser.familyId, item.id, rejectionReason);
       }
       setOptimisticallyRemovedIds(prev => new Set(prev).add(key));
-    } catch (err: any) {
-      setError(errorText(err));
+    } catch (err: unknown) {
+      setError(mapApprovalError(err).message);
     } finally {
       inFlightKeys.current.delete(key);
       setProcessing(previous => { const next = { ...previous }; delete next[key]; return next; });
     }
   };
 
+  const handleAccept = async (item: any) => {
+    if (!currentUser) return;
+    const key = itemKey(item);
+    if (inFlightKeys.current.has(key)) return;
+    inFlightKeys.current.add(key);
+    setProcessing(previous => ({ ...previous, [key]: 'accept' }));
+    setError('');
+    try {
+      await getRequestActions('money_request').accept?.(currentUser.familyId, item.id);
+      setOptimisticallyRemovedIds(previous => new Set(previous).add(key));
+    } catch (err: unknown) {
+      setError(mapApprovalError(err).message);
+    } finally {
+      inFlightKeys.current.delete(key);
+      setProcessing(previous => { const next = { ...previous }; delete next[key]; return next; });
+    }
+  };
+
+  const requestContext: RequestContext = {
+    currency: currencySymbolFromCode(resolveFamilyCurrencyCode(familyData)),
+    resolveMember: id => {
+      const member = familyMembers.find(candidate => candidate.id === id);
+      return member
+        ? { id: member.id, name: member.displayName, avatarUrl: member.avatarUrl, role: member.role }
+        : undefined;
+    },
+    resolveTask: id => {
+      const task = tasks.find(candidate => candidate.id === id);
+      return task ? { title: task.title, pointsReward: task.pointsReward } : undefined;
+    },
+    rewards: (rewards || []).reduce<Record<string, { title: string }>>((result, reward) => {
+      result[reward.id] = { title: reward.title };
+      return result;
+    }, {}),
+  };
+
   const renderApprovalCard = (item: any) => {
+    if (item.category === 'money_request') {
+      const request = normalizeRequest(item, requestContext);
+      const identity: MoneyRequestIdentity = {
+        familyId: currentUser?.familyId,
+        requesterId: request.requestedBy?.id,
+        requestedFromId: request.recipient?.id,
+        amountPence: request.amountPence,
+        status: request.status,
+      };
+      const canAccept = canAcceptMoneyRequest(identity, currentUser);
+      const canReject = canRejectMoneyRequest(identity, currentUser);
+      const canApprove = canApproveMoneyRequest(identity, currentUser);
+      const key = itemKey(item);
+      const sourceKind: ReversalSourceKind = 'money_request';
+      const actions = item.isPending ? (
+        <>
+          {canReject && (
+            <Button size="sm" variant="danger" disabled={key in processing} onClick={() => handleReject(item)}>
+              {processing[key] === 'reject' ? t('rejecting') : t('reject')}
+            </Button>
+          )}
+          {canAccept && (
+            <Button size="sm" className="bg-success-500 hover:bg-success-600 text-white" disabled={key in processing} onClick={() => handleAccept(item)}>
+              {processing[key] === 'accept' ? t('accepting') : t('accept')}
+            </Button>
+          )}
+          {canApprove && (
+            <Button size="sm" className="bg-success-500 hover:bg-success-600 text-white" disabled={key in processing} onClick={() => handleApprove(item)}>
+              {processing[key] === 'approve' ? t('approving') : t('approve')}
+            </Button>
+          )}
+        </>
+      ) : (
+        <HistoryActionControl sourceKind={sourceKind} source={item} />
+      );
+
+      return (
+        <RequestCard
+          key={`${item.category}-${item.id}`}
+          request={request}
+          onOpen={() => openRequest(item)}
+          actions={actions}
+          className={item.isPending ? undefined : 'opacity-75'}
+        />
+      );
+    }
+
     let title = '';
     let description = '';
     let amount = 0;

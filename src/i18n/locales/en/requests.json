@@ -13,6 +13,7 @@
     "taskCompletion": "{{childName}} completed \"{{taskTitle}}\"",
     "transferRequest": "{{fromName}} requested to send {{amount}} to {{toName}}",
     "moneyRequest": "{{requesterName}} requested {{amount}}",
+    "moneyRequestToRecipient": "{{requesterName}} requested {{amount}} from {{requestedFromName}}",
     "petBoxDonation": "{{childName}} wants to donate {{amount}} to {{fundName}}",
     "profileUpdateRequest": "{{childName}} wants to update their profile",
     "rewardRequest": "{{childName}} requested the \"{{rewardTitle}}\" reward",

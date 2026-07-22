@@ -12,6 +12,7 @@ import { isParentRole } from '../../lib/roles';
 import { cn } from '../../lib/utils';
 import { formatDate } from '../../i18n/format';
 import { resolveAvatarImage } from '../../config/avatarCatalog';
+import { mapApprovalError } from '../../lib/api';
 import {
   canApproveMoneyRequest,
   canRejectMoneyRequest,
@@ -110,8 +111,8 @@ export function RequestDetailContent({
       setConfirm(null);
       onResolved?.();
       onClose();
-    } catch (err: any) {
-      setError(`${err?.code ? `${err.code}: ` : ''}${err?.message || t('requests:detail.somethingWentWrong')}`);
+    } catch (err: unknown) {
+      setError(mapApprovalError(err).message);
     } finally {
       setProcessing(false);
     }
@@ -235,23 +236,23 @@ export function RequestDetailContent({
                   {t('requests:detail.cancelRequest')}
                 </Button>
               )}
-              {canApprove && canReject && (
-                <>
-                  <Button
-                    variant="danger"
-                    fullWidth
-                    onClick={() => setConfirm('reject')}
-                  >
-                    {t('approvals:reject')}
-                  </Button>
-                  <Button
-                    className="bg-success-500 hover:bg-success-600 text-white"
-                    fullWidth
-                    onClick={() => setConfirm('approve')}
-                  >
-                    {t('approvals:approve')}
-                  </Button>
-                </>
+              {canReject && (
+                <Button
+                  variant="danger"
+                  fullWidth
+                  onClick={() => setConfirm('reject')}
+                >
+                  {t('approvals:reject')}
+                </Button>
+              )}
+              {canApprove && (
+                <Button
+                  className="bg-success-500 hover:bg-success-600 text-white"
+                  fullWidth
+                  onClick={() => setConfirm('approve')}
+                >
+                  {t('approvals:approve')}
+                </Button>
               )}
               {canCancel && (canApprove || canReject) && (
                 <Button variant="ghost" fullWidth onClick={() => runAction('cancel')}>

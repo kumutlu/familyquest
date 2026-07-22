@@ -13,6 +13,7 @@
     "taskCompletion": "{{childName}} \"{{taskTitle}}\" görevini tamamladı",
     "transferRequest": "{{fromName}}, {{toName}} kullanıcısına {{amount}} göndermek istedi",
     "moneyRequest": "{{requesterName}} istedi {{amount}}",
+    "moneyRequestToRecipient": "{{requesterName}}, {{requestedFromName}} kullanıcısından {{amount}} istedi",
     "petBoxDonation": "{{childName}}, {{fundName}} için {{amount}} bağışlamak istiyor",
     "profileUpdateRequest": "{{childName}} profilini güncellemek istiyor",
     "rewardRequest": "{{childName}}, \"{{rewardTitle}}\" ödülünü istedi",

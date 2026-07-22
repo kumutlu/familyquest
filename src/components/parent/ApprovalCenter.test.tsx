@@ -8,6 +8,7 @@ const api = vi.hoisted(() => ({
   approveMoneyRequest: vi.fn(), rejectMoneyRequest: vi.fn(), acceptMoneyRequest: vi.fn(),
   approvePetBoxDonation: vi.fn(), rejectPetBoxDonation: vi.fn(),
   approveProfileUpdateRequest: vi.fn(), rejectProfileUpdateRequest: vi.fn(),
+  cancelPendingApproval: vi.fn(),
   mapApprovalError: (err: any) => {
     const code = err?.code
     const message: string = err?.message || ''
@@ -238,6 +239,7 @@ describe('pending_acceptance money requests', () => {
     renderApprovalCenter();
     expect(screen.queryByRole('button', { name: 'Approve' })).not.toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Accept' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Reject' })).toBeInTheDocument();
   });
 
   it('rejecting a pending_acceptance money request removes it from Pending', async () => {

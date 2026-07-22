@@ -13,11 +13,19 @@ const api = vi.hoisted(() => ({
   rejectTransferRequest: vi.fn(),
   approveMoneyRequest: vi.fn(),
   rejectMoneyRequest: vi.fn(),
+  acceptMoneyRequest: vi.fn(),
   approvePetBoxDonation: vi.fn(),
   rejectPetBoxDonation: vi.fn(),
   approveProfileUpdateRequest: vi.fn(),
   rejectProfileUpdateRequest: vi.fn(),
   cancelPendingApproval: vi.fn(),
+  mapApprovalError: (err: any) => {
+    const code = err?.code
+    if (code === 'permission-denied') {
+      return { message: 'You no longer have permission to manage this request.', code, raw: err }
+    }
+    return { message: 'We couldn’t reject this request. Please try again.', code, raw: err }
+  },
 }))
 
 const storeState = vi.hoisted(() => ({ current: {} as any }))
@@ -310,13 +318,27 @@ describe('pending_acceptance money requests', () => {
     expect(screen.queryByText(/pending_acceptance/i)).not.toBeInTheDocument()
   })
 
-    it('parent approver (who is the requested-from) sees Accept for a pending_acceptance request', () => {
+  it('requested-from parent sees Accept and Reject, but never Approve, for a pending_acceptance request', () => {
     setCurrentUser({ id: 'parent-1', familyId: 'family-1', role: 'owner', displayName: 'Kemal' })
     render(<RequestDetailSheet request={moneyRequestPendingAcceptanceRaw} onClose={() => {}} />)
     expect(screen.getByRole('button', { name: 'Accept Request' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Reject' })).toBeInTheDocument()
     expect(screen.queryByRole('button', { name: 'Approve' })).not.toBeInTheDocument()
-    expect(screen.queryByRole('button', { name: 'Reject' })).not.toBeInTheDocument()
     expect(screen.queryByRole('button', { name: 'Cancel Request' })).not.toBeInTheDocument()
+  })
+
+  it('maps action failures without rendering Firebase internals', async () => {
+    api.acceptMoneyRequest.mockRejectedValue(
+      Object.assign(new Error('Missing or insufficient permissions.'), { code: 'permission-denied' }),
+    )
+    setCurrentUser({ id: 'parent-1', familyId: 'family-1', role: 'owner', displayName: 'Kemal' })
+    render(<RequestDetailSheet request={moneyRequestPendingAcceptanceRaw} onClose={() => {}} />)
+
+    fireEvent.click(screen.getByRole('button', { name: 'Accept Request' }))
+
+    expect(await screen.findByText('You no longer have permission to manage this request.')).toBeInTheDocument()
+    expect(screen.queryByText(/permission-denied/i)).not.toBeInTheDocument()
+    expect(screen.queryByText(/Missing or insufficient permissions/i)).not.toBeInTheDocument()
   })
 
   it('request creator sees Cancel Request and no approve/reject', () => {

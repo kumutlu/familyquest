@@ -296,9 +296,10 @@ const moneyRequestAdapter: RequestAdapter = (raw, ctx) => {
     requestedBy: { id: raw.requesterId, name: requesterName, avatarUrl: requester?.avatarUrl },
     recipient: { id: raw.requestedFromId, name: requestedFromName, avatarUrl: requestedFrom?.avatarUrl },
     createdAt: toMillis(raw.createdAt),
-    primarySummary: i18n.t('requests:summary.moneyRequest', {
+    primarySummary: i18n.t('requests:summary.moneyRequestToRecipient', {
       requesterName,
       amount: formatAmount(raw.amountPence, currency),
+      requestedFromName,
     }),
     secondarySummary: raw.message,
     amountPence: raw.amountPence,
