@@ -92,10 +92,10 @@ export function TransactionDetailsModal({
     (transaction.parentRef ? resolve(transaction.parentRef) || parent : null);
 
   const detailRows: { label: string; value: string }[] = [];
-  if (fromTo) detailRows.push({ label: t('details.fromTo'), value: fromTo });
-  if (actor) detailRows.push({ label: t('details.actor'), value: actor });
+  if (fromTo) detailRows.push({ label: t('ledger.details.fromTo'), value: fromTo });
+  if (actor) detailRows.push({ label: t('ledger.details.actor'), value: actor });
   if (transaction.note || transaction.message) {
-    detailRows.push({ label: t('details.note'), value: transaction.note || transaction.message });
+    detailRows.push({ label: t('ledger.details.note'), value: transaction.note || transaction.message });
   }
 
   return (
@@ -115,12 +115,12 @@ export function TransactionDetailsModal({
           style={{ paddingTop: 'calc(1rem + env(safe-area-inset-top))' }}
         >
           <h3 id="transaction-details-title" className="text-xl font-bold text-gray-900">
-            {t('details.title')}
+            {t('ledger.details.title')}
           </h3>
           <button
             type="button"
             onClick={onClose}
-            aria-label={t('details.close')}
+            aria-label={t('ledger.details.close')}
             className="p-2 -mr-2 bg-gray-100 hover:bg-gray-200 rounded-full text-gray-500 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-400"
           >
             ✕
@@ -157,14 +157,14 @@ export function TransactionDetailsModal({
 
           <div className="bg-gray-50 rounded-2xl p-4 space-y-3">
             <div className="flex justify-between">
-              <span className="text-gray-500 text-sm">{t('details.status')}</span>
+              <span className="text-gray-500 text-sm">{t('ledger.details.status')}</span>
               <span className="font-bold text-gray-900 text-sm capitalize">
-                {transaction.status || t('details.completed')}
+                {transaction.status || t('ledger.details.completed')}
               </span>
             </div>
             {date && (
               <div className="flex justify-between">
-                <span className="text-gray-500 text-sm">{t('details.date')}</span>
+                <span className="text-gray-500 text-sm">{t('ledger.details.date')}</span>
                 <span className="font-medium text-gray-900 text-sm text-right">{date}</span>
               </div>
             )}
@@ -175,7 +175,7 @@ export function TransactionDetailsModal({
               </div>
             ))}
             <div className="flex justify-between border-t border-gray-200 pt-3 mt-3">
-              <span className="text-gray-400 text-xs">{t('details.reference')}</span>
+              <span className="text-gray-400 text-xs">{t('ledger.details.reference')}</span>
               <span className="font-mono text-gray-400 text-xs">
                 {String(transaction.id).slice(-6).toUpperCase()}
               </span>

@@ -226,6 +226,53 @@ describe('bootstrap/auth/listener state machine', () => {
     expect(useStore.getState().appReady).toBe(false);
   });
 
+  it('marks optional history resources loading until their authoritative snapshots arrive', () => {
+    authenticatedState();
+    useStore.getState().loadFamilyData('user1', 'fam1');
+
+    expect(useStore.getState().bootstrapStatus).toMatchObject({
+      walletTransactions: 'loading',
+      savingsGoals: 'loading',
+      goalLedger: 'loading',
+      redemptions: 'loading',
+      behaviourEvents: 'loading',
+      funds: 'loading',
+      transferRequests: 'loading',
+      moneyRequests: 'loading',
+      petboxRequests: 'loading',
+      reversals: 'loading',
+    });
+  });
+
+  it('resolves goal subcollection resources immediately when there are no savings goals', () => {
+    authenticatedState();
+    useStore.getState().loadFamilyData('user1', 'fam1');
+
+    listener('families/fam1/savings_goals').next(collectionSnapshot([]));
+
+    expect(useStore.getState().bootstrapStatus).toMatchObject({
+      savingsGoals: 'ready',
+      goalContributions: 'ready',
+      goalLedger: 'ready',
+      goalMatchProposals: 'ready',
+    });
+  });
+
+  it('keeps goal ledger loading until every active goal has an authoritative snapshot', () => {
+    authenticatedState();
+    useStore.getState().loadFamilyData('user1', 'fam1');
+    listener('families/fam1/savings_goals').next(collectionSnapshot([
+      { id: 'goal-1' },
+      { id: 'goal-2' },
+    ]));
+
+    listener('families/fam1/savings_goals/goal-1/goal_ledger').next(collectionSnapshot([]));
+    expect(useStore.getState().bootstrapStatus.goalLedger).toBe('loading');
+
+    listener('families/fam1/savings_goals/goal-2/goal_ledger').next(collectionSnapshot([]));
+    expect(useStore.getState().bootstrapStatus.goalLedger).toBe('ready');
+  });
+
   it('does not let a slower initial server read overwrite a newer listener snapshot', async () => {
     authenticatedState();
     useStore.getState().loadFamilyData('user1', 'fam1');

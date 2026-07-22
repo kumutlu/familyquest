@@ -437,3 +437,15 @@ describe('27. Mobile layout has no horizontal overflow', () => {
     expect(root.className).toContain('px-4');
   });
 });
+
+describe('transaction history navigation', () => {
+  it('provides a visible in-app link to the full history screen', () => {
+    render(
+      <MemoryRouter>
+        <Wallet />
+      </MemoryRouter>,
+    );
+
+    expect(screen.getByRole('link', { name: 'Transactions' })).toHaveAttribute('href', '/history');
+  });
+});

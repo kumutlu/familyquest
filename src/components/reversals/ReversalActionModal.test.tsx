@@ -28,6 +28,32 @@ describe('ReversalActionModal', () => {
     expect(screen.getByText('Predicted balance: £2.00')).toBeInTheDocument();
   });
 
+  it('localizes reversible reward point deltas and balances in Turkish', async () => {
+    await i18n.loadNamespaces(['reversals', 'wallet']);
+    await i18n.changeLanguage('tr');
+    const rewardAction: HistoryAction = {
+      sourceKind: 'reward_redemption',
+      sourceId: 'redemption-1',
+      source: {},
+      summary: 'Ödül kullanıldı: Bisiklet',
+      action: 'reverse',
+      actionLabel: 'refund',
+      targets: [{
+        id: 'child-1',
+        label: 'Alex puanı',
+        originalDelta: -100,
+        predictedBalance: 250,
+        unit: 'points',
+      }],
+    };
+
+    render(<ReversalActionModal open familyId="family-1" historyAction={rewardAction} onClose={vi.fn()} />);
+
+    expect(screen.getByText('Orijinal: -100 puan')).toBeInTheDocument();
+    expect(screen.getByText('Tahmini bakiye: 250 puan')).toBeInTheDocument();
+    expect(screen.queryByText(/pts/)).not.toBeInTheDocument();
+  });
+
   it('requires a trimmed reason of at least three characters', async () => {
     render(<ReversalActionModal open familyId="family-1" historyAction={action} onClose={vi.fn()} />);
     fireEvent.change(screen.getByLabelText('Reason'), { target: { value: ' x ' } });

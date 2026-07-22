@@ -3,7 +3,7 @@
  * ====================================================
  */
 
-import { describe, it, expect } from 'vitest';
+import { afterEach, describe, it, expect } from 'vitest';
 import {
   adaptAllTransactions,
   filterTransactions,
@@ -13,10 +13,15 @@ import {
   groupTransactionsByMonth,
 } from './transactionAdapter';
 import { getTransactionDisplayAmount, type NormalizedTransaction } from './transactionModel';
+import i18n from '../i18n/config';
 
 const NOW = new Date(2026, 6, 16, 12).getTime();
 const timestamp = (daysAgo: number) => ({
   toMillis: () => NOW - daysAgo * 86_400_000,
+});
+
+afterEach(async () => {
+  await i18n.changeLanguage('en');
 });
 
 // Fixtures mirror the records written by src/lib/api.ts and goalContracts.ts.
@@ -265,6 +270,62 @@ describe('transactionAdapter', () => {
       expect(result.slice(0, 3).every(tx => tx.isPending)).toBe(true);
     });
 
+    it('localizes generated wallet, behaviour, and request subtitles in Turkish', async () => {
+      await i18n.loadNamespaces(['wallet', 'goals', 'rewards', 'reversals']);
+      await i18n.changeLanguage('tr');
+      const t = i18n.getFixedT('tr', ['wallet', 'goals', 'rewards', 'reversals']);
+
+      const result = adaptAllTransactions({
+        walletTransactions: [{
+          id: 'deposit-tr',
+          type: 'deposit',
+          amountPence: 500,
+          childId: 'child1',
+          parentRef: 'parent1',
+          status: 'completed',
+          createdAt: timestamp(4),
+        }],
+        behaviourEvents: [{
+          id: 'behaviour-tr',
+          childId: 'child1',
+          type: 'financial',
+          walletDelta: -100,
+          createdBy: 'parent1',
+          createdAt: timestamp(3),
+        }],
+        transferRequests: [{
+          id: 'transfer-tr',
+          fromChildId: 'child1',
+          toChildId: 'child2',
+          amountPence: 200,
+          status: 'pending',
+          createdAt: timestamp(2),
+        }],
+        moneyRequests: [{
+          id: 'money-tr',
+          requesterId: 'child1',
+          requestedFromId: 'parent1',
+          amountPence: 300,
+          status: 'pending',
+          createdAt: timestamp(1),
+        }],
+        opts: {
+          t,
+          currentUserId: 'child1',
+          nameResolver: id => ({
+            child1: 'Alex', child2: 'Sam', parent1: 'Taylor',
+          })[id],
+        },
+      });
+
+      expect(Object.fromEntries(result.map(item => [item.id, item.subtitle]))).toEqual({
+        'deposit-tr': 'Taylor tarafından',
+        'behaviour-tr': 'Alex · Taylor tarafından',
+        'transfer-tr': 'Alex → Sam',
+        'money-tr': 'Alex ← Taylor',
+      });
+    });
+
     it('keeps source order stable when timestamps are equal', () => {
       const sameTime = timestamp(1);
       const result = adaptAllTransactions({
@@ -434,7 +495,10 @@ describe('transactionAdapter', () => {
       const redemption = result.find(tx => tx.id === 'red1');
 
       expect(deposit && getTransactionDisplayAmount(deposit)).toBe('£10.00');
-      expect(redemption && getTransactionDisplayAmount(redemption)).toBe('100 points');
+      expect(redemption && getTransactionDisplayAmount(
+        redemption,
+        points => `${points} points`,
+      )).toBe('100 points');
     });
   });
 

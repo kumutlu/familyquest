@@ -16,6 +16,7 @@ import { FundsDashboard } from './pages/FundsDashboard';
 import { Goals } from './pages/Goals';
 import { GoalDetail } from './pages/GoalDetail';
 import { Notifications } from './pages/Notifications';
+import { TransactionHistoryScreen } from './components/history/TransactionHistoryScreen';
 import { useStore } from './store/useStore';
 import { initForegroundMessaging } from './lib/pushNotifications';
 import { RequestDetailProvider } from './components/requests/RequestDetailContext';
@@ -56,6 +57,7 @@ function App() {
             <Route path="goals" element={<Goals />} />
             <Route path="goals/:goalId" element={<GoalDetail />} />
             <Route path="notifications" element={<Notifications />} />
+            <Route path="history" element={<TransactionHistoryScreen />} />
             <Route path="settings" element={<Settings />} />
           </Route>
         </Routes>

@@ -327,9 +327,10 @@ function translate<Namespace extends 'wallet' | 'goals' | 'rewards' | 'reversals
   t: TFunction<Namespace> | undefined,
   key: string,
   fallback: string,
+  values: Readonly<Record<string, string | number>> = {},
 ): string {
   if (!t) return fallback;
-  const translated = t(key as never, { defaultValue: fallback });
+  const translated = t(key as never, { ...values, defaultValue: fallback });
   return typeof translated === 'string' ? translated : fallback;
 }
 
@@ -519,11 +520,24 @@ function normalizeWallet(
   const fundName = stringValue(record.fundName) ?? (fundId ? opts.fundResolver?.(fundId)?.name : undefined);
   let subtitle = stringValue(record.description) ?? '';
   if (!subtitle) {
-    if (type === 'deposit') subtitle = actorName ? `From ${actorName}` : childName ?? '';
-    else if (type === 'withdrawal') subtitle = actorName ? `By ${actorName}` : childName ?? '';
-    else if (type === 'transfer_in') subtitle = counterpartyName ? `From ${counterpartyName}` : '';
-    else if (type === 'transfer_out') subtitle = counterpartyName ? `To ${counterpartyName}` : '';
-    else if (type === 'transfer') subtitle = [fromName, childName].filter(isString).join(' to ');
+    if (type === 'deposit') subtitle = actorName
+      ? translate(opts.t, 'tx.depositFrom', actorName, { actor: actorName })
+      : childName ?? '';
+    else if (type === 'withdrawal') subtitle = actorName
+      ? translate(opts.t, 'tx.withdrawnBy', actorName, { actor: actorName })
+      : childName ?? '';
+    else if (type === 'transfer_in') subtitle = counterpartyName
+      ? translate(opts.t, 'tx.from', counterpartyName, { name: counterpartyName })
+      : '';
+    else if (type === 'transfer_out') subtitle = counterpartyName
+      ? translate(opts.t, 'tx.to', counterpartyName, { name: counterpartyName })
+      : '';
+    else if (type === 'transfer') subtitle = fromName && childName
+      ? translate(opts.t, 'tx.transferBetween', `${fromName} → ${childName}`, {
+        from: fromName,
+        to: childName,
+      })
+      : fromName ?? childName ?? '';
     else if (goalName) subtitle = goalName;
     else if (fundName) subtitle = fundName;
     else subtitle = actorName ?? childName ?? '';
@@ -655,6 +669,12 @@ function normalizeBehaviour(
   const creatorName = stringValue(record.createdByName) ?? (creatorId ? opts.nameResolver?.(creatorId) : undefined);
   const childName = opts.nameResolver?.(record.childId);
   const reason = stringValue(record.reason);
+  const generatedSubtitle = childName && creatorName
+    ? translate(opts.t, 'tx.behaviourBy', `${childName} · ${creatorName}`, {
+      child: childName,
+      actor: creatorName,
+    })
+    : childName ?? creatorName ?? '';
   return buildTransaction({
     id: record.id,
     timestamp: timestampFrom(record.createdAt, record.timestamp),
@@ -662,7 +682,7 @@ function normalizeBehaviour(
     amountPence: -Math.abs(record.walletDelta),
     status: 'completed',
     title: translate(opts.t, 'tx.penalty', 'Penalty'),
-    subtitle: reason ?? childName ?? '',
+    subtitle: reason ?? generatedSubtitle,
     source: 'behaviour_event',
     sourceId: record.id,
     childId: record.childId,
@@ -716,7 +736,12 @@ function normalizeTransferRequest(
     direction,
     status: statusFrom(record.status, 'pending'),
     title: translate(opts.t, 'tx.transfer', 'Transfer request'),
-    subtitle: [fromName, toName].filter(isString).join(' to '),
+    subtitle: fromName && toName
+      ? translate(opts.t, 'tx.transferBetween', `${fromName} → ${toName}`, {
+        from: fromName,
+        to: toName,
+      })
+      : fromName ?? toName ?? '',
     source: 'transfer_request',
     sourceId: record.id,
     childId: record.fromChildId,
@@ -745,7 +770,12 @@ function normalizeMoneyRequest(
     direction,
     status: statusFrom(record.status, 'pending'),
     title: translate(opts.t, 'tx.moneyReceived', 'Money request'),
-    subtitle: [requesterName, requestedFromName].filter(isString).join(' from '),
+    subtitle: requesterName && requestedFromName
+      ? translate(opts.t, 'tx.moneyRequestBetween', `${requesterName} ← ${requestedFromName}`, {
+        requester: requesterName,
+        requestedFrom: requestedFromName,
+      })
+      : requesterName ?? requestedFromName ?? '',
     source: 'money_request',
     sourceId: record.id,
     childId: record.requesterId,

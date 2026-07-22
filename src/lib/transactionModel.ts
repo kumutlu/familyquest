@@ -282,8 +282,13 @@ export function getTransactionAmountPence(tx: NormalizedTransaction): number {
   return tx.amountPence;
 }
 
-export function getTransactionDisplayAmount(tx: NormalizedTransaction): string {
-  if (tx.unit === 'points') return `${Math.abs(tx.amountPence)} points`;
+export type TransactionPointsFormatter = (points: number) => string;
+
+export function getTransactionDisplayAmount(
+  tx: NormalizedTransaction,
+  formatPoints: TransactionPointsFormatter = points => `${points} points`,
+): string {
+  if (tx.unit === 'points') return formatPoints(Math.abs(tx.amountPence));
   return formatPence(Math.abs(tx.amountPence), currencyCodeFromSymbol(tx.currency));
 }
 

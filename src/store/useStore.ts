@@ -446,7 +446,7 @@ export const useStore = create<AppState>((set, get) => ({
 
     set({
       ...emptyFamilyState(),
-      bootstrapStatus: createBootstrapStatus('loading', requiredResources),
+      bootstrapStatus: createBootstrapStatus('loading', roleResources),
       bootstrapError: null,
       featureErrors: {},
       error: null,
@@ -463,7 +463,8 @@ export const useStore = create<AppState>((set, get) => ({
       get().currentUser?.familyId === familyId;
 
     const markReady = (resource: BootstrapResource) => {
-      if (!isCurrent() || get().bootstrapStatus[resource] === 'ready') return;
+      const status = get().bootstrapStatus[resource];
+      if (!isCurrent() || status === 'ready' || status === 'error') return;
       set(current => ({
         bootstrapStatus: { ...current.bootstrapStatus, [resource]: 'ready' },
       }));
@@ -503,11 +504,12 @@ export const useStore = create<AppState>((set, get) => ({
       applySnapshot: (snapshot: any) => void,
       listenerName: string = resource,
       critical = requiredResources.includes(resource),
+      readyOnSnapshot = true,
     ) => {
       const acceptSnapshot = (snapshot: any) => {
         if (!isCurrent()) return;
         applySnapshot(snapshot);
-        markReady(resource);
+        if (readyOnSnapshot) markReady(resource);
       };
       const unsubscribe = onSnapshot(
         target,
@@ -565,11 +567,23 @@ export const useStore = create<AppState>((set, get) => ({
     // feature error rather than blocking bootstrap.
     const GOAL_COLLECTION = 'savings_goals';
     const goalFamilyPath = `families/${familyId}`;
-    const goalSubBuffers: Record<string, Record<string, any[]>> = {
+    type GoalSubResource = 'goalContributions' | 'goalLedger' | 'goalMatchProposals';
+    const goalSubResources: readonly GoalSubResource[] = [
+      'goalContributions',
+      'goalLedger',
+      'goalMatchProposals',
+    ];
+    const goalSubBuffers: Record<GoalSubResource, Record<string, any[]>> = {
       goalContributions: {},
       goalLedger: {},
       goalMatchProposals: {},
     };
+    const goalSubReady: Record<GoalSubResource, Set<string>> = {
+      goalContributions: new Set(),
+      goalLedger: new Set(),
+      goalMatchProposals: new Set(),
+    };
+    let activeGoalIds = new Set<string>();
     const flushGoalSubs = () => {
       if (!isCurrent()) return;
       set({
@@ -577,15 +591,18 @@ export const useStore = create<AppState>((set, get) => ({
         goalLedger: Object.values(goalSubBuffers.goalLedger).flat(),
         goalMatchProposals: Object.values(goalSubBuffers.goalMatchProposals).flat(),
       });
-      markReady('goalContributions');
-      markReady('goalLedger');
-      markReady('goalMatchProposals');
+      for (const resource of goalSubResources) {
+        if ([...activeGoalIds].every(goalId => goalSubReady[resource].has(goalId))) {
+          markReady(resource);
+        }
+      }
     };
-    const subscribeGoalSubcollection = (goalId: string, sub: 'goalContributions' | 'goalLedger' | 'goalMatchProposals', subPath: string) => {
+    const subscribeGoalSubcollection = (goalId: string, sub: GoalSubResource, subPath: string) => {
       const target = collection(db, `${goalFamilyPath}/${GOAL_COLLECTION}/${goalId}/${subPath}`);
       const listenerName = `${sub}:${goalId}`;
       const apply = (snapshot: any) => {
         goalSubBuffers[sub][goalId] = docs(snapshot);
+        goalSubReady[sub].add(goalId);
         flushGoalSubs();
       };
       subscribe(
@@ -596,9 +613,24 @@ export const useStore = create<AppState>((set, get) => ({
         apply,
         listenerName,
         false,
+        false,
       );
     };
     const subscribeGoalSubcollections = (goalIds: string[]) => {
+      const nextGoalIds = new Set(goalIds);
+      for (const previousGoalId of activeGoalIds) {
+        if (nextGoalIds.has(previousGoalId)) continue;
+        for (const resource of goalSubResources) {
+          stopFamilyListener(`${resource}:${previousGoalId}`);
+          delete goalSubBuffers[resource][previousGoalId];
+          goalSubReady[resource].delete(previousGoalId);
+        }
+      }
+      activeGoalIds = nextGoalIds;
+      if (goalIds.length === 0) {
+        flushGoalSubs();
+        return;
+      }
       for (const goalId of goalIds) {
         subscribeGoalSubcollection(goalId, 'goalContributions', 'contributions');
         subscribeGoalSubcollection(goalId, 'goalLedger', 'goal_ledger');

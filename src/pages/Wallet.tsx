@@ -1,5 +1,7 @@
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
+import { Link } from 'react-router-dom';
+import { ChevronRight, History } from 'lucide-react';
 import { useStore } from '../store/useStore';
 import { isChildRole } from '../lib/roles';
 import {
@@ -161,6 +163,17 @@ export function Wallet() {
           onRetry={retryBootstrap}
         />
       )}
+
+      <Link
+        to="/history"
+        className="flex items-center justify-between rounded-2xl border border-gray-100 bg-white px-4 py-3 font-semibold text-gray-700 transition-colors hover:border-primary-200 hover:text-primary-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-400"
+      >
+        <span className="flex items-center gap-2">
+          <History size={18} aria-hidden="true" />
+          {t('transactions')}
+        </span>
+        <ChevronRight size={18} aria-hidden="true" />
+      </Link>
 
       <TransactionList
         transactions={visible}

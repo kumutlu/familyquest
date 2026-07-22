@@ -18,6 +18,9 @@ vi.mock('./pages/Signup', () => ({ Signup: () => null }));
 vi.mock('./pages/Onboarding', () => ({ Onboarding: () => null }));
 vi.mock('./pages/FundsDashboard', () => ({ FundsDashboard: () => <span>Pet Box funds</span> }));
 vi.mock('./pages/Notifications', () => ({ Notifications: () => <span>Notifications page</span> }));
+vi.mock('./components/history/TransactionHistoryScreen', () => ({
+  TransactionHistoryScreen: () => <span>Transaction history page</span>,
+}));
 
 import App from './App';
 
@@ -32,5 +35,11 @@ describe('application routes', () => {
     window.history.pushState({}, '', '/notifications');
     render(<App />);
     expect(screen.getByText('Notifications page')).toBeInTheDocument();
+  });
+
+  it('mounts the transaction history screen at /history', () => {
+    window.history.pushState({}, '', '/history');
+    render(<App />);
+    expect(screen.getByText('Transaction history page')).toBeInTheDocument();
   });
 });
