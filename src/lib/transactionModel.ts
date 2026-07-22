@@ -43,6 +43,8 @@ export type TransactionType =
 
 export type TransactionDirection = 'in' | 'out' | 'neutral';
 
+export type TransactionUnit = 'money' | 'points';
+
 export type TransactionStatus = 'completed' | 'pending' | 'pending_approval' | 'pending_acceptance' | 'rejected' | 'cancelled' | 'reversed';
 
 export type TransactionCategory = 'income' | 'expense' | 'reward' | 'allowance' | 'goal' | 'adjustment';
@@ -72,11 +74,14 @@ export interface NormalizedTransaction {
   /** Transaction type */
   type: TransactionType;
 
-  /** Amount in pence (positive for income, negative for expense) */
+  /** Signed amount: minor currency units for money, or whole reward points. */
   amountPence: number;
 
   /** Currency symbol from Family Settings */
   currency: string;
+
+  /** Denomination required to interpret and render amountPence safely. */
+  unit: TransactionUnit;
 
   /** Direction derived from amount */
   direction: TransactionDirection;
@@ -266,7 +271,7 @@ export function isCompletedStatus(status: TransactionStatus): boolean {
 }
 
 export function isReversedStatus(status: TransactionStatus): boolean {
-  return status === 'reversed' || status === 'cancelled' || status === 'rejected';
+  return status === 'reversed';
 }
 
 // ---------------------------------------------------------------------------
@@ -278,6 +283,7 @@ export function getTransactionAmountPence(tx: NormalizedTransaction): number {
 }
 
 export function getTransactionDisplayAmount(tx: NormalizedTransaction): string {
+  if (tx.unit === 'points') return `${Math.abs(tx.amountPence)} points`;
   return formatPence(Math.abs(tx.amountPence), currencyCodeFromSymbol(tx.currency));
 }
 
