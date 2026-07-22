@@ -136,7 +136,7 @@ describe('ApprovalCenter interaction contract', () => {
 
     expect(screen.getByText(/Muhammed Osman wants to update their profile/)).toBeInTheDocument()
     expect(screen.getAllByText(/Muhammed Osman/).length).toBeGreaterThan(0)
-    expect(screen.getByText('Muhammed')).toBeInTheDocument()
+    expect(screen.getByText(/name → "Muhammed"/)).toBeInTheDocument()
 
     const approveButtons = screen.getAllByRole('button', { name: 'Approve' })
     fireEvent.click(approveButtons[0])

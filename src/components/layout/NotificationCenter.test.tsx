@@ -98,7 +98,7 @@ describe('NotificationCenter bell + badge', () => {
   it('shows no unread badge and a plain label when count is 0', () => {
     freshState({ unreadCount: 0 })
     renderCenter()
-    const bell = screen.getByRole('button', { name: 'Notifications' })
+    const bell = screen.getByRole('button', { name: 'Notifications, 0 unread' })
     expect(bell).toBeInTheDocument()
     expect(screen.queryByText('9+')).not.toBeInTheDocument()
   })

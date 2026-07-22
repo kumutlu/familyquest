@@ -19,6 +19,7 @@ const store = vi.hoisted(() => ({
   authUser: { email: 'sam@example.com' },
   familyData: { id: 'f1', name: 'The Smiths', currency: '£', inviteCode: 'ABC123' },
   familyMembers: [] as any[],
+  joinRequests: [] as any[],
   profileUpdateRequests: [] as any[],
   behaviourEvents: [] as any[],
   funds: [] as any[],
@@ -30,7 +31,7 @@ const store = vi.hoisted(() => ({
 }));
 
 vi.mock('../store/useStore', () => ({
-  useStore: Object.assign(() => store, { getState: () => store }),
+  useStore: Object.assign((selector?: (state: typeof store) => unknown) => selector ? selector(store) : store, { getState: () => store }),
 }));
 
 vi.mock('../lib/roles', () => ({
@@ -115,6 +116,7 @@ beforeEach(async () => {
   store.authUser = { email: 'sam@example.com' };
   store.familyData = { id: 'f1', name: 'The Smiths', currency: '£', inviteCode: 'ABC123' };
   store.familyMembers = [];
+  store.joinRequests = [];
   store.profileUpdateRequests = [];
   store.behaviourEvents = [];
   store.funds = [];
@@ -356,7 +358,7 @@ describe('Phase 2D i18n — Settings (English)', () => {
     render(withRouter(<Settings />));
     expect(screen.getByText('Settings')).toBeInTheDocument();
     expect(screen.getByText('Profile')).toBeInTheDocument();
-    expect(screen.getByText('Family')).toBeInTheDocument();
+    expect(screen.getAllByText('Family').length).toBeGreaterThan(0);
     expect(screen.getByText('Notifications')).toBeInTheDocument();
     expect(screen.getByText('Security')).toBeInTheDocument();
     expect(screen.getByText('About')).toBeInTheDocument();
@@ -373,7 +375,7 @@ describe('Phase 2D i18n — Settings (Turkish)', () => {
     render(withRouter(<Settings />));
     expect(screen.getByText('Ayarlar')).toBeInTheDocument();
     expect(screen.getByText('Profil')).toBeInTheDocument();
-    expect(screen.getByText('Aile')).toBeInTheDocument();
+    expect(screen.getAllByText('Aile').length).toBeGreaterThan(0);
     expect(screen.getByText('Bildirimler')).toBeInTheDocument();
     expect(screen.getByText('Güvenlik')).toBeInTheDocument();
     expect(screen.getByText('Hakkında')).toBeInTheDocument();

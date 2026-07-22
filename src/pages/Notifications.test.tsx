@@ -1,6 +1,7 @@
 import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import i18n from '../i18n/config';
 
 // Controllable hook state.
 const notif = vi.hoisted(() => ({
@@ -77,7 +78,9 @@ function renderPage() {
 }
 
 describe('Notifications page', () => {
-  beforeEach(() => {
+  beforeEach(async () => {
+    await i18n.loadNamespaces(['common', 'notifications']);
+    await i18n.changeLanguage('en');
     freshState();
     store.current = { currentUser: { uid: 'u1', familyId: 'fam1' } };
     navigate.mockClear();

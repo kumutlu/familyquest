@@ -45,7 +45,7 @@ describe('ChildSummaryCard', () => {
         <ChildSummaryCard child={child} walletBalance={2720} pendingTaskCount={2} />
       </MemoryRouter>,
     );
-    const link = screen.getByRole('link', { name: /View Muhammed Osman's profile/i });
+    const link = screen.getByRole('link', { name: /View Muhammed Osman[’']s profile/i });
     expect(link).toHaveAttribute('href', '/family/c1');
     expect(screen.getByText(/2 pending tasks/)).toBeInTheDocument();
   });

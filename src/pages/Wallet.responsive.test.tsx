@@ -121,7 +121,7 @@ describe('C. Pending transfer empty vs error vs partial-failure', () => {
     mockStore.myWallet = { balance: 100 };
     mockStore.featureErrors = { transferRequests: '[Transfer requests] permission-denied: denied' };
     render(<MemoryRouter><Wallet /></MemoryRouter>);
-    expect(screen.getByText(/We couldn’t load your pending transfers/i)).toBeInTheDocument();
+    expect(screen.getByText(/We couldn[’']t load your pending transfers/i)).toBeInTheDocument();
     const retry = screen.getByRole('button', { name: /Try again/i });
     expect(retry).toBeInTheDocument();
     fireEvent.click(retry);

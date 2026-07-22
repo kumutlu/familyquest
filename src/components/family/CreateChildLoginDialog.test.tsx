@@ -61,8 +61,7 @@ describe('CreateChildLoginDialog', () => {
     const user = userEvent.setup();
     render(<CreateChildLoginDialog member={member} onClose={() => {}} onSuccess={() => {}} />);
     await user.type(screen.getByLabelText('Username'), '  MiLo  ');
-    expect(await screen.findByText(/Will be saved as:/)).toBeInTheDocument();
-    expect(screen.getByText('milo')).toBeInTheDocument();
+    expect(await screen.findByText((_, node) => node?.textContent === 'Will be saved as: milo')).toBeInTheDocument();
   });
 
   it('creates a login on valid submit and clears passwords', async () => {
