@@ -4,6 +4,7 @@ import { Button } from '../ui/Button';
 import { doc, updateDoc } from 'firebase/firestore';
 import { db } from '../../lib/firebase';
 import { getAvatarById, resolveAvatarImage } from '../../config/avatarCatalog';
+import { CHILD_COLOUR_SWATCHES, type ChildColour } from '../../config/childColours';
 import { AvatarPicker } from '../profile/AvatarPicker';
 
 interface EditMemberModalProps {
@@ -20,8 +21,11 @@ export function EditMemberModal({ member, onClose }: EditMemberModalProps) {
   const { t } = useTranslation(['family', 'common']);
   const [displayName, setDisplayName] = useState(member.displayName || '');
   const [selectedAvatarId, setSelectedAvatarId] = useState<string | null>(member.avatarId || null);
+  const [selectedColour, setSelectedColour] = useState<ChildColour | null>(member.colour || null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  const isChild = member.role === 'child';
 
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -40,6 +44,9 @@ export function EditMemberModal({ member, onClose }: EditMemberModalProps) {
       if (selectedAvatarId) {
         update.avatarId = selectedAvatarId;
         update.avatarUrl = resolveAvatarImage(selectedAvatarId, member.avatarUrl) || '';
+      }
+      if (isChild) {
+        update.colour = selectedColour;
       }
       await updateDoc(doc(db, 'users', member.id), update);
       onClose();
@@ -89,6 +96,26 @@ export function EditMemberModal({ member, onClose }: EditMemberModalProps) {
                 disabled={isSubmitting}
               />
             </div>
+            {isChild && (
+              <div>
+                <span className="block text-sm font-medium text-gray-700 mb-2">{t('family:editMember.colourLabel')}</span>
+                <div className="flex flex-wrap gap-2 justify-center">
+                  {CHILD_COLOUR_SWATCHES.map((c) => (
+                    <button
+                      key={c.value}
+                      type="button"
+                      aria-label={c.name}
+                      aria-pressed={selectedColour === c.value}
+                      onClick={() => setSelectedColour(selectedColour === c.value ? null : c.value)}
+                      className={`w-9 h-9 rounded-full border-2 transition-all ${
+                        selectedColour === c.value ? 'border-gray-900 scale-110' : 'border-transparent'
+                      }`}
+                      style={{ backgroundColor: c.value }}
+                    />
+                  ))}
+                </div>
+              </div>
+            )}
             <div className="pt-4 flex gap-3">
               <Button type="button" variant="outline" fullWidth onClick={onClose}>
                 {t('common:cancel')}

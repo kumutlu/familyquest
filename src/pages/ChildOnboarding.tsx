@@ -9,21 +9,12 @@ import { createManagedMember } from '../lib/api';
 import { isChildRole } from '../lib/roles';
 import { AvatarPicker } from '../components/profile/AvatarPicker';
 import { CreateChildLoginDialog } from '../components/family/CreateChildLoginDialog';
+import { CHILD_COLOUR_SWATCHES, type ChildColour } from '../config/childColours';
 import {
   clearChildOnboardingStep,
   loadChildOnboardingStep,
   saveChildOnboardingStep,
 } from '../lib/childOnboarding';
-
-// Preset accent colours offered during child creation (optional field).
-const COLOUR_SWATCHES = [
-  { name: 'Sky', value: '#38bdf8' },
-  { name: 'Violet', value: '#a78bfa' },
-  { name: 'Rose', value: '#fb7185' },
-  { name: 'Amber', value: '#fbbf24' },
-  { name: 'Emerald', value: '#34d399' },
-  { name: 'Fuchsia', value: '#e879f9' },
-];
 
 const TOTAL_STEPS = 6;
 
@@ -41,7 +32,7 @@ export function ChildOnboarding() {
   const [name, setName] = useState('');
   const [dob, setDob] = useState('');
   const [avatarId, setAvatarId] = useState<string | null>(null);
-  const [colour, setColour] = useState<string | null>(null);
+  const [colour, setColour] = useState<ChildColour | null>(null);
   const [formError, setFormError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
 
@@ -172,7 +163,7 @@ export function ChildOnboarding() {
             <div>
               <span className="block text-sm font-medium text-gray-700 mb-2">{t('auth:childOnboarding.colourLabel')}</span>
               <div className="flex flex-wrap gap-2">
-                {COLOUR_SWATCHES.map((c) => (
+                {CHILD_COLOUR_SWATCHES.map((c) => (
                   <button
                     key={c.value}
                     type="button"
