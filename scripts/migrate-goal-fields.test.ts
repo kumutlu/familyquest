@@ -16,7 +16,7 @@
 import { initializeTestEnvironment, RulesTestEnvironment } from '@firebase/rules-unit-testing'
 import { readFileSync } from 'fs'
 import { describe, beforeAll, afterAll, beforeEach, it, expect } from 'vitest'
-import { getFirestore as getAdminFirestore, FieldValue } from 'firebase-admin/firestore'
+import { getFirestore as getAdminFirestore } from 'firebase-admin/firestore'
 import { applicationDefault, getApps, initializeApp } from 'firebase-admin/app'
 import { migrateGoalFields } from './migrate-goal-fields'
 
@@ -24,7 +24,7 @@ const PROJECT_ID = 'familyquest-goal-migration-test'
 const FAMILY = 'family1'
 const EMULATOR_HOST = '127.0.0.1:8080'
 
-let testEnv: RulesTestEnvironment
+let testEnv: RulesTestEnvironment | undefined
 
 // Point the firebase-admin SDK at the same emulator the rules test env starts.
 process.env.FIRESTORE_EMULATOR_HOST = EMULATOR_HOST
@@ -48,12 +48,12 @@ beforeAll(async () => {
 })
 
 afterAll(async () => {
-  await testEnv.cleanup()
+  await testEnv?.cleanup()
 })
 
 beforeEach(async () => {
   const adminDb = getAdminDb()
-  await testEnv.clearFirestore()
+  await testEnv!.clearFirestore()
   // Seed via admin (bypasses rules, as production migration does).
   await adminDb.doc(`families/${FAMILY}`).set({ name: 'Family 1' })
   // Legacy (pre-v1) goal: major-unit fields, no version/kind/status/currency/pence.
