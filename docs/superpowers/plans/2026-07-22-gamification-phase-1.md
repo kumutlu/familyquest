@@ -10,7 +10,7 @@
 
 ## Global Constraints
 
-- Start from `todo-theme` at `279495ba477aeecda0f7d9a27c01167bcf52ddfe` with a clean tree.
+- Start from `todo-theme` at `c210eaff639427d45f97f1d2a447975c4cbb7737` with a clean tree. Treat the accepted Task Details completion IDs from `c210eaf` as client document identities only; the server derives the canonical logical occurrence independently.
 - Scope is XP, levels, configurable Daily Goal percentage, weighted daily progress, streak, Perfect Day, immutable events, summaries, and baseline migration only.
 - Do not add badges, Mystery Boxes, pets, Habit Tree, seasons, Family Boss, AI Coach, or push notifications.
 - Task XP is its finite, non-negative, safe-integer `pointsReward` snapshot.
@@ -21,6 +21,7 @@
 - At 100%, award both bonuses. Each positive bonus occurs once per child/local day.
 - Zero eligible points awards nothing and is streak-neutral.
 - Events are append-only. Reversals append compensation; `bestStreak` does not decrease.
+- Bonus XP is awarded/revoked at most once, while separate immutable zero-XP qualification transitions represent every threshold loss and same-day recovery.
 - Immutable daily eligibility snapshots are authoritative denominators; progress, checkpoints, and summaries are rebuildable caches.
 - Per-task daily contribution is capped to that task's frozen weight; never use a global total clamp.
 - Cancellation/invalidation/reversal before or after award and cross-ID duplicate delivery must converge idempotently. An already-invalid source's atomic award/revoke causal group is observed only after its net-zero fold and cannot raise current/best streak.
@@ -48,21 +49,21 @@
 
 ---
 
-### Task 1: Commit architecture and implementation plan
+### Task 1: Amend and independently approve architecture and implementation plan
 
 **Files:**
-- Create: `docs/superpowers/specs/2026-07-22-gamification-phase-1-design.md`
-- Create: `docs/superpowers/plans/2026-07-22-gamification-phase-1.md`
+- Modify: `docs/superpowers/specs/2026-07-22-gamification-phase-1-design.md`
+- Modify: `docs/superpowers/plans/2026-07-22-gamification-phase-1.md`
 
 **Interfaces:**
-- Consumes: approved decisions and repository contracts at `279495b`.
+- Consumes: approved decisions and repository contracts at `c210eaf`, including the accepted Task Details regression fix.
 - Produces: authoritative design and execution sequence.
 
 - [ ] **Step 1: Verify preconditions**
 
 ```bash
 test "$(git branch --show-current)" = "todo-theme"
-test "$(git rev-parse HEAD)" = "279495ba477aeecda0f7d9a27c01167bcf52ddfe"
+test "$(git rev-parse HEAD)" = "c210eaff639427d45f97f1d2a447975c4cbb7737"
 test -z "$(git status --porcelain)"
 ```
 
@@ -75,7 +76,7 @@ rg -n "\b(T""BD|T""ODO)\b|implement[[:space:]]later|fill[[:space:]]in[[:space:]]
 git diff --check
 git add docs/superpowers/specs/2026-07-22-gamification-phase-1-design.md \
   docs/superpowers/plans/2026-07-22-gamification-phase-1.md
-git commit -m "docs(gamification): plan phase 1 architecture"
+git commit -m "docs(gamification): amend phase 1 architecture plan"
 ```
 
 Expected: `rg` exits 1 with no matches, diff check passes, and one commit contains exactly two docs.
@@ -118,7 +119,7 @@ Expected: FAIL because modules do not exist.
 
 - [ ] **Step 3: Implement exact readonly contracts and resolver**
 
-Use design event/source unions and epoch-millisecond timestamps. Encode the minimum immutable completion effect, eligibility snapshot reference, migration state union, and rebuild checkpoint contracts. Return a frozen/read-only config. Do not import platform libraries.
+Use design event/source unions and epoch-millisecond timestamps. Encode the minimum immutable completion effect, eligibility snapshot reference, canonical `sourceTransitionId` variants, semantic cursor, exact summary projection fields, migration state union, and rebuild checkpoint contracts. Return a frozen/read-only config. Do not import platform libraries. Test every transition-ID producer, retry stability, distinct repeated-oscillation sources, delimiter rejection, and the eight-record causal-group cap.
 
 - [ ] **Step 4: Verify and commit**
 
@@ -242,12 +243,12 @@ Expected: all pass. Complete both reviews.
 
 - [ ] **Step 1: Write failing transition tests**
 
-Test same-day idempotency, consecutive days, finalized miss reset, unfinalized current day, neutral zero-work bridge, late approval, reversal, and 100% planning `daily_goal_awarded:+25` plus `perfect_day_awarded:+50`. Replay causal groups ordered by `(effectiveAt, causalGroupId)`, apply their events by `(transitionRank, eventId)`, and observe streak state only after the complete group. Prove: (a) an already-invalid source's award+revoke in one group is net-zero and leaves current/best at 0 without transient qualification; (b) Monday award in group A records best 1, Monday revoke in later group B removes active qualification, and Tuesday award yields current 1 and best 1 rather than 2. Delete the summary cache and reproduce both results from immutable eligibility and award/revoke events.
+Test same-day idempotency, consecutive days, finalized eligible miss reset, unfinalized current day, neutral finalized zero-work bridge, late approval after finalization, reversal, and 100% planning `daily_goal_awarded:+25` plus `perfect_day_awarded:+50` and both zero-XP qualified transitions. Assert a finalized eligible miss emits deterministic zero-XP unqualified finalization events, while an unfinalized or zero-denominator day emits none; replay must not consult the current clock. Replay causal groups ordered by `(effectiveAt, causalGroupId)`, apply their events by `(transitionRank, eventId)`, and observe streak state only after the complete group. Prove: (a) an already-invalid source's bonus award+compensation and qualification+unqualification in one group is net-zero and leaves current/best at 0; (b) Monday qualification in group A records best 1, Monday unqualification in later group B removes active qualification, and Tuesday qualification yields current 1/best 1; (c) same-day recovery and a second loss/recovery use distinct canonical source IDs, restore qualification/Perfect Day state, and never award bonus XP twice. Delete the summary cache and reproduce all results from immutable eligibility and qualification events.
 
 - [ ] **Step 2: Prove RED, implement, verify, and commit**
 
 Run RED: `npx vitest run src/domain/gamification/{streak,perfectDay}.test.ts`
-Expected: missing modules. Positive IDs have no attempt counter; compensation references `causalEventId`; every transition has deterministic `causalGroupId`, `effectiveAt`, and `transitionRank`; same-day recovery cannot re-award XP. Cached `bestStreak` must not be its own authoritative input.
+Expected: missing modules. Positive bonus IDs have no attempt counter; compensation references `causalEventId`; qualification IDs include canonical `sourceTransitionId`; every transition has deterministic `causalGroupId`, `effectiveAt`, and `transitionRank`; same-day recovery cannot re-award XP. Cached `bestStreak` must not be its own authoritative input.
 
 ```bash
 npx vitest run src/domain/gamification/*.test.ts
@@ -273,7 +274,7 @@ Expected: all pass. Complete both reviews.
 
 - [ ] **Step 1: Write failing full-domain tests**
 
-At 100%, assert manual and auto-approved inputs produce identical task/bonus events and summary total `task XP + 75`. Two document IDs with one logical key produce one award. Cancellation/invalidation/reversal after award produces exact compensation in a later causal group and preserves a legitimately achieved `bestStreak`. Reversal-before-award later converges to an immutable award+revocation pair in one atomic causal group with net zero; retries add nothing and replay never raises threshold qualification, `currentStreak`, `bestStreak`, or Perfect Day count. Shuffled events/eligibility/progress rebuild XP, level, current/best streak, and Perfect Day count without the old summary.
+At 100%, assert manual and auto-approved inputs produce identical task/bonus events and summary total `task XP + 75`. Two document IDs with one logical key produce one award. Cancellation/invalidation/reversal after award produces exact compensation and an unqualification transition in a later causal group while preserving a legitimately achieved `bestStreak`. Same-day recovery appends a zero-XP qualification transition, restores active qualification/Perfect Day count, and never grants the bonus twice; test a second loss/recovery cycle as deterministic immutable transitions. Reversal-before-award later converges to an immutable award+revocation pair plus net-zero qualification transitions in one atomic causal group; retries add nothing and replay never raises threshold qualification, `currentStreak`, `bestStreak`, or Perfect Day count. Shuffled events/eligibility/progress rebuild XP, level, current/best streak, and Perfect Day count without the old summary.
 
 - [ ] **Step 2: Prove RED, implement plain-value plans, and commit**
 
@@ -299,12 +300,12 @@ Expected: all pass. Complete both reviews.
 - Modify: `package.json`
 
 **Interfaces:**
-- Consumes: Admin `Firestore`, optional family scope, execute flag, baseline ID helper, summary rebuild.
+- Consumes: Admin `Firestore`, optional family scope, execute flag, baseline ID helper, semantic cursor, and summary dirty-marker contract.
 - Produces: `prepareGamificationMigration(db, familyId, cutoverAt)`, `migrateLegacyXp(db, args)`, baseline dry-run/execute CLI, and `npm run test:migration:gamification`.
 
 - [ ] **Step 1: Write failing emulator tests**
 
-Seed two families and test positive, zero, missing, invalid, valid pre-existing event, partial recovery, re-run, cross-family isolation, `schemaVersion`, `migratedAt`, and untouched original `lifetimeXP`. Test only `inactive -> prepared -> baseline_complete`, denied skipped/reverse transitions, required frozen `cutoverAt`, concurrent post-cutover event preservation during baseline summary rebuild, and that Task 7 neither defers/processes task rewards nor advances to `active`.
+Seed two families and test positive, zero, missing, invalid, valid pre-existing event, partial recovery, re-run with a different run clock, cross-family isolation, `schemaVersion`, `migratedAt`, untouched original `lifetimeXP`, and earliest-dirty-cursor merging. Assert baseline `effectiveAt` and dirty cursor use the concrete frozen `cutoverAt`; `createdAt`/`migratedAt` use one pre-transaction Admin timestamp; rerun preserves those original operational timestamps while verifying every semantic field. Test only `inactive -> prepared` plus baseline append/verification while remaining `prepared`; deny skipped/reverse transitions and premature `baseline_complete`; preserve concurrent post-cutover events/dirty cursors; and prove Task 7 neither processes task rewards nor advances migration state beyond `prepared`.
 
 - [ ] **Step 2: Prove RED**
 
@@ -316,7 +317,7 @@ Expected: FAIL because migration module is absent.
 
 - [ ] **Step 3: Implement per-child transactions and commands**
 
-Existing deterministic events are verified and skipped, never overwritten. Preparation uses compare-and-set from `inactive`; the baseline requires `prepared`, writes no task events, and transactionally appends the baseline plus a summary rebuilt from the baseline and any seeded/already-committed post-cutover events. Firestore conflicts retry against concurrent summary writes. It ends at `baseline_complete` only after every child is verified/skipped. Task 8 owns immediate live task processing, missed-trigger repair, backlog verification, and activation behavior. Add:
+Existing deterministic events are verified and skipped, never overwritten. Preparation uses compare-and-set from `inactive`; the baseline requires and remains `prepared`, writes no task events, and transactionally appends the baseline plus a merged earliest-dirty summary rebuild marker. It never scans full history. Firestore conflicts retry against concurrent summary/projection writes. Task 8 owns bounded rebuild, verification, the guarded `prepared -> baseline_complete` transition after every child and summary is clean, immediate live task processing, missed-trigger repair, and activation behavior. Add:
 
 ```json
 "test:migration:gamification": "firebase emulators:exec --only firestore 'vitest run scripts/migrate-legacy-xp.test.ts'"
@@ -368,9 +369,11 @@ Report repository schedule fields and ask the user to decide weekly/one-time occ
 
 - [ ] **Step 2: Write failing adapter, Functions, and emulator tests**
 
-Use injected repository/clock dependencies. Emulator tests invoke processors against Admin Firestore and verify: manual/auto-approved identical trusted effects; auto-approved `awardedPoints`, timezone/day snapshot, and exact-once reward points; client task completion never directly mutates `rewardPoints`; every source at/after `cutoverAt` receives its complete reward/effect/event/projection transaction immediately while state is `prepared`; no reservation/effect can commit without rewardPoints/events/summary; trusted normalization of an arbitrary-ID pending completion created before cutover but approved after `prepared`; server-only occurrence-reservation cross-ID dedupe/conflict rejection; invalid reward no-write; cancellation/invalidation/reversal before and after award; later reversal preserving a legitimate best; already-invalid source award+revoke causal group leaving current/best/Perfect Day net-zero; late approval repair; cross-family rejection; immutable eligibility creation/content verification; zero-day finalization; 250-document generation/watermark paging; a write whose ID sorts before the cursor marking dirty and forcing restart; `<`/`>= cutoverAt` filtering; live/baseline concurrency; missed-trigger repair; checkpoint resume; and activation only after baseline plus repair verification.
+Use injected repository/clock dependencies. Emulator tests invoke processors against Admin Firestore and verify: manual/auto-approved identical trusted effects; auto-approved `awardedPoints`, timezone/day snapshot, and exact-once reward points; client task completion never directly mutates `rewardPoints`; every source at/after `cutoverAt` receives its complete reward/effect/event/projection transaction immediately while state is `prepared`; no reservation/effect can commit without rewardPoints/events and either a bounded summary update or dirty marker; trusted normalization of an arbitrary-ID pending completion created before cutover but approved after `prepared`; server-only occurrence-reservation cross-ID dedupe/conflict rejection; invalid reward no-write; cancellation/invalidation/reversal before and after award; same-day threshold loss/recovery/loss with one bonus and replayable zero-XP qualification transitions; finalized eligible miss unqualification, unfinalized-day absence, zero-denominator neutrality, and late approval recovery without clock inference; later reversal preserving a legitimate best; already-invalid source award+revoke causal group leaving current/best/Perfect Day net-zero; late approval repair; cross-family rejection; immutable eligibility creation/content verification; constant-size in-order live projection; historical write marking the earliest dirty cursor without an unbounded read; 250-document generation/watermark paging; a write whose ID sorts before the cursor marking dirty and forcing restart; `<`/`>= cutoverAt` filtering; `inactive` completion create/approval barrier; live/baseline concurrency; missed-trigger repair; checkpoint resume; and activation only after baseline plus repair verification.
 
 Add an adversarial occurrence test with two arbitrary completion document IDs and two different syntactically valid client `periodKey` values that both refer to the same authoritative scheduled occurrence/local day. The processor must ignore those values as accounting authority, derive one normalized logical key from the schedule and validated completion time, reserve it once, and leave the second delivery with no additional `rewardPoints`, task XP, Daily Goal/Perfect Day events, feed item, or approved-task notification.
+
+Add rebuild-query tests that merge child-scoped eligibility and event streams by `(effectiveAt, causalGroupId, transitionRank, documentId)`, never read more than 250 total records in one invocation, carry a causal group split at a page boundary without exposing partial state, reject a group larger than eight records, and restart when a late-created earlier-effective record dirties the generation. Capture the exact query/index evidence for the approval gate; do not edit indexes here.
 
 - [ ] **Step 3: Prove RED**
 
@@ -385,7 +388,7 @@ Expected: missing modules/exports.
 
 - [ ] **Step 4: Implement exact shared build and orchestration**
 
-Set Functions `rootDir` to `..`, include Functions source and root gamification source, set `main` to `lib/functions/src/index.js`, and build `rm -rf lib && tsc`. Import root domain; do not copy it. Keep timestamps/Firestore types in adapters. Reuse `onTaskCompletionWritten`; do not add a callable or parallel task-award path. From `prepared` onward, the Admin transaction immediately derives authoritative occurrence/day data, verifies or creates the occurrence reservation and immutable effect, increments spendable `rewardPoints`, appends immutable gamification events, replaces progress/summary caches, and writes deterministic approved-task feed/notification IDs as one all-or-nothing unit. Never write an effect/reservation for later credit. Existing occurrence/event/effect identities must match exactly before reuse. Transactions are bounded to one logical occurrence/affected day. Repair pages at most 250 source documents within a generation's stable `watermarkAt`; it repairs only missed complete transactions, while every writer marks an in-flight generation dirty and dirty publish restarts. Validation errors have no fallback writes. Task 8 advances `baseline_complete -> active` only after the captured post-cutover repair boundary is drained and verified.
+Set Functions `rootDir` to `..`, include Functions source and root gamification source, set `main` to `lib/functions/src/index.js`, and build `rm -rf lib && tsc`. Import root domain; do not copy it. Keep timestamps/Firestore types in adapters. Create and export the single new `onTaskCompletionWritten` trigger over the existing completion collection/workflow; do not add a callable or parallel task-award path. From `prepared` onward, the Admin transaction immediately derives authoritative occurrence/day data, verifies or creates the occurrence reservation and immutable effect, increments spendable `rewardPoints`, appends immutable gamification events, replaces affected progress, applies a cursor-safe constant-size summary delta or merges an earliest-dirty rebuild marker, and writes deterministic approved-task feed/notification IDs as one all-or-nothing unit. Never write an effect/reservation for later credit. Existing occurrence/event/effect identities must match exactly before reuse. No live or migration transaction scans full history. Paged rebuild merges eligibility/events by `(effectiveAt, causalGroupId, transitionRank, documentId)`, reads at most 250 total records per invocation, carries split causal groups without observing partial state, and restarts when an authoritative writer dirties the generation. Only a clean generation replaces the complete summary. Task 8 advances `prepared -> baseline_complete` only after baseline verification and every dirty summary is clean, then advances `baseline_complete -> active` only after the captured post-cutover repair boundary is drained. Validation errors have no fallback writes.
 
 Add this root command and exclude the same emulator-backed file from the ordinary `test` script:
 
@@ -438,7 +441,7 @@ Report the proposed combined Rules/client/settings diff, every new and affected 
 
 - [ ] **Step 2: After approval, write all failing Rules and client tests and prove RED together**
 
-Rules coverage: parent/owner same-family reads; child own reads; cross-child/family denial; every client occurrence-reservation/eligibility/event/progress/checkpoint/summary write denied; direct XP/streak and task reward/effect writes denied; manual/auto clients limited to exact completion source/status/reviewer fields; arbitrary-ID legacy pending approval allowed without trusted fields; forged logical/period keys unable to grant rewards; legacy non-task XP accepted only in `inactive`; migration metadata client-write denied; owner-only validated config. Update the listed existing Rules suites for the same contract without weakening unrelated behavior.
+Rules coverage: parent/owner same-family reads; child own reads; cross-child/family denial; every client occurrence-reservation/eligibility/event/progress/checkpoint/summary write denied; direct XP/streak and task reward/effect writes denied; completion create/approval denied for every client while migration state is `inactive`; manual/auto clients limited to exact completion source/status/reviewer fields from `prepared` onward; arbitrary-ID legacy pending approval allowed without trusted fields after the barrier opens; forged logical/period keys unable to grant rewards; legacy non-task XP denied by the coordinated cutover contract; migration metadata client-write denied; owner-only validated config. Update the listed existing Rules suites for the same contract without weakening unrelated behavior.
 
 Client coverage: the new client never writes task `rewardPoints`, legacy XP/streak fields, trusted effects, or occurrence reservations in any state; manual and auto paths write only completion state/reviewer fields; retries cannot manufacture credit; approved success feed/notifications are absent client-side while submission/rejection behavior remains; non-task spendable points preserve intended behavior without post-cutover compatibility XP; settings writes only `{gamification:{schemaVersion:1,dailyGoalPercentage}}` and rejects invalid percentages.
 
@@ -454,7 +457,7 @@ Expected: new Rules and client assertions fail against the legacy contract.
 
 - [ ] **Step 3: Implement the single coherent contract**
 
-Add only approved Rule match/update constraints and do not broaden unrelated permissions. Keep the existing completion create/transition API and `onTaskCompletionWritten`; add no callable or parallel reward path. Manual and auto client writes contain only Rules-validated source/status/reviewer fields. Remove client task reward/reservation/effect/XP/streak and approved-success notification/feed writes. Preserve submission/rejection notifications and existing non-task spendable-point behavior. Reuse `updateFamilySettings`; add the labelled integer Daily Goal input (`min=50`, `max=100`) with help/error association, loading state, and EN/TR parity.
+Add only approved Rule match/update constraints and do not broaden unrelated permissions. Keep the existing completion create/transition API and the single new Task 8 `onTaskCompletionWritten` export; add no callable or parallel reward path. Manual and auto client writes contain only Rules-validated source/status/reviewer fields. Remove client task reward/reservation/effect/XP/streak and approved-success notification/feed writes. Preserve submission/rejection notifications and existing non-task spendable-point behavior. Reuse `updateFamilySettings`; add the labelled integer Daily Goal input (`min=50`, `max=100`) with help/error association, loading state, and EN/TR parity.
 
 - [ ] **Step 4: Verify and commit Rules, client, settings, and affected tests together**
 
@@ -633,7 +636,7 @@ Test baseline-derived summary through adapters into parent/child 100% rendering.
 
 - [ ] **Step 2: Write operations documentation**
 
-Document the exact `inactive -> prepared -> baseline_complete -> active` commands and guards, the single coherent client/Rules/settings cutover, maintenance-through-active policy, immediate complete post-cutover processing, cutover filters, dry-run/execute commands, missed-trigger repair/checkpoint resume, verification queries, partial recovery, deterministic reruns, compatibility fields, non-destructive rollback, and no-deploy status.
+Document the exact `inactive -> prepared -> baseline_complete -> active` commands and guards, the Rules-enforced `inactive` completion create/approval barrier, the single coherent client/Rules/settings cutover, maintenance-through-active policy, immediate complete post-cutover processing, cutover filters, dry-run/execute commands, missed-trigger repair/checkpoint resume, bounded summary rebuild and dirty-cursor recovery, verification queries, partial recovery, deterministic reruns, compatibility fields, non-destructive rollback, and no-deploy status.
 
 - [ ] **Step 3: Run complete verification**
 
@@ -669,7 +672,7 @@ Expected: only operations documentation and genuine Stage 2 test/fix files.
 
 - [ ] **Step 5: Full review and clean-tree gate**
 
-Request independent specification and security/quality review from `279495b` to `HEAD`. Fix findings in coherent commits and repeat. Re-run every command above, then require:
+Request independent specification and security/quality review from `c210eaf` to `HEAD`. Fix findings in coherent commits and repeat. Re-run every command above, then require:
 
 ```bash
 test -z "$(git status --porcelain)"

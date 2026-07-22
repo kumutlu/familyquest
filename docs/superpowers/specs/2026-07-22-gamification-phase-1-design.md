@@ -1,8 +1,8 @@
 # FamilyQuest Gamification Phase 1 Design
 
-**Status:** Approved product rules captured for implementation
+**Status:** Amended after the approved auto-approved-task decision and independent architecture review
 **Date:** 2026-07-22
-**Starting point:** `todo-theme` at `279495ba477aeecda0f7d9a27c01167bcf52ddfe`
+**Starting point:** `todo-theme` at `c210eaff639427d45f97f1d2a447975c4cbb7737`
 
 ## 1. Scope and fixed rules
 
@@ -41,6 +41,8 @@ They use the same logical identity, reward validation, frozen eligibility weight
 ## 2. Current architecture and compatibility boundary
 
 The current client `src/lib/api.ts` directly updates `lifetimeXP` during task completion/approval, positive behaviour, challenge claim, and generic `awardPoints`. It also updates legacy streak fields from the browser clock. UI components independently derive levels from `lifetimeXP`. `reverseTransaction` creates immutable reversal records but intentionally has no XP effect. Current Firestore rules require task approval and positive-behaviour `lifetimeXP` mutations.
+
+The accepted `c210eaf` Task Details regression fix gives current client completion documents deterministic child/task/period attempt IDs and preserves legacy random-ID and rejected-attempt compatibility. This is an interim client-workflow safeguard, not the Phase 1 accounting identity. Phase 1 still normalizes every arbitrary completion document ID—including IDs produced by `c210eaf`—to the server-derived `logicalCompletionKey` and server-only occurrence reservation. No gamification rule may trust a client completion document ID as proof of uniqueness or eligibility.
 
 Phase 1 authority is limited to approved task rewards, Daily Goal and Perfect Day bonuses, their compensation events, and the one-time baseline. Positive behaviour, challenge claims, and generic point awards do not create Phase 1 XP events. Their spendable `rewardPoints` behavior remains, but their direct `lifetimeXP` writes are deprecated and are removed at the coordinated client/rule cutover. The baseline preserves all valid positive legacy XP accumulated before cutover, regardless of its original feature. No new reward source is invented.
 
@@ -178,6 +180,8 @@ perfectDayReached = eligiblePoints > 0
 
 There is no global post-sum clamp: every contribution is independently bounded by its authoritative frozen task weight. Manual and auto-approved completions use the same weight. Pending, rejected, cancelled, invalidated, and reversed logical occurrences contribute zero. Thresholds use integer cross-multiplication; display rounding never decides rewards. All-zero weights form a neutral zero denominator.
 
+Reward validation and progress capping are separate and deterministic. The trusted processor accepts a task reward only when the authoritative task snapshot is a finite, non-negative safe integer; accepted `xpAward` and `rewardPointsAward` equal that snapshot exactly, while an invalid reward aborts the whole effect with no fallback write. There is no global reward clamp and no post-sum correction. For Daily Goal weighting only, each logical task contribution is independently capped with `min(validCompletionDailyWeight, frozenTaskWeight)` so one malformed or conflicting effect cannot consume another task's denominator.
+
 ## 6. Firestore model
 
 ### Family configuration
@@ -227,8 +231,10 @@ interface GamificationEventV1 {
     | 'xp_revoked'
     | 'daily_goal_awarded'
     | 'daily_goal_revoked'
+    | 'daily_goal_qualification_changed'
     | 'perfect_day_awarded'
     | 'perfect_day_revoked'
+    | 'perfect_day_qualification_changed'
     | 'legacy_xp_baseline';
   xpDelta: number;
   sourceType: 'task_completion' | 'daily_progress' | 'migration';
@@ -246,6 +252,8 @@ interface GamificationEventV1 {
   createdBy: 'gamification-engine-v1' | 'legacy-xp-migration-v1';
   createdAt: Timestamp;
   migratedAt?: Timestamp;
+  sourceTransitionId?: string;
+  qualificationState?: 'qualified' | 'unqualified';
 }
 ```
 
@@ -258,10 +266,27 @@ daily_goal:{familyId}:{childId}:{dayKey}
 daily_goal_reversal:{familyId}:{childId}:{dayKey}
 perfect_day:{familyId}:{childId}:{dayKey}
 perfect_day_reversal:{familyId}:{childId}:{dayKey}
+daily_goal_qualification:{familyId}:{childId}:{dayKey}:{sourceTransitionId}
+perfect_day_qualification:{familyId}:{childId}:{dayKey}:{sourceTransitionId}
 legacy_xp_baseline:{familyId}:{childId}
 ```
 
-Pipes and colons are valid Firestore ID characters; the reserved delimiter is forbidden inside components. Cross-document duplicates therefore address the same event. `causalGroupId` is deterministic from the logical source transition; normal awards and later reversals use separate groups, while repair of a source already known invalid uses one shared atomic group for its award/revoke pair. `effectiveAt` is the authoritative source-transition time, not trigger-delivery time. Positive daily IDs occur once. If invalidation lowers progress, at most one matching compensation is appended. If progress later recovers the same day, qualification/streak can recover but XP is not awarded twice.
+Pipes and colons are valid Firestore ID characters; the reserved delimiter is forbidden inside components. Cross-document duplicates therefore address the same event. `causalGroupId` is deterministic from the logical source transition; normal awards and later reversals use separate groups, while repair of a source already known invalid uses one shared atomic group for its award/revoke pair. `effectiveAt` is the authoritative source-transition time, not trigger-delivery time.
+
+Bonus accounting and qualification history are deliberately separate. `daily_goal_awarded`/`perfect_day_awarded` grant XP once; their matching `*_revoked` compensation can remove that XP once and is never repeated. Every actual threshold state transition also appends a zero-XP `*_qualification_changed` event keyed by the authoritative transition source. Consequently award → revoke → same-day recovery appends `qualified`, `unqualified`, `qualified`; the recovery grants no second bonus but is visible to streak and Perfect Day replay. Further oscillations append deterministic zero-XP state transitions without editing earlier records. A retry of the same source transition addresses the same event and verifies identical content.
+
+`sourceTransitionId` is canonical, server-derived, and never a trigger-delivery or repair-run ID:
+
+```text
+approval      = approval_v1|{logicalCompletionKey}
+invalidation  = invalidation_v1|{immutableReversalId}
+cancellation  = cancellation_v1|{completionId}|{authoritativeStatusChangedAtEpochMs}
+finalization  = finalization_v1|{eligibilitySnapshotId}
+```
+
+Components use the logical-key delimiter validation rules and timestamps use canonical UTC epoch milliseconds. Manual and auto approval sources for one logical occurrence share the approval identity. Repair reconstructs the ID from the original authoritative fact. Each source can cause at most one state transition per threshold; repeated loss/recovery cycles require distinct authoritative facts and therefore distinct IDs. `causalGroupId` is `gamification_transition_v1|{sourceTransitionId}`, and `effectiveAt` is the authoritative approval, reversal, status-change, or local-day-finalization time. Fixed `transitionRank` values order writes inside the group. A group contains at most eight records; exceeding that bound is an integrity failure.
+
+Finalization is itself an immutable replay fact. When a finalized day has `eligiblePoints > 0` but misses Daily Goal and/or Perfect Day, the scheduler appends the corresponding deterministic zero-XP `*_qualification_changed: unqualified` event using the finalization identity, even if the day was never previously qualified. An unfinalized day emits no finalization event, and a finalized zero-denominator day emits no qualification event and remains neutral. Late approval after finalization appends its later authoritative qualification transition. Replay never infers finalization from the current clock.
 
 ### Immutable daily eligibility ledger
 
@@ -278,6 +303,9 @@ interface DailyEligibilitySnapshotV1 {
   taskWeights: Record<string, number>;
   eligibleTaskCount: number;
   eligiblePoints: number;
+  effectiveAt: Timestamp;
+  causalGroupId: string;
+  transitionRank: 0;
   createdAt: Timestamp;
   createdBy: 'gamification-engine-v1';
 }
@@ -329,19 +357,40 @@ interface GamificationSummaryV1 {
   bestStreak: number;
   perfectDayCount: number;
   lastQualifiedDayKey: string | null;
+  projectionRevision: number;
+  foldedThrough: {
+    effectiveAt: Timestamp;
+    causalGroupId: string;
+    transitionRank: number;
+    documentId: string;
+  } | null;
+  rebuildRequired: boolean;
+  earliestDirtyCursor: {
+    effectiveAt: Timestamp;
+    causalGroupId: string;
+    transitionRank: number;
+    documentId: string;
+  } | null;
+  projectionStatus: 'ready' | 'rebuilding';
   updatedAt: Timestamp;
 }
 ```
 
-`xpTotal` is the exact event-delta sum; a causally invalid negative ledger is rejected rather than clamped. Level is derived. Perfect Day count is awards without compensation. `currentStreak` rebuilds from immutable eligibility plus current invalidation-aware progress.
+`xpTotal` is the exact event-delta sum; a causally invalid negative ledger is rejected rather than clamped. Level is derived. Perfect Day count is the number of days whose latest immutable Perfect Day qualification transition is `qualified`; bonus XP remains the once-only award minus its at-most-once compensation. `currentStreak` rebuilds from immutable eligibility plus immutable qualification transitions, with current progress used only as a replaceable convenience projection.
 
-`bestStreak` is rebuilt by chronologically replaying both `daily_goal_awarded` and `daily_goal_revoked` transitions over immutable eligibility. Replay first groups events by `causalGroupId`, sorts groups by `(effectiveAt, causalGroupId)`, and sorts events inside a group by `(transitionRank, eventId)`. The fold applies every transition in a causal group before observing qualification or updating `currentStreak`/`bestStreak`; intermediate state inside an atomic group is never visible. An ordinary later reversal has a distinct, later causal group, so a legitimately observed earlier maximum remains historical. Example: Monday award in group A records best 1; Monday revoke in later group B removes Monday from active state; Tuesday award yields current 1 and best remains 1—not an invented streak of 2. By contrast, a reversal already authoritative before an award causes the repair processor to append award and revoke in one causal group; its post-group state is net-zero, so neither current nor best streak ever increases. The cached previous value is an optimization, not the sole source.
+`bestStreak` is rebuilt by chronologically replaying zero-XP `daily_goal_qualification_changed` transitions over immutable eligibility. Eligibility snapshots and events share the pageable semantic tuple `(effectiveAt, causalGroupId, transitionRank, documentId)`. Replay merges the two ordered collection streams by that tuple, groups adjacent records by `causalGroupId`, and observes qualification/streak only after the complete group. An ordinary later reversal has a distinct, later causal group, so a legitimately observed earlier maximum remains historical. Example: Monday qualification in group A records best 1; Monday unqualification in later group B removes Monday from active state; Tuesday qualification yields current 1 and best remains 1—not an invented streak of 2. A same-day recovery appends another qualification transition and can restore active streak state without granting XP twice. By contrast, a reversal already authoritative before an award causes the repair processor to append the award, compensation, and net-zero qualification transitions in one causal group; its post-group state is unqualified, so neither current nor best streak ever increases. The cached previous value is an optimization, not the sole source.
+
+### Bounded live projection
+
+No live transaction scans a child's full history. Each summary stores the exact projection fields declared above. `foldedThrough` advances only after a complete causal group is folded. An ordinary append whose semantic tuple follows that cursor applies a constant-size delta from the new immutable events plus the affected day's previous/new progress: XP delta, derived level, Perfect Day qualification delta, and the current-day streak transition. The transaction reads only direct identity documents, the affected eligibility/progress documents, the current summary, and adjacent finalized-day projection state. `projectionRevision` increments on every successful cache replacement; `projectionStatus` is `ready` only when `rebuildRequired === false` and `earliestDirtyCursor === null`.
+
+If an approval, reversal, migration baseline, or repair is older than the summary cursor—or cannot update streaks from that bounded neighborhood—the same atomic write still appends authority and updates affected progress, but marks the summary `rebuildRequired` with the earliest dirty day/event cursor. It never publishes a guessed complete summary. UI treats a rebuilding summary as stale/unavailable. The paged generation below then recomputes the complete cache. Baseline migration likewise appends the baseline and marks/merges the dirty cursor; `baseline_complete` is forbidden until every affected child's bounded rebuild has published. This keeps authoritative writes bounded while ensuring every cache is eventually and deterministically complete.
 
 ### Bounded rebuild checkpoint
 
 Path: `families/{familyId}/gamification_checkpoints/{childId}`. This server-only document is a discardable cursor/cache, never authority. A rebuild transaction creates a generation with `generationId`, `watermarkAt`, `dirty: false`, cursors, and partial fold state. Every authoritative event/eligibility writer reads the checkpoint in its transaction; if a generation is running it sets that generation `dirty: true`, causing a Firestore conflict/retry if initialization raced.
 
-The generation pages only documents with `createdAt <= watermarkAt`, ordered by `(createdAt, documentId)`, at most 250 per invocation. At publish, a transaction verifies the same generation and `dirty === false`; only then does it replace the summary. If dirty, partial state is discarded and a new generation/watermark starts. Thus an event inserted during the run whose deterministic ID sorts before the current cursor cannot be missed: it marks the generation dirty and appears after restart. Removing the checkpoint and replaying all stable pages produces the same summary. Query/index requirements are verified at the explicit index approval gate.
+The generation freezes `watermarkAt` and maintains separate eligibility/event query cursors plus one pending causal group. Both collection streams filter `effectiveAt <= watermarkAt` and use the same semantic order `(effectiveAt, causalGroupId, transitionRank, documentId)`; each invocation reads at most 250 records total across the two streams, merges them in memory, and carries a causal group across page boundaries without observing it until its final record is read. A causal group is capped by contract at eight records; exceeding the cap is an integrity error rather than an unbounded read. At publish, a transaction verifies the same generation and `dirty === false`; only then does it replace the summary and exact `foldedThrough` cursor. If dirty, partial state is discarded and a new generation/watermark starts. Thus a late-created record with an earlier `effectiveAt` cannot be missed: every authoritative writer marks the generation dirty and the restarted generation includes it. Removing the checkpoint and replaying all stable pages produces the same summary. The two required semantic-order query shapes and any composite indexes are reported at the explicit index approval gate; no index file is edited beforehand.
 
 ## 7. Streak semantics
 
@@ -352,8 +401,8 @@ The generation pages only documents with `createdAt <= watermarkAt`, ordered by 
 - A qualifying current day may extend displayed current streak immediately.
 - Same-day reprocessing recalculates the sequence and cannot double-increment.
 - Late approval can restore historical qualification; reversal can remove it.
-- `currentStreak` follows recalculated authoritative progress.
-- `bestStreak` comes from chronological award/revoke replay and therefore preserves a legitimately reached historical maximum without joining days that were never simultaneously consecutive.
+- `currentStreak` follows immutable eligibility and the latest qualification transition for each day.
+- `bestStreak` comes from chronological qualification-transition replay and therefore preserves a legitimately reached historical maximum without joining days that were never simultaneously consecutive.
 
 This implements “do not punish” without manufacturing credit on no-work days.
 
@@ -365,8 +414,9 @@ Approval processing plans:
 - one frozen task effect plus deterministic approved-task feed/notification records;
 - one `xp_awarded` event containing the exact task reward snapshot, including zero;
 - replacement daily progress for the completion day;
-- absent `daily_goal_awarded` and/or `perfect_day_awarded` events when newly reached;
-- a complete summary rebuilt from immutable events and progress.
+- appended `daily_goal_awarded` and/or `perfect_day_awarded` events when newly reached;
+- zero-XP `*_qualification_changed: qualified` events whenever a threshold becomes qualified, including same-day recovery without a second bonus;
+- a bounded incremental summary update when its cursor permits it, otherwise an atomic `rebuildRequired` marker for paged reconciliation.
 
 The repository commits the entire plan in one Admin transaction. It never exposes a credited reward balance without its reservation/effect/events, or events without the corresponding reward credit. Existing reservations/events must exactly match the plan; otherwise the transaction fails as an integrity error.
 
@@ -375,7 +425,8 @@ Invalidation includes an immutable task reversal record and any trusted transiti
 - `xp_revoked` with the exact negative task XP and `causalEventId`;
 - progress excluding the reversed completion;
 - `daily_goal_revoked` and/or `perfect_day_revoked` when an awarded threshold is no longer reached;
-- rebuilt summary.
+- zero-XP `*_qualification_changed: unqualified` events whenever a threshold becomes unqualified;
+- the same bounded summary update-or-dirty-marker rule used by approval processing.
 
 No transition mutates historical awards. Existing deterministic events must match the planned immutable identity; a mismatch is a hard integrity error with no writes.
 
@@ -394,26 +445,28 @@ For each child with finite, positive, safe-integer `lifetimeXP`, create exactly 
   sourceId: 'legacy_lifetime_xp',
   idempotencyKey: `legacy_xp_baseline:${familyId}:${childId}`,
   causalGroupId: `legacy_xp_baseline:${familyId}:${childId}`,
-  effectiveAt: serverTimestamp(),
+  effectiveAt: familyCutoverAt,
   transitionRank: 0,
   configSchemaVersion: 1,
   createdBy: 'legacy-xp-migration-v1',
-  createdAt: serverTimestamp(),
-  migratedAt: serverTimestamp(),
+  createdAt: migrationRunAt,
+  migratedAt: migrationRunAt,
 }
 ```
 
-Missing, invalid, zero, and negative values create no baseline. One transaction per child verifies an existing deterministic event instead of overwriting it and rebuilds that child's summary. Re-runs are no-ops; partial runs resume per child; family paths and user `familyId` are cross-checked. The user field remains untouched.
+`familyCutoverAt` is the already-frozen concrete Admin `Timestamp` from `gamificationMigration.cutoverAt`, so the baseline sorts deterministically before or alongside the first post-cutover facts and its exact semantic cursor is available before the transaction. `migrationRunAt` is one concrete Admin `Timestamp` captured before the first write transaction and reused for `createdAt`/`migratedAt`; it is never a server transform. On rerun, an existing event must match every semantic/accounting field, while the original operational `createdAt`/`migratedAt` values are preserved and intentionally excluded from equality against the new run clock.
+
+Missing, invalid, zero, and negative values create no baseline. One transaction per child verifies an existing deterministic event instead of overwriting it and merges the baseline's fully known semantic position into the summary's earliest dirty cursor. It does not scan or rebuild history. Re-runs are no-ops; partial runs resume per child; family paths and user `familyId` are cross-checked. The user field remains untouched.
 
 The cutover state machine separates pre-cutover baseline XP from live post-cutover rewards without deferring valid credits:
 
 1. `inactive`: existing clients/rules remain authoritative for legacy `lifetimeXP`; installed Functions observe but create no gamification data.
-2. `prepared`: trusted tooling atomically records `cutoverAt`; the coordinated client/Rules contract freezes legacy client reward/XP writes. For every approved source with `approvedAt >= cutoverAt`, the trusted processor immediately commits the complete Admin transaction: occurrence reservation, frozen effect, spendable `rewardPoints`, XP/bonus events, daily progress, summary, and deterministic success records. It never persists a reversible effect or reservation while deferring the corresponding credit. Trigger retries and repair use the same deterministic identities.
-3. baseline pass: while post-cutover sources continue through that complete live transaction, migration appends each frozen pre-cutover `legacy_xp_baseline` and rebuilds the affected summary transactionally. The baseline and live writers conflict/retry safely on the derived summary; neither overwrites immutable events. UI remains migration-gated.
-4. `baseline_complete`: all children have been verified/skipped and the state advances atomically after baseline verification. Live complete processing never pauses. Backfill is repair for a missed trigger only, never the normal credit path.
+2. `prepared`: trusted tooling atomically records `cutoverAt`; the already-deployed coordinated client/Rules contract changes from its `inactive` completion-write barrier to permitting completion-state writes while continuing to deny legacy client reward/XP writes. For every approved source with `approvedAt >= cutoverAt`, the trusted processor immediately commits the complete Admin transaction: occurrence reservation, frozen effect, spendable `rewardPoints`, XP/bonus events, daily progress, bounded summary update or dirty marker, and deterministic success records. It never persists a reversible effect or reservation while deferring the corresponding credit. Trigger retries and repair use the same deterministic identities.
+3. baseline pass: while post-cutover sources continue through complete live transactions, migration appends each frozen pre-cutover `legacy_xp_baseline` and transactionally merges the affected summary's earliest dirty cursor. The baseline and live writers conflict/retry safely on bounded projection state; neither overwrites immutable events. The paged rebuilder publishes complete summaries before `baseline_complete`; UI remains migration-gated.
+4. `baseline_complete`: all children have been verified/skipped, every baseline-dirtied summary has a clean published rebuild, and trusted orchestration advances the state atomically. Live complete processing never pauses. Backfill is repair for a missed trigger only, never the normal credit path.
 5. `active`: a final repair checkpoint proves no post-cutover source is missing its reservation/credit/events and the state advances. A source before `cutoverAt` is always filtered out; a source at exactly `cutoverAt` is post-cutover. Normal triggers and bounded repair continue.
 
-No state transition may skip forward or move backward. Old clients that still attempt legacy XP writes are denied after `prepared`. Operational maintenance/readiness therefore begins before the coherent client/Rules cutover and remains in place through baseline verification, post-cutover repair/backlog verification, and the transition to `active`; only then is normal client traffic/UI enabled. This repository work performs no production state transition, migration, or deployment.
+No state transition may skip forward or move backward. The coordinated Rules contract enforces a completion create/approval write barrier while migration state is `inactive`; therefore neither old clients, mobile clients, nor direct SDK writes can create the pre-`cutoverAt` lost-award window after legacy reward writes are denied. The trusted `inactive -> prepared` transition atomically establishes `cutoverAt`; Rules then permit state-only completion writes and the server processes the inclusive `approvedAt >= cutoverAt` range. Old clients that attempt legacy reward/XP writes remain denied. Operational maintenance/readiness begins before the coherent client/Rules cutover and remains through baseline verification, post-cutover repair/backlog verification, and transition to `active`; only then is normal UI enabled. This repository work performs no production state transition, migration, or deployment.
 
 Emulator tests cover positive, zero, missing, invalid, re-run, partial recovery, valid pre-existing event, original field preservation, cross-family isolation, every legal/illegal state transition, exact cutover boundary filtering, complete live processing during `prepared`, concurrent baseline/live summary retry, missed-trigger repair, no effect-without-credit intermediate state, and checkpoint resume.
 
@@ -429,7 +482,7 @@ A pure adapter returns XP total, level progress, XP to next level, current/best 
 
 Family Settings reuses `updateFamilySettings` and adds one accessible integer Daily Goal control. It does not create a second API/callable/write path. English and Turkish keys are added together with exact parity.
 
-The coordinated task API/rule change supports both approval modes, but the client only creates or transitions task completion state. The existing Firestore trigger—not a callable or parallel award path—runs the one trusted processor. Its Admin transaction derives the authoritative logical occurrence/day, reserves it, freezes effect snapshots, credits the exact validated spendable reward points, appends XP/bonus events, and updates projections atomically. It also creates deterministic approved-task feed/notification records; client approval code does not emit those success records, preventing retry duplicates. Rejected/submitted notifications remain in their existing appropriate transition paths. Tests prove reward-point parity, cross-document logical dedupe, and no client reward authority for both approval forms.
+The coordinated task API/rule change supports both approval modes, but the client only creates or transitions task completion state. Task 8 creates and exports one new Firestore completion trigger over the existing completion collection/workflow—not a callable or parallel award path—and that trigger runs the trusted processor. Its Admin transaction derives the authoritative logical occurrence/day, reserves it, freezes effect snapshots, credits the exact validated spendable reward points, appends XP/bonus/qualification events, and updates projections atomically. It also creates deterministic approved-task feed/notification records; client approval code does not emit those success records, preventing retry duplicates. Rejected/submitted notifications remain in their existing appropriate transition paths. Tests prove reward-point parity, cross-document logical dedupe, and no client reward authority for both approval forms.
 
 ## 11. Security and index gate
 
@@ -444,7 +497,7 @@ Required rule behavior, only after explicit approval:
 - legacy behaviour/challenge/generic flows may not change `lifetimeXP` after cutover;
 - only owner updates validated nested gamification config.
 
-Admin Functions/migrations bypass client rules and are the only writers of occurrence reservations, trusted task effects, task reward-point credits, eligibility, events, progress, checkpoints, and summaries. The client/Rules/server cutover is one reviewed task and one independently valid commit after explicit Rules approval: old task-reward client writes exist only before that contract; the new Rules deny all client task reward/effect/reservation mutations in every migration state and allow only completion-state transitions; the compatible client never writes task rewards; and the trusted processor immediately performs the complete post-cutover transaction from `prepared` onward. Maintenance/readiness spans the coherent cutover through `active`, so no incompatible client or partially migrated summary is exposed. No layer is committed with imports or writes that require a later fix-up commit. Proposed reads are direct documents or family subcollections. If bounded repair query evidence requires a composite index, stop before editing `firestore.indexes.json` and request approval.
+Admin Functions/migrations bypass client rules and are the only writers of occurrence reservations, trusted task effects, task reward-point credits, eligibility, events, progress, checkpoints, and summaries. The client/Rules/server cutover is one reviewed task and one independently valid commit after explicit Rules approval: old task-reward client writes exist only before that contract; the new Rules deny all client task reward/effect/reservation mutations in every state, deny completion create/approval while `inactive`, and allow only state transitions from `prepared` onward; the compatible client never writes task rewards; and the trusted processor immediately performs the complete post-cutover transaction from `prepared` onward. Maintenance/readiness spans the coherent cutover through `active`, so no incompatible client or partially migrated summary is exposed. No layer is committed with imports or writes that require a later fix-up commit. Proposed reads are direct documents or family subcollections. If bounded repair query evidence requires a composite index, stop before editing `firestore.indexes.json` and request approval.
 
 ## 12. Verification and rollout
 
@@ -454,4 +507,4 @@ Functions/emulator tests cover manually and auto-approved effect snapshots, rewa
 
 Every commit passes focused tests, root typecheck/build, affected Functions build/tests, and `git diff --check`, then receives specification and quality review. Implementation stops before production rule/index changes for explicit approval.
 
-The eventual release order is: deploy state-aware dormant Functions; enter maintenance/readiness mode; deploy the single coherent client/Rules/settings cutover commit that denies client task reward writes; verify the compatible client and processor; transition `inactive -> prepared` to freeze legacy XP and record cutover; immediately smoke-test a complete server-processed post-cutover reward transaction; run/review/execute baselines while all new approvals continue to receive complete server transactions; transition to `baseline_complete`; run/resume bounded missed-trigger repair until its checkpoint is caught up; transition to `active`; then leave maintenance and enable summary UI. There is no deferred post-cutover credit window. Rollback before `active` remains in maintenance but never moves stored state backward or deletes events. After activation, rollback disables trigger/read surfaces while preserving events, snapshots, checkpoints, and compatibility fields. This task does not deploy.
+The eventual release order is: deploy state-aware dormant Functions; enter maintenance/readiness mode; deploy the single coherent client/Rules/settings cutover commit, which denies legacy task reward writes and enforces the `inactive` completion create/approval barrier; verify both the barrier and compatible client/processor; atomically transition `inactive -> prepared` to record `cutoverAt`, which opens state-only completion writes; immediately smoke-test a complete server-processed post-cutover reward transaction; run/review/execute baselines while all new approvals continue to receive complete server transactions; finish every baseline-triggered bounded summary rebuild; transition to `baseline_complete`; run/resume bounded missed-trigger repair until its checkpoint is caught up; transition to `active`; then leave maintenance and enable summary UI. There is no permitted completion write between legacy-authority removal and `cutoverAt`, and no deferred post-cutover credit window. Rollback before `active` remains in maintenance but never moves stored state backward or deletes events. After activation, rollback disables trigger/read surfaces while preserving events, snapshots, checkpoints, and compatibility fields. This task does not deploy.
