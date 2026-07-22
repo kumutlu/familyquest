@@ -168,21 +168,21 @@ describe('ParentDashboard summary cards (Phase 3)', () => {
     expect(screen.getByText('Family Wallets')).toBeInTheDocument();
     expect(screen.queryByText('My Wallet')).not.toBeInTheDocument();
     expect(screen.getByText('£7.50')).toBeInTheDocument();
-    fireEvent.click(screen.getByTestId('wallet-summary'));
+    fireEvent.click(screen.getByRole('button', { name: /Manage family wallets/i }));
     expect(h.navigate).toHaveBeenCalledWith('/wallets');
   });
 
   it('shows active goals count and links to /goals', () => {
     render(<MemoryRouter><ParentDashboard /></MemoryRouter>);
     expect(screen.getByText('2')).toBeInTheDocument();
-    fireEvent.click(screen.getByTestId('goal-summary'));
+    fireEvent.click(screen.getByRole('button', { name: /View all goals/i }));
     expect(h.navigate).toHaveBeenCalledWith('/goals');
   });
 
   it('shows pet box overview and links to /pet-box', () => {
     render(<MemoryRouter><ParentDashboard /></MemoryRouter>);
     expect(screen.getByText('1')).toBeInTheDocument();
-    fireEvent.click(screen.getByTestId('petbox-summary'));
+    fireEvent.click(screen.getByRole('button', { name: /Open Pet Box/i }));
     expect(h.navigate).toHaveBeenCalledWith('/pet-box');
   });
 });
