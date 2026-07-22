@@ -1,8 +1,6 @@
 import { test, expect } from '@playwright/test';
 import { execSync } from 'child_process';
-import { loginAs, logout } from './utils/auth';
-import { db, seedTestFamily } from './utils/seed';
-import { Timestamp } from 'firebase-admin/firestore';
+import { loginAs } from './utils/auth';
 
 /**
  * Regression test for the collapsed NotificationCenter content area.
@@ -23,23 +21,6 @@ import { Timestamp } from 'firebase-admin/firestore';
 test.describe('NotificationCenter layout', () => {
   test.beforeEach(async () => {
     execSync('npx tsx tests/e2e/utils/seed.ts', { stdio: 'ignore' });
-
-    // Seed a notification for child1 so the list renders a real row.
-    await db
-      .doc('families/test-fam/notifications/notif-1')
-      .set({
-        familyId: 'test-fam',
-        type: 'task_approved',
-        actorId: 'parent1',
-        recipientIds: ['child1'],
-        title: 'Room cleaned!',
-        body: 'Your task was approved.',
-        entityType: 'task',
-        entityId: 'task1',
-        actionUrl: '/tasks',
-        dedupeKey: 'notif-1',
-        createdAt: Timestamp.now(),
-      });
   });
 
   test('tabs, first row and content container are visible with real height', async ({ page }) => {

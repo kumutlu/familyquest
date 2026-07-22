@@ -77,6 +77,22 @@ export async function seedTestFamily() {
     createdAt: Timestamp.now()
   });
 
+  // Notification fixture lives in the standalone seed process so Playwright
+  // specs never import firebase-admin through Playwright's ESM transform.
+  batch.set(db.doc(`families/${familyId}/notifications/notif-1`), {
+    familyId,
+    type: 'task_approved',
+    actorId: 'parent1',
+    recipientIds: ['child1'],
+    title: 'Room cleaned!',
+    body: 'Your task was approved.',
+    entityType: 'task',
+    entityId: 'task1',
+    actionUrl: '/tasks',
+    dedupeKey: 'notif-1',
+    createdAt: Timestamp.now(),
+  });
+
   // Pet Box
   batch.set(db.doc(`families/${familyId}/funds/petbox1`), {
     name: 'Vet Fund',
@@ -174,4 +190,3 @@ if (import.meta.url === `file://${process.argv[1]}`) {
     process.exit(1);
   });
 }
-
