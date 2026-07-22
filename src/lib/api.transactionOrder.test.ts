@@ -27,6 +27,10 @@ const firestore = vi.hoisted(() => {
     runTransaction: vi.fn(),
     serverTimestamp: vi.fn(() => ({ sentinel: 'server-timestamp' })),
     writeBatch: vi.fn(() => ({ set: vi.fn(), commit: vi.fn(async () => {}) })),
+    query: vi.fn(() => ({ kind: 'query' })),
+    where: vi.fn(),
+    getDocs: vi.fn(async () => ({ docs: [] })),
+    getDoc: vi.fn(),
     resetIds: () => { generatedId = 0 },
   }
 })
@@ -34,7 +38,7 @@ const authState = vi.hoisted(() => ({ currentUser: { uid: 'child-1' } as any }))
 
 vi.mock('firebase/firestore', () => ({
   ...firestore,
-  setDoc: vi.fn(), query: vi.fn(), where: vi.fn(), getDocs: vi.fn(), getDoc: vi.fn(),
+  setDoc: vi.fn(),
   deleteDoc: vi.fn(), updateDoc: vi.fn(),
 }))
 vi.mock('firebase/auth', () => ({
@@ -83,7 +87,13 @@ function snapshot(data?: Record<string, any>) {
 function recordingTransaction(docs: Record<string, Record<string, any> | undefined>) {
   const ops: string[] = []
   const tx = {
-    get: vi.fn(async (ref: { path: string }) => { ops.push('get'); return snapshot(docs[ref.path]) }),
+    get: vi.fn(async (ref: { path?: string }) => {
+      if (typeof ref?.path !== 'string') {
+        throw new TypeError("Cannot read properties of undefined (reading 'path')")
+      }
+      ops.push('get')
+      return snapshot(docs[ref.path])
+    }),
     update: vi.fn(() => { ops.push('update') }),
     set: vi.fn(() => { ops.push('set') }),
     delete: vi.fn(() => { ops.push('delete') }),
@@ -111,6 +121,7 @@ describe('transaction operation ordering (reads-before-writes)', () => {
     vi.clearAllMocks()
     firestore.resetIds()
     authState.currentUser = { uid: 'child-1' }
+    firestore.getDoc.mockResolvedValue(snapshot(task))
     loadNotificationRecipientsInTransaction.mockResolvedValue({ ref: { path: 'families/family-1/notifications/n' }, data: { familyId: 'family-1' } })
   })
 
@@ -123,6 +134,72 @@ describe('transaction operation ordering (reads-before-writes)', () => {
     expectReadsBeforeWrites(tx)
     expect(loadNotificationRecipientsInTransaction).toHaveBeenCalled()
     expect(applyNotificationWrites).toHaveBeenCalled()
+  })
+
+  it('completeTask never passes a query object to Transaction.get', async () => {
+    const tx = recordingTransaction({
+      'users/child-1': childUser,
+      'families/family-1/tasks/task-1': task,
+    })
+
+    await expect(completeTask('family-1', 'task-1', 'child-1', true)).resolves.toBeUndefined()
+    expect(tx.get.mock.calls.every(([ref]) => typeof ref?.path === 'string')).toBe(true)
+  })
+
+  it('completeTask atomically ignores an existing completion for the logical period', async () => {
+    const tx = recordingTransaction({
+      'users/child-1': childUser,
+      'families/family-1/tasks/task-1': task,
+      'families/family-1/task_completions/child-1__task-1__one-time': {
+        status: 'approved',
+        taskId: 'task-1',
+        assigneeId: 'child-1',
+      },
+    })
+
+    await completeTask('family-1', 'task-1', 'child-1', false)
+
+    expect(tx.set).not.toHaveBeenCalled()
+    expect(tx.update).not.toHaveBeenCalled()
+  })
+
+  it('completeTask preserves a rejected attempt and creates the next deterministic attempt', async () => {
+    const tx = recordingTransaction({
+      'users/child-1': childUser,
+      'families/family-1/tasks/task-1': task,
+      'families/family-1/task_completions/child-1__task-1__one-time': {
+        status: 'rejected',
+        taskId: 'task-1',
+        assigneeId: 'child-1',
+      },
+    })
+
+    await completeTask('family-1', 'task-1', 'child-1', true)
+
+    const completionSet = (tx.set.mock.calls as any[][])
+      .find(([ref]) => ref.path.includes('/task_completions/'))
+    expect(completionSet?.[0].path).toBe(
+      'families/family-1/task_completions/child-1__task-1__one-time__attempt-2',
+    )
+  })
+
+  it('completeTask honors an active completion stored under a legacy random ID', async () => {
+    firestore.getDocs.mockResolvedValueOnce({
+      docs: [{ data: () => ({
+        taskId: 'task-1',
+        assigneeId: 'child-1',
+        status: 'approved',
+      }) }],
+    } as any)
+    const tx = recordingTransaction({
+      'users/child-1': childUser,
+      'families/family-1/tasks/task-1': task,
+    })
+
+    await completeTask('family-1', 'task-1', 'child-1', false)
+
+    expect(tx.get).not.toHaveBeenCalled()
+    expect(tx.set).not.toHaveBeenCalled()
   })
 
   it('approveTaskCompletion keeps reads before writes', async () => {

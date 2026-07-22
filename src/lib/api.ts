@@ -509,55 +509,61 @@ export const completeTask = async (familyId: string, taskId: string, userId: str
   if (!actorId) throw new Error('Not authenticated');
   if (actorId !== userId) throw new Error('Cannot complete a task for another user');
   const approverIds = await getApproverIds(familyId);
+  const taskRef = doc(db, `families/${familyId}/tasks`, taskId);
+
+  // Compatibility guard for completion records created with historical random
+  // document IDs. New records use an atomic deterministic identity below.
+  const taskBeforeTransaction = await getDoc(taskRef);
+  const legacyPeriodKey = periodKeyFor(
+    taskBeforeTransaction.exists() ? taskBeforeTransaction.data().type as string | undefined : undefined,
+    now,
+  );
+  const legacyCompletions = await getDocs(query(
+    collection(db, `families/${familyId}/task_completions`),
+    where('periodKey', '==', legacyPeriodKey),
+  ));
+  const hasActiveLegacyCompletion = legacyCompletions.docs.some((completion) => {
+    const data = completion.data();
+    return data.taskId === taskId &&
+      data.assigneeId === userId &&
+      (data.status === 'approved' || data.status === 'pending_approval');
+  });
+  if (hasActiveLegacyCompletion) return;
+
   await runTransaction(db, async (transaction) => {
     // ---------------------------------------------------------------------
     // PHASE A — ALL READS (no writes may occur before this phase completes)
     // ---------------------------------------------------------------------
     const userRef = doc(db, 'users', userId);
-    const completionRef = doc(collection(db, `families/${familyId}/task_completions`));
     const userDoc = await transaction.get(userRef);
     if (!userDoc.exists()) throw new Error("User not found");
 
     // READ task (needed for auto-award and for the approval notification body)
-    const taskRef = doc(db, `families/${familyId}/tasks`, taskId);
     const taskSnap = await transaction.get(taskRef);
 
     const userData = userDoc.data();
 
+    const taskType = taskSnap.exists() ? (taskSnap.data().type as string | undefined) : undefined;
+    const currentPeriodKey = periodKeyFor(taskType, now);
+    // The logical completion identity is deterministic, making duplicate
+    // prevention atomic without passing an unsupported Query to Transaction.get.
+    const completionBaseId = `${userId}__${taskId}__${currentPeriodKey}`;
+    let attempt = 1;
+    let completionRef = doc(db, `families/${familyId}/task_completions/${completionBaseId}`);
+    let existingCompletion = await transaction.get(completionRef);
+    while (existingCompletion.exists()) {
+      const existingStatus = existingCompletion.data().status;
+      if (existingStatus === 'approved' || existingStatus === 'pending_approval') return;
+      if (existingStatus !== 'rejected' && existingStatus !== 'cancelled') return;
+      attempt += 1;
+      if (attempt > 50) throw new Error('Too many completion attempts for this task period');
+      completionRef = doc(db, `families/${familyId}/task_completions/${completionBaseId}__attempt-${attempt}`);
+      existingCompletion = await transaction.get(completionRef);
+    }
+
     // Recurrence period key: a recurring task is "done" only within its current
     // period. We store this on the immutable completion record and use it (with
     // the task schedule type) to derive availability without mutating history.
-    const taskType = taskSnap.exists() ? (taskSnap.data().type as string | undefined) : undefined;
-    const currentPeriodKey = periodKeyFor(taskType, now);
-
-    // Server-side guard: do not create a second completion / award points again
-    // for the same task+assignee within the current period. This keeps the
-    // recurrence reset authoritative on the server, not just the client UI.
-    // Queries a single field (periodKey) so no composite index is required; the
-    // task/assignee match is resolved in memory.
-    const completionsQuery = query(
-      collection(db, `families/${familyId}/task_completions`),
-      where('periodKey', '==', currentPeriodKey),
-    );
-    if (completionsQuery) {
-      // `Transaction.get` is typed for DocumentReference in this SDK surface; a
-      // Query is accepted at runtime, so we pass it through unchanged.
-      const existingSnap = await transaction.get(completionsQuery as any);
-      const existingDocs = (existingSnap as { docs?: any[] }).docs ?? [];
-      const alreadyDoneThisPeriod = existingDocs.some((d: any) => {
-        const data = typeof d.data === 'function' ? d.data() : d;
-        return (
-          data.taskId === taskId &&
-          data.assigneeId === userId &&
-          (data.status === 'approved' || data.status === 'pending_approval')
-        );
-      });
-      if (alreadyDoneThisPeriod) {
-        // Idempotent no-op for this period: the task is already completed/submitted.
-        return;
-      }
-    }
-
     // Resolve the notification dedupe read up-front so the write phase never
     // performs a transaction.get (Firestore requires reads-before-writes).
     let notifPlan = { ref: null, data: null } as Awaited<

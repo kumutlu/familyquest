@@ -45,7 +45,8 @@ describe('Tasks page — role-based management controls', () => {
     useStoreMock.mockReturnValue(makeStore({ currentUser: { id: 'u1', familyId: 'fam', role: 'owner', rewardPoints: 0 } }));
     render(<Tasks />);
     expect(screen.getByRole('button', { name: 'Add Task' })).toBeInTheDocument();
-    fireEvent.click(screen.getByText('Brush Teeth'));
+    expect(() => fireEvent.click(screen.getByText('Brush Teeth'))).not.toThrow();
+    expect(screen.getByRole('dialog', { name: 'Task Details' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Edit' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Archive' })).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Mark as Done' })).not.toBeInTheDocument();
@@ -68,6 +69,7 @@ describe('Tasks page — role-based management controls', () => {
     expect(screen.queryByRole('button', { name: 'Edit' })).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Archive' })).not.toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Mark as Done' })).toBeInTheDocument();
+    expect(api.completeTask).not.toHaveBeenCalled();
   });
 
   it('owner is never treated as child (no redeem-only view)', () => {

@@ -92,6 +92,7 @@ describe('notification creation on business events', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     firestore.reset();
+    firestore.getDoc.mockResolvedValue(snapshot({ title: 'Clean bedroom', pointsReward: 20 }));
   });
 
   it('child task submission notifies parent/owner approvers', async () => {
@@ -348,6 +349,7 @@ describe('recipient failure behaviour', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     firestore.reset();
+    firestore.getDoc.mockResolvedValue(snapshot({ title: 'Clean bedroom', pointsReward: 20 }));
   });
 
   it('completeTask still creates the completion when approvers cannot be resolved', async () => {
