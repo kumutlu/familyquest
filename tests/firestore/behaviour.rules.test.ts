@@ -123,6 +123,21 @@ describe('behaviour event rules', () => {
     }));
   });
 
+  test('managed-member creation remains owner-only', async () => {
+    await assertFails(setDoc(doc(user(PARENT_ID), 'users', 'parent-managed-child'), {
+      uid: 'parent-managed-child', familyId: FAMILY_ID, role: 'child', displayName: 'Managed', isManaged: true,
+    }));
+  });
+
+  test('owner child edits allow displayName/avatarUrl but reject UI-only profile fields', async () => {
+    const owner = user(OWNER_ID);
+    await assertSucceeds(updateDoc(doc(owner, 'users', CHILD_ID), {
+      displayName: 'Updated Child', avatarUrl: 'https://example.test/starter-cat',
+    }));
+    await assertFails(updateDoc(doc(owner, 'users', CHILD_ID), { avatarId: 'starter-cat' }));
+    await assertFails(updateDoc(doc(owner, 'users', CHILD_ID), { colour: '#ef4444' }));
+  });
+
   test('family members can read history but another family cannot', async () => {
     await testEnv.withSecurityRulesDisabled(async (context) => {
       await setDoc(doc(context.firestore(), `families/${FAMILY_ID}/behaviour_events/existing`), validEvent({ createdAt: new Date() }));

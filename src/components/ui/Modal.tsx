@@ -4,6 +4,9 @@ import { X } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { useBodyScrollLock } from '../../lib/useBodyScrollLock';
 
+const FOCUSABLE_SELECTOR =
+  'a[href], button:not([disabled]), textarea, input, select, [tabindex]:not([tabindex="-1"])';
+
 export interface ModalProps {
   isOpen: boolean;
   onClose: () => void;
@@ -41,6 +44,17 @@ export function Modal({
 }: ModalProps) {
   const { t } = useTranslation('common');
   const previouslyFocused = useRef<HTMLElement | null>(null);
+  const dialogRef = useRef<HTMLDivElement>(null);
+  const wasOpen = useRef(false);
+  const openingFocus = useRef<HTMLElement | null>(null);
+  // Capture the opener during the closed -> open render, before React commits
+  // descendants and applies any deliberate autoFocus field.
+  if (isOpen && !wasOpen.current) {
+    openingFocus.current = typeof document === 'undefined'
+      ? null
+      : document.activeElement as HTMLElement | null;
+  }
+  wasOpen.current = isOpen;
   const titleId = title ? 'modal-title' : undefined;
   // Keep the latest onClose without making it an effect dependency. Passing a
   // new inline onClose every render (common in callers) previously re-ran this
@@ -54,9 +68,40 @@ export function Modal({
 
   useEffect(() => {
     if (!isOpen) return;
-    previouslyFocused.current = document.activeElement as HTMLElement | null;
+    previouslyFocused.current = openingFocus.current;
+    if (!dialogRef.current?.contains(document.activeElement)) {
+      dialogRef.current?.focus();
+    }
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') onCloseRef.current();
+      if (e.key === 'Escape') {
+        e.preventDefault();
+        onCloseRef.current();
+        return;
+      }
+      if (e.key !== 'Tab' || !dialogRef.current) return;
+
+      const focusable = Array.from(
+        dialogRef.current.querySelectorAll<HTMLElement>(FOCUSABLE_SELECTOR),
+      );
+      if (focusable.length === 0) {
+        e.preventDefault();
+        dialogRef.current.focus();
+        return;
+      }
+
+      const first = focusable[0];
+      const last = focusable[focusable.length - 1];
+      const active = document.activeElement;
+      if (!dialogRef.current.contains(active)) {
+        e.preventDefault();
+        (e.shiftKey ? last : first).focus();
+      } else if (e.shiftKey && (active === first || active === dialogRef.current)) {
+        e.preventDefault();
+        last.focus();
+      } else if (!e.shiftKey && active === last) {
+        e.preventDefault();
+        first.focus();
+      }
     };
     document.addEventListener('keydown', onKey);
     return () => {
@@ -72,11 +117,13 @@ export function Modal({
 
   return (
     <div
+      ref={dialogRef}
       className="fixed inset-0 z-50 flex items-end justify-center sm:items-center sm:p-4"
       style={{ zIndex }}
       role="dialog"
       aria-modal="true"
       aria-labelledby={titleId}
+      tabIndex={-1}
     >
       {/* Backdrop */}
       <div

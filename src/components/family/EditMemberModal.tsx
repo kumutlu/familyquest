@@ -4,8 +4,8 @@ import { Button } from '../ui/Button';
 import { doc, updateDoc } from 'firebase/firestore';
 import { db } from '../../lib/firebase';
 import { getAvatarById, resolveAvatarImage } from '../../config/avatarCatalog';
-import { CHILD_COLOUR_SWATCHES, type ChildColour } from '../../config/childColours';
 import { AvatarPicker } from '../profile/AvatarPicker';
+import { useAccessibleDialog } from './useAccessibleDialog';
 
 interface EditMemberModalProps {
   member: any;
@@ -21,11 +21,10 @@ export function EditMemberModal({ member, onClose }: EditMemberModalProps) {
   const { t } = useTranslation(['family', 'common']);
   const [displayName, setDisplayName] = useState(member.displayName || '');
   const [selectedAvatarId, setSelectedAvatarId] = useState<string | null>(member.avatarId || null);
-  const [selectedColour, setSelectedColour] = useState<ChildColour | null>(member.colour || null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const isChild = member.role === 'child';
+  const dialogRef = useAccessibleDialog(onClose);
 
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -42,11 +41,7 @@ export function EditMemberModal({ member, onClose }: EditMemberModalProps) {
     try {
       const update: Record<string, unknown> = { displayName: displayName.trim() };
       if (selectedAvatarId) {
-        update.avatarId = selectedAvatarId;
         update.avatarUrl = resolveAvatarImage(selectedAvatarId, member.avatarUrl) || '';
-      }
-      if (isChild) {
-        update.colour = selectedColour;
       }
       await updateDoc(doc(db, 'users', member.id), update);
       onClose();
@@ -60,10 +55,17 @@ export function EditMemberModal({ member, onClose }: EditMemberModalProps) {
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-gray-900/40 backdrop-blur-sm p-4">
-      <div className="bg-white w-full max-w-sm rounded-3xl shadow-xl overflow-hidden flex flex-col animate-in fade-in zoom-in-95 duration-200">
+      <div
+        ref={dialogRef}
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="edit-member-dialog-title"
+        tabIndex={-1}
+        className="bg-white w-full max-w-sm rounded-3xl shadow-xl overflow-hidden flex flex-col animate-in fade-in zoom-in-95 duration-200 outline-none"
+      >
         <div className="px-6 py-4 border-b border-gray-100 flex justify-between items-center">
-          <h3 className="text-xl font-bold text-gray-900">{t('family:editMember.title')}</h3>
-          <button onClick={onClose} className="p-2 -mr-2 bg-gray-100 hover:bg-gray-200 rounded-full text-gray-500 transition-colors">
+          <h3 id="edit-member-dialog-title" className="text-xl font-bold text-gray-900">{t('family:editMember.title')}</h3>
+          <button type="button" aria-label={t('common:closeDialog')} onClick={onClose} className="p-2 -mr-2 bg-gray-100 hover:bg-gray-200 rounded-full text-gray-500 transition-colors">
             ✕
           </button>
         </div>
@@ -96,26 +98,6 @@ export function EditMemberModal({ member, onClose }: EditMemberModalProps) {
                 disabled={isSubmitting}
               />
             </div>
-            {isChild && (
-              <div>
-                <span className="block text-sm font-medium text-gray-700 mb-2">{t('family:editMember.colourLabel')}</span>
-                <div className="flex flex-wrap gap-2 justify-center">
-                  {CHILD_COLOUR_SWATCHES.map((c) => (
-                    <button
-                      key={c.value}
-                      type="button"
-                      aria-label={c.name}
-                      aria-pressed={selectedColour === c.value}
-                      onClick={() => setSelectedColour(selectedColour === c.value ? null : c.value)}
-                      className={`w-9 h-9 rounded-full border-2 transition-all ${
-                        selectedColour === c.value ? 'border-gray-900 scale-110' : 'border-transparent'
-                      }`}
-                      style={{ backgroundColor: c.value }}
-                    />
-                  ))}
-                </div>
-              </div>
-            )}
             <div className="pt-4 flex gap-3">
               <Button type="button" variant="outline" fullWidth onClick={onClose}>
                 {t('common:cancel')}

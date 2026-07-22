@@ -108,6 +108,7 @@
     "loginEnabled": "Login enabled",
     "addParent": "Add parent",
     "addParentInviteExplanation": "Adding another parent isn't available yet. Family invite codes currently create child join requests.",
+    "copyInviteForAdult": "Copy invite code for another adult",
     "addChild": "Add child",
     "childAdded": "Child added successfully",
     "regional": "Regional",

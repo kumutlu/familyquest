@@ -233,22 +233,25 @@ describe('FamilySettings — section navigation', () => {
 });
 
 describe('FamilySettings — role-based visibility', () => {
-  it('15. Owner sees unavailable add parent and active add child controls', async () => {
+  it('15. Owner sees the existing invite-code action and active add child control', async () => {
     const user = userEvent.setup();
     renderFamilySettings('owner');
     // Navigate to Members section to see the buttons
     await user.click(screen.getByRole('button', { name: 'Members' }));
-    expect(screen.getByRole('button', { name: '+ Add parent' })).toBeDisabled();
+    const inviteAction = screen.getByRole('button', { name: 'Copy invite code for another adult' });
+    expect(inviteAction).toBeEnabled();
+    await user.click(inviteAction);
+    expect(clipboardWriteText).toHaveBeenCalledWith('ABC123');
     expect(screen.getByRole('button', { name: '+ Add child' })).toBeInTheDocument();
   });
 
-  it('16. Parent sees add child button but not add parent', async () => {
+  it('16. Parent sees neither owner-only add control', async () => {
     const user = userEvent.setup();
     renderFamilySettings('parent');
     // Navigate to Members section to see the buttons
     await user.click(screen.getByRole('button', { name: 'Members' }));
     expect(screen.queryByRole('button', { name: '+ Add parent' })).not.toBeInTheDocument();
-    expect(screen.getByRole('button', { name: '+ Add child' })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: '+ Add child' })).not.toBeInTheDocument();
   });
 
   it('17. Child sees no add buttons', async () => {
@@ -378,17 +381,18 @@ describe('FamilySettings — regional settings editing', () => {
 });
 
 describe('FamilySettings — add parent flow', () => {
-  it('marks Add parent unavailable and never copies the generic child invite code', async () => {
+  it('accurately explains the limitation and reuses the existing invite-code copy path', async () => {
     const user = userEvent.setup();
     renderFamilySettings('owner');
     await user.click(screen.getByRole('button', { name: 'Members' }));
 
     expect(screen.getByText(/adding another parent isn't available yet/i)).toBeInTheDocument();
-    const addParent = screen.getByRole('button', { name: '+ Add parent' });
-    expect(addParent).toBeDisabled();
-    await user.click(addParent);
+    const copyInvite = screen.getByRole('button', { name: 'Copy invite code for another adult' });
+    expect(copyInvite).toBeEnabled();
+    await user.click(copyInvite);
 
-    expect(clipboardWriteText).not.toHaveBeenCalled();
+    expect(clipboardWriteText).toHaveBeenCalledWith('ABC123');
+    expect(await screen.findByText('Invite code copied to clipboard.')).toBeInTheDocument();
   });
 });
 

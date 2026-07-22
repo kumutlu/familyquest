@@ -470,9 +470,19 @@ export function FamilySettings({ onSectionChange }: FamilySettingsProps) {
                       <p className="text-sm text-gray-500">
                         {t('familySettings.addParentInviteExplanation')}
                       </p>
-                      <Button variant="outline" className="w-full" disabled>
-                        + {t('familySettings.addParent')}
+                      <Button variant="outline" className="w-full" onClick={handleCopyInviteCode}>
+                        {t('familySettings.copyInviteForAdult')}
                       </Button>
+                      {copyStatus === 'success' && (
+                        <p className="text-sm text-green-600" role="status">
+                          {t('familySettings.inviteCodeCopied')}
+                        </p>
+                      )}
+                      {copyStatus === 'error' && (
+                        <p className="text-sm text-red-600" role="alert">
+                          {t('familySettings.inviteCodeCopyFailed')}
+                        </p>
+                      )}
                     </div>
                   )}
                 </div>
@@ -560,7 +570,7 @@ export function FamilySettings({ onSectionChange }: FamilySettingsProps) {
                       </div>
                     </div>
                   )}
-                  {isParentOrOwner && (
+                  {owner && (
                     <Button variant="outline" className="w-full" onClick={() => setShowAddChildModal(true)}>
                       + {t('familySettings.addChild')}
                     </Button>

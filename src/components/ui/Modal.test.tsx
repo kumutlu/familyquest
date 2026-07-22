@@ -1,5 +1,5 @@
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
-import { render, screen, act } from '@testing-library/react';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
+import { render, screen, act, fireEvent, waitFor } from '@testing-library/react';
 import i18n from '../../i18n/config';
 import { Modal } from './Modal';
 
@@ -42,5 +42,65 @@ describe('Modal — shared dialog labels', () => {
       </Modal>,
     );
     expect(screen.getByRole('button', { name: /kapat/i })).toBeInTheDocument();
+  });
+
+  it('traps forward and backward Tab navigation inside the dialog', () => {
+    render(
+      <Modal isOpen title="Test dialog" onClose={() => {}}>
+        <button type="button">First action</button>
+        <button type="button">Last action</button>
+      </Modal>,
+    );
+    const close = screen.getByRole('button', { name: /close dialog/i });
+    const last = screen.getByRole('button', { name: 'Last action' });
+
+    last.focus();
+    fireEvent.keyDown(document, { key: 'Tab' });
+    expect(close).toHaveFocus();
+
+    fireEvent.keyDown(document, { key: 'Tab', shiftKey: true });
+    expect(last).toHaveFocus();
+  });
+
+  it('keeps focus on the dialog when it has no focusable descendants', () => {
+    render(
+      <Modal isOpen title="Test dialog" header={<div>Static header</div>} onClose={() => {}}>
+        <p>Static body</p>
+      </Modal>,
+    );
+    const dialog = screen.getByRole('dialog');
+    expect(dialog).toHaveFocus();
+    fireEvent.keyDown(document, { key: 'Tab' });
+    expect(dialog).toHaveFocus();
+  });
+
+  it('preserves Escape closing and restores focus to the opener', async () => {
+    const opener = document.createElement('button');
+    document.body.appendChild(opener);
+    opener.focus();
+    const onClose = vi.fn();
+    const { unmount } = renderModal(onClose);
+
+    fireEvent.keyDown(document, { key: 'Escape' });
+    expect(onClose).toHaveBeenCalledOnce();
+    unmount();
+    await waitFor(() => expect(opener).toHaveFocus());
+    opener.remove();
+  });
+
+  it('preserves child autoFocus and still restores the external opener', async () => {
+    const opener = document.createElement('button');
+    document.body.appendChild(opener);
+    opener.focus();
+    const { unmount } = render(
+      <Modal isOpen title="Test dialog" onClose={() => {}}>
+        <input aria-label="Amount" autoFocus />
+      </Modal>,
+    );
+
+    expect(screen.getByRole('textbox', { name: 'Amount' })).toHaveFocus();
+    unmount();
+    await waitFor(() => expect(opener).toHaveFocus());
+    opener.remove();
   });
 });

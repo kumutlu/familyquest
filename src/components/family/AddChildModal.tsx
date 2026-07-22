@@ -1,15 +1,14 @@
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useNavigate } from 'react-router-dom';
 import { Button } from '../ui/Button';
 import { Avatar } from '../ui/Avatar';
 import { Baby, PartyPopper, Rocket, Gift, ArrowRight, Check } from 'lucide-react';
-import { useStore } from '../../store/useStore';
 import { createManagedMember } from '../../lib/api';
-import { isChildRole } from '../../lib/roles';
 import { CHILD_COLOUR_SWATCHES, type ChildColour } from '../../config/childColours';
 import { AvatarPicker } from '../profile/AvatarPicker';
 import { CreateChildLoginDialog } from './CreateChildLoginDialog';
+import { useAccessibleDialog } from './useAccessibleDialog';
 
 interface AddChildModalProps {
   familyId: string;
@@ -20,7 +19,6 @@ interface AddChildModalProps {
 export function AddChildModal({ familyId, onClose, onChildAdded }: AddChildModalProps) {
   const { t } = useTranslation(['auth', 'common']);
   const navigate = useNavigate();
-  const familyMembers = useStore(state => state.familyMembers);
   const [step, setStep] = useState<number>(1);
 
   // Step 2 — create child form state
@@ -34,13 +32,7 @@ export function AddChildModal({ familyId, onClose, onChildAdded }: AddChildModal
   // Step 3 — created child + login dialog
   const [createdChild, setCreatedChild] = useState<{ id: string; displayName: string } | null>(null);
   const [createLoginFor, setCreateLoginFor] = useState<{ id: string; displayName: string } | null>(null);
-
-  // Safety net: if a child appears (e.g. created elsewhere) we close the modal.
-  useEffect(() => {
-    if (familyMembers.some((m) => isChildRole(m.role))) {
-      onClose();
-    }
-  }, [familyMembers, onClose]);
+  const dialogRef = useAccessibleDialog(onClose, !createLoginFor);
 
   const goTo = (next: number) => setStep(next);
 
@@ -85,14 +77,22 @@ export function AddChildModal({ familyId, onClose, onChildAdded }: AddChildModal
   return (
     <>
       <div className="fixed inset-0 z-50 flex items-center justify-center bg-gray-900/40 backdrop-blur-sm p-4">
-        <div className="bg-white w-full max-w-md rounded-3xl shadow-xl overflow-hidden flex flex-col animate-in fade-in zoom-in-95 duration-200">
+        <div
+          ref={dialogRef}
+          role="dialog"
+          aria-modal={createLoginFor ? undefined : 'true'}
+          aria-hidden={createLoginFor ? true : undefined}
+          aria-labelledby="add-child-dialog-title"
+          tabIndex={-1}
+          className="bg-white w-full max-w-md rounded-3xl shadow-xl overflow-hidden flex flex-col animate-in fade-in zoom-in-95 duration-200 outline-none"
+        >
           {/* Step 1 — Welcome */}
           {step === 1 && (
             <div className="bg-white p-8 rounded-xl shadow text-center">
               <div className="w-16 h-16 bg-primary-100 text-primary-600 rounded-full flex items-center justify-center mx-auto mb-4">
                 <Baby size={32} />
               </div>
-              <h2 className="text-2xl font-bold text-gray-900 mb-2">{t('auth:childOnboarding.welcomeTitle')}</h2>
+              <h2 id="add-child-dialog-title" className="text-2xl font-bold text-gray-900 mb-2">{t('auth:childOnboarding.welcomeTitle')}</h2>
               <p className="text-gray-600 mb-6">{t('auth:childOnboarding.welcomeBody')}</p>
               <div className="flex flex-col gap-3">
                 <Button fullWidth size="lg" onClick={() => goTo(2)}>
@@ -110,7 +110,7 @@ export function AddChildModal({ familyId, onClose, onChildAdded }: AddChildModal
             <div className="bg-white p-8 rounded-xl shadow text-center">
               <div className="text-center mb-2">
                 <span className="text-xs font-bold text-primary-600 uppercase tracking-widest">{stepLabel(2)}</span>
-                <h3 className="text-xl font-bold mt-1">{t('auth:childOnboarding.createTitle')}</h3>
+                <h3 id="add-child-dialog-title" className="text-xl font-bold mt-1">{t('auth:childOnboarding.createTitle')}</h3>
               </div>
 
               <form className="space-y-4" onSubmit={handleCreateChild}>
@@ -193,7 +193,7 @@ export function AddChildModal({ familyId, onClose, onChildAdded }: AddChildModal
                 <PartyPopper size={32} />
               </div>
               <div>
-                <h3 className="text-xl font-bold text-gray-900">{t('auth:childOnboarding.successTitle')}</h3>
+                <h3 id="add-child-dialog-title" className="text-xl font-bold text-gray-900">{t('auth:childOnboarding.successTitle')}</h3>
                 <p className="text-gray-600 mt-1">{t('auth:childOnboarding.successBody', { name: createdChild.displayName })}</p>
               </div>
 
@@ -228,7 +228,7 @@ export function AddChildModal({ familyId, onClose, onChildAdded }: AddChildModal
               </div>
               <div>
                 <span className="text-xs font-bold text-primary-600 uppercase tracking-widest">{stepLabel(4)}</span>
-                <h3 className="text-xl font-bold text-gray-900 mt-1">{t('auth:childOnboarding.quickStartTitle')}</h3>
+                <h3 id="add-child-dialog-title" className="text-xl font-bold text-gray-900 mt-1">{t('auth:childOnboarding.quickStartTitle')}</h3>
                 <p className="text-gray-600 mt-1">{t('auth:childOnboarding.quickStartBody')}</p>
               </div>
               <div className="flex flex-col gap-3">
@@ -250,7 +250,7 @@ export function AddChildModal({ familyId, onClose, onChildAdded }: AddChildModal
               </div>
               <div>
                 <span className="text-xs font-bold text-primary-600 uppercase tracking-widest">{stepLabel(5)}</span>
-                <h3 className="text-xl font-bold text-gray-900 mt-1">{t('auth:childOnboarding.rewardsTitle')}</h3>
+                <h3 id="add-child-dialog-title" className="text-xl font-bold text-gray-900 mt-1">{t('auth:childOnboarding.rewardsTitle')}</h3>
                 <p className="text-gray-600 mt-1">{t('auth:childOnboarding.rewardsBody')}</p>
               </div>
               <div className="flex flex-col gap-3">
@@ -272,7 +272,7 @@ export function AddChildModal({ familyId, onClose, onChildAdded }: AddChildModal
               </div>
               <div>
                 <span className="text-xs font-bold text-primary-600 uppercase tracking-widest">{stepLabel(6)}</span>
-                <h3 className="text-xl font-bold text-gray-900 mt-1">{t('auth:childOnboarding.finishTitle')}</h3>
+                <h3 id="add-child-dialog-title" className="text-xl font-bold text-gray-900 mt-1">{t('auth:childOnboarding.finishTitle')}</h3>
                 <p className="text-gray-600 mt-1">{t('auth:childOnboarding.finishBody')}</p>
               </div>
               <Button fullWidth size="lg" onClick={finish}>
@@ -291,7 +291,6 @@ export function AddChildModal({ familyId, onClose, onChildAdded }: AddChildModal
             member={createLoginFor}
             onClose={() => {
               setCreateLoginFor(null);
-              goTo(4);
             }}
             onSuccess={() => {
               setCreateLoginFor(null);
