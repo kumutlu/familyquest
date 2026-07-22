@@ -54,23 +54,43 @@
     "status": "Durum",
     "date": "Tarih",
     "transaction": "İşlem",
+    "searchPlaceholder": "İşlemleri ara...",
+    "clearFilters": "Tüm filtreleri temizle",
     "groups": {
       "today": "Bugün",
       "yesterday": "Dün",
       "earlierThisWeek": "Bu hafta başında",
-      "older": "Daha eski"
+      "older": "Daha eski",
+      "thisWeek": "Bu Hafta",
+      "lastWeek": "Geçen Hafta",
+      "thisMonth": "Bu Ay"
+    },
+    "filters": {
+      "income": "Gelir",
+      "expense": "Gider",
+      "reward": "Ödüller",
+      "allowance": "Harçlık",
+      "goal": "Hedefler",
+      "adjustment": "Düzeltmeler",
+      "pending": "Bekleyen",
+      "completed": "Tamamlandı",
+      "reversed": "İptal Edilmiş"
+    },
+    "details": {
+      "title": "İşlem Ayrıntıları",
+      "close": "Kapat",
+      "status": "Durum",
+      "date": "Tarih",
+      "completed": "Tamamlandı",
+      "fromTo": "Kimden / Kime",
+      "actor": "İşlem Yapan",
+      "note": "Not",
+      "reference": "Referans",
+      "child": "Çocuk",
+      "type": "Tür",
+      "balanceAfter": "İşlem sonrası bakiye",
+      "pending": "Bekleyen"
     }
-  },
-  "details": {
-    "title": "İşlem Ayrıntıları",
-    "close": "Kapat",
-    "status": "Durum",
-    "date": "Tarih",
-    "completed": "Tamamlandı",
-    "fromTo": "Kimden / Kime",
-    "actor": "İşlem Yapan",
-    "note": "Not",
-    "reference": "Referans"
   },
   "tx": {
     "deposit": "Para eklendi",
@@ -92,7 +112,8 @@
     "to": "{{name}} hesabına",
     "by": "{{actor}} tarafından",
     "anotherChild": "başka bir çocuk",
-    "parent": "Veli"
+    "parent": "Veli",
+    "adjustment": "Düzeltme"
   },
   "send": {
     "title": "Para Gönder",

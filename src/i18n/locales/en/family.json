@@ -62,7 +62,8 @@
     "chooseAvatar": "Choose Avatar",
     "freeAvatarError": "Adults can only use free starter avatars from the catalog.",
     "updateError": "Failed to update member.",
-    "save": "Save"
+    "save": "Save",
+    "colourLabel": "Favourite colour"
   },
   "createLogin": {
     "title": "Create Login for {{name}}",

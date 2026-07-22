@@ -137,5 +137,10 @@
     "yourNet": "Net (çekilebilir)",
     "perChild": "Çocuk başına",
     "child": "Çocuk"
-  }
+  },
+  "closure": "Hedef kapalı",
+  "transaction": "Hedef işlemi",
+  "autoMatch": "Otomatik eşleşme",
+  "manualMatch": "Manuel eşleşme",
+  "return": "Paralar iade edildi"
 }

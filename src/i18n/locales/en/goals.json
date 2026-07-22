@@ -137,5 +137,10 @@
     "yourNet": "Your net (withdrawable)",
     "perChild": "Per child",
     "child": "Child"
-  }
+  },
+  "closure": "Goal closed",
+  "transaction": "Goal transaction",
+  "autoMatch": "Auto match",
+  "manualMatch": "Manual match",
+  "return": "Funds returned"
 }

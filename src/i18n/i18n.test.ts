@@ -8,6 +8,27 @@ import {
   formatRelativeTime,
 } from './format';
 
+type TranslationValue = string | { [key: string]: TranslationValue };
+
+const localeModules = import.meta.glob('./locales/{en,tr}/*.json', {
+  eager: true,
+  import: 'default',
+}) as Record<string, TranslationValue>;
+
+function flattenLocaleKeys(value: TranslationValue, prefix = ''): string[] {
+  if (typeof value === 'string') return [prefix];
+
+  return Object.entries(value).flatMap(([key, child]) =>
+    flattenLocaleKeys(child, prefix ? `${prefix}.${key}` : key),
+  );
+}
+
+function localeNamespace(language: 'en' | 'tr', namespace: string): TranslationValue {
+  const locale = localeModules[`./locales/${language}/${namespace}.json`];
+  if (!locale) throw new Error(`Missing ${language}/${namespace} locale`);
+  return locale;
+}
+
 const ORIGINAL_LANGUAGE = i18n.language;
 
 // --- navigator.languages mocking helpers -----------------------------------
@@ -72,6 +93,27 @@ describe('i18n initialization', () => {
     expect(warnSpy).not.toHaveBeenCalled();
     errorSpy.mockRestore();
     warnSpy.mockRestore();
+  });
+});
+
+describe('locale completeness', () => {
+  it('keeps every English and Turkish namespace key in parity', () => {
+    for (const namespace of NAMESPACES) {
+      const englishKeys = flattenLocaleKeys(localeNamespace('en', namespace)).sort();
+      const turkishKeys = flattenLocaleKeys(localeNamespace('tr', namespace)).sort();
+
+      expect(turkishKeys, namespace).toEqual(englishKeys);
+    }
+  });
+
+  it('uses the correct Turkish spelling of ailede in wallet copy', () => {
+    const wallet = localeNamespace('tr', 'wallet') as {
+      send: { noSiblings: string };
+      allowance: { noChildren: string };
+    };
+
+    expect(wallet.send.noSiblings).toBe('Bu ailede henüz başka çocuk yok.');
+    expect(wallet.allowance.noChildren).toBe('Bu ailede çocuk bulunamadı.');
   });
 });
 

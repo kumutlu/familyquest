@@ -10,6 +10,7 @@
   "empty": "Henüz uygun ödül yok.",
   "redemptionHistory": "Kullanım geçmişi",
   "redeemedPoints": "{{value}} puan kullanıldı",
+  "redemption": "Ödül kullanıldı",
   "details": {
     "title": "Ödül Ayrıntıları",
     "points": "{{value}} puan",

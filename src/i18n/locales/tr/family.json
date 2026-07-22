@@ -62,7 +62,8 @@
     "chooseAvatar": "Avatar Seç",
     "freeAvatarError": "Yetişkinler yalnızca katalogdaki ücretsiz başlangıç avatarlarını kullanabilir.",
     "updateError": "Üye güncellenemedi.",
-    "save": "Kaydet"
+    "save": "Kaydet",
+    "colourLabel": "Favori renk"
   },
   "createLogin": {
     "title": "{{name}} için Giriş Oluştur",
