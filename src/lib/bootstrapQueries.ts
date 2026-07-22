@@ -104,11 +104,11 @@ export const bootstrapCompositeIndexes = [
   },
   {
     collectionGroup: 'push_tokens',
-    queryScope: 'COLLECTION',
+    queryScope: 'COLLECTION_GROUP',
     fields: [
+      { fieldPath: 'enabled', order: 'ASCENDING' },
       { fieldPath: 'familyId', order: 'ASCENDING' },
       { fieldPath: 'userId', order: 'ASCENDING' },
-      { fieldPath: 'enabled', order: 'ASCENDING' },
     ],
   },
 ] as const

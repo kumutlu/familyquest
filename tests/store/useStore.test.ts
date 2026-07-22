@@ -75,6 +75,7 @@ const familyResources = [
   'families/fam1/feed',
   'families/fam1/wallet_transactions',
   'families/fam1/savings_goals',
+  'families/fam1/goal_requests',
   'families/fam1/behaviour_events',
   'families/fam1/challenges',
   'families/fam1/funds',
@@ -396,9 +397,9 @@ describe('bootstrap/auth/listener state machine', () => {
 
     expect(listeners.some(item => item.target === 'families/fam1/join_requests')).toBe(false);
     expect(listeners.some(item => item.target === 'families/fam1/wallets/user1')).toBe(true);
+    expect(listeners.some(item => item.target === 'families/fam1/task_completions')).toBe(true);
     expect(useStore.getState().bootstrapStatus.joinRequests).toBe('idle');
     expect(queryShapes).toEqual(expect.arrayContaining([
-      expect.objectContaining({ target: 'families/fam1/task_completions', constraints: expect.arrayContaining([expect.objectContaining({ type: 'where', field: 'assigneeId', value: 'user1' })]) }),
       expect.objectContaining({ target: 'families/fam1/redemptions', constraints: expect.arrayContaining([expect.objectContaining({ type: 'where', field: 'userId', value: 'user1' })]) }),
       expect.objectContaining({ target: 'families/fam1/wallet_transactions', constraints: expect.arrayContaining([expect.objectContaining({ type: 'where', field: 'childId', value: 'user1' })]) }),
       expect.objectContaining({ target: 'families/fam1/savings_goals', constraints: expect.arrayContaining([expect.objectContaining({ type: 'where', field: 'childId', value: 'user1' })]) }),

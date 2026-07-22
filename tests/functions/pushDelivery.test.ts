@@ -126,8 +126,10 @@ describe('resolveRoute', () => {
 
 describe('buildPushMessage', () => {
   it('uses dedupeKey (or id) as the collapse tag', () => {
-    expect(buildPushMessage(baseInput()).notification.tag).toBe('task_submit_c1');
-    expect(buildPushMessage(baseInput({ dedupeKey: undefined })).notification.tag).toBe('n1');
+    expect(buildPushMessage(baseInput()).android.notification.tag).toBe('task_submit_c1');
+    expect(buildPushMessage(baseInput()).webpush.notification.tag).toBe('task_submit_c1');
+    expect(buildPushMessage(baseInput({ dedupeKey: undefined })).android.notification.tag).toBe('n1');
+    expect(buildPushMessage(baseInput({ dedupeKey: undefined })).webpush.notification.tag).toBe('n1');
   });
 
   it('includes the minimal data payload', () => {
@@ -380,7 +382,6 @@ describe('deliverNotification', () => {
     expect(structureLog.notification).toMatchObject({
       title: 'A task was submitted',
       body: 'Review “Clean bedroom”',
-      tag: 'task_submit_c1',
     });
     expect(structureLog.data).toMatchObject({
       notificationId: 'n1',
@@ -389,6 +390,8 @@ describe('deliverNotification', () => {
       route: '/tasks/c1',
     });
     expect(structureLog.webpush).toBeDefined();
+    expect(structureLog.android.notification.tag).toBe('task_submit_c1');
+    expect(structureLog.webpush.notification.tag).toBe('task_submit_c1');
     // No token or raw registration data must leak into the structure log.
     const logged = JSON.stringify(structureLog);
     expect(logged).not.toContain('tok-a');
