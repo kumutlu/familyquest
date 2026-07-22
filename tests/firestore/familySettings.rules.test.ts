@@ -1,0 +1,76 @@
+import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
+import {
+  assertFails,
+  assertSucceeds,
+  initializeTestEnvironment,
+  type RulesTestEnvironment,
+} from '@firebase/rules-unit-testing';
+import { doc, setDoc, updateDoc } from 'firebase/firestore';
+import { readFileSync } from 'node:fs';
+
+const FAMILY_ID = 'settings-family';
+let testEnv: RulesTestEnvironment;
+
+beforeAll(async () => {
+  testEnv = await initializeTestEnvironment({
+    projectId: 'familyquest-family-settings-rules',
+    firestore: {
+      rules: readFileSync('firestore.rules', 'utf8'),
+      host: '127.0.0.1',
+      port: 8080,
+    },
+  });
+});
+
+beforeEach(async () => {
+  await testEnv.clearFirestore();
+  await testEnv.withSecurityRulesDisabled(async context => {
+    const db = context.firestore();
+    await setDoc(doc(db, `families/${FAMILY_ID}`), {
+      name: 'Original family',
+      inviteCode: 'OLD123',
+      currencyCode: 'GBP',
+      timezone: 'Europe/London',
+      weekStartsOn: 1,
+    });
+    await setDoc(doc(db, 'users/owner'), { familyId: FAMILY_ID, role: 'owner' });
+    await setDoc(doc(db, 'users/parent'), { familyId: FAMILY_ID, role: 'parent' });
+    await setDoc(doc(db, 'users/child'), { familyId: FAMILY_ID, role: 'child' });
+  });
+});
+
+afterAll(async () => {
+  await testEnv.cleanup();
+});
+
+const familyRef = (uid: 'owner' | 'parent' | 'child') =>
+  doc(testEnv.authenticatedContext(uid).firestore(), `families/${FAMILY_ID}`);
+
+describe('family settings ownership', () => {
+  it('allows the owner to update family and regional settings', async () => {
+    await expect(assertSucceeds(updateDoc(familyRef('owner'), {
+      name: 'Updated family',
+      currencyCode: 'TRY',
+      timezone: 'Europe/Istanbul',
+      weekStartsOn: 0,
+    }))).resolves.toBeUndefined();
+  });
+
+  it('allows the owner to persist a regenerated invite code', async () => {
+    await expect(assertSucceeds(updateDoc(familyRef('owner'), {
+      inviteCode: 'NEW456',
+    }))).resolves.toBeUndefined();
+  });
+
+  it.each(['parent', 'child'] as const)('denies %s family settings and invite-code updates', async role => {
+    await expect(assertFails(updateDoc(familyRef(role), {
+      currencyCode: 'TRY',
+      timezone: 'Europe/Istanbul',
+      weekStartsOn: 0,
+    }))).resolves.toBeDefined();
+
+    await expect(assertFails(updateDoc(familyRef(role), {
+      inviteCode: 'FORGED',
+    }))).resolves.toBeDefined();
+  });
+});

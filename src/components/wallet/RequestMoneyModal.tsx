@@ -4,13 +4,15 @@ import { Button } from '../ui/Button';
 import { createMoneyRequest } from '../../lib/api';
 import { useStore } from '../../store/useStore';
 import { HandCoins } from 'lucide-react';
+import { currencySymbolFromCode, type SupportedCurrencyCode } from '../../i18n/format';
 
 interface RequestMoneyModalProps {
   onClose: () => void;
   onSuccess?: () => void;
+  currencyCode?: SupportedCurrencyCode;
 }
 
-export function RequestMoneyModal({ onClose, onSuccess }: RequestMoneyModalProps) {
+export function RequestMoneyModal({ onClose, onSuccess, currencyCode = 'GBP' }: RequestMoneyModalProps) {
   const { currentUser, familyMembers } = useStore();
   const [requestedFromId, setRequestedFromId] = useState('');
   const [amountGBP, setAmountGBP] = useState('');
@@ -20,7 +22,7 @@ export function RequestMoneyModal({ onClose, onSuccess }: RequestMoneyModalProps
   const [success, setSuccess] = useState(false);
 
   const { t } = useTranslation('wallet');
-  const currency = '£';
+  const currency = currencySymbolFromCode(currencyCode);
 
   const candidates = (familyMembers || [])
     .filter(m => m.id !== currentUser?.id)

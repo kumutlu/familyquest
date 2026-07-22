@@ -11,7 +11,7 @@ import { Button } from '../components/ui/Button';
 import { Progress } from '../components/ui/Progress';
 import { Badge } from '../components/ui/Badge';
 import { CurrencyDisplay } from '../components/ui/CurrencyDisplay';
-import { formatPence, currencyCodeFromSymbol } from '../i18n/format';
+import { formatPence, resolveFamilyCurrencyCode } from '../i18n/format';
 import { ContributionBreakdown } from '../components/goals/ContributionBreakdown';
 import { ContributionModal } from '../components/goals/ContributionModal';
 import { ParentContributionModal } from '../components/goals/ParentContributionModal';
@@ -41,7 +41,7 @@ export function GoalDetail() {
   const navigate = useNavigate();
   const { currentUser, familyData, savingsGoals, familyMembers } = useStore();
   const { t } = useTranslation('goals');
-  const currency = familyData?.currency || '£';
+  const currencyCode = resolveFamilyCurrencyCode(familyData);
   const isParent = isParentRole(currentUser?.role);
 
   const rawGoal = savingsGoals.find(g => g.id === goalId || g.goalId === goalId);
@@ -196,7 +196,7 @@ export function GoalDetail() {
             {pendingProposals.map(p => (
               <div key={p.proposalId} className="flex items-center justify-between bg-gray-50 rounded-xl p-3">
                 <span className="font-semibold text-gray-800">
-                  {t('detail.match', { amount: formatPence(p.proposedMatchAmountPence, currencyCodeFromSymbol(currency)) })}
+                  {t('detail.match', { amount: formatPence(p.proposedMatchAmountPence, currencyCode) })}
                 </span>
                 <div className="flex gap-2">
                   <Button variant="danger" size="sm" disabled={busy} onClick={() => runParentAction(() => rejectMatchProposal(familyData.id, goal.goalId!, p.proposalId!), 'reject match')}>{t('detail.reject')}</Button>

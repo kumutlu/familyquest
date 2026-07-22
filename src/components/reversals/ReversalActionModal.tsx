@@ -3,7 +3,7 @@ import { useTranslation } from 'react-i18next';
 import type { HistoryAction } from '../../lib/reversalHistory';
 import { reverseTransaction } from '../../lib/reversalApi';
 import { useStore } from '../../store/useStore';
-import { formatPence, currencyCodeFromSymbol } from '../../i18n/format';
+import { formatPence, resolveFamilyCurrencyCode } from '../../i18n/format';
 import { Button } from '../ui/Button';
 
 interface ReversalActionModalProps {
@@ -25,7 +25,7 @@ const balanceValue = (amount: number, unit: 'money' | 'points', currencyCode: st
 export function ReversalActionModal({ open, familyId, historyAction, onClose, onCancel, onSuccess }: ReversalActionModalProps) {
   const { t } = useTranslation('reversals');
   const state = useStore();
-  const currencyCode = currencyCodeFromSymbol(state.familyData?.currency);
+  const currencyCode = resolveFamilyCurrencyCode(state.familyData);
   const [reason, setReason] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);

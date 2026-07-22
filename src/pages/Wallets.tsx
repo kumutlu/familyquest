@@ -8,12 +8,12 @@ import { Navigate } from 'react-router-dom';
 import { useState } from 'react';
 import { AddMoneyModal } from '../components/wallet/AddMoneyModal';
 import { signedTransactionAmount } from '../lib/walletPresentation';
-import { formatPence, currencyCodeFromSymbol, formatDate as i18nFormatDate } from '../i18n/format';
+import { formatPence, formatDate as i18nFormatDate, resolveFamilyCurrencyCode } from '../i18n/format';
 
 export function Wallets() {
-  const { currentUser, familyMembers, loading, walletTransactions, childWallets } = useStore();
+  const { currentUser, familyData, familyMembers, loading, walletTransactions, childWallets } = useStore();
   const { t } = useTranslation('wallet');
-  const currency = '£';
+  const currencyCode = resolveFamilyCurrencyCode(familyData);
   const [selectedChildId, setSelectedChildId] = useState<string | null>(null);
 
   if (loading) return <div className="p-8 text-center text-gray-500 animate-pulse">{t('allowance.loading')}</div>;
@@ -41,7 +41,7 @@ export function Wallets() {
   };
 
   const formatAmount = (amountPence: number) => {
-    return formatPence(amountPence, currencyCodeFromSymbol(currency));
+    return formatPence(amountPence, currencyCode);
   };
 
   const formatTransactionLabel = (tx: any) => {
@@ -144,6 +144,7 @@ export function Wallets() {
         <AddMoneyModal 
           child={children.find(c => c.id === selectedChildId)} 
           onClose={() => setSelectedChildId(null)} 
+          currencyCode={currencyCode}
         />
       )}
     </div>

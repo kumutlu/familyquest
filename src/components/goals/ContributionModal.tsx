@@ -6,6 +6,7 @@ import { CurrencyDisplay } from '../ui/CurrencyDisplay';
 import { useStore } from '../../store/useStore';
 import { contributeToGoal } from '../../lib/api';
 import { normalizeGoalDoc, type Goal } from '../../lib/goalContracts';
+import { currencySymbolFromCode, resolveFamilyCurrencyCode } from '../../i18n/format';
 
 /**
  * Child contribution flow: wallet -> goal. Optionally approval-gated
@@ -20,6 +21,7 @@ export function ContributionModal({ goal, isOpen, onClose, onDone }: {
   const { currentUser, myWallet, familyData } = useStore();
   const { t } = useTranslation('goals');
   const g: Goal = normalizeGoalDoc(goal);
+  const currencySymbol = currencySymbolFromCode(resolveFamilyCurrencyCode(familyData));
   const [amount, setAmount] = useState('');
   const [approvalRequired, setApprovalRequired] = useState(false);
   const [error, setError] = useState('');
@@ -75,7 +77,7 @@ export function ContributionModal({ goal, isOpen, onClose, onDone }: {
         <div>
           <label className="block text-sm font-semibold text-gray-700 mb-1">{t('contribution.amount')}</label>
           <div className="relative">
-            <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 font-bold">{familyData?.currency || '£'}</span>
+            <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 font-bold">{currencySymbol}</span>
             <input
               type="number"
               inputMode="decimal"

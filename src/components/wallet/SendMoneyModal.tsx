@@ -6,12 +6,13 @@ import { createTransferRequest } from '../../lib/api';
 import { useStore } from '../../store/useStore';
 import { isChildRole } from '../../lib/roles';
 import { Send } from 'lucide-react';
-import { formatPence, currencyCodeFromSymbol } from '../../i18n/format';
+import { currencySymbolFromCode, formatPence, type SupportedCurrencyCode } from '../../i18n/format';
 import type { TFunction } from 'i18next';
 
 interface SendMoneyModalProps {
   onClose: () => void;
   onSuccess?: () => void;
+  currencyCode?: SupportedCurrencyCode;
 }
 
 const FOCUSABLE_SELECTOR =
@@ -48,7 +49,7 @@ function friendlyError(err: any, t: TFunction<'wallet'>): string {
   return t('send.generic');
 }
 
-export function SendMoneyModal({ onClose, onSuccess }: SendMoneyModalProps) {
+export function SendMoneyModal({ onClose, onSuccess, currencyCode = 'GBP' }: SendMoneyModalProps) {
   const { currentUser, familyMembers, myWallet } = useStore();
   const [recipientId, setRecipientId] = useState('');
   const [amountGBP, setAmountGBP] = useState('');
@@ -59,7 +60,7 @@ export function SendMoneyModal({ onClose, onSuccess }: SendMoneyModalProps) {
   const [submittedAmountPence, setSubmittedAmountPence] = useState(0);
 
   const { t } = useTranslation('wallet');
-  const currency = '£';
+  const currency = currencySymbolFromCode(currencyCode);
 
   const dialogRef = useRef<HTMLDivElement>(null);
   const previouslyFocused = useRef<HTMLElement | null>(null);
@@ -238,7 +239,7 @@ export function SendMoneyModal({ onClose, onSuccess }: SendMoneyModalProps) {
               <p className="text-sm text-gray-500 mt-1">
                 {recipient
                   ? t('send.successDetail', {
-                      amount: formatPence(submittedAmountPence, currencyCodeFromSymbol(currency)),
+                      amount: formatPence(submittedAmountPence, currencyCode),
                       name: recipient.displayName,
                     })
                   : t('send.successDetailNoName')}

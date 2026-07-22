@@ -10,8 +10,6 @@ import {
   Bell,
   Shield,
   Info,
-  Copy,
-  RefreshCw,
   LogOut,
   KeyRound,
   CheckCircle2,
@@ -46,6 +44,7 @@ import {
 } from '../lib/pushNotifications';
 import { FAMILYQUEST_BUILD } from '../buildInfo';
 import { ProfileEditorModal } from '../components/profile/ProfileEditorModal';
+import { FamilySettings } from '../components/family/FamilySettings';
 
 interface SectionProps {
   id: string;
@@ -277,15 +276,11 @@ export function Settings() {
   const currentUser = useStore(state => state.currentUser);
   const authUser = useStore(state => state.authUser);
   const familyData = useStore(state => state.familyData);
-  const familyMembers = useStore(state => state.familyMembers);
 
   const [editorOpen, setEditorOpen] = useState(false);
 
-  // Global status (copy, etc.)
+  // Sign-out status is surfaced at page level; family actions own their feedback.
   const [status, setStatus] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
-
-  // Invite code copy
-  const [copying, setCopying] = useState(false);
 
   // Password reset
   const [resetState, setResetState] = useState<{
@@ -294,7 +289,6 @@ export function Settings() {
   }>({ loading: false, message: null });
 
   const role = currentUser?.role;
-  const owner = isOwnerRole(role);
   const child = isChildRole(role);
   const isParentOrOwner = isOwnerRole(role) || isParentRole(role);
   const profileUpdateRequests = useStore(state => state.profileUpdateRequests);
@@ -305,27 +299,6 @@ export function Settings() {
     ? t('roleCopyParent')
     : t('roleCopyChild');
   const { connectionState, retry } = useNotifications(currentUser?.familyId ?? null, currentUser?.uid ?? null);
-
-  const inviteCode = familyData?.inviteCode;
-  const memberCount = familyMembers?.length ?? 0;
-
-  const handleCopy = async () => {
-    if (!inviteCode || copying) return;
-    setCopying(true);
-    setStatus(null);
-    try {
-      if (navigator.clipboard?.writeText) {
-        await navigator.clipboard.writeText(inviteCode);
-      } else {
-        throw new Error('Clipboard unavailable');
-      }
-      setStatus({ type: 'success', message: t('statusCopied') });
-    } catch {
-      setStatus({ type: 'error', message: t('statusCopyFailed') });
-    } finally {
-      setCopying(false);
-    }
-  };
 
   const handlePasswordReset = async () => {
     if (resetState.loading) return;
@@ -479,78 +452,7 @@ export function Settings() {
         title={t('familyTitle')}
         description={t('familyDesc')}
       >
-        <Card>
-          <CardContent className="p-5 divide-y divide-gray-100">
-            <Row label={t('familyName')} value={familyData?.name ?? '—'} />
-
-            {child ? (
-              <div className="pt-3">
-                <p className="text-sm font-medium text-gray-500 mb-2">{t('familyMembers')}</p>
-                <ul className="space-y-2">
-                  {familyMembers.map(member => (
-                    <li key={member.id} className="flex items-center justify-between gap-3">
-                      <span className="text-sm font-semibold text-gray-900 truncate">
-                        {member.displayName}
-                      </span>
-                      <span className="text-xs font-medium text-gray-400">
-                        {getRoleLabel(member.role)}
-                      </span>
-                    </li>
-                  ))}
-                </ul>
-              </div>
-            ) : (
-              <>
-                <div className="py-3">
-                  <p className="text-sm font-medium text-gray-500 mb-2">{t('inviteCode')}</p>
-                  <div className="flex flex-col sm:flex-row gap-3">
-                    <div className="flex-1 bg-gray-50 border border-gray-200 rounded-xl px-4 py-3 flex items-center justify-between">
-                      <span className="font-mono text-lg font-bold tracking-widest text-primary-600">
-                        {inviteCode || '—'}
-                      </span>
-                    </div>
-                    <div className="flex gap-2">
-                      <Button
-                        variant="secondary"
-                        onClick={handleCopy}
-                        disabled={copying || !inviteCode}
-                        aria-label={t('copyInviteAria')}
-                        className="flex-1 sm:flex-none justify-center"
-                      >
-                        {copying ? (
-                          t('common:copying')
-                        ) : (
-                          <>
-                            <Copy size={16} className="mr-2" aria-hidden="true" /> {t('common:copy')}
-                          </>
-                        )}
-                      </Button>
-                    </div>
-                  </div>
-                </div>
-
-                {owner && (
-                  <div className="py-3">
-                    <Button
-                      variant="outline"
-                      disabled
-                      aria-label={t('regenerateInviteAria')}
-                      className="w-full justify-center cursor-not-allowed"
-                      title={t('regenerateDisabledTitle')}
-                    >
-                      <RefreshCw size={16} className="mr-2" aria-hidden="true" /> {t('regenerateInvite')}
-                    </Button>
-                    <p className="mt-2 text-xs text-gray-400">
-                      {t('regenerateNote')}
-                    </p>
-                  </div>
-                )}
-
-                <Row label={t('memberCount')} value={memberCount} />
-              </>
-            )}
-          </CardContent>
-        </Card>
+        <FamilySettings />
       </Section>
 
       {/* 3. NOTIFICATIONS */}

@@ -3,17 +3,18 @@ import { useTranslation } from 'react-i18next';
 import { Button } from '../ui/Button';
 import { depositToWallet, withdrawFromWallet } from '../../lib/api';
 import { useStore } from '../../store/useStore';
-import { formatPence, currencyCodeFromSymbol } from '../../i18n/format';
+import { currencySymbolFromCode, formatPence, type SupportedCurrencyCode } from '../../i18n/format';
 
 interface AddMoneyModalProps {
   child: any;
   onClose: () => void;
+  currencyCode?: SupportedCurrencyCode;
 }
 
-export function AddMoneyModal({ child, onClose }: AddMoneyModalProps) {
+export function AddMoneyModal({ child, onClose, currencyCode = 'GBP' }: AddMoneyModalProps) {
   const { currentUser } = useStore();
   const { t } = useTranslation('wallet');
-  const currency = '£';
+  const currency = currencySymbolFromCode(currencyCode);
   const [amountGBP, setAmountGBP] = useState('');
   const [note, setNote] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -57,7 +58,7 @@ export function AddMoneyModal({ child, onClose }: AddMoneyModalProps) {
   const hasValidAmount = !isNaN(amountFloat) && amountFloat > 0;
   const amountPence = hasValidAmount ? Math.round(amountFloat * 100) : 0;
   const formattedAmount = hasValidAmount
-    ? formatPence(amountPence, currencyCodeFromSymbol(currency))
+    ? formatPence(amountPence, currencyCode)
     : '';
 
   const submitLabel = isSubmitting

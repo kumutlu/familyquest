@@ -8,11 +8,13 @@ import { Modal } from '../components/ui/Modal';
 import { createGoal, deleteCancelledGoal } from '../lib/api';
 import { normalizeGoalDoc, type GoalKind, type ParentContributionInput } from '../lib/goalContracts';
 import { Target, Plus } from 'lucide-react';
+import { currencySymbolFromCode, resolveFamilyCurrencyCode } from '../i18n/format';
 
 export function Goals() {
   const navigate = useNavigate();
   const { currentUser, familyData, savingsGoals, familyMembers } = useStore();
   const { t } = useTranslation('goals');
+  const currencySymbol = currencySymbolFromCode(resolveFamilyCurrencyCode(familyData));
 
   const [showCreate, setShowCreate] = useState(false);
   const [title, setTitle] = useState('');
@@ -207,7 +209,7 @@ const confirmDelete = async () => {
           <div>
             <label className="block text-sm font-semibold text-gray-700 mb-1">{t('create.targetLabel')}</label>
             <div className="relative">
-              <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 font-bold">{familyData?.currency || '£'}</span>
+              <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 font-bold">{currencySymbol}</span>
               <input
                 type="number"
                 inputMode="decimal"
@@ -253,7 +255,7 @@ const confirmDelete = async () => {
               <div>
                 <label className="block text-xs font-medium text-gray-500 mb-1">{t('create.fixedLabel')}</label>
                 <div className="relative">
-                  <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 font-bold">{familyData?.currency || '£'}</span>
+                  <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 font-bold">{currencySymbol}</span>
                   <input
                     type="number"
                     inputMode="decimal"

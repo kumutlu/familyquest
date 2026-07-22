@@ -6,6 +6,7 @@ import { Button } from '../ui/Button';
 import { RequestStatusBadge } from './RequestStatusBadge';
 import { RequestDetailContent } from './RequestDetailContent';
 import { normalizeRequest, type RequestContext, type NormalizedRequest } from '../../lib/requestModel';
+import { currencySymbolFromCode, resolveFamilyCurrencyCode } from '../../i18n/format';
 
 interface RequestDetailSheetProps {
   /** Raw request document carrying a `category` field, or null when closed. */
@@ -34,7 +35,7 @@ export function RequestDetailSheet({ request, onClose, onResolved }: RequestDeta
   const { normalized, failed } = useMemo<{ normalized: NormalizedRequest | null; failed: boolean }>(() => {
     if (!request) return { normalized: null, failed: false };
     const ctx: RequestContext = {
-      currency: familyData?.currency || '£',
+      currency: currencySymbolFromCode(resolveFamilyCurrencyCode(familyData)),
       resolveMember: id => {
         const member = familyMembers.find(m => m.id === id);
         return member

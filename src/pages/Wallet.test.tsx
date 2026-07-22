@@ -39,6 +39,7 @@ const thisMonth = () => ({ toDate: () => new Date() });
 beforeEach(() => {
   mockStore.currentUser = { id: 'child-1', familyId: 'family-1', role: 'child', displayName: 'Muhammed Osman' };
   mockStore.myWallet = { balance: 0 };
+  mockStore.familyData = { id: 'family-1', currency: '£' };
   mockStore.walletTransactions = [];
   mockStore.transferRequests = [];
   mockStore.familyMembers = [];
@@ -113,6 +114,22 @@ describe('6. £0.00 renders correctly', () => {
       </MemoryRouter>,
     );
     expect(screen.getAllByText('£0.00').length).toBeGreaterThanOrEqual(1);
+  });
+});
+
+describe('canonical family currency', () => {
+  it('prefers currencyCode over the legacy currency symbol', () => {
+    mockStore.familyData = { id: 'family-1', currencyCode: 'TRY', currency: '£' };
+    mockStore.myWallet = { balance: 1_234 };
+
+    render(
+      <MemoryRouter>
+        <Wallet />
+      </MemoryRouter>,
+    );
+
+    expect(screen.getByText(/₺12\.34|TRY\s*12\.34/)).toBeInTheDocument();
+    expect(screen.queryByText('£12.34')).not.toBeInTheDocument();
   });
 });
 
@@ -401,7 +418,7 @@ describe('25 & 26. Wallet load failure shows a friendly error (never raw Firebas
         <Wallet />
       </MemoryRouter>,
     );
-    expect(screen.getByText(/We couldn’t load your wallet/i)).toBeInTheDocument();
+    expect(screen.getByText(/We (?:couldn't|couldn’t) load your wallet/i)).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /try again/i })).toBeInTheDocument();
     expect(screen.queryByText(/permission-denied/i)).not.toBeInTheDocument();
   });

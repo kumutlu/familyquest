@@ -89,15 +89,52 @@ export function formatRelativeTime(
  * ISO 4217 code so `Intl.NumberFormat` can format amounts locale-aware.
  * Unknown / missing symbols fall back to GBP to keep the UI functional.
  */
-const SYMBOL_TO_CURRENCY_CODE: Record<string, string> = {
+export type SupportedCurrencyCode = 'GBP' | 'EUR' | 'USD' | 'TRY';
+
+const SUPPORTED_CURRENCY_CODES: readonly SupportedCurrencyCode[] = ['GBP', 'EUR', 'USD', 'TRY'];
+
+const SYMBOL_TO_CURRENCY_CODE: Record<string, SupportedCurrencyCode> = {
   '£': 'GBP',
   $: 'USD',
   '€': 'EUR',
   '₺': 'TRY',
-  '¥': 'JPY',
 };
 
-export function currencyCodeFromSymbol(symbol?: string): string {
-  if (symbol && SYMBOL_TO_CURRENCY_CODE[symbol]) return SYMBOL_TO_CURRENCY_CODE[symbol];
-  return 'GBP';
+const CURRENCY_CODE_TO_SYMBOL: Record<SupportedCurrencyCode, string> = {
+  GBP: '£',
+  EUR: '€',
+  USD: '$',
+  TRY: '₺',
+};
+
+const isSupportedCurrencyCode = (value: unknown): value is SupportedCurrencyCode =>
+  typeof value === 'string' && SUPPORTED_CURRENCY_CODES.includes(value as SupportedCurrencyCode);
+
+function normalizeLegacyCurrency(value: unknown): SupportedCurrencyCode | null {
+  if (typeof value !== 'string') return null;
+  const trimmed = value.trim();
+  const symbolCode = SYMBOL_TO_CURRENCY_CODE[trimmed];
+  if (symbolCode) return symbolCode;
+  const legacyCode = trimmed.toUpperCase();
+  return isSupportedCurrencyCode(legacyCode) ? legacyCode : null;
+}
+
+/**
+ * Resolve the family's canonical ISO currency code without mutating legacy data.
+ * A strictly valid currencyCode wins; otherwise the legacy currency symbol/code
+ * is normalized, and unsupported or missing values deterministically use GBP.
+ */
+export function resolveFamilyCurrencyCode(
+  family?: { currencyCode?: unknown; currency?: unknown } | null,
+): SupportedCurrencyCode {
+  if (isSupportedCurrencyCode(family?.currencyCode)) return family.currencyCode;
+  return normalizeLegacyCurrency(family?.currency) ?? 'GBP';
+}
+
+export function currencyCodeFromSymbol(symbol?: string): SupportedCurrencyCode {
+  return normalizeLegacyCurrency(symbol) ?? 'GBP';
+}
+
+export function currencySymbolFromCode(currencyCode: SupportedCurrencyCode): string {
+  return CURRENCY_CODE_TO_SYMBOL[currencyCode];
 }

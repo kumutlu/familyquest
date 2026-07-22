@@ -5,6 +5,7 @@ import { Button } from '../ui/Button';
 import { useStore } from '../../store/useStore';
 import { addParentGoalContribution } from '../../lib/api';
 import { normalizeGoalDoc, type Goal } from '../../lib/goalContracts';
+import { currencySymbolFromCode, resolveFamilyCurrencyCode } from '../../i18n/format';
 
 /**
  * Parent contribution flow: external parent money added directly to the goal
@@ -19,6 +20,7 @@ export function ParentContributionModal({ goal, isOpen, onClose, onDone }: {
   const { currentUser, familyData } = useStore();
   const { t } = useTranslation('goals');
   const g: Goal = normalizeGoalDoc(goal);
+  const currencySymbol = currencySymbolFromCode(resolveFamilyCurrencyCode(familyData));
   const [amount, setAmount] = useState('');
   const [error, setError] = useState('');
   const [submitting, setSubmitting] = useState(false);
@@ -67,7 +69,7 @@ export function ParentContributionModal({ goal, isOpen, onClose, onDone }: {
         <div>
           <label className="block text-sm font-semibold text-gray-700 mb-1">{t('parentContribution.amount')}</label>
           <div className="relative">
-            <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 font-bold">{familyData?.currency || '£'}</span>
+            <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 font-bold">{currencySymbol}</span>
             <input
               type="number"
               inputMode="decimal"

@@ -97,6 +97,8 @@
     "copyFailed": "Kopyalama başarısız",
     "inviteCodeCopied": "Davet kodu panoya kopyalandı.",
     "inviteCodeCopyFailed": "Davet kodu kopyalanamadı.",
+    "regenerateInvite": "Davet kodunu yenile",
+    "regenerateInviteAria": "Davet kodunu yenile",
     "memberCount": "Üye sayısı",
     "members": "Üyeler",
     "membersDesc": "Aile üyelerini ve izinleri yönetin.",
@@ -105,13 +107,32 @@
     "managed": "Yönetilen",
     "loginEnabled": "Giriş etkin",
     "addParent": "Ebeveyn ekle",
+    "addParentInviteExplanation": "Başka bir ebeveyn ekleme özelliği henüz kullanılamıyor. Aile davet kodları şu anda çocuk katılma isteği oluşturur.",
     "addChild": "Çocuk ekle",
     "childAdded": "Çocuk başarıyla eklendi",
     "regional": "Bölgesel",
     "regionalDesc": "Para birimi, saat dilimi ve hafta başlangıcı için aile genelinde ayarlar.",
     "currency": "Para birimi",
+    "currencies": {
+      "gbp": "İngiliz sterlini (£)",
+      "eur": "Euro (€)",
+      "usd": "ABD doları ($)",
+      "try": "Türk lirası (₺)"
+    },
     "timezone": "Saat dilimi",
+    "timezones": {
+      "london": "Londra (Europe/London)",
+      "newYork": "New York (America/New_York)",
+      "losAngeles": "Los Angeles (America/Los_Angeles)",
+      "tokyo": "Tokyo (Asia/Tokyo)",
+      "dubai": "Dubai (Asia/Dubai)",
+      "sydney": "Sidney (Australia/Sydney)"
+    },
     "weekStarts": "Hafta başlangıcı",
+    "weekDays": {
+      "monday": "Pazartesi",
+      "sunday": "Pazar"
+    },
     "dangerZone": "Tehlike Bölgesi",
     "dangerZoneDesc": "Ailenizi etkileyen geri alınamaz eylemler.",
     "dangerZoneTitle": "Tehlike Bölgesi",
@@ -120,11 +141,24 @@
     "leaveFamily": "Aileden ayrıl",
     "comingSoon": "Yakında",
     "inviteCodeRegenerated": "Davet kodu yenilendi",
+    "inviteCodeRegenerateError": "Davet kodu yenilenemedi.",
     "regionalSettingsSaved": "Bölgesel ayarlar başarıyla güncellendi",
+    "regionalSettingsUpdateError": "Bölgesel ayarlar güncellenemedi.",
     "joinFamily": "Aileye katıl",
     "joinRequestSent": "Katılma isteği gönderildi. Ebeveyn onayı bekleniyor.",
     "parentApproved": "Ebeveyn onaylandı",
     "parentRejected": "Ebeveyn reddedildi",
-    "pendingApprovals": "Bekleyen Onaylar"
+    "joinRequestApproved": "Katılma isteği onaylandı",
+    "joinRequestRejected": "Katılma isteği reddedildi",
+    "approveJoinRequestError": "Katılma isteği onaylanamadı.",
+    "rejectJoinRequestError": "Katılma isteği reddedilemedi.",
+    "pendingApprovals": "Bekleyen Onaylar",
+    "pendingRequestCount_one": "{{count}} istek onay bekliyor",
+    "pendingRequestCount_other": "{{count}} istek onay bekliyor",
+    "pendingChildApprovalExplanation": "Bu isteği onayladığınızda kişi aileye çocuk olarak eklenir.",
+    "requestedOn": "İstek tarihi: {{date}}",
+    "approve": "Onayla",
+    "reject": "Reddet",
+    "rejectionReason": "Onaylanmadı"
   }
 }

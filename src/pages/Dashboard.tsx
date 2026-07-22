@@ -10,7 +10,7 @@ import { RequestCard } from '../components/requests/RequestCard';
 import { useRequestDetail } from '../components/requests/RequestDetailContext';
 import { normalizeRequest, type RequestContext, type RequestCategory } from '../lib/requestModel';
 import { resolveFeedRequest } from '../lib/feedRequestResolver';
-import { formatDate } from '../i18n/format';
+import { currencySymbolFromCode, formatDate, resolveFamilyCurrencyCode } from '../i18n/format';
 import { WalletSummaryCard } from '../components/dashboard/WalletSummaryCard';
 import { GoalSummaryCard } from '../components/dashboard/GoalSummaryCard';
 import { PetBoxSummaryCard } from '../components/dashboard/PetBoxSummaryCard';
@@ -46,7 +46,7 @@ export function Dashboard() {
   const levelProgress = (xpInLevel / 1000) * 100;
 
   const ctx: RequestContext = {
-    currency: familyData?.currency || '£',
+    currency: currencySymbolFromCode(resolveFamilyCurrencyCode(familyData)),
     resolveMember: id => {
       const member = familyMembers.find(m => m.id === id);
       return member ? { id: member.id, name: member.displayName, avatarUrl: member.avatarUrl } : undefined;

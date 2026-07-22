@@ -6,6 +6,7 @@ import { CurrencyDisplay } from '../ui/CurrencyDisplay';
 import { useStore } from '../../store/useStore';
 import { createMatchProposal } from '../../lib/api';
 import { normalizeGoalDoc, type Goal, type ContributionLeg } from '../../lib/goalContracts';
+import { currencySymbolFromCode, resolveFamilyCurrencyCode } from '../../i18n/format';
 
 /**
  * Parent match proposal flow: proposes a manual match for a specific child
@@ -22,6 +23,7 @@ export function MatchProposalModal({ goal, contributions, isOpen, onClose, onDon
   const { currentUser, familyData, familyMembers } = useStore();
   const { t } = useTranslation('goals');
   const g: Goal = normalizeGoalDoc(goal);
+  const currencySymbol = currencySymbolFromCode(resolveFamilyCurrencyCode(familyData));
 
   const childContribs = contributions.filter(
     c => c.type === 'child_contribution' && (!c.status || c.status === 'applied'),
@@ -104,7 +106,7 @@ export function MatchProposalModal({ goal, contributions, isOpen, onClose, onDon
         <div>
           <label className="block text-sm font-semibold text-gray-700 mb-1">{t('matchProposal.matchAmount')}</label>
           <div className="relative">
-            <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 font-bold">{familyData?.currency || '£'}</span>
+            <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 font-bold">{currencySymbol}</span>
             <input
               type="number"
               inputMode="decimal"

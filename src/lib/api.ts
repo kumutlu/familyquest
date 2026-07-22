@@ -45,6 +45,7 @@ import { getAvatarById, getAvatarCost, resolveAvatarImage } from '../config/avat
 import {
   periodKeyFor,
 } from './taskRecurrence';
+import type { SupportedCurrencyCode } from '../i18n/format';
 import {
   computeNetChild,
   computeMatchPence,
@@ -254,6 +255,45 @@ export const requestToJoinFamily = async (uid: string, name: string, inviteCode:
   });
 
   return familyId;
+};
+
+export interface FamilySettingsUpdates {
+  name?: string;
+  currencyCode?: SupportedCurrencyCode;
+  timezone?: string;
+  weekStartsOn?: 0 | 1;
+}
+
+/** Update only the owner-managed family settings allowlist. */
+export const updateFamilySettings = async (familyId: string, updates: FamilySettingsUpdates) => {
+  if (!familyId.trim()) throw new Error('Family id is required');
+
+  const allowedUpdates: Record<string, unknown> = {};
+  if (updates.name !== undefined) allowedUpdates.name = updates.name;
+  if (updates.currencyCode !== undefined) allowedUpdates.currencyCode = updates.currencyCode;
+  if (updates.timezone !== undefined) allowedUpdates.timezone = updates.timezone;
+  if (updates.weekStartsOn !== undefined) allowedUpdates.weekStartsOn = updates.weekStartsOn;
+  if (Object.keys(allowedUpdates).length === 0) throw new Error('No family settings to update');
+
+  await updateDoc(doc(db, 'families', familyId), allowedUpdates);
+};
+
+const generateInviteCode = () =>
+  Math.random().toString(36).slice(2, 8).padEnd(6, '0').toUpperCase();
+
+/** Replace the family invite code atomically so live listeners observe one update. */
+export const regenerateInviteCode = async (familyId: string) => {
+  if (!familyId.trim()) throw new Error('Family id is required');
+  const familyRef = doc(db, 'families', familyId);
+  const inviteCode = generateInviteCode();
+
+  await runTransaction(db, async transaction => {
+    const familyDoc = await transaction.get(familyRef);
+    if (!familyDoc.exists()) throw new Error('Family not found');
+    transaction.update(familyRef, { inviteCode });
+  });
+
+  return { inviteCode };
 };
 
 export const approveJoinRequest = async (familyId: string, requestId: string, role: 'parent' | 'child') => {

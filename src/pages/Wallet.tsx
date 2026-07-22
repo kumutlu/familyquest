@@ -19,6 +19,7 @@ import { TransactionDetailsModal } from '../components/wallet/TransactionDetails
 import { SendMoneyModal } from '../components/wallet/SendMoneyModal';
 import { RequestMoneyModal } from '../components/wallet/RequestMoneyModal';
 import { ErrorState, TransactionSkeletonRows } from '../components/wallet/WalletStates';
+import { currencySymbolFromCode, resolveFamilyCurrencyCode } from '../i18n/format';
 
 // Re-exported for backward compatibility with helpers previously defined here.
 export {
@@ -73,7 +74,8 @@ export function Wallet() {
   }
 
   const isChild = isChildRole(currentUser?.role);
-  const currency = familyData?.currency || '£';
+  const currencyCode = resolveFamilyCurrencyCode(familyData);
+  const currency = currencySymbolFromCode(currencyCode);
   const currentBalance = myWallet?.balance || 0;
   const bs = bootstrapStatus || {};
 
@@ -180,10 +182,10 @@ export function Wallet() {
         nameResolver={nameResolver}
       />
       {isChild && activeModal === 'send' && (
-        <SendMoneyModal onClose={() => setActiveModal(null)} />
+        <SendMoneyModal onClose={() => setActiveModal(null)} currencyCode={currencyCode} />
       )}
       {isChild && activeModal === 'request' && (
-        <RequestMoneyModal onClose={() => setActiveModal(null)} />
+        <RequestMoneyModal onClose={() => setActiveModal(null)} currencyCode={currencyCode} />
       )}
     </div>
   );

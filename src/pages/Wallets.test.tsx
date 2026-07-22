@@ -38,10 +38,24 @@ beforeEach(() => {
   mockStore.familyMembers = [];
   mockStore.childWallets = [];
   mockStore.walletTransactions = [];
+  mockStore.familyData = { id: 'family-1', currency: '£' };
   mockStore.loading = false;
 });
 
 describe('Parent Wallets page balance single source of truth', () => {
+  it('formats balances with canonical family currencyCode', () => {
+    mockStore.familyData = { id: 'family-1', currencyCode: 'TRY', currency: '£' };
+    mockStore.familyMembers = [
+      { id: 'child-1', familyId: 'family-1', role: 'child', displayName: 'Mnalium' },
+    ];
+    mockStore.childWallets = [{ id: 'child-1', balance: 1_234 }];
+
+    render(<MemoryRouter><Wallets /></MemoryRouter>);
+
+    expect(screen.getByText(/₺12\.34|TRY\s*12\.34/)).toBeInTheDocument();
+    expect(screen.queryByText('£12.34')).not.toBeInTheDocument();
+  });
+
   it('shows walletDoc.balance (£606.00), NOT the legacy walletBalance (£639.00)', () => {
     // Legacy profile field deliberately set to a different (wrong) value to prove it is ignored.
     mockStore.currentUser = { id: 'parent-1', familyId: 'family-1', role: 'owner', walletBalance: 63900 };

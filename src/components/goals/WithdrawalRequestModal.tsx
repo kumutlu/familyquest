@@ -4,7 +4,7 @@ import { Modal } from '../ui/Modal';
 import { Button } from '../ui/Button';
 import { CurrencyDisplay } from '../ui/CurrencyDisplay';
 import { useStore } from '../../store/useStore';
-import { formatPence, currencyCodeFromSymbol } from '../../i18n/format';
+import { currencySymbolFromCode, formatPence, resolveFamilyCurrencyCode } from '../../i18n/format';
 import { requestGoalWithdrawal } from '../../lib/api';
 import { normalizeGoalDoc, computeNetChild, type Goal, type ContributionLeg } from '../../lib/goalContracts';
 
@@ -22,7 +22,8 @@ export function WithdrawalRequestModal({ goal, contributions, isOpen, onClose, o
 }) {
   const { currentUser, familyData } = useStore();
   const { t } = useTranslation('goals');
-  const currency = familyData?.currency || '£';
+  const currencyCode = resolveFamilyCurrencyCode(familyData);
+  const currency = currencySymbolFromCode(currencyCode);
   const g: Goal = normalizeGoalDoc(goal);
   const childId = currentUser?.id ?? g.childId ?? '';
   const netChild = computeNetChild(contributions, childId);
@@ -37,7 +38,7 @@ export function WithdrawalRequestModal({ goal, contributions, isOpen, onClose, o
   const handleSubmit = async () => {
     if (!currentUser || !familyData) return;
     if (!valid) {
-      setError(t('withdrawal.errorUpToNet', { amount: formatPence(netChild, currencyCodeFromSymbol(currency)) }));
+      setError(t('withdrawal.errorUpToNet', { amount: formatPence(netChild, currencyCode) }));
       return;
     }
     setSubmitting(true);
@@ -79,7 +80,7 @@ export function WithdrawalRequestModal({ goal, contributions, isOpen, onClose, o
         <div>
           <label className="block text-sm font-semibold text-gray-700 mb-1">{t('withdrawal.amountToWithdraw')}</label>
           <div className="relative">
-            <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 font-bold">{familyData?.currency || '£'}</span>
+            <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 font-bold">{currency}</span>
             <input
               type="number"
               inputMode="decimal"

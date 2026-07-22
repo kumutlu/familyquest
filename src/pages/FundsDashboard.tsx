@@ -6,6 +6,7 @@ import { PetLeaderboard } from '../components/funds/PetLeaderboard';
 import { createFund } from '../lib/api';
 import { Button } from '../components/ui/Button';
 import { CurrencyDisplay } from '../components/ui/CurrencyDisplay';
+import { currencySymbolFromCode, resolveFamilyCurrencyCode } from '../i18n/format';
 
 export function FundsDashboard() {
   const { t } = useTranslation(['funds', 'common']);
@@ -21,7 +22,7 @@ export function FundsDashboard() {
   });
 
   const isParent = currentUser?.role === 'parent' || currentUser?.role === 'owner';
-  const currencySymbol = familyData?.currency || '£';
+  const currencySymbol = currencySymbolFromCode(resolveFamilyCurrencyCode(familyData));
 
   const handleCreateFund = async (e: React.FormEvent) => {
     e.preventDefault();

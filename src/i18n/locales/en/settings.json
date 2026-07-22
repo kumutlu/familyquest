@@ -97,6 +97,8 @@
     "copyFailed": "Copy failed",
     "inviteCodeCopied": "Invite code copied to clipboard.",
     "inviteCodeCopyFailed": "Could not copy the invite code.",
+    "regenerateInvite": "Regenerate invite code",
+    "regenerateInviteAria": "Regenerate invite code",
     "memberCount": "Member count",
     "members": "Members",
     "membersDesc": "Manage family members and permissions.",
@@ -105,13 +107,32 @@
     "managed": "Managed",
     "loginEnabled": "Login enabled",
     "addParent": "Add parent",
+    "addParentInviteExplanation": "Adding another parent isn't available yet. Family invite codes currently create child join requests.",
     "addChild": "Add child",
     "childAdded": "Child added successfully",
     "regional": "Regional",
     "regionalDesc": "Family-wide settings for currency, timezone, and week start.",
     "currency": "Currency",
+    "currencies": {
+      "gbp": "British Pound (£)",
+      "eur": "Euro (€)",
+      "usd": "US Dollar ($)",
+      "try": "Turkish Lira (₺)"
+    },
     "timezone": "Timezone",
+    "timezones": {
+      "london": "London (Europe/London)",
+      "newYork": "New York (America/New_York)",
+      "losAngeles": "Los Angeles (America/Los_Angeles)",
+      "tokyo": "Tokyo (Asia/Tokyo)",
+      "dubai": "Dubai (Asia/Dubai)",
+      "sydney": "Sydney (Australia/Sydney)"
+    },
     "weekStarts": "Week starts",
+    "weekDays": {
+      "monday": "Monday",
+      "sunday": "Sunday"
+    },
     "dangerZone": "Danger Zone",
     "dangerZoneDesc": "Irreversible actions that affect your family.",
     "dangerZoneTitle": "Danger Zone",
@@ -120,11 +141,24 @@
     "leaveFamily": "Leave family",
     "comingSoon": "Coming soon",
     "inviteCodeRegenerated": "Invite code regenerated",
+    "inviteCodeRegenerateError": "Failed to regenerate the invite code.",
     "regionalSettingsSaved": "Regional settings updated successfully",
+    "regionalSettingsUpdateError": "Failed to update regional settings.",
     "joinFamily": "Join Family",
     "joinRequestSent": "Join request sent. Waiting for parent approval.",
     "parentApproved": "Parent approved",
     "parentRejected": "Parent rejected",
-    "pendingApprovals": "Pending Approvals"
+    "joinRequestApproved": "Join request approved",
+    "joinRequestRejected": "Join request rejected",
+    "approveJoinRequestError": "Failed to approve the join request.",
+    "rejectJoinRequestError": "Failed to reject the join request.",
+    "pendingApprovals": "Pending Approvals",
+    "pendingRequestCount_one": "{{count}} request awaiting approval",
+    "pendingRequestCount_other": "{{count}} requests awaiting approval",
+    "pendingChildApprovalExplanation": "Approving this request adds the person as a child.",
+    "requestedOn": "Requested: {{date}}",
+    "approve": "Approve",
+    "reject": "Reject",
+    "rejectionReason": "Not approved"
   }
 }

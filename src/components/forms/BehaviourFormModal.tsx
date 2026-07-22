@@ -3,6 +3,7 @@ import { Button } from '../ui/Button';
 import { useStore } from '../../store/useStore';
 import { addBehaviourEvent } from '../../lib/api';
 import { useTranslation } from 'react-i18next';
+import { currencySymbolFromCode, resolveFamilyCurrencyCode } from '../../i18n/format';
 
 interface BehaviourFormModalProps {
   isOpen: boolean;
@@ -71,7 +72,7 @@ export function BehaviourFormModal({ isOpen, onClose, childrenList }: BehaviourF
     }
   };
 
-  const currencySymbol = familyData?.currency || '£';
+  const currencySymbol = currencySymbolFromCode(resolveFamilyCurrencyCode(familyData));
 
   return (
     <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-gray-900/40 backdrop-blur-sm animate-in fade-in duration-200">

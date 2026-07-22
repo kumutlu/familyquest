@@ -18,6 +18,12 @@ import enWallet from '../i18n/locales/en/wallet.json';
 import trWallet from '../i18n/locales/tr/wallet.json';
 import enGoals from '../i18n/locales/en/goals.json';
 import trGoals from '../i18n/locales/tr/goals.json';
+import enSettings from '../i18n/locales/en/settings.json';
+import trSettings from '../i18n/locales/tr/settings.json';
+import enFunds from '../i18n/locales/en/funds.json';
+import trFunds from '../i18n/locales/tr/funds.json';
+import enProfile from '../i18n/locales/en/profile.json';
+import trProfile from '../i18n/locales/tr/profile.json';
 
 // Preload the UI namespaces used by the Parent Core experience so that
 // components render with real translations synchronously in tests (the
@@ -33,6 +39,9 @@ const UI_BUNDLES: Record<string, { en: unknown; tr: unknown }> = {
   errors: { en: enErrors, tr: trErrors },
   wallet: { en: enWallet, tr: trWallet },
   goals: { en: enGoals, tr: trGoals },
+  settings: { en: enSettings, tr: trSettings },
+  funds: { en: enFunds, tr: trFunds },
+  profile: { en: enProfile, tr: trProfile },
 };
 
 for (const [ns, { en, tr }] of Object.entries(UI_BUNDLES)) {

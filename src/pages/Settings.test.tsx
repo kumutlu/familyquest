@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { render, screen, within, waitFor, act } from '@testing-library/react';
+import { render, screen, within, waitFor, act, fireEvent } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter } from 'react-router-dom';
 import { Settings } from './Settings';
@@ -96,6 +96,8 @@ function seedStore(role: string) {
         { id: 'u2', displayName: 'Kid One', role: 'child' },
         { id: 'u3', displayName: 'Parent Two', role: 'parent' },
       ],
+      joinRequests: [],
+      familyLoading: false,
     });
   });
 }
@@ -123,24 +125,33 @@ beforeEach(() => {
   apiMocks.sendPasswordReset.mockResolvedValue(undefined);
   apiMocks.signOut.mockResolvedValue(undefined);
   updateDocMock.mockResolvedValue(undefined);
+  pushMocks.loadPushState.mockImplementation(() => new Promise<PushState>(() => {}));
   notifState.connectionState = 'connected';
 });
 
 afterEach(() => {
   vi.clearAllMocks();
-  useStore.setState({ currentUser: null, authUser: undefined, familyData: null, familyMembers: [] });
+  act(() => {
+    useStore.setState({ currentUser: null, authUser: undefined, familyData: null, familyMembers: [] });
+  });
 });
 
 describe('Settings — role visibility', () => {
+  it('does not render duplicate family section IDs when FamilySettings is embedded', () => {
+    renderSettings('owner');
+
+    expect(document.querySelectorAll('#family-section')).toHaveLength(1);
+  });
+
   it('1. Owner sees all permitted Settings sections', () => {
     renderSettings('owner');
     for (const heading of ['Profile', 'Family', 'Notifications', 'Security', 'About']) {
-      expect(screen.getByRole('heading', { name: heading })).toBeInTheDocument();
+      expect(screen.getAllByRole('heading', { name: heading }).length).toBeGreaterThan(0);
     }
     expect(screen.getByLabelText('Copy invite code')).toBeInTheDocument();
     expect(screen.getByLabelText('Regenerate invite code')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /Send password reset email/i })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Sign Out' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /Sign out/i })).toBeInTheDocument();
   });
 
   it('2. Parent does not see owner-only controls', () => {
@@ -156,7 +167,8 @@ describe('Settings — role visibility', () => {
     renderSettings('child');
     expect(screen.queryByLabelText('Copy invite code')).not.toBeInTheDocument();
     expect(screen.queryByLabelText('Regenerate invite code')).not.toBeInTheDocument();
-    // Child sees the family members list instead of management actions.
+    // Child can open the read-only family members list.
+    fireEvent.click(screen.getByRole('button', { name: 'Members' }));
     expect(screen.getByText('Kid One')).toBeInTheDocument();
     expect(screen.getByText('Parent Two')).toBeInTheDocument();
     // Child can still open the (read-only) profile editor.
@@ -210,9 +222,9 @@ describe('Settings — dead controls', () => {
     for (const dead of ['Manage Members', 'Permissions', 'Theme', 'Sound Effects']) {
       expect(screen.queryByText(dead)).not.toBeInTheDocument();
     }
-    // The deferred regenerate control is present but disabled.
+    // Invite regeneration is a real owner-only action, not a dead placeholder.
     const regenerate = screen.getByLabelText('Regenerate invite code') as HTMLButtonElement;
-    expect(regenerate).toBeDisabled();
+    expect(regenerate).toBeEnabled();
   });
 });
 
@@ -225,12 +237,12 @@ describe('Settings — family invite code', () => {
     expect(await screen.findByText(/copied to clipboard/i)).toBeInTheDocument();
   });
 
-  it('8. Regenerate invite code respects role and is deferred', () => {
-    // Owner sees a disabled, explained regenerate control.
+  it('8. Regenerate invite code respects role and is active for owners', () => {
+    // Owner sees the active action.
     const { unmount } = renderSettings('owner');
     const ownerRegenerate = screen.getByLabelText('Regenerate invite code') as HTMLButtonElement;
-    expect(ownerRegenerate).toBeDisabled();
-    expect(screen.getByText(/Regenerating the invite code is not available yet/i)).toBeInTheDocument();
+    expect(ownerRegenerate).toBeEnabled();
+    expect(screen.queryByText(/Regenerating the invite code is not available yet/i)).not.toBeInTheDocument();
     unmount();
 
     // Parent must not see the owner-only control at all.
@@ -392,7 +404,7 @@ describe('Settings — layout & role helpers', () => {
     expect(root?.className).toContain('mx-auto');
     // All five sections render as stacked cards.
     for (const heading of ['Profile', 'Family', 'Notifications', 'Security', 'About']) {
-      expect(screen.getByRole('heading', { name: heading })).toBeInTheDocument();
+      expect(screen.getAllByRole('heading', { name: heading }).length).toBeGreaterThan(0);
     }
   });
 
