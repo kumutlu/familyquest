@@ -534,38 +534,24 @@ service cloud.firestore {
         && !exists(/databases/$(database)/documents/families/$(oldData.get('familyId', 'null'))/redemptions/$(txId));
     }
 
+    // Task approval mutation: DENY client rewardPoints/lifetimeXP writes.
+    // The gamification processor (server-side) handles these writes via the
+    // immutable event ledger. Clients may only update task_completions status.
     function isValidTaskApprovalMutation(uid) {
-      let data = request.resource.data;
-      let oldData = resource.data;
-      let completionId = data.get('lastTaskCompletionId', 'null');
-      let familyId = oldData.get('familyId', 'null');
-      let oldCompletion = get(/databases/$(database)/documents/families/$(familyId)/task_completions/$(completionId));
-      let completion = getAfter(/databases/$(database)/documents/families/$(familyId)/task_completions/$(completionId));
-      let taskId = completion == null ? 'null' : completion.data.get('taskId', 'null');
-      let task = get(/databases/$(database)/documents/families/$(familyId)/tasks/$(taskId));
-      return isParent(familyId)
-        && data.diff(oldData).affectedKeys().hasOnly(['rewardPoints', 'lifetimeXP', 'lastTaskCompletionId'])
-        && oldCompletion != null && oldCompletion.data.status == 'pending_approval'
-        && completion != null && completion.data.status == 'approved' && completion.data.assigneeId == uid
-        && task != null && completion.data.awardedPoints == task.data.pointsReward
-        && data.get('rewardPoints', 0) == oldData.get('rewardPoints', 0) + task.data.pointsReward
-        && data.get('lifetimeXP', 0) == oldData.get('lifetimeXP', 0) + task.data.pointsReward;
+      return false;
     }
 
     function hasValidTaskApprovalEffect(familyId, completionId, oldData, data) {
       let task = get(/databases/$(database)/documents/families/$(familyId)/tasks/$(oldData.get('taskId', 'null')));
-      let oldUser = get(/databases/$(database)/documents/users/$(oldData.get('assigneeId', 'null')));
       let user = getAfter(/databases/$(database)/documents/users/$(oldData.get('assigneeId', 'null')));
       let feed = getAfter(/databases/$(database)/documents/families/$(familyId)/feed/$(('task_approval_') + completionId));
-      return task != null && oldUser != null && user != null
+      return task != null && user != null
         && data.taskId == oldData.taskId && data.assigneeId == oldData.assigneeId
         && data.awardedPoints == task.data.pointsReward
         && data.effectSnapshot.familyId == familyId && data.effectSnapshot.actorId == request.auth.uid
         && data.effectSnapshot.childId == oldData.assigneeId && data.effectSnapshot.pointsDelta == task.data.pointsReward
         && data.effectSnapshot.xpAdjustment == 0
         && user.data.lastTaskCompletionId == completionId
-        && user.data.rewardPoints == oldUser.data.get('rewardPoints', 0) + task.data.pointsReward
-        && user.data.lifetimeXP == oldUser.data.get('lifetimeXP', 0) + task.data.pointsReward
         && feed != null && feed.data.actorId == request.auth.uid;
     }
 
@@ -1448,6 +1434,34 @@ service cloud.firestore {
         && data.expiresAt == request.time;
     }
 
+    // =========================================================================
+    // GAMIFICATION PHASE 1 — HELPER FUNCTIONS
+    // =========================================================================
+    // These helpers support the gamification security model:
+    // - Migration state machine: inactive -> prepared -> baseline_complete -> active
+    // - Server-only collections for immutable gamification data
+    // - Daily Goal percentage validation (50-100 integer)
+    // =========================================================================
+
+    function gamificationMigrationStatus(familyId) {
+      let family = get(/databases/$(database)/documents/families/$(familyId));
+      return family == null ? 'inactive' : family.data.get('gamificationMigration.status', 'inactive');
+    }
+
+    function isGamificationActive() {
+      return gamificationMigrationStatus(resource.data.familyId) in ['prepared', 'baseline_complete', 'active'];
+    }
+
+    function isValidDailyGoalPercentage(value) {
+      return value is int && value >= 50 && value <= 100;
+    }
+
+    function isValidGamificationConfig(data) {
+      return data.keys().hasOnly(['schemaVersion', 'dailyGoalPercentage'])
+        && data.schemaVersion == 1
+        && isValidDailyGoalPercentage(data.dailyGoalPercentage);
+    }
+
     // USERS
     match /users/{uid} {
       allow read: if isAuthenticated() && (request.auth.uid == uid || get(/databases/$(database)/documents/users/$(request.auth.uid)).data.familyId == resource.data.familyId);
@@ -1465,7 +1479,9 @@ service cloud.firestore {
         // Children are not isParent, so they remain routed through the approval flow.
         (isParent(resource.data.familyId) && request.auth.uid == uid
           && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['displayName', 'avatarUrl', 'avatarId'])) ||
-        (request.resource.data.diff(resource.data).affectedKeys().hasAny(['rewardPoints', 'lastTaskCompletionId', 'lastBehaviourEventId']) ? isValidRedemptionDeduction(uid) || isValidTaskApprovalMutation(uid) || isValidBehaviourPointMutation(uid) : false) ||
+        (request.resource.data.diff(resource.data).affectedKeys().hasAny(['lastRedemptionId']) && isValidRedemptionDeduction(uid))
+          || (request.resource.data.diff(resource.data).affectedKeys().hasAny(['lastTaskCompletionId']) && isValidTaskApprovalMutation(uid))
+          || (request.resource.data.diff(resource.data).affectedKeys().hasAny(['lastBehaviourEventId']) && isValidBehaviourPointMutation(uid)) ||
         (!('familyId' in resource.data) && 'familyId' in request.resource.data ? isValidOwnerBootstrap(uid) || isValidJoinProfileUpdate(uid) : false) ||
         ('familyId' in resource.data && isOwner(resource.data.familyId) && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['role']) && resource.data.get('role', 'null') != 'child' && request.resource.data.role != 'child') ||
         ('familyId' in resource.data && isParent(resource.data.familyId) && resource.data.get('role', 'null') == 'child' && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['displayName', 'avatarUrl']))
@@ -1483,7 +1499,9 @@ service cloud.firestore {
     match /families/{familyId} {
       allow read: if isFamilyMember(familyId);
       allow create: if isAuthenticated();
-      allow update: if isOwner(familyId);
+      allow update: if isOwner(familyId)
+        && (!('gamificationConfig' in request.resource.data)
+            || isValidGamificationConfig(request.resource.data.gamificationConfig));
 
       match /join_requests/{requestId} {
         allow create: if isAuthenticated() && request.resource.data.uid == request.auth.uid;
@@ -1512,8 +1530,7 @@ service cloud.firestore {
           && request.resource.data.reviewedAt == request.time
           && ((request.resource.data.status == 'approved'
               && request.resource.data.approvedAt == request.time
-              && hasValidTaskApprovalEffect(familyId, completionId, resource.data, request.resource.data)
-              && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'parentComment', 'approvedAt', 'awardedPoints', 'reviewedBy', 'reviewedByName', 'reviewedAt', 'effectSnapshot']))
+              && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'parentComment', 'approvedAt', 'reviewedBy', 'reviewedByName', 'reviewedAt']))
             || (request.resource.data.status == 'rejected'
               && request.resource.data.rejectedAt == request.time
               && request.resource.data.parentComment is string && request.resource.data.parentComment.trim().size() > 0
@@ -2027,6 +2044,50 @@ service cloud.firestore {
         allow read, write: if false;
       }
       match /childLoginIdempotency/{clientReqId} {
+        allow read, write: if false;
+      }
+
+      // =========================================================================
+      // GAMIFICATION PHASE 1 — SERVER-OWNED COLLECTIONS
+      // =========================================================================
+      // These collections are written ONLY by the trusted backend (Admin SDK /
+      // Cloud Functions) as part of the gamification processor. They contain
+      // immutable occurrence reservations, event ledgers, eligibility snapshots,
+      // daily progress projections, summary caches, and rebuild checkpoints.
+      // Clients (parent, owner, or child) MUST NOT be able to read or write any
+      // of them. The Admin SDK bypasses rules, so the trusted backend remains
+      // the sole writer. This is defense-in-depth: even a compromised client
+      // token cannot forge gamification data.
+      //
+      // Migration state machine: inactive -> prepared -> baseline_complete -> active
+      // - inactive: task completion create/approval writes are DENIED
+      // - prepared/baseline_complete/active: task completion state writes are ALLOWED
+      // - All states: client rewardPoints/lifetimeXP writes on task completion are DENIED
+      // =========================================================================
+
+      // Server-only collections: task_occurrences, gamification_events, daily_eligibility,
+      // daily_progress, gamification_summaries, gamification_checkpoints
+      match /task_occurrences/{occurrenceId} {
+        allow read, write: if false;
+      }
+
+      match /gamification_events/{eventId} {
+        allow read, write: if false;
+      }
+
+      match /daily_eligibility/{eligibilityId} {
+        allow read, write: if false;
+      }
+
+      match /daily_progress/{progressId} {
+        allow read, write: if false;
+      }
+
+      match /gamification_summaries/{summaryId} {
+        allow read, write: if false;
+      }
+
+      match /gamification_checkpoints/{checkpointId} {
         allow read, write: if false;
       }
     }

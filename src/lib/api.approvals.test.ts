@@ -50,10 +50,12 @@ describe('approval API transaction contracts', () => {
 
     await approveTaskCompletion('family-1', 'completion-1', 'Great work')
 
+    // Client writes only status fields; awardedPoints and effectSnapshot are server-only
     expect(tx.update).toHaveBeenCalledWith(expect.objectContaining({ path: 'families/family-1/task_completions/completion-1' }), expect.objectContaining({
-      status: 'approved', parentComment: 'Great work', reviewedBy: 'owner-1', reviewedByName: 'Kemal', awardedPoints: 10,
+      status: 'approved', parentComment: 'Great work', reviewedBy: 'owner-1', reviewedByName: 'Kemal',
     }))
-    expect(tx.update).toHaveBeenCalledWith(expect.objectContaining({ path: 'users/child-1' }), { rewardPoints: 15, lifetimeXP: 30, lastTaskCompletionId: 'completion-1' })
+    // XP/rewards handled by gamification processor (server-side)
+    // Client no longer writes lastTaskCompletionId - server handles it
   })
 
   it('rejects replay before any write', async () => {

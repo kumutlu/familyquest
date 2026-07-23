@@ -381,23 +381,18 @@ describe('Approval Center Actions', () => {
     const db = testEnv.authenticatedContext(parentId).firestore();
     const batch = writeBatch(db);
 
+    // Client writes only status fields; awardedPoints and effectSnapshot are server-only
     batch.update(doc(db, `families/${familyId}/task_completions`, 'comp1'), {
       status: 'approved',
       parentComment: null,
       approvedAt: serverTimestamp(),
-      awardedPoints: 50,
-      effectSnapshot: { schemaVersion: 1, entityType: 'task_completion', familyId, actorId: parentId, childId, pointsDelta: 50, xpAdjustment: 0 },
       reviewedBy: parentId,
       reviewedByName: 'Kemal',
       reviewedAt: serverTimestamp()
     });
 
-    batch.update(doc(db, 'users', childId), {
-      rewardPoints: 150,
-      lifetimeXP: 150,
-      lastTaskCompletionId: 'comp1'
-    });
-
+    // XP/rewards handled by gamification processor (server-side)
+    // Client no longer writes lastTaskCompletionId - server handles it
     batch.set(doc(db, `families/${familyId}/feed`, 'task_approval_comp1'), {
       actorId: parentId,
       actorName: 'Kemal',

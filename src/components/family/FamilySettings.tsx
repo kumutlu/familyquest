@@ -67,6 +67,11 @@ export function FamilySettings({ onSectionChange }: FamilySettingsProps) {
   const [isSavingRegional, setIsSavingRegional] = useState(false);
   const [regionalError, setRegionalError] = useState<string | null>(null);
 
+  // Gamification settings state
+  const [dailyGoalPercentage, setDailyGoalPercentage] = useState(familyData?.gamificationConfig?.dailyGoalPercentage ?? 80);
+  const [isSavingGamification, setIsSavingGamification] = useState(false);
+  const [gamificationError, setGamificationError] = useState<string | null>(null);
+
   const showToast = (message: string, type: 'success' | 'error' | 'info' = 'success') =>
     setToast({ id: Date.now(), message, type });
 
@@ -100,6 +105,11 @@ export function FamilySettings({ onSectionChange }: FamilySettingsProps) {
       weekStartsOn: familyData?.weekStartsOn ?? 1,
     });
   }, [resolvedCurrencyCode, familyData?.timezone, familyData?.weekStartsOn]);
+
+  // Reset gamification settings when data changes
+  useEffect(() => {
+    setDailyGoalPercentage(familyData?.gamificationConfig?.dailyGoalPercentage ?? 80);
+  }, [familyData?.gamificationConfig?.dailyGoalPercentage]);
 
   const handleSaveFamilyName = async () => {
     if (!familyData?.id) return;
@@ -183,6 +193,28 @@ export function FamilySettings({ onSectionChange }: FamilySettingsProps) {
     }
   };
 
+  const handleSaveGamificationSettings = async () => {
+    if (!familyData?.id) return;
+
+    setIsSavingGamification(true);
+    setGamificationError(null);
+
+    try {
+      await updateFamilySettings(familyData.id, {
+        gamificationConfig: {
+          schemaVersion: 1,
+          dailyGoalPercentage,
+        },
+      });
+      showToast(t('familySettings.gamificationSettingsSaved'));
+    } catch (error: any) {
+      console.error('Failed to update gamification settings:', error);
+      setGamificationError(error.message || t('familySettings.gamificationSettingsUpdateError'));
+    } finally {
+      setIsSavingGamification(false);
+    }
+  };
+
   const handleApproveJoinRequest = async (requestId: string) => {
     if (!familyData?.id) return;
 
@@ -259,6 +291,16 @@ export function FamilySettings({ onSectionChange }: FamilySettingsProps) {
           }
         >
           {t('familySettings.regional')}
+        </button>
+        <button
+          onClick={() => setActiveSection('gamification')}
+          className={
+            activeSection === 'gamification'
+              ? 'px-4 py-2 rounded-lg text-sm font-medium bg-white text-primary-600 shadow-sm'
+              : 'px-4 py-2 rounded-lg text-sm font-medium text-gray-600 hover:text-gray-900'
+          }
+        >
+          {t('familySettings.gamification')}
         </button>
         <button
           onClick={() => setActiveSection('danger')}
@@ -699,7 +741,71 @@ export function FamilySettings({ onSectionChange }: FamilySettingsProps) {
         </div>
       )}
 
-      {/* Danger Zone Section */}
+     {/* Gamification Section */}
+     {activeSection === 'gamification' && (
+       <div className="space-y-6">
+         <Section
+           id="family-settings-gamification-section"
+           icon={Globe}
+           title={t('familySettings.gamification')}
+           description={t('familySettings.gamificationDesc')}
+         >
+           <Card>
+             <CardContent className="p-6 divide-y divide-gray-100">
+               {/* Daily Goal Percentage */}
+               <div className="py-3">
+                 <label htmlFor="family-settings-daily-goal" className="block text-sm font-medium text-gray-500 mb-2">
+                   {t('familySettings.dailyGoalPercentage')}
+                 </label>
+                 {owner ? (
+                   <select
+                     id="family-settings-daily-goal"
+                     value={dailyGoalPercentage}
+                     onChange={(e) => setDailyGoalPercentage(parseInt(e.target.value, 10))}
+                     disabled={isSavingGamification}
+                     className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-primary-500 focus:border-transparent outline-none transition-all"
+                   >
+                     {Array.from({ length: 51 }, (_, i) => 50 + i).map(pct => (
+                       <option key={pct} value={pct}>{pct}%</option>
+                     ))}
+                   </select>
+                 ) : (
+                   <div className="font-semibold text-gray-900">
+                     {dailyGoalPercentage}%
+                   </div>
+                 )}
+               </div>
+
+               {/* Save Gamification Settings */}
+               {owner && (
+                 <div className="pt-4">
+                   {gamificationError && (
+                     <p className="text-sm text-red-600 mb-3">{gamificationError}</p>
+                   )}
+                   <Button
+                     type="submit"
+                     disabled={isSavingGamification}
+                     className="w-full bg-primary-500"
+                     onClick={handleSaveGamificationSettings}
+                   >
+                     {isSavingGamification ? (
+                       <>
+                         <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                         {t('common:saving')}
+                       </>
+                     ) : (
+                       t('common:save')
+                     )}
+                   </Button>
+                 </div>
+               )}
+             </CardContent>
+           </Card>
+         </Section>
+       </div>
+     )}
+
+     {/* Danger Zone Section */}
       {activeSection === 'danger' && (
         <div className="space-y-6">
           <Section

@@ -257,11 +257,17 @@ export const requestToJoinFamily = async (uid: string, name: string, inviteCode:
   return familyId;
 };
 
+export interface GamificationConfigInput {
+  schemaVersion: 1;
+  dailyGoalPercentage: number;
+}
+
 export interface FamilySettingsUpdates {
   name?: string;
   currencyCode?: SupportedCurrencyCode;
   timezone?: string;
   weekStartsOn?: 0 | 1;
+  gamificationConfig?: GamificationConfigInput;
 }
 
 /** Update only the owner-managed family settings allowlist. */
@@ -273,6 +279,7 @@ export const updateFamilySettings = async (familyId: string, updates: FamilySett
   if (updates.currencyCode !== undefined) allowedUpdates.currencyCode = updates.currencyCode;
   if (updates.timezone !== undefined) allowedUpdates.timezone = updates.timezone;
   if (updates.weekStartsOn !== undefined) allowedUpdates.weekStartsOn = updates.weekStartsOn;
+  if (updates.gamificationConfig !== undefined) allowedUpdates.gamificationConfig = updates.gamificationConfig;
   if (Object.keys(allowedUpdates).length === 0) throw new Error('No family settings to update');
 
   await updateDoc(doc(db, 'families', familyId), allowedUpdates);
@@ -638,13 +645,11 @@ export const completeTask = async (familyId: string, taskId: string, userId: str
       }
     }
 
-    // 4. Update user doc with streak and points
+    // 4. Update user doc with streak (XP/rewards handled by gamification processor)
     transaction.update(userRef, {
       currentStreak: newCurrentStreak,
       longestStreak: newLongestStreak,
-      lastActiveDate: serverTimestamp(),
-      rewardPoints: finalRewardPoints,
-      lifetimeXP: finalLifetimeXP
+      lastActiveDate: serverTimestamp()
     });
 
     // Write stage performs ZERO reads.
@@ -687,22 +692,16 @@ export const approveTaskCompletion = async (familyId: string, completionId: stri
       dedupeKey: taskApprovedKey(completionId),
     });
 
+    // Client writes only status fields; awardedPoints and effectSnapshot are server-only
     transaction.update(completionRef, {
       status: 'approved',
       parentComment: comment || null,
       approvedAt: serverTimestamp(),
-      awardedPoints: points,
-      effectSnapshot: effectSnapshot({ entityType: 'task_completion', familyId, actorId: currentUserUid, childId: completion.assigneeId, pointsDelta: points }),
       ...reviewerFields(currentUserUid, reviewerDoc.data().displayName || 'Parent', serverTimestamp()),
     });
 
-    const currentPoints = userDoc.data().rewardPoints || 0;
-    const currentXP = userDoc.data().lifetimeXP || 0;
-    transaction.update(userRef, {
-      rewardPoints: currentPoints + points,
-      lifetimeXP: currentXP + points,
-      lastTaskCompletionId: completionId,
-    });
+    // XP/rewards handled by gamification processor (server-side)
+    // Client no longer writes lastTaskCompletionId - server handles it
 
     const feedRef = doc(db, `families/${familyId}/feed`, `task_approval_${completionId}`);
     transaction.set(feedRef, {
