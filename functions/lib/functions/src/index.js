@@ -8,13 +8,17 @@
 // is triggered, keeping the existing business notification system untouched.
 // ---------------------------------------------------------------------------
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.completeChildPasswordChange = exports.changeChildUsername = exports.revokeChildSessions = exports.enableChildLogin = exports.disableChildLogin = exports.resetChildPassword = exports.signInChild = exports.createChildLogin = exports.onUserWritten = exports.onNotificationCreated = void 0;
+exports.completeChildPasswordChange = exports.changeChildUsername = exports.revokeChildSessions = exports.enableChildLogin = exports.disableChildLogin = exports.resetChildPassword = exports.signInChild = exports.createChildLogin = exports.onUserWritten = exports.onNotificationCreated = exports.finalizeGamificationDays = exports.onGamificationReversalCreated = exports.onTaskCompletionWritten = void 0;
 const app_1 = require("firebase-admin/app");
 const firestore_1 = require("firebase-admin/firestore");
 const messaging_1 = require("firebase-admin/messaging");
 const firebase_functions_1 = require("firebase-functions");
 const firestore_2 = require("firebase-functions/v2/firestore");
+const scheduler_1 = require("firebase-functions/v2/scheduler");
 const pushDelivery_1 = require("./pushDelivery");
+const gamificationRepository_1 = require("./gamificationRepository");
+const gamificationTriggers_1 = require("./gamificationTriggers");
+const gamificationScheduler_1 = require("./gamificationScheduler");
 // Region chosen to be close to the project's European user base.
 const REGION = 'europe-west1';
 (0, firebase_functions_1.setGlobalOptions)({ region: REGION, maxInstances: 10, timeoutSeconds: 60 });
@@ -29,6 +33,16 @@ else {
 }
 const db = (0, firestore_1.getFirestore)();
 const messaging = (0, messaging_1.getMessaging)();
+const gamificationRepository = new gamificationRepository_1.AdminGamificationRepository(db);
+const gamificationTriggers = (0, gamificationTriggers_1.createGamificationTriggers)({
+    repository: gamificationRepository,
+    now: () => Date.now(),
+});
+exports.onTaskCompletionWritten = gamificationTriggers.onTaskCompletionWritten;
+exports.onGamificationReversalCreated = gamificationTriggers.onGamificationReversalCreated;
+exports.finalizeGamificationDays = (0, scheduler_1.onSchedule)('every 60 minutes', async () => {
+    await (0, gamificationScheduler_1.finalizeGamificationDaysOnce)({ repository: gamificationRepository, now: () => Date.now() });
+});
 const isEmulator = process.env.FUNCTIONS_EMULATOR === 'true' || process.env.FIRESTORE_EMULATOR_HOST != null;
 function makeContext() {
     return {

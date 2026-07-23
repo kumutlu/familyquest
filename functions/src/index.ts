@@ -12,12 +12,16 @@ import { getFirestore, FieldValue } from 'firebase-admin/firestore';
 import { getMessaging } from 'firebase-admin/messaging';
 import { setGlobalOptions } from 'firebase-functions';
 import { onDocumentCreated, onDocumentWritten } from 'firebase-functions/v2/firestore';
+import { onSchedule } from 'firebase-functions/v2/scheduler';
 import {
   deliverNotification,
   removeAllUserTokens,
   type DeliveryContext,
   type PushNotificationInput,
 } from './pushDelivery';
+import { AdminGamificationRepository } from './gamificationRepository';
+import { createGamificationTriggers } from './gamificationTriggers';
+import { finalizeGamificationDaysOnce } from './gamificationScheduler';
 
 // Region chosen to be close to the project's European user base.
 const REGION = 'europe-west1';
@@ -35,6 +39,18 @@ if (process.env.FCM_SERVICE_ACCOUNT_PATH) {
 
 const db = getFirestore();
 const messaging = getMessaging();
+const gamificationRepository = new AdminGamificationRepository(db);
+const gamificationTriggers = createGamificationTriggers({
+  repository: gamificationRepository,
+  now: () => Date.now(),
+});
+
+export const onTaskCompletionWritten = gamificationTriggers.onTaskCompletionWritten;
+export const onGamificationReversalCreated = gamificationTriggers.onGamificationReversalCreated;
+
+export const finalizeGamificationDays = onSchedule('every 60 minutes', async () => {
+  await finalizeGamificationDaysOnce({ repository: gamificationRepository, now: () => Date.now() });
+});
 
 const isEmulator =
   process.env.FUNCTIONS_EMULATOR === 'true' || process.env.FIRESTORE_EMULATOR_HOST != null;
