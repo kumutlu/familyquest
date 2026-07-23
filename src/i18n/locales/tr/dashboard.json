@@ -36,7 +36,16 @@
     "pendingTasks_one": "{{count}} bekleyen görev",
     "pendingTasks_other": "{{count}} bekleyen görev",
     "viewProfile": "Profili Gör →",
-    "viewProfileAria": "{{name}} profilini görüntüle"
+    "viewProfileAria": "{{name}} profilini görüntüle",
+    "xpTotal": "Toplam XP",
+    "xpToNext": "{{xp}} XP seviye {{level}}'e",
+    "bestStreak": "En İyi Seri",
+    "todayProgress": "Bugün",
+    "dailyGoalReached": "Hedefe Ulaşıldı",
+    "dailyGoalNotReached": "Hedefe Doğru",
+    "perfectDay": "Mükemmel Gün",
+    "rebuilding": "Güncelleniyor…",
+    "noEligibleTasks": "Bugün görev yok"
   },
   "taskSummary": {
     "viewAria": "Görevlerinizi görüntüleyin",

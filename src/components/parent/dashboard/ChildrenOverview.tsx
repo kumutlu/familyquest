@@ -4,6 +4,8 @@ import { isChildRole } from '../../../lib/roles';
 import { isTaskDoneThisPeriod } from '../../../lib/taskRecurrence';
 import { useRecurrenceClock } from '../../../lib/useRecurrenceClock';
 import { ChildSummaryCard } from './ChildSummaryCard';
+import { adaptGamificationSummary } from '../../../lib/gamificationAdapters';
+import type { GamificationSummaryV1, DailyProgressV1 } from '../../../domain/gamification/types';
 
 function ChildCardSkeleton() {
   return (
@@ -24,6 +26,31 @@ function ChildCardSkeleton() {
   );
 }
 
+/**
+ * Gets today's progress for a child from the daily progress array.
+ * The dayKey format is YYYYMMDD. We need to find the most recent
+ * progress for the current day.
+ */
+function getTodaysProgress(
+  dailyProgress: DailyProgressV1[],
+  childId: string,
+  todayKey: string,
+): DailyProgressV1 | null {
+  return dailyProgress.find(
+    (p) => p.childId === childId && p.dayKey === todayKey,
+  ) ?? null;
+}
+
+/**
+ * Formats a date as YYYYMMDD for dayKey comparison.
+ */
+function formatDayKey(date: Date): string {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+  return `${year}${month}${day}`;
+}
+
 export function ChildrenOverview() {
   const { t } = useTranslation('dashboard');
   const {
@@ -31,13 +58,17 @@ export function ChildrenOverview() {
     childWallets = [],
     tasks = [],
     taskCompletions = [],
+    gamificationSummaries = [],
+    dailyProgress = [],
     bootstrapStatus,
   } = useStore();
   const walletsLoading = (bootstrapStatus as any)?.wallets === 'loading';
+  const summariesLoading = (bootstrapStatus as any)?.gamificationSummaries === 'loading';
 
   // Open-session clock: re-derives "done this period" when the day/week
   // boundary crosses while the dashboard stays open.
   const now = useRecurrenceClock();
+  const todayKey = formatDayKey(now);
 
   const children = familyMembers.filter(member => isChildRole(member.role));
 
@@ -52,7 +83,7 @@ export function ChildrenOverview() {
         {t('childrenOverview.heading')}
       </h2>
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3">
-        {walletsLoading
+        {walletsLoading || summariesLoading
           ? children.map(child => <ChildCardSkeleton key={child.id} />)
           : children.map(child => {
               const walletDoc = childWallets.find(w => w.id === child.id);
@@ -68,12 +99,20 @@ export function ChildrenOverview() {
                   !isTaskDoneThisPeriod(task, taskCompletions, now, child.id),
               ).length;
 
+              // Get gamification summary and today's progress for this child
+              const summaryDoc = gamificationSummaries.find(
+                (s: GamificationSummaryV1) => s.childId === child.id,
+              ) ?? null;
+              const todaysProgress = getTodaysProgress(dailyProgress, child.id, todayKey);
+              const gamificationView = adaptGamificationSummary(summaryDoc, todaysProgress);
+
               return (
                 <ChildSummaryCard
                   key={child.id}
                   child={child}
                   walletBalance={balance}
                   pendingTaskCount={pendingTaskCount}
+                  gamificationSummary={gamificationView}
                 />
               );
             })}

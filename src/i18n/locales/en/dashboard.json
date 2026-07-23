@@ -6,7 +6,7 @@
     "morning": "Good morning, {{name}}",
     "afternoon": "Good afternoon, {{name}}",
     "evening": "Good evening, {{name}}",
-    "subtitle": "Here’s what’s happening with your family today.",
+    "subtitle": "Here's what's happening with your family today.",
     "family": "{{name}} family"
   },
   "quickActions": {
@@ -36,7 +36,16 @@
     "pendingTasks_one": "{{count}} pending task",
     "pendingTasks_other": "{{count}} pending tasks",
     "viewProfile": "View Profile →",
-    "viewProfileAria": "View {{name}}’s profile"
+    "viewProfileAria": "View {{name}}'s profile",
+    "xpTotal": "Total XP",
+    "xpToNext": "{{xp}} XP to Level {{level}}",
+    "bestStreak": "Best Streak",
+    "todayProgress": "Today",
+    "dailyGoalReached": "Goal Reached",
+    "dailyGoalNotReached": "Goal in Progress",
+    "perfectDay": "Perfect Day",
+    "rebuilding": "Updating…",
+    "noEligibleTasks": "No tasks today"
   },
   "taskSummary": {
     "viewAria": "View your tasks",
@@ -65,7 +74,7 @@
     "approving": "Approving…"
   },
   "loadError": {
-    "title": "We couldn’t load your family dashboard.",
+    "title": "We couldn't load your family dashboard.",
     "subtitle": "Please try again in a moment."
   }
 }

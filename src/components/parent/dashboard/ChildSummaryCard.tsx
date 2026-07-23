@@ -3,7 +3,9 @@ import { useTranslation } from 'react-i18next';
 import { Card, CardContent } from '../../ui/Card';
 import { Avatar } from '../../ui/Avatar';
 import { CurrencyDisplay } from '../../ui/CurrencyDisplay';
-import { Flame, Star, Wallet, ListChecks } from 'lucide-react';
+import { Progress } from '../../ui/Progress';
+import { Flame, Star, Wallet, ListChecks, CheckCircle2, Circle } from 'lucide-react';
+import type { GamificationSummaryView } from '../../../lib/gamificationAdapters';
 
 export interface ChildSummaryCardProps {
   child: any;
@@ -15,14 +17,45 @@ export interface ChildSummaryCardProps {
    */
   walletBalance: number | null;
   pendingTaskCount: number;
+  /**
+   * Gamification summary view for this child, adapted from Firestore.
+   * `null` means the summary is unavailable or still loading.
+   */
+  gamificationSummary: GamificationSummaryView | null;
 }
 
-export function ChildSummaryCard({ child, walletBalance, pendingTaskCount }: ChildSummaryCardProps) {
+export function ChildSummaryCard({ child, walletBalance, pendingTaskCount, gamificationSummary }: ChildSummaryCardProps) {
   const { t } = useTranslation('dashboard');
-  const level = Math.floor((child.lifetimeXP || 0) / 1000) + 1;
-  const points = child.rewardPoints || 0;
-  const streak = child.currentStreak || 0;
   const displayName = child.displayName || 'Child';
+
+  // Use gamification summary if available, otherwise fall back to legacy profile data
+  // (but show "Unavailable" for misleading zeroes when summary is not ready)
+  const isSummaryAvailable = gamificationSummary?.isAvailable ?? false;
+  const summary = isSummaryAvailable ? gamificationSummary : null;
+
+  const level = summary
+    ? summary.level
+    : Math.floor((child.lifetimeXP || 0) / 1000) + 1;
+
+  const points = child.rewardPoints || 0;
+
+  const bestStreak = summary
+    ? summary.bestStreak
+    : 0;
+
+  const xpToNextLevel = summary
+    ? summary.xpToNextLevel
+    : (1000 - (child.lifetimeXP || 0) % 1000);
+
+  const xpProgressInLevel = summary
+    ? summary.xpProgressInLevel
+    : ((child.lifetimeXP || 0) % 1000);
+
+  const levelProgress = (xpProgressInLevel / 1000) * 100;
+
+  const todayProgress = summary ? summary.todayProgress : null;
+  const todayGoalReached = summary ? summary.todayGoalReached : null;
+  const todayPerfectDay = summary ? summary.todayPerfectDay : null;
 
   return (
     <Link
@@ -40,7 +73,18 @@ export function ChildSummaryCard({ child, walletBalance, pendingTaskCount }: Chi
             </div>
           </div>
 
-          <div className="mt-4 grid grid-cols-3 gap-2 text-center">
+          {/* Level progress bar */}
+          <div className="mt-3">
+            <div className="flex justify-between text-[10px] font-medium text-gray-500">
+              <span>{t('childCard.xpTotal')}</span>
+              <span aria-label={t('childCard.xpToNext', { xp: xpToNextLevel, level: level + 1 })}>
+                {t('childCard.xpToNext', { xp: xpToNextLevel, level: level + 1 })}
+              </span>
+            </div>
+            <Progress value={levelProgress} className="mt-1" />
+          </div>
+
+          <div className="mt-3 grid grid-cols-3 gap-2 text-center">
             <div>
               <p className="text-[10px] font-bold uppercase tracking-wider text-gray-400">{t('childCard.points')}</p>
               <p className="flex items-center justify-center gap-1 font-bold text-gray-900">
@@ -60,13 +104,56 @@ export function ChildSummaryCard({ child, walletBalance, pendingTaskCount }: Chi
               </p>
             </div>
             <div>
-              <p className="text-[10px] font-bold uppercase tracking-wider text-gray-400">{t('childCard.streak')}</p>
+              <p className="text-[10px] font-bold uppercase tracking-wider text-gray-400">{t('childCard.bestStreak')}</p>
               <p className="flex items-center justify-center gap-1 font-bold text-gray-900">
                 <Flame size={12} className="text-warning-500" />
-                {streak}
+                {bestStreak}
               </p>
             </div>
           </div>
+
+          {/* Today's progress and Daily Goal status */}
+          {summary && (
+            <div className="mt-3 flex items-center justify-between text-xs">
+              <div className="flex items-center gap-1">
+                {todayProgress !== null ? (
+                  <>
+                    <span className="text-gray-500">{t('childCard.todayProgress')}</span>
+                    <span className="font-medium text-gray-900" aria-label={`${todayProgress}% complete`}>
+                      {todayProgress}%
+                    </span>
+                  </>
+                ) : (
+                  <span className="text-gray-400">{t('childCard.noEligibleTasks')}</span>
+                )}
+              </div>
+              {todayGoalReached !== null && (
+                <div className="flex items-center gap-1" aria-label={todayGoalReached ? t('childCard.dailyGoalReached') : t('childCard.dailyGoalNotReached')}>
+                  {todayGoalReached ? (
+                    <CheckCircle2 size={14} className="text-success-500" />
+                  ) : (
+                    <Circle size={14} className="text-gray-300" />
+                  )}
+                  <span className={todayGoalReached ? 'text-success-600 font-medium' : 'text-gray-500'}>
+                    {todayGoalReached ? t('childCard.dailyGoalReached') : t('childCard.dailyGoalNotReached')}
+                  </span>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Perfect Day status - only shown when defined */}
+          {summary && todayPerfectDay && (
+            <div className="mt-2 flex items-center gap-1 text-xs text-success-600">
+              <CheckCircle2 size={14} className="text-success-500" />
+              <span className="font-medium">{t('childCard.perfectDay')}</span>
+            </div>
+          )}
+
+          {/* Rebuilding/unavailable indicator */}
+          {!summary && (
+            <p className="mt-2 text-xs text-gray-400">{t('childCard.rebuilding')}</p>
+          )}
 
           {pendingTaskCount > 0 && (
             <p className="mt-3 flex items-center gap-1 text-xs text-gray-500">
