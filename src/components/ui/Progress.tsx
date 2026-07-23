@@ -19,8 +19,15 @@ export function Progress({ value, max = 100, color = 'primary', className, ...pr
   };
 
   return (
-    <div className={cn("w-full bg-gray-200 rounded-full h-2.5 overflow-hidden", className)} {...props}>
+    <div
+      className={cn("w-full bg-gray-200 rounded-full h-2.5 overflow-hidden", className)}
+      {...props}
+    >
       <div
+        role="progressbar"
+        aria-valuenow={Math.round(percentage)}
+        aria-valuemin={0}
+        aria-valuemax={100}
         className={cn("h-2.5 rounded-full transition-all duration-500 ease-out", colors[color])}
         style={{ width: `${percentage}%` }}
       />
