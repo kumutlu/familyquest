@@ -38,6 +38,8 @@ export type BootstrapResource =
   | 'reversals'
   | 'avatarUnlocks'
   | 'wallets'
+  | 'gamificationSummaries'
+  | 'dailyProgress'
 
 export type BootstrapQueryPlanEntry =
   | {
@@ -139,6 +141,8 @@ export const bootstrapResources: BootstrapResource[] = [
   'reversals',
   'avatarUnlocks',
   'wallets',
+  'gamificationSummaries',
+  'dailyProgress',
   ]
 
 export const criticalBootstrapResources: BootstrapResource[] = [
@@ -233,6 +237,23 @@ export function createBootstrapQueryPlan(
     // the user so a child only ever sees their own collection.
     { resource: 'avatarUnlocks', key: 'avatarUnlocks', kind: 'query', target: query(collection(db, `${familyPath}/users/${userId}/avatar_unlocks`)) },
   )
+
+  // Gamification queries: parent/owner reads all family summaries/progress,
+  // child reads only own summary and today's progress
+  if (parentPlan) {
+    plan.push(
+      { resource: 'gamificationSummaries', key: 'gamificationSummaries', kind: 'query', target: collection(db, `${familyPath}/gamification_summaries`) },
+      { resource: 'dailyProgress', key: 'dailyProgress', kind: 'query', target: collection(db, `${familyPath}/daily_progress`) },
+    )
+  } else {
+    // Child: read own summary and today's progress
+    // Note: today's day key is computed client-side; we query the collection
+    // and filter client-side for the current day
+    plan.push(
+      { resource: 'gamificationSummaries', key: 'gamificationSummaries', kind: 'document', target: doc(db, `${familyPath}/gamification_summaries/${userId}`) },
+      { resource: 'dailyProgress', key: 'dailyProgress', kind: 'query', target: query(collection(db, `${familyPath}/daily_progress`), where('childId', '==', userId)) },
+    )
+  }
 
   return plan
 }

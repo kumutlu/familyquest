@@ -86,11 +86,17 @@ const familyResources = [
   'families/fam1/profile_update_requests',
   'families/fam1/reversals',
   'families/fam1/users/user1/avatar_unlocks',
+  'families/fam1/gamification_summaries',
+  'families/fam1/daily_progress',
 ] as const;
 
 const childFamilyResources = familyResources
   .filter(target => target !== 'families/fam1/join_requests')
-  .map(target => target === 'families/fam1/wallets' ? 'families/fam1/wallets/user1' : target);
+  .map(target => {
+    if (target === 'families/fam1/wallets') return 'families/fam1/wallets/user1';
+    if (target === 'families/fam1/gamification_summaries') return 'families/fam1/gamification_summaries/user1';
+    return target;
+  });
 
 function listener(target: string, occurrence = 0) {
   const matches = listeners.filter(item => item.target === target);
@@ -117,6 +123,10 @@ function familySnapshot(exists = true, data: any = { name: 'Family One' }, fromC
   return { exists: () => exists, id: 'fam1', data: () => data, metadata: { fromCache } };
 }
 
+function documentSnapshot(exists = true, id: string, data: any = {}, fromCache = false) {
+  return { exists: () => exists, id, data: () => data, metadata: { fromCache } };
+}
+
 function emitAllFamilySnapshots(overrides: Record<string, any[]> = {}) {
   for (const target of familyResources) {
     if (target === 'families/fam1') listener(target).next(familySnapshot());
@@ -131,6 +141,8 @@ function emitAllChildSnapshots(overrides: Record<string, any[]> = {}) {
       if (target === 'families/fam1') subscription.next(familySnapshot());
       else if (target === 'families/fam1/wallets/user1') {
         subscription.next({ exists: () => true, id: 'user1', data: () => ({ balance: 0 }), metadata: { fromCache: false } });
+      } else if (target === 'families/fam1/gamification_summaries/user1') {
+        subscription.next({ exists: () => true, id: 'user1', data: () => ({ ...overrides.gamificationSummary, childId: 'user1' }), metadata: { fromCache: false } });
       } else subscription.next(collectionSnapshot(overrides[target] ?? []));
     }
   }
@@ -614,5 +626,34 @@ describe('bootstrap/auth/listener state machine', () => {
     await authNext!({ uid: 'user1', getIdToken: vi.fn().mockResolvedValue('token') });
     listener('users/user1').next({ exists: () => true, id: 'user1', data: () => ({ role: 'parent' }) });
     expect(useStore.getState()).toMatchObject({ appReady: true, loading: false, activeFamilyId: null, familyData: null, tasks: [] });
+  });
+
+  it('subscribes to gamification summaries collection for parent role', () => {
+    authenticatedState('fam1', 'parent');
+    useStore.getState().loadFamilyData('user1', 'fam1');
+    expect(listeners.some(item => item.target === 'families/fam1/gamification_summaries')).toBe(true);
+    expect(listeners.some(item => item.target === 'families/fam1/daily_progress')).toBe(true);
+  });
+
+  it('subscribes to own gamification summary document for child role', () => {
+    authenticatedState('fam1', 'child');
+    useStore.getState().loadFamilyData('user1', 'fam1');
+    expect(listeners.some(item => item.target === 'families/fam1/gamification_summaries/user1')).toBe(true);
+    expect(listeners.some(item => item.target === 'families/fam1/daily_progress')).toBe(true);
+  });
+
+  it('clears gamification state on logout', () => {
+    authenticatedState();
+    useStore.getState().loadFamilyData('user1', 'fam1');
+    emitAllFamilySnapshots();
+    expect(useStore.getState().gamificationSummaries).toEqual([]);
+    expect(useStore.getState().dailyProgress).toEqual([]);
+
+    // Simulate logout
+    useStore.getState().cleanup();
+    expect(useStore.getState().gamificationSummaries).toEqual([]);
+    expect(useStore.getState().dailyProgress).toEqual([]);
+    expect(useStore.getState().myGamificationSummary).toBeNull();
+    expect(useStore.getState().myDailyProgress).toBeNull();
   });
 });

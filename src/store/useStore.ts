@@ -83,6 +83,10 @@ const emptyFamilyState = () => ({
   avatarUnlocks: [] as any[],
   myWallet: null,
   childWallets: [] as any[],
+  gamificationSummaries: [] as any[],
+  dailyProgress: [] as any[],
+  myGamificationSummary: null as any,
+  myDailyProgress: null as any,
 });
 
 interface AppState {
@@ -131,6 +135,10 @@ interface AppState {
   avatarUnlocks: any[];
   myWallet: any | null;
   childWallets: any[];
+  gamificationSummaries: any[];
+  dailyProgress: any[];
+  myGamificationSummary: any | null;
+  myDailyProgress: any | null;
   error: string | null;
 
   initAuth: () => void;
@@ -742,6 +750,28 @@ export const useStore = create<AppState>((set, get) => ({
       subscribePlanned('challenges', 'Challenges', snapshot => set({ challenges: docs(snapshot) }));
       subscribePlanned('funds', 'Funds', snapshot => set({ funds: docs(snapshot) }));
       subscribePlanned('fundTransactions', 'Fund transactions', snapshot => set({ fundTransactions: docs(snapshot) }));
+
+      // Gamification subscriptions: parent/owner reads all family summaries/progress,
+      // child reads only own summary and today's progress
+      if (currentUser?.role === 'parent' || currentUser?.role === 'owner') {
+        subscribePlanned('gamificationSummaries', 'Gamification summaries', snapshot => set({ gamificationSummaries: docs(snapshot) }));
+        subscribePlanned('dailyProgress', 'Daily progress', snapshot => set({ dailyProgress: docs(snapshot) }))
+      } else {
+        // Child: read own summary and filter today's progress client-side
+        subscribePlanned('gamificationSummaries', 'Gamification summaries', snapshot => {
+          if (snapshot.exists()) {
+            set({ myGamificationSummary: { id: snapshot.id, ...snapshot.data() } })
+          } else {
+            set({ myGamificationSummary: null })
+          }
+        })
+        subscribePlanned('dailyProgress', 'Daily progress', snapshot => {
+          // For child, find today's progress from the query results
+          // The dayKey format is YYYYMMDD, but we need to match the server format
+          // For now, just store all progress and let the adapter filter
+          set({ dailyProgress: docs(snapshot) })
+        })
+      }
     } catch (error: any) {
       handleCriticalListenerError('family', 'Bootstrap', error);
     }

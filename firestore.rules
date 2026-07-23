@@ -2080,11 +2080,15 @@ service cloud.firestore {
       }
 
       match /daily_progress/{progressId} {
-        allow read, write: if false;
+        // Parent/owner can read all family progress; child can read only own progress
+        allow read: if isParent(familyId) || (isAuthenticated() && resource.data.childId == request.auth.uid);
+        allow write: if false;
       }
 
       match /gamification_summaries/{summaryId} {
-        allow read, write: if false;
+        // Parent/owner can read all family summaries; child can read only own summary
+        allow read: if isParent(familyId) || (isAuthenticated() && resource.data.childId == request.auth.uid);
+        allow write: if false;
       }
 
       match /gamification_checkpoints/{checkpointId} {

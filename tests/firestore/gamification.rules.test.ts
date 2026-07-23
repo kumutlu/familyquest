@@ -96,32 +96,33 @@ describe('Gamification Phase 1 Security Rules', () => {
       }));
     });
 
-    it('denies all client reads on daily_progress', async () => {
+    it('denies unauthenticated reads on daily_progress', async () => {
       const db = testEnv.unauthenticatedContext().firestore();
-      await assertFails(getDoc(doc(db, 'daily_progress', 'progress123')));
+      await assertFails(getDoc(doc(db, `families/${familyId}/daily_progress`, `${childId}:2024-01-01`)));
     });
 
     it('denies all client writes on daily_progress', async () => {
       const db = testEnv.unauthenticatedContext().firestore();
-      await assertFails(setDoc(doc(db, 'daily_progress', 'progress123'), {
+      await assertFails(setDoc(doc(db, `families/${familyId}/daily_progress`, `${childId}:2024-01-01`), {
         familyId,
         childId,
-        date: '2024-01-01',
-        progress: 50
+        dayKey: '2024-01-01',
+        progressPercentage: 50
       }));
     });
 
-    it('denies all client reads on gamification_summaries', async () => {
+    it('denies unauthenticated reads on gamification_summaries', async () => {
       const db = testEnv.unauthenticatedContext().firestore();
-      await assertFails(getDoc(doc(db, 'gamification_summaries', 'summary123')));
+      await assertFails(getDoc(doc(db, `families/${familyId}/gamification_summaries`, childId)));
     });
 
     it('denies all client writes on gamification_summaries', async () => {
       const db = testEnv.unauthenticatedContext().firestore();
-      await assertFails(setDoc(doc(db, 'gamification_summaries', 'summary123'), {
+      await assertFails(setDoc(doc(db, `families/${familyId}/gamification_summaries`, childId), {
         familyId,
         childId,
-        totalXP: 1000
+        xpTotal: 1000,
+        level: 1
       }));
     });
 
@@ -135,6 +136,132 @@ describe('Gamification Phase 1 Security Rules', () => {
       await assertFails(setDoc(doc(db, 'gamification_checkpoints', 'checkpoint123'), {
         familyId,
         lastProcessed: serverTimestamp()
+      }));
+    });
+  });
+
+  describe('Role-scoped gamification read access', () => {
+    // Setup: create gamification documents for testing
+    beforeEach(async () => {
+      await testEnv.withSecurityRulesDisabled(async (context: any) => {
+        const db = context.firestore();
+        // Create a summary for the child
+        await setDoc(doc(db, `families/${familyId}/gamification_summaries`, childId), {
+          familyId,
+          childId,
+          xpTotal: 1000,
+          level: 1,
+          currentStreak: 5,
+          bestStreak: 10,
+          perfectDayCount: 3,
+          lastQualifiedDayKey: '2024-01-01',
+          projectionRevision: 1,
+          foldedThrough: null,
+          rebuildRequired: false,
+          earliestDirtyCursor: null,
+          projectionStatus: 'ready',
+          updatedAt: serverTimestamp()
+        });
+        // Create a daily progress for the child
+        await setDoc(doc(db, `families/${familyId}/daily_progress`, `${childId}:2024-01-01`), {
+          familyId,
+          childId,
+          dayKey: '2024-01-01',
+          timezone: 'Europe/London',
+          eligibilitySnapshotId: 'snapshot123',
+          dailyGoalPercentage: 80,
+          eligiblePoints: 100,
+          approvedPoints: 80,
+          eligibleTaskCount: 5,
+          approvedTaskCount: 4,
+          progressPercentage: 80,
+          dailyGoalReached: true,
+          perfectDayReached: false,
+          finalized: true,
+          contributingLogicalCompletionKeys: [],
+          invalidatedLogicalCompletionKeys: [],
+          calculatedAt: serverTimestamp()
+        });
+      });
+    });
+
+    it('allows parent to read any family child summary', async () => {
+      const db = testEnv.authenticatedContext(parentId).firestore();
+      await assertSucceeds(getDoc(doc(db, `families/${familyId}/gamification_summaries`, childId)));
+    });
+
+    it('allows parent to read any family child daily progress', async () => {
+      const db = testEnv.authenticatedContext(parentId).firestore();
+      await assertSucceeds(getDoc(doc(db, `families/${familyId}/daily_progress`, `${childId}:2024-01-01`)));
+    });
+
+    it('allows child to read own summary', async () => {
+      const db = testEnv.authenticatedContext(childId).firestore();
+      await assertSucceeds(getDoc(doc(db, `families/${familyId}/gamification_summaries`, childId)));
+    });
+
+    it('allows child to read own daily progress', async () => {
+      const db = testEnv.authenticatedContext(childId).firestore();
+      await assertSucceeds(getDoc(doc(db, `families/${familyId}/daily_progress`, `${childId}:2024-01-01`)));
+    });
+
+    it('denies child from reading another child summary', async () => {
+      const otherChildId = 'otherChild999';
+      await testEnv.withSecurityRulesDisabled(async (context: any) => {
+        const db = context.firestore();
+        await setDoc(doc(db, 'users', otherChildId), {
+          familyId,
+          role: 'child',
+          displayName: 'Other Child'
+        });
+        await setDoc(doc(db, `families/${familyId}/gamification_summaries`, otherChildId), {
+          familyId,
+          childId: otherChildId,
+          xpTotal: 500,
+          level: 1
+        });
+      });
+      const db = testEnv.authenticatedContext(childId).firestore();
+      await assertFails(getDoc(doc(db, `families/${familyId}/gamification_summaries`, otherChildId)));
+    });
+
+    it('denies child from reading another child daily progress', async () => {
+      const otherChildId = 'otherChild999';
+      await testEnv.withSecurityRulesDisabled(async (context: any) => {
+        const db = context.firestore();
+        await setDoc(doc(db, 'users', otherChildId), {
+          familyId,
+          role: 'child',
+          displayName: 'Other Child'
+        });
+        await setDoc(doc(db, `families/${familyId}/daily_progress`, `${otherChildId}:2024-01-01`), {
+          familyId,
+          childId: otherChildId,
+          dayKey: '2024-01-01',
+          progressPercentage: 50
+        });
+      });
+      const db = testEnv.authenticatedContext(childId).firestore();
+      await assertFails(getDoc(doc(db, `families/${familyId}/daily_progress`, `${otherChildId}:2024-01-01`)));
+    });
+
+    it('denies all clients write access to gamification_summaries', async () => {
+      const db = testEnv.authenticatedContext(parentId).firestore();
+      await assertFails(setDoc(doc(db, `families/${familyId}/gamification_summaries`, childId), {
+        familyId,
+        childId,
+        xpTotal: 2000,
+        level: 2
+      }));
+    });
+
+    it('denies all clients write access to daily_progress', async () => {
+      const db = testEnv.authenticatedContext(parentId).firestore();
+      await assertFails(setDoc(doc(db, `families/${familyId}/daily_progress`, `${childId}:2024-01-02`), {
+        familyId,
+        childId,
+        dayKey: '2024-01-02',
+        progressPercentage: 100
       }));
     });
   });
