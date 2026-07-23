@@ -161,6 +161,15 @@ The current schema does not unambiguously answer all eligibility questions. Befo
 
 No exclusion, shared-task ownership rule, historical schedule-edit rule, or duplicate winner rule is silently selected. The pure progress engine consumes a frozen `DailyEligibilitySnapshotV1`; the Firestore schedule adapter is implemented only after these decisions.
 
+### Product Decision Gate A — recorded decisions
+
+The following decisions were made and are implemented in `functions/src/dailyEligibilityAdapter.ts`:
+
+1. **Weekly and one-time participation.** `weekly` and `one-time` tasks participate in a Daily Goal when they are due on the family-local day. An undated weekly occurrence is represented by the Monday of its week (`week:{mondayOf(dayKey)}`). A one-time task uses its `dueDate` if set, otherwise the day it first becomes eligible (the day after `createdAt`).
+2. **Unassigned-task ownership.** A task with no `assigneeId` is eligible for nobody until assigned. Only tasks explicitly assigned to a child are eligible for that child.
+3. **Post-snapshot edits.** A task created, edited, assigned, unassigned, or archived after a day's snapshot does not change that day. Tasks created on or after the day key are first eligible on the next applicable local day. Archived, deleted, disabled, or inactive tasks are excluded from the snapshot. Edits to active tasks after the snapshot do not retroactively change the frozen snapshot.
+4. **Legacy conflicting duplicates and partial reversals.** Conflicting sources arriving before an award quarantine the occurrence and award nothing. A conflict discovered after an immutable award creates an integrity alert and no second write. Reversals of only one duplicate source append compensation events and preserve legitimate `bestStreak` values.
+
 For each frozen eligible task weight, a valid approved logical completion contributes at most that task's frozen weight:
 
 ```text
