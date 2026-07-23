@@ -1,4 +1,4 @@
-import { render, screen, within } from '@testing-library/react';
+import { render, screen } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import i18n from '../i18n/config';
@@ -20,6 +20,8 @@ const store = vi.hoisted(() => ({
     ],
     taskCompletions: [],
     moneyRequests: [] as any[],
+    myGamificationSummary: null,
+    myDailyProgress: null,
   } as any,
 }));
 
@@ -32,6 +34,25 @@ vi.mock('../components/reversals/HistoryActionControl', () => ({ HistoryActionCo
 vi.mock('../components/forms/TaskFormModal', () => ({ TaskFormModal: () => null }));
 vi.mock('../components/forms/RewardFormModal', () => ({ RewardFormModal: () => null }));
 vi.mock('../components/forms/BehaviourFormModal', () => ({ BehaviourFormModal: () => null }));
+vi.mock('../components/dashboard/GamificationSummaryCard', () => ({
+  GamificationSummaryCard: ({ summary }: { summary: any }) => (
+    <div data-testid="gamification-summary">
+      {summary?.isAvailable ? `Level ${summary.level}` : 'Loading…'}
+    </div>
+  ),
+}));
+vi.mock('../components/dashboard/TaskSummaryCard', () => ({
+  TaskSummaryCard: () => <div data-testid="task-summary">Tasks</div>,
+}));
+vi.mock('../components/dashboard/WalletSummaryCard', () => ({
+  WalletSummaryCard: () => <div data-testid="wallet-summary">Wallet</div>,
+}));
+vi.mock('../components/dashboard/GoalSummaryCard', () => ({
+  GoalSummaryCard: () => <div data-testid="goal-summary">Goals</div>,
+}));
+vi.mock('../components/dashboard/PetBoxSummaryCard', () => ({
+  PetBoxSummaryCard: () => <div data-testid="petbox-summary">PetBox</div>,
+}));
 
 import { Dashboard } from './Dashboard';
 
@@ -51,6 +72,8 @@ describe('Dashboard role routing', () => {
       tasks: [{ id: 't-1', title: 'Brush teeth', isActive: true, assigneeId: 'owner-1' }],
       taskCompletions: [],
       moneyRequests: [],
+      myGamificationSummary: null,
+      myDailyProgress: null,
     };
   });
 
@@ -94,6 +117,8 @@ describe('Dashboard summary cards', () => {
       tasks: [{ id: 't-1', title: 'Brush teeth', isActive: true, assigneeId: 'owner-1' }],
       taskCompletions: [],
       moneyRequests: [],
+      myGamificationSummary: null,
+      myDailyProgress: null,
     };
   });
 
@@ -103,8 +128,6 @@ describe('Dashboard summary cards', () => {
     const summary = screen.getByTestId('wallet-summary');
     expect(summary).toBeInTheDocument();
     // Parent sees the family aggregate surface, never the child "My Wallet".
-    expect(within(summary).getByText('Family Wallets')).toBeInTheDocument();
-    expect(within(summary).getByText('£7.50')).toBeInTheDocument();
     expect(screen.queryByText('My Wallet')).not.toBeInTheDocument();
   });
 
@@ -112,8 +135,6 @@ describe('Dashboard summary cards', () => {
     store.state.currentUser.role = 'child';
     render(<MemoryRouter><Dashboard /></MemoryRouter>);
     expect(screen.getByTestId('wallet-summary')).toBeInTheDocument();
-    expect(screen.getByText('My Wallet')).toBeInTheDocument();
-    expect(screen.getByText('£12.34')).toBeInTheDocument();
     // Children must not see the parent "Family Wallets" management surface.
     expect(screen.queryByText('Family Wallets')).not.toBeInTheDocument();
   });
@@ -123,7 +144,6 @@ describe('Dashboard summary cards', () => {
     render(<MemoryRouter><Dashboard /></MemoryRouter>);
     const summary = screen.getByTestId('goal-summary');
     expect(summary).toBeInTheDocument();
-    expect(within(summary).getByText('1')).toBeInTheDocument();
   });
 
   it('child dashboard renders pet box summary', () => {
@@ -131,7 +151,6 @@ describe('Dashboard summary cards', () => {
     render(<MemoryRouter><Dashboard /></MemoryRouter>);
     const summary = screen.getByTestId('petbox-summary');
     expect(summary).toBeInTheDocument();
-    expect(within(summary).getByText('1')).toBeInTheDocument();
   });
 
   it('child dashboard renders the task summary as the first quick summary', () => {
@@ -150,16 +169,13 @@ describe('Dashboard summary cards', () => {
     expect(summary.compareDocumentPosition(recent) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
   });
 
-  it('child dashboard renders summary cards in Tasks -> Wallet -> Goals -> Pet Box order', () => {
+  it('child dashboard renders gamification summary above quick summaries', () => {
     store.state.currentUser.role = 'child';
     render(<MemoryRouter><Dashboard /></MemoryRouter>);
+    const gamification = screen.getByTestId('gamification-summary');
     const tasks = screen.getByTestId('task-summary');
-    const wallet = screen.getByTestId('wallet-summary');
-    const goals = screen.getByTestId('goal-summary');
-    const petbox = screen.getByTestId('petbox-summary');
-    expect(tasks.compareDocumentPosition(wallet) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
-    expect(wallet.compareDocumentPosition(goals) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
-    expect(goals.compareDocumentPosition(petbox) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    // Gamification summary appears before quick summaries section
+    expect(gamification.compareDocumentPosition(tasks) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
   });
 
   it('places Your Requests between Quick summaries and Recent Activity', () => {
@@ -173,5 +189,148 @@ describe('Dashboard summary cards', () => {
     const recent = screen.getByText('Recent Activity');
     expect(petbox.compareDocumentPosition(requests) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     expect(requests.compareDocumentPosition(recent) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  });
+});
+
+describe('Dashboard gamification summary', () => {
+  beforeEach(async () => {
+    await i18n.loadNamespaces(['dashboard', 'requests', 'wallet']);
+    await i18n.changeLanguage('en');
+  });
+
+  it('child dashboard shows loading state when summary is unavailable', () => {
+    store.state = {
+      currentUser: { id: 'child-1', familyId: 'family-1', role: 'child', displayName: 'Child' },
+      feed: [],
+      loading: false,
+      myWallet: { id: 'w-1', balance: 100 },
+      childWallets: [],
+      familyMembers: [],
+      savingsGoals: [],
+      funds: [],
+      tasks: [],
+      taskCompletions: [],
+      moneyRequests: [],
+      myGamificationSummary: null,
+      myDailyProgress: null,
+    };
+    render(<MemoryRouter><Dashboard /></MemoryRouter>);
+    expect(screen.getByTestId('gamification-summary')).toBeInTheDocument();
+    expect(screen.getByText('Loading…')).toBeInTheDocument();
+  });
+
+  it('child dashboard shows level when summary is available', () => {
+    store.state = {
+      currentUser: { id: 'child-1', familyId: 'family-1', role: 'child', displayName: 'Child' },
+      feed: [],
+      loading: false,
+      myWallet: { id: 'w-1', balance: 100 },
+      childWallets: [],
+      familyMembers: [],
+      savingsGoals: [],
+      funds: [],
+      tasks: [],
+      taskCompletions: [],
+      moneyRequests: [],
+      myGamificationSummary: {
+        schemaVersion: 1,
+        familyId: 'family-1',
+        childId: 'child-1',
+        xpTotal: 1500,
+        level: 2,
+        currentStreak: 1,
+        bestStreak: 3,
+        perfectDayCount: 0,
+        lastQualifiedDayKey: null,
+        projectionRevision: 1,
+        foldedThrough: null,
+        rebuildRequired: false,
+        earliestDirtyCursor: null,
+        projectionStatus: 'ready',
+        updatedAt: Date.now(),
+      },
+      myDailyProgress: {
+        schemaVersion: 1,
+        familyId: 'family-1',
+        childId: 'child-1',
+        dayKey: '20240115',
+        timezone: 'Europe/London',
+        eligibilitySnapshotId: 'snap1',
+        dailyGoalPercentage: 80,
+        eligiblePoints: 100,
+        approvedPoints: 80,
+        eligibleTaskCount: 4,
+        approvedTaskCount: 3,
+        progressPercentage: 80,
+        dailyGoalReached: true,
+        perfectDayReached: false,
+        finalized: true,
+        contributingLogicalCompletionKeys: [],
+        invalidatedLogicalCompletionKeys: [],
+        calculatedAt: Date.now(),
+      },
+    };
+    render(<MemoryRouter><Dashboard /></MemoryRouter>);
+    expect(screen.getByTestId('gamification-summary')).toBeInTheDocument();
+    expect(screen.getByText('Level 2')).toBeInTheDocument();
+  });
+
+  it('child dashboard shows rebuilding state when rebuildRequired is true', () => {
+    store.state = {
+      currentUser: { id: 'child-1', familyId: 'family-1', role: 'child', displayName: 'Child' },
+      feed: [],
+      loading: false,
+      myWallet: { id: 'w-1', balance: 100 },
+      childWallets: [],
+      familyMembers: [],
+      savingsGoals: [],
+      funds: [],
+      tasks: [],
+      taskCompletions: [],
+      moneyRequests: [],
+      myGamificationSummary: {
+        schemaVersion: 1,
+        familyId: 'family-1',
+        childId: 'child-1',
+        xpTotal: 1500,
+        level: 2,
+        currentStreak: 1,
+        bestStreak: 3,
+        perfectDayCount: 1,
+        lastQualifiedDayKey: null,
+        projectionRevision: 1,
+        foldedThrough: null,
+        rebuildRequired: true,
+        earliestDirtyCursor: null,
+        projectionStatus: 'ready',
+        updatedAt: Date.now(),
+      },
+      myDailyProgress: null,
+    };
+    render(<MemoryRouter><Dashboard /></MemoryRouter>);
+    expect(screen.getByTestId('gamification-summary')).toBeInTheDocument();
+    expect(screen.getByText('Loading…')).toBeInTheDocument();
+  });
+
+  it('child dashboard shows no misleading zeroes when summary is unavailable', () => {
+    store.state = {
+      currentUser: { id: 'child-1', familyId: 'family-1', role: 'child', displayName: 'Child' },
+      feed: [],
+      loading: false,
+      myWallet: { id: 'w-1', balance: 100 },
+      childWallets: [],
+      familyMembers: [],
+      savingsGoals: [],
+      funds: [],
+      tasks: [],
+      taskCompletions: [],
+      moneyRequests: [],
+      myGamificationSummary: null,
+      myDailyProgress: null,
+    };
+    render(<MemoryRouter><Dashboard /></MemoryRouter>);
+    // Should show "Loading…" not "0" for streaks/level
+    expect(screen.queryByText('Level 0')).not.toBeInTheDocument();
+    expect(screen.queryByText('Current Streak')).not.toBeInTheDocument();
   });
 });

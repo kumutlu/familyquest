@@ -3,28 +3,57 @@ import { useTranslation } from 'react-i18next';
 import { Card, CardContent } from '../components/ui/Card';
 import { Avatar } from '../components/ui/Avatar';
 import { Badge } from '../components/ui/Badge';
-import { Progress } from '../components/ui/Progress';
 import { ChevronLeft, Star, Flame, Trophy, TrendingUp, TrendingDown, Shield, Award, Zap } from 'lucide-react';
 import { useStore } from '../store/useStore';
 import { ACHIEVEMENTS } from '../lib/achievements';
 import { cn } from '../lib/utils';
 import { formatDate } from '../i18n/format';
 import { HistoryActionControl } from '../components/reversals/HistoryActionControl';
+import { GamificationSummaryCard } from '../components/dashboard/GamificationSummaryCard';
+import { adaptGamificationSummary } from '../lib/gamificationAdapters';
+import type { GamificationSummaryV1, DailyProgressV1 } from '../domain/gamification/types';
+
+/**
+ * Helper to get today's progress for a child from the daily progress array.
+ * The dayKey format is YYYYMMDD.
+ */
+function getTodaysProgress(
+  dailyProgress: DailyProgressV1[],
+  childId: string,
+  todayKey: string,
+): DailyProgressV1 | null {
+  return dailyProgress.find(
+    (p) => p.childId === childId && p.dayKey === todayKey,
+  ) ?? null;
+}
+
+/**
+ * Formats a date as YYYYMMDD for dayKey comparison.
+ */
+function formatDayKey(date: Date): string {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+  return `${year}${month}${day}`;
+}
 
 export function MemberProfile() {
-  const { t } = useTranslation('profile');
+  const { t } = useTranslation(['profile', 'dashboard']);
   const { id } = useParams();
-  const { familyMembers, loading, behaviourEvents } = useStore();
+  const { familyMembers, loading, behaviourEvents, gamificationSummaries, dailyProgress } = useStore();
 
-  if (loading) return <div className="p-8 text-center text-gray-500 animate-pulse">{t('loading')}</div>;
+  if (loading) return <div className="p-8 text-center text-gray-500 animate-pulse">{t('profile:loading')}</div>;
 
   const member = familyMembers.find(m => m.id === id);
-  if (!member) return <div className="p-8 text-center text-gray-500">{t('notFound')}</div>;
+  if (!member) return <div className="p-8 text-center text-gray-500">{t('profile:notFound')}</div>;
 
-  const currentLevel = Math.floor((member.lifetimeXP || 0) / 1000) + 1;
-  const xpInLevel = (member.lifetimeXP || 0) % 1000;
-  const levelProgress = (xpInLevel / 1000) * 100;
-  
+  // Get gamification summary for this child
+  const summaryDoc = gamificationSummaries.find(
+    (s: GamificationSummaryV1) => s.childId === id,
+  ) ?? null;
+  const todaysProgress = getTodaysProgress(dailyProgress, id!, formatDayKey(new Date()));
+  const gamificationView = adaptGamificationSummary(summaryDoc, todaysProgress);
+
   const userEvents = behaviourEvents.filter(e => e.userId === id).slice(0, 10);
 
   return (
@@ -33,63 +62,37 @@ export function MemberProfile() {
         <Link to="/family" className="p-2 -ml-2 text-gray-400 hover:text-gray-900 bg-gray-100 rounded-full transition-colors">
           <ChevronLeft size={24} />
         </Link>
-        <h1 className="text-xl font-bold text-gray-900">{t('title')}</h1>
+        <h1 className="text-xl font-bold text-gray-900">{t('profile:title')}</h1>
       </header>
 
       <div className="flex flex-col items-center text-center space-y-4 py-4">
         <div className="relative">
           <Avatar src={member.avatarUrl} fallback={member.displayName[0]} size="xl" className="w-24 h-24 ring-4 ring-white shadow-xl" />
-          <div className="absolute -bottom-2 -right-2 bg-primary-500 text-white w-8 h-8 rounded-full flex items-center justify-center font-bold border-2 border-white shadow-sm">
-            {currentLevel}
-          </div>
+          {gamificationView?.isAvailable ? (
+            <div className="absolute -bottom-2 -right-2 bg-primary-500 text-white w-8 h-8 rounded-full flex items-center justify-center font-bold border-2 border-white shadow-sm">
+              {gamificationView.level}
+            </div>
+          ) : (
+            <div className="absolute -bottom-2 -right-2 bg-gray-300 text-white w-8 h-8 rounded-full flex items-center justify-center font-bold border-2 border-white shadow-sm">
+              ?
+            </div>
+          )}
         </div>
         
         <div>
           <h2 className="text-2xl font-extrabold text-gray-900">{member.displayName}</h2>
-          <p className="text-primary-600 font-bold">{t('rewardPoints', { count: member.rewardPoints || 0 })}</p>
+          <p className="text-primary-600 font-bold">{t('profile:rewardPoints', { count: member.rewardPoints || 0 })}</p>
         </div>
       </div>
 
-      <Card>
-        <CardContent className="p-5">
-          <div className="flex justify-between items-end mb-2">
-            <div>
-              <p className="text-sm font-bold text-gray-500 uppercase tracking-wider">{t('level', { level: currentLevel })}</p>
-              <p className="font-bold text-gray-900 mt-1">{t('totalXp', { count: member.lifetimeXP || 0 })}</p>
-            </div>
-            <p className="text-sm font-medium text-gray-400">{t('toNextLevel', { count: 1000 - xpInLevel })}</p>
-          </div>
-          <Progress value={levelProgress} className="h-2" />
-        </CardContent>
-      </Card>
-
-      <div className="grid grid-cols-2 gap-4">
-        <Card>
-          <CardContent className="p-4 flex flex-col items-center justify-center text-center">
-            <div className="w-10 h-10 bg-warning-50 rounded-full flex items-center justify-center mb-2">
-              <Flame size={20} className="text-warning-500" />
-            </div>
-            <p className="text-2xl font-bold text-gray-900">{member.currentStreak || 0}</p>
-            <p className="text-xs font-bold text-gray-500 uppercase tracking-wider mt-1">{t('dayStreak')}</p>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardContent className="p-4 flex flex-col items-center justify-center text-center">
-            <div className="w-10 h-10 bg-primary-50 rounded-full flex items-center justify-center mb-2">
-              <Trophy size={20} className="text-primary-500" />
-            </div>
-            <p className="text-2xl font-bold text-gray-900">{member.longestStreak || 0}</p>
-            <p className="text-xs font-bold text-gray-500 uppercase tracking-wider mt-1">{t('bestStreak')}</p>
-          </CardContent>
-        </Card>
-      </div>
+      {/* Gamification summary card - shows level, XP, streaks, and daily progress */}
+      <GamificationSummaryCard summary={gamificationView} />
 
       <section>
-        <h2 className="text-lg font-bold text-gray-900 mb-4">{t('behaviourHistory')}</h2>
+        <h2 className="text-lg font-bold text-gray-900 mb-4">{t('profile:behaviourHistory')}</h2>
         {userEvents.length === 0 ? (
           <div className="bg-white rounded-2xl border border-gray-100 p-8 text-center text-gray-500">
-            {t('noEvents')}
+            {t('profile:noEvents')}
           </div>
         ) : (
           <div className="space-y-3">
@@ -123,7 +126,7 @@ export function MemberProfile() {
       <section>
         <h2 className="text-lg font-bold text-gray-900 mb-4 flex items-center gap-2">
           <Trophy size={20} className="text-reward-500" />
-          {t('achievementGallery')}
+          {t('profile:achievementGallery')}
         </h2>
         <div className="grid grid-cols-2 gap-3">
           {ACHIEVEMENTS.map(badge => {

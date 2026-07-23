@@ -1,6 +1,3 @@
-import { Card, CardHeader, CardTitle, CardContent } from '../components/ui/Card';
-import { Stat } from '../components/ui/Stat';
-import { Progress } from '../components/ui/Progress';
 import { Flame, Star, MessageCircle, Inbox } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { useStore } from '../store/useStore';
@@ -10,11 +7,13 @@ import { RequestCard } from '../components/requests/RequestCard';
 import { useRequestDetail } from '../components/requests/RequestDetailContext';
 import { normalizeRequest, type RequestContext, type RequestCategory } from '../lib/requestModel';
 import { resolveFeedRequest } from '../lib/feedRequestResolver';
-import { currencySymbolFromCode, formatDate, resolveFamilyCurrencyCode } from '../i18n/format';
+import { formatDate } from '../i18n/format';
 import { WalletSummaryCard } from '../components/dashboard/WalletSummaryCard';
 import { GoalSummaryCard } from '../components/dashboard/GoalSummaryCard';
 import { PetBoxSummaryCard } from '../components/dashboard/PetBoxSummaryCard';
 import { TaskSummaryCard } from '../components/dashboard/TaskSummaryCard';
+import { GamificationSummaryCard } from '../components/dashboard/GamificationSummaryCard';
+import { adaptGamificationSummary } from '../lib/gamificationAdapters';
 
 export function Dashboard() {
   const { t } = useTranslation('dashboard');
@@ -23,7 +22,6 @@ export function Dashboard() {
     feed,
     loading,
     familyMembers,
-    familyData,
     tasks,
     rewards,
     moneyRequests,
@@ -32,6 +30,8 @@ export function Dashboard() {
     profileUpdateRequests,
     taskCompletions,
     redemptions,
+    myGamificationSummary,
+    myDailyProgress,
   } = useStore();
   const { openRequest } = useRequestDetail();
 
@@ -41,12 +41,11 @@ export function Dashboard() {
     return <ParentDashboard />;
   }
 
-  const currentLevel = Math.floor((currentUser.lifetimeXP || 0) / 1000) + 1; // Simplified formula
-  const xpInLevel = (currentUser.lifetimeXP || 0) % 1000;
-  const levelProgress = (xpInLevel / 1000) * 100;
+  // Adapt gamification summary for child view
+  const gamificationView = adaptGamificationSummary(myGamificationSummary, myDailyProgress);
 
   const ctx: RequestContext = {
-    currency: currencySymbolFromCode(resolveFamilyCurrencyCode(familyData)),
+    currency: '£',
     resolveMember: id => {
       const member = familyMembers.find(m => m.id === id);
       return member ? { id: member.id, name: member.displayName, avatarUrl: member.avatarUrl } : undefined;
@@ -99,23 +98,20 @@ export function Dashboard() {
       </header>
 
       <div className="grid grid-cols-2 gap-4">
-        <Stat label="Total Points" value={currentUser.rewardPoints || 0} icon={<Star className="fill-current" />} />
-        <Stat label="Day Streak" value={currentUser.currentStreak || 0} icon={<Flame className="text-warning-500 fill-warning-500" />} />
+        <div className="flex items-center justify-center gap-2 rounded-2xl bg-white p-4 shadow-sm border border-gray-100">
+          <Star size={20} className="fill-current text-reward-500" />
+          <span className="text-sm font-medium text-gray-500">Total Points</span>
+          <span className="font-bold text-gray-900">{currentUser.rewardPoints || 0}</span>
+        </div>
+        <div className="flex items-center justify-center gap-2 rounded-2xl bg-white p-4 shadow-sm border border-gray-100">
+          <Flame size={20} className="text-warning-500 fill-warning-500" />
+          <span className="text-sm font-medium text-gray-500">Day Streak</span>
+          <span className="font-bold text-gray-900">{currentUser.currentStreak || 0}</span>
+        </div>
       </div>
 
       <div className="grid grid-cols-1 gap-4">
-        <Card className="border-none bg-primary-500 text-white">
-          <CardHeader className="border-none pb-2">
-            <CardTitle className="flex justify-between text-sm font-medium uppercase tracking-wider text-white opacity-90">
-              Level {currentLevel}
-              <span>{Math.round(levelProgress)}%</span>
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <Progress value={levelProgress} className="bg-primary-700 [&>div]:bg-white" />
-            <p className="mt-3 text-right text-xs font-medium text-primary-200">{1000 - xpInLevel} XP to Level {currentLevel + 1}</p>
-          </CardContent>
-        </Card>
+        <GamificationSummaryCard summary={gamificationView} />
       </div>
 
       <section aria-label="Quick summaries">

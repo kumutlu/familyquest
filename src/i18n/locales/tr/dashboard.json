@@ -47,6 +47,24 @@
     "rebuilding": "Güncelleniyor…",
     "noEligibleTasks": "Bugün görev yok"
   },
+  "gamification": {
+    "level": "Seviye {{level}}",
+    "loading": "Yükleniyor…",
+    "updating": "Güncelleniyor…",
+    "xpTotal": "{{xp}} Toplam XP",
+    "xpToNext": "{{xp}} XP seviye {{level}}'e",
+    "xpProgress": "{{xp}} XP seviye {{level}}'de",
+    "xpToNextLevel": "Seviye {{level}}'e ulaşmak için {{xp}} XP",
+    "currentStreak": "Mevcut Seri",
+    "bestStreak": "En İyi Seri",
+    "todayProgress": "Bugün",
+    "todayProgressAria": "%{{progress}} tamamlandı",
+    "dailyGoalReached": "Hedefe Ulaşıldı",
+    "dailyGoalNotReached": "Hedefe Doğru",
+    "perfectDay": "Mükemmel Gün",
+    "rebuilding": "Güncelleniyor…",
+    "noEligibleTasks": "Bugün görev yok"
+  },
   "taskSummary": {
     "viewAria": "Görevlerinizi görüntüleyin",
     "title": "Görevler",

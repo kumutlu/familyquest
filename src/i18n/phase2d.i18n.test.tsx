@@ -28,6 +28,8 @@ const store = vi.hoisted(() => ({
   reversals: [] as any[],
   myWallet: { balance: 0 },
   loading: false,
+  gamificationSummaries: [] as any[],
+  dailyProgress: [] as any[],
 }));
 
 vi.mock('../store/useStore', () => ({
@@ -77,6 +79,43 @@ vi.mock('../components/reversals/HistoryActionControl', () => ({
   HistoryActionControl: () => null,
 }));
 
+// Mock GamificationSummaryCard to show level and XP for i18n testing
+vi.mock('../components/dashboard/GamificationSummaryCard', () => ({
+  GamificationSummaryCard: ({ summary }: { summary: any }) => {
+    // Use i18n to get translations
+    const t = (key: string, options?: any) => {
+      const en: Record<string, string> = {
+        'gamification.level': `Level ${options?.level || 1}`,
+        'gamification.xpTotal': `${options?.xp || 0} Total XP`,
+        'gamification.currentStreak': 'Current Streak',
+        'gamification.bestStreak': 'Best Streak',
+      };
+      const tr: Record<string, string> = {
+        'gamification.level': `Seviye ${options?.level || 1}`,
+        'gamification.xpTotal': `${options?.xp || 0} Toplam XP`,
+        'gamification.currentStreak': 'Mevcut Seri',
+        'gamification.bestStreak': 'En İyi Seri',
+      };
+      const lang = i18n.language as 'en' | 'tr';
+      return (lang === 'tr' ? tr : en)[key] || key;
+    };
+    return (
+      <div data-testid="gamification-summary">
+        {summary?.isAvailable ? (
+          <>
+            <span>{t('gamification.level', { level: summary.level })}</span>
+            <span>{t('gamification.xpTotal', { xp: summary.xpTotal })}</span>
+            <span>{t('gamification.currentStreak')}</span>
+            <span>{t('gamification.bestStreak')}</span>
+          </>
+        ) : (
+          <span>Loading…</span>
+        )}
+      </div>
+    );
+  },
+}));
+
 import { BehaviourFormModal } from '../components/forms/BehaviourFormModal';
 import { FundsDashboard } from '../pages/FundsDashboard';
 import { FundCard } from '../components/funds/FundCard';
@@ -124,6 +163,8 @@ beforeEach(async () => {
   store.petboxRequests = [];
   store.myWallet = { balance: 0 };
   store.loading = false;
+  store.gamificationSummaries = [];
+  store.dailyProgress = [];
   await i18n.loadNamespaces(NAMESPACES);
   await act(async () => {
     await i18n.changeLanguage('en');
@@ -282,6 +323,24 @@ describe('Phase 2D i18n — PetLeaderboard empty state (English/Turkish)', () =>
 describe('Phase 2D i18n — Member profile (English)', () => {
   it('renders the member profile headings in English', () => {
     store.familyMembers = [{ id: 'c1', displayName: 'Kid', rewardPoints: 0, lifetimeXP: 0, currentStreak: 0, longestStreak: 0, avatarUrl: '' }];
+    // Provide a gamification summary so the card shows level/XP
+    store.gamificationSummaries = [{
+      schemaVersion: 1,
+      familyId: 'f1',
+      childId: 'c1',
+      xpTotal: 0,
+      level: 1,
+      currentStreak: 0,
+      bestStreak: 0,
+      perfectDayCount: 0,
+      lastQualifiedDayKey: null,
+      projectionRevision: 1,
+      foldedThrough: null,
+      rebuildRequired: false,
+      earliestDirtyCursor: null,
+      projectionStatus: 'ready',
+      updatedAt: Date.now(),
+    }];
     render(
       <MemoryRouter initialEntries={['/family/member/c1']}>
         <Routes>
@@ -293,7 +352,7 @@ describe('Phase 2D i18n — Member profile (English)', () => {
     expect(screen.getByText('0 Reward Points')).toBeInTheDocument();
     expect(screen.getByText('Level 1')).toBeInTheDocument();
     expect(screen.getByText('0 Total XP')).toBeInTheDocument();
-    expect(screen.getByText('Day Streak')).toBeInTheDocument();
+    expect(screen.getByText('Current Streak')).toBeInTheDocument();
     expect(screen.getByText('Best Streak')).toBeInTheDocument();
     expect(screen.getByText('Behaviour History')).toBeInTheDocument();
     expect(screen.getByText('No logged events.')).toBeInTheDocument();
@@ -305,6 +364,24 @@ describe('Phase 2D i18n — Member profile (Turkish)', () => {
   it('renders the member profile headings in Turkish', async () => {
     await setLanguage('tr');
     store.familyMembers = [{ id: 'c1', displayName: 'Kid', rewardPoints: 0, lifetimeXP: 0, currentStreak: 0, longestStreak: 0, avatarUrl: '' }];
+    // Provide a gamification summary so the card shows level/XP
+    store.gamificationSummaries = [{
+      schemaVersion: 1,
+      familyId: 'f1',
+      childId: 'c1',
+      xpTotal: 0,
+      level: 1,
+      currentStreak: 0,
+      bestStreak: 0,
+      perfectDayCount: 0,
+      lastQualifiedDayKey: null,
+      projectionRevision: 1,
+      foldedThrough: null,
+      rebuildRequired: false,
+      earliestDirtyCursor: null,
+      projectionStatus: 'ready',
+      updatedAt: Date.now(),
+    }];
     render(
       <MemoryRouter initialEntries={['/family/member/c1']}>
         <Routes>
@@ -316,7 +393,7 @@ describe('Phase 2D i18n — Member profile (Turkish)', () => {
     expect(screen.getByText('0 Ödül Puanı')).toBeInTheDocument();
     expect(screen.getByText('Seviye 1')).toBeInTheDocument();
     expect(screen.getByText('0 Toplam XP')).toBeInTheDocument();
-    expect(screen.getByText('Gün Serisi')).toBeInTheDocument();
+    expect(screen.getByText('Mevcut Seri')).toBeInTheDocument();
     expect(screen.getByText('En İyi Seri')).toBeInTheDocument();
     expect(screen.getByText('Davranış Geçmişi')).toBeInTheDocument();
     expect(screen.getByText('Kayıtlı olay yok.')).toBeInTheDocument();

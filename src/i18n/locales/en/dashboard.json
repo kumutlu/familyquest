@@ -47,6 +47,24 @@
     "rebuilding": "Updating…",
     "noEligibleTasks": "No tasks today"
   },
+  "gamification": {
+    "level": "Level {{level}}",
+    "loading": "Loading…",
+    "updating": "Updating…",
+    "xpTotal": "{{xp}} Total XP",
+    "xpToNext": "{{xp}} XP to Level {{level}}",
+    "xpProgress": "{{xp}} XP in Level {{level}}",
+    "xpToNextLevel": "{{xp}} XP to reach Level {{level}}",
+    "currentStreak": "Current Streak",
+    "bestStreak": "Best Streak",
+    "todayProgress": "Today",
+    "todayProgressAria": "{{progress}}% complete",
+    "dailyGoalReached": "Goal Reached",
+    "dailyGoalNotReached": "Goal in Progress",
+    "perfectDay": "Perfect Day",
+    "rebuilding": "Updating…",
+    "noEligibleTasks": "No tasks today"
+  },
   "taskSummary": {
     "viewAria": "View your tasks",
     "title": "Tasks",
