@@ -45,18 +45,25 @@ export function Onboarding() {
     }
   };
 
-  const handleAddMember = async () => {
-    if (!newMemberName.trim()) return;
-    setLoading(true);
-    try {
-      await createManagedMember(generatedFamilyId, newMemberRole, newMemberName);
-      setMembers([...members, { name: newMemberName, role: newMemberRole }]);
-      setNewMemberName('');
-    } catch (err: any) {
-      setError(err.message);
-    } finally {
-      setLoading(false);
+  const handleAddMember = () => {
+    if (!newMemberName.trim()) {
+      setError(t('auth:memberNameRequired'));
+      return;
     }
+
+    // Check for duplicates
+    const trimmedName = newMemberName.trim();
+    if (members.some(m => m.name.toLowerCase() === trimmedName.toLowerCase())) {
+      setError(t('auth:memberAlreadyExists'));
+      return;
+    }
+
+    // Update local state only - no Firestore write yet
+    setMembers([...members, { name: trimmedName, role: newMemberRole }]);
+    setNewMemberName('');
+    // Clear role to child for next entry (sensible default)
+    setNewMemberRole('child');
+    setError('');
   };
 
   const handleJoin = async (e: React.FormEvent) => {
@@ -80,6 +87,25 @@ export function Onboarding() {
     } finally {
       setLoading(false);
     }
+  };
+
+  const handleFinishSetup = async () => {
+    if (!generatedFamilyId) {
+      navigate('/');
+      return;
+    }
+    setLoading(true);
+    try {
+      // Create all managed members in Firestore
+      for (const member of members) {
+        await createManagedMember(generatedFamilyId, member.role, member.name);
+      }
+    } catch (err: any) {
+      setError(err.message || t('auth:failedToAddMember'));
+    } finally {
+      setLoading(false);
+    }
+    navigate('/');
   };
 
   if (joinRequested) {
@@ -153,11 +179,24 @@ export function Onboarding() {
                 <option value="child">{t('auth:child')}</option>
                 <option value="parent">{t('auth:parent')}</option>
               </select>
-              <Button type="button" onClick={handleAddMember} disabled={loading || !newMemberName.trim()}><Plus size={16} /></Button>
+              <Button type="button" onClick={handleAddMember} disabled={!newMemberName.trim()}><Plus size={16} /></Button>
             </div>
+            {error && <p className="text-red-500 text-sm mt-2">{error}</p>}
 
             <div className="pt-6 mt-6 border-t border-gray-100">
-              <Button fullWidth onClick={() => setStep(3)}>{t('auth:continueToInviteCode')}</Button>
+              <Button
+                fullWidth
+                onClick={() => {
+                  if (members.length === 0) {
+                    setError(t('auth:mustAddAtLeastOneMember'));
+                    return;
+                  }
+                  setError('');
+                  setStep(3);
+                }}
+              >
+                {t('auth:continueToInviteCode')}
+              </Button>
             </div>
           </div>
         )}
@@ -175,7 +214,8 @@ export function Onboarding() {
               <p className="text-4xl font-mono font-black text-primary-600 tracking-widest">{generatedInviteCode}</p>
             </div>
 
-            <Button fullWidth onClick={() => navigate('/')}>{t('auth:finishSetup')}</Button>
+            {error && <p className="text-red-500 text-sm">{error}</p>}
+            <Button fullWidth onClick={handleFinishSetup} disabled={loading}>{t('auth:finishSetup')}</Button>
           </div>
         )}
 
