@@ -1,14 +1,21 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { render, screen, act } from '@testing-library/react';
+import { render, screen, waitFor, act } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter } from 'react-router-dom';
 import i18n from '../i18n/config';
 
 const apiMocks = vi.hoisted(() => ({
   signUp: vi.fn(async () => ({ user: {} })),
+  signInWithGoogle: vi.fn(async () => ({ user: {} })),
 }));
 vi.mock('../lib/api', () => ({
   signUp: apiMocks.signUp,
+  signInWithGoogle: apiMocks.signInWithGoogle,
+}));
+
+// Mock the store so the page renders (unauthenticated)
+vi.mock('../store/useStore', () => ({
+  useStore: (selector: any) => selector({ authStatus: 'unauthenticated' }),
 }));
 
 import { Signup } from './Signup';
@@ -32,6 +39,7 @@ function getSignupInputs(): HTMLInputElement[] {
 
 beforeEach(async () => {
   apiMocks.signUp.mockClear();
+  apiMocks.signInWithGoogle.mockClear();
   await i18n.loadNamespaces(['auth']);
   await act(async () => { await i18n.changeLanguage('en'); });
 });
@@ -63,6 +71,41 @@ describe('Signup — English rendering', () => {
   });
 });
 
+describe('Signup — Google authentication', () => {
+  it('renders Google button on signup page', () => {
+    renderSignup();
+    expect(screen.getByRole('button', { name: /continue with google/i })).toBeInTheDocument();
+  });
+
+  it('clicking Google button calls the shared signInWithGoogle handler', async () => {
+    const user = userEvent.setup();
+    renderSignup();
+    await user.click(screen.getByRole('button', { name: /continue with google/i }));
+    await waitFor(() => expect(apiMocks.signInWithGoogle).toHaveBeenCalled());
+  });
+
+  it('Google button is disabled while signing in', async () => {
+    const user = userEvent.setup();
+    let resolveGoogle!: (v: any) => void;
+    apiMocks.signInWithGoogle.mockImplementation(
+      () => new Promise(resolve => { resolveGoogle = resolve; }),
+    );
+    renderSignup();
+    const googleButton = screen.getByRole('button', { name: /continue with google/i });
+    await user.click(googleButton);
+    await waitFor(() => expect(googleButton).toBeDisabled());
+    resolveGoogle({ user: {} });
+  });
+
+  it('shows error message when Google sign-in fails', async () => {
+    const user = userEvent.setup();
+    apiMocks.signInWithGoogle.mockRejectedValue(new Error('Google sign-in failed'));
+    renderSignup();
+    await user.click(screen.getByRole('button', { name: /continue with google/i }));
+    await waitFor(() => expect(screen.getByRole('alert')).toHaveTextContent('Google sign-in failed'));
+  });
+});
+
 describe('Signup — Turkish rendering', () => {
   it('renders all fields and actions in Turkish', async () => {
     await act(async () => { await i18n.changeLanguage('tr'); });
@@ -73,6 +116,12 @@ describe('Signup — Turkish rendering', () => {
     expect(screen.getByText(/^şifre$/i)).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /^kaydol$/i })).toBeInTheDocument();
     expect(screen.getByRole('link', { name: /zaten hesabınız var mı\? giriş yap/i })).toBeInTheDocument();
+  });
+
+  it('renders Google button text in Turkish', async () => {
+    await act(async () => { await i18n.changeLanguage('tr'); });
+    renderSignup();
+    expect(screen.getByRole('button', { name: /google ile devam et/i })).toBeInTheDocument();
   });
 });
 

@@ -239,6 +239,43 @@ export const createFamilyAndParent = async (_uid: string, _name: string, familyN
   return { familyId: familyRef.id, inviteCode };
 };
 
+/**
+ * Updates the parent user to become the family owner after managed members are created.
+ * This is called in Step 3 of the onboarding flow to set familyId and role='owner' on
+ * the parent user document, which allows the AppLayout route guard to recognize the user
+ * as having completed onboarding.
+ *
+ * The update is performed in a transaction to ensure atomicity with the family document
+ * existence check, satisfying the isValidOwnerBootstrap security rule.
+ */
+export const updateUserToOwner = async (uid: string, familyId: string) => {
+  const userRef = doc(db, 'users', uid);
+  const familyRef = doc(db, 'families', familyId);
+
+  await runTransaction(db, async (transaction) => {
+    const userDoc = await transaction.get(userRef);
+    if (!userDoc.exists()) throw new Error('User not found');
+
+    // Verify the user is in the correct state for bootstrap (no familyId, role='parent')
+    if ('familyId' in userDoc.data()) {
+      throw new Error('User already has a family');
+    }
+    if (userDoc.data().role !== 'parent') {
+      throw new Error('User is not in parent state for bootstrap');
+    }
+
+    // Verify the family exists
+    const familyDoc = await transaction.get(familyRef);
+    if (!familyDoc.exists()) throw new Error('Family not found');
+
+    // Update the user to become the owner
+    transaction.update(userRef, {
+      familyId,
+      role: 'owner'
+    });
+  });
+};
+
 export const requestToJoinFamily = async (uid: string, name: string, inviteCode: string) => {
   const code = inviteCode.toUpperCase().trim();
   const q = query(collection(db, 'families'), where('inviteCode', '==', code));
@@ -550,6 +587,13 @@ export const completeTask = async (familyId: string, taskId: string, userId: str
 
     const userData = userDoc.data();
 
+    // Validate task assignment: only tasks explicitly assigned to the user may be completed
+    if (!taskSnap.exists()) throw new Error("Task not found");
+    const taskData = taskSnap.data();
+    if (taskData.assigneeId !== undefined && taskData.assigneeId !== null && taskData.assigneeId !== userId) {
+      throw new Error("Task is not assigned to this user");
+    }
+
     const taskType = taskSnap.exists() ? (taskSnap.data().type as string | undefined) : undefined;
     const currentPeriodKey = periodKeyFor(taskType, now);
     // The logical completion identity is deterministic, making duplicate
@@ -706,8 +750,10 @@ export const approveTaskCompletion = async (familyId: string, completionId: stri
     const feedRef = doc(db, `families/${familyId}/feed`, `task_approval_${completionId}`);
     transaction.set(feedRef, {
       actorId: currentUserUid,
+      actorName: reviewerDoc.data().displayName || 'Parent',
       type: 'custom',
       text: `Task approved: ${taskDoc.data().title} (+${points} pts)${comment ? ` - "${comment}"` : ''}`,
+      createdAt: serverTimestamp(),
       timestamp: serverTimestamp()
     });
 
@@ -756,8 +802,10 @@ export const rejectTaskCompletion = async (familyId: string, completionId: strin
     const feedRef = doc(collection(db, `families/${familyId}/feed`));
     transaction.set(feedRef, {
       actorId: currentUserUid,
+      actorName: reviewerDoc.data().displayName || 'Parent',
       type: 'custom',
       text: `Task rejected: ${taskDoc.data().title} - "${comment}"`,
+      createdAt: serverTimestamp(),
       timestamp: serverTimestamp()
     });
 
@@ -880,6 +928,7 @@ export async function addBehaviourEvent(
       walletDelta: effect.walletDelta,
       childId: childId,
       actorId,
+      actorName: creator.displayName,
       text: `Logged behaviour for ${child.displayName}: ${input.reason.trim()} (${deltaText})`,
       createdAt: feedTimestamp,
       timestamp: feedTimestamp,
@@ -3112,10 +3161,12 @@ export const approveProfileUpdateRequest = async (familyId: string, requestId: s
     const feedRef = doc(collection(db, `families/${familyId}/feed`));
     transaction.set(feedRef, {
       actorId: currentUserUid,
+      actorName: reviewerName,
       type: 'custom',
       text: `Profile update for ${reqData.childName} was approved.`,
       visibleTo: [reqData.childId, currentUserUid],
       timestamp: serverTimestamp(),
+      createdAt: serverTimestamp(),
     });
 
     // Write stage performs ZERO reads.
