@@ -9,18 +9,18 @@ import { completeTask, createTask, updateTask } from '../lib/api';
 import { deriveTaskAvailability } from '../lib/taskRecurrence';
 import { useRecurrenceClock } from '../lib/useRecurrenceClock';
 import { cn } from '../lib/utils';
-import { isParentRole } from '../lib/roles';
+import { isChildRole, isParentRole } from '../lib/roles';
 import { TaskDetailsModal } from '../components/tasks/TaskDetailsModal';
 
 export function Tasks() {
   const { t } = useTranslation(['tasks', 'errors']);
-  const { currentUser, tasks, taskCompletions, loading } = useStore();
+  const { currentUser, tasks, taskCompletions, loading, familyMembers } = useStore();
   const [filter, setFilter] = useState<'all' | 'daily' | 'weekdays' | 'weekends' | 'weekly' | 'one-time'>('all');
   const [selectedTask, setSelectedTask] = useState<any>(null);
-  
+
   const [isFormOpen, setIsFormOpen] = useState(false);
-  const [formData, setFormData] = useState<any>({ title: '', pointsReward: 10, type: 'daily', requiresApproval: true });
-  
+  const [formData, setFormData] = useState<any>({ title: '', pointsReward: 10, type: 'daily', requiresApproval: true, assigneeId: '' });
+
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [successMsg, setSuccessMsg] = useState<string | null>(null);
@@ -34,11 +34,16 @@ export function Tasks() {
   // Filter out archived tasks first
   const activeTasks = tasks.filter(t => t.isActive !== false);
 
+  // Role-scoped visibility: children only see their own tasks and shared tasks
+  const visibleTasks = isChildRole(currentUser?.role)
+    ? activeTasks.filter(task => !task.assigneeId || task.assigneeId === currentUser?.id)
+    : activeTasks;
+
   // Derive each task's current availability from immutable completion history +
   // the current recurrence period. This is the single source of truth shared
   // with the parent view, so recurring tasks reset correctly instead of staying
   // permanently completed.
-  const mappedTasks = activeTasks.map(task => {
+  const mappedTasks = visibleTasks.map(task => {
     const av = deriveTaskAvailability(task, taskCompletions, now, currentUser?.id);
     return {
       ...task,
@@ -60,7 +65,7 @@ export function Tasks() {
     if (!currentUser) return;
     setIsSubmitting(true);
     setError(null);
-    
+
     try {
       await completeTask(currentUser.familyId, selectedTask.id, currentUser.id, selectedTask.requiresApproval, now);
       setTimeout(() => {
@@ -75,12 +80,12 @@ export function Tasks() {
   };
 
   const openCreateForm = () => {
-    setFormData({ title: '', pointsReward: 10, type: 'daily', requiresApproval: true });
+    setFormData({ title: '', pointsReward: 10, type: 'daily', requiresApproval: true, assigneeId: '' });
     setIsFormOpen(true);
   };
 
   const openEditForm = (task: any) => {
-    setFormData({ ...task });
+    setFormData({ ...task, assigneeId: task.assigneeId || '' });
     setSelectedTask(null);
     setIsFormOpen(true);
   };
@@ -107,7 +112,8 @@ export function Tasks() {
           title: formData.title,
           pointsReward: Number(formData.pointsReward),
           type: formData.type,
-          requiresApproval: formData.requiresApproval
+          requiresApproval: formData.requiresApproval,
+          assigneeId: formData.assigneeId || null
         });
         setSuccessMsg(t('tasks:updateSuccess'));
       } else {
@@ -115,7 +121,8 @@ export function Tasks() {
           title: formData.title,
           pointsReward: Number(formData.pointsReward),
           type: formData.type,
-          requiresApproval: formData.requiresApproval
+          requiresApproval: formData.requiresApproval,
+          assigneeId: formData.assigneeId || null
         });
         setSuccessMsg(t('tasks:createSuccess'));
       }
@@ -180,13 +187,13 @@ export function Tasks() {
               <CardContent className="p-4 flex items-center gap-4">
                 <div className={cn(
                   "w-6 h-6 rounded-full border-2 flex items-center justify-center shrink-0 transition-colors",
-                  task.status === 'approved' ? "bg-success-500 border-success-500 text-white" : 
+                  task.status === 'approved' ? "bg-success-500 border-success-500 text-white" :
                   task.status === 'pending_approval' ? "bg-warning-500 border-warning-500 text-white" :
                   "border-gray-300 text-transparent"
                 )}>
                   <CheckCircle2 size={16} className={task.status !== 'pending' ? 'opacity-100' : 'opacity-0'} />
                 </div>
-                
+
                 <div className="flex-1 min-w-0">
                   <h3 className={cn("font-bold truncate", task.status === 'approved' ? 'text-gray-500 line-through' : 'text-gray-900')}>
                     {task.title}
@@ -237,6 +244,15 @@ export function Tasks() {
                 <div>
                   <label className="block text-sm font-medium text-gray-700">{t('tasks:form.pointsReward')}</label>
                   <input type="number" required min="1" value={formData.pointsReward} onChange={e => setFormData({...formData, pointsReward: e.target.value})} className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md" />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700">{t('tasks:form.assignedChild')}</label>
+                  <select value={formData.assigneeId} onChange={e => setFormData({...formData, assigneeId: e.target.value})} className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md bg-white">
+                    <option value="">{t('tasks:form.anyoneShared')}</option>
+                    {familyMembers.filter(m => m.role === 'child').map(child => (
+                      <option key={child.id} value={child.id}>{child.displayName}</option>
+                    ))}
+                  </select>
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-gray-700">{t('tasks:form.category')}</label>
