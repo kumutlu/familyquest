@@ -74,13 +74,13 @@ describe('Signup — English rendering', () => {
 describe('Signup — Google authentication', () => {
   it('renders Google button on signup page', () => {
     renderSignup();
-    expect(screen.getByRole('button', { name: /continue with google/i })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /sign in with google/i })).toBeInTheDocument();
   });
 
   it('clicking Google button calls the shared signInWithGoogle handler', async () => {
     const user = userEvent.setup();
     renderSignup();
-    await user.click(screen.getByRole('button', { name: /continue with google/i }));
+    await user.click(screen.getByRole('button', { name: /sign in with google/i }));
     await waitFor(() => expect(apiMocks.signInWithGoogle).toHaveBeenCalled());
   });
 
@@ -91,7 +91,7 @@ describe('Signup — Google authentication', () => {
       () => new Promise(resolve => { resolveGoogle = resolve; }),
     );
     renderSignup();
-    const googleButton = screen.getByRole('button', { name: /continue with google/i });
+    const googleButton = screen.getByRole('button', { name: /sign in with google/i });
     await user.click(googleButton);
     await waitFor(() => expect(googleButton).toBeDisabled());
     resolveGoogle({ user: {} });
@@ -101,7 +101,7 @@ describe('Signup — Google authentication', () => {
     const user = userEvent.setup();
     apiMocks.signInWithGoogle.mockRejectedValue(new Error('Google sign-in failed'));
     renderSignup();
-    await user.click(screen.getByRole('button', { name: /continue with google/i }));
+    await user.click(screen.getByRole('button', { name: /sign in with google/i }));
     await waitFor(() => expect(screen.getByRole('alert')).toHaveTextContent('Google sign-in failed'));
   });
 });
@@ -121,7 +121,7 @@ describe('Signup — Turkish rendering', () => {
   it('renders Google button text in Turkish', async () => {
     await act(async () => { await i18n.changeLanguage('tr'); });
     renderSignup();
-    expect(screen.getByRole('button', { name: /google ile devam et/i })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /google ile giriş yap/i })).toBeInTheDocument();
   });
 });
 

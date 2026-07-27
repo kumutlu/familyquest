@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { Button } from '../components/ui/Button';
-import { createFamilyAndParent, requestToJoinFamily, createManagedMember, signOut } from '../lib/api';
+import { createFamilyAndParent, requestToJoinFamily, createManagedMember, updateUserToOwner, signOut } from '../lib/api';
 import { useStore } from '../store/useStore';
 import { Plus, Shield } from 'lucide-react';
 
@@ -94,18 +94,22 @@ export function Onboarding() {
       navigate('/');
       return;
     }
+    if (!currentUser) return;
     setLoading(true);
     try {
       // Create all managed members in Firestore
       for (const member of members) {
         await createManagedMember(generatedFamilyId, member.role, member.name);
       }
+      // Update the parent user to become the owner (set familyId and role='owner')
+      await updateUserToOwner(currentUser.uid, generatedFamilyId);
+      // Only navigate on success - the route guard will redirect once auth is ready
+      navigate('/');
     } catch (err: any) {
       setError(err.message || t('auth:failedToAddMember'));
     } finally {
       setLoading(false);
     }
-    navigate('/');
   };
 
   if (joinRequested) {
