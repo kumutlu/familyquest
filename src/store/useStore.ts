@@ -18,6 +18,7 @@ import {
   type BootstrapResource,
   type BootstrapRole,
 } from '../lib/bootstrapQueries';
+import i18n, { applyDocumentDirection, applyLanguage, resolveProfileLanguage } from '../i18n';
 
 export type BootstrapStatus = 'idle' | 'loading' | 'ready' | 'error';
 
@@ -313,25 +314,40 @@ export const useStore = create<AppState>((set, get) => ({
           }
 
           profileResolved = true;
-          const validatedProfile = { ...profile, ...(familyId ? { familyId } : { familyId: undefined }) };
-          set({ currentUser: validatedProfile, profileLoading: false, bootstrapError: null });
-          logAuthTrace('profile-request-completed', { hasFamilyId: Boolean(familyId) });
+          const language = resolveProfileLanguage(profile.language);
+          const finishProfileHydration = () => {
+            if (generation !== authGeneration || get().authUser?.uid !== user.uid) return;
+            const validatedProfile = {
+              ...profile,
+              language,
+              ...(familyId ? { familyId } : { familyId: undefined }),
+            };
+            set({ currentUser: validatedProfile, profileLoading: false, bootstrapError: null });
+            logAuthTrace('profile-request-completed', { hasFamilyId: Boolean(familyId) });
 
-          if (!familyId) {
-            stopFamilyListeners();
-            set({
-              ...emptyFamilyState(),
-              bootstrapStatus: createBootstrapStatus('idle'),
-              familyLoading: false,
-              bootstrapError: null,
-              activeFamilyId: null,
-              appReady: true,
-              loading: false,
-            });
-            return;
+            if (!familyId) {
+              stopFamilyListeners();
+              set({
+                ...emptyFamilyState(),
+                bootstrapStatus: createBootstrapStatus('idle'),
+                familyLoading: false,
+                bootstrapError: null,
+                activeFamilyId: null,
+                appReady: true,
+                loading: false,
+              });
+              return;
+            }
+
+            get().loadFamilyData(validatedProfile.id, familyId);
+          };
+
+          if (i18n.language === language) {
+            applyDocumentDirection(language);
+            finishProfileHydration();
+          } else {
+            void applyLanguage(language).then(finishProfileHydration);
           }
-
-          get().loadFamilyData(validatedProfile.id, familyId);
         };
 
         profileUnsubscribe = onSnapshot(

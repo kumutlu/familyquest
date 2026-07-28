@@ -37,24 +37,22 @@ export function detectBrowserLanguage(): SupportedLanguage {
   return DEFAULT_LANGUAGE;
 }
 
-/**
- * Future-ready hook for the authenticated user's saved language preference.
- * Not yet wired to auth storage; returns `null` until preferences are editable.
- * When implemented, read the persisted preference (e.g. a user profile field)
- * and return it here — the rest of the resolution chain already consumes it.
- */
-export function getUserLanguagePreference(): SupportedLanguage | null {
-  return null;
+export function isSupportedLanguage(value: unknown): value is SupportedLanguage {
+  return typeof value === 'string'
+    && (SUPPORTED_LANGUAGES as readonly string[]).includes(value);
 }
 
 /**
- * Resolution priority:
- *   1. authenticated user's saved preference (future-ready)
- *   2. browser language
- *   3. English fallback
+ * Resolve an authoritative profile value. Missing legacy fields use the
+ * browser preference, but a present invalid value fails closed to English.
  */
+export function resolveProfileLanguage(value: unknown): SupportedLanguage {
+  if (value === undefined || value === null) return detectBrowserLanguage();
+  return isSupportedLanguage(value) ? value : DEFAULT_LANGUAGE;
+}
+
 export function resolveInitialLanguage(): SupportedLanguage {
-  return getUserLanguagePreference() ?? detectBrowserLanguage() ?? DEFAULT_LANGUAGE;
+  return detectBrowserLanguage();
 }
 
 /**
@@ -68,15 +66,19 @@ export function applyDocumentDirection(language: string): void {
   document.documentElement.setAttribute('lang', base);
 }
 
+export async function applyLanguage(language: SupportedLanguage): Promise<void> {
+  if (i18n.language !== language) {
+    await i18n.changeLanguage(language);
+  }
+  applyDocumentDirection(language);
+}
+
 /**
  * Initialize language + document direction once, before the app renders.
  * Safe to call a single time from the application entry point.
  */
 export async function bootstrapI18n(): Promise<typeof i18n> {
   const language = resolveInitialLanguage();
-  if (i18n.language !== language) {
-    await i18n.changeLanguage(language);
-  }
-  applyDocumentDirection(language);
+  await applyLanguage(language);
   return i18n;
 }

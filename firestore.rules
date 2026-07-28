@@ -1468,6 +1468,10 @@ service cloud.firestore {
       return value is int && value >= 50 && value <= 100;
     }
 
+    function isValidLanguage(value) {
+      return value is string && value in ['en', 'tr'];
+    }
+
     function isValidGamificationConfig(data) {
       return data.keys().hasOnly(['schemaVersion', 'dailyGoalPercentage'])
         && data.schemaVersion == 1
@@ -1480,9 +1484,12 @@ service cloud.firestore {
 
       allow update: if isAuthenticated() && (
         isValidReversalPointsUpdate(uid) ||
+        (request.auth.uid == uid
+          && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['language'])
+          && isValidLanguage(request.resource.data.language)) ||
         (request.auth.uid == uid && !request.resource.data.diff(resource.data).affectedKeys().hasAny([
           'role', 'familyId', 'rewardPoints', 'lifetimeXP', 'walletBalance', 'balance', 'lastFundTxId',
-          'displayName', 'avatarUrl', 'avatarId',
+          'displayName', 'avatarUrl', 'avatarId', 'language',
           // Phase 1 child-login linking fields: server-only (Admin SDK). A client
           // must never be able to set its own login link, username, or flags.
           'hasLogin', 'username', 'loginEnabled', 'requiresPasswordChange', 'authUid'

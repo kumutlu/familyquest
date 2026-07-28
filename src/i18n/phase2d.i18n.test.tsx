@@ -33,7 +33,13 @@ const store = vi.hoisted(() => ({
 }));
 
 vi.mock('../store/useStore', () => ({
-  useStore: Object.assign((selector?: (state: typeof store) => unknown) => selector ? selector(store) : store, { getState: () => store }),
+  useStore: Object.assign(
+    (selector?: (state: typeof store) => unknown) => selector ? selector(store) : store,
+    {
+      getState: () => store,
+      setState: (update: Partial<typeof store>) => Object.assign(store, update),
+    },
+  ),
 }));
 
 vi.mock('../lib/roles', () => ({
@@ -49,6 +55,7 @@ const api = vi.hoisted(() => ({
   sendPasswordReset: vi.fn(),
   getAuthProviderInfo: vi.fn(() => ({ isEmailPassword: true, primaryProviderLabel: 'Email' })),
   mapAuthErrorMessage: vi.fn((err: any) => err?.message || 'Error'),
+  updateLanguagePreference: vi.fn(async () => {}),
 }));
 vi.mock('../lib/api', () => api);
 
@@ -472,7 +479,7 @@ describe('Phase 2D i18n — Language selector switching', () => {
       fireEvent.click(turkishRadio);
     });
     expect(turkishRadio).toBeChecked();
-    expect(screen.getByText('Language updated.')).toBeInTheDocument();
+    expect(await screen.findByText('Dil güncellendi.')).toBeInTheDocument();
   });
 });
 

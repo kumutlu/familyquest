@@ -1,6 +1,11 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import i18n, { DEFAULT_LANGUAGE, NAMESPACES, SUPPORTED_LANGUAGES } from './config';
-import { detectBrowserLanguage, resolveInitialLanguage } from './index';
+import {
+  detectBrowserLanguage,
+  isSupportedLanguage,
+  resolveInitialLanguage,
+  resolveProfileLanguage,
+} from './index';
 import {
   formatCurrency,
   formatDate,
@@ -147,6 +152,27 @@ describe('i18n browser language detection', () => {
     expect(SUPPORTED_LANGUAGES).toContain(resolved);
     expect(resolved).toBe(detectBrowserLanguage());
     expect(resolved).toBe(DEFAULT_LANGUAGE);
+  });
+
+  it('uses a valid saved preference instead of the browser language', () => {
+    setBrowserLanguages(['en-GB']);
+    expect(resolveProfileLanguage('tr')).toBe('tr');
+  });
+
+  it('uses the supported browser language when the profile preference is missing', () => {
+    setBrowserLanguages(['tr-TR']);
+    expect(resolveProfileLanguage(undefined)).toBe('tr');
+  });
+
+  it('uses English when the profile preference is missing and the browser is unsupported', () => {
+    setBrowserLanguages(['de-DE']);
+    expect(resolveProfileLanguage(null)).toBe('en');
+  });
+
+  it('falls directly to English for an invalid saved preference', () => {
+    setBrowserLanguages(['tr-TR']);
+    expect(resolveProfileLanguage('de')).toBe('en');
+    expect(isSupportedLanguage('de')).toBe(false);
   });
 });
 

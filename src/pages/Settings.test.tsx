@@ -6,6 +6,7 @@ import { Settings } from './Settings';
 import { useStore } from '../store/useStore';
 import { FAMILYQUEST_BUILD } from '../buildInfo';
 import type { PushState } from '../lib/pushNotifications';
+import i18n from '../i18n';
 
 const clipboardWriteText = vi.fn(async () => {});
 
@@ -28,6 +29,7 @@ const apiMocks = vi.hoisted(() => ({
   })),
   sendPasswordReset: vi.fn(async () => {}),
   signOut: vi.fn(async () => {}),
+  updateLanguagePreference: vi.fn(async () => {}),
 }));
 vi.mock('../lib/api', async importOriginal => {
   const actual = await importOriginal<typeof import('../lib/api')>();
@@ -36,6 +38,7 @@ vi.mock('../lib/api', async importOriginal => {
     getAuthProviderInfo: apiMocks.getAuthProviderInfo,
     sendPasswordReset: apiMocks.sendPasswordReset,
     signOut: apiMocks.signOut,
+    updateLanguagePreference: apiMocks.updateLanguagePreference,
   };
 });
 
@@ -88,6 +91,7 @@ function seedStore(role: string) {
         avatarUrl: '',
         role,
         familyId: 'fam1',
+        language: 'en',
       },
       authUser: { email: EMAIL, uid: 'u1' },
       familyData: { id: 'fam1', name: 'The Family', inviteCode: 'ABC123' },
@@ -124,16 +128,56 @@ beforeEach(() => {
   });
   apiMocks.sendPasswordReset.mockResolvedValue(undefined);
   apiMocks.signOut.mockResolvedValue(undefined);
+  apiMocks.updateLanguagePreference.mockResolvedValue(undefined);
   updateDocMock.mockResolvedValue(undefined);
   pushMocks.loadPushState.mockImplementation(() => new Promise<PushState>(() => {}));
   notifState.connectionState = 'connected';
 });
 
-afterEach(() => {
+describe('Settings — authoritative language preference', () => {
+  it('updates the store and mounted i18n immediately, then persists users/{uid}.language', async () => {
+    let resolveWrite!: () => void;
+    apiMocks.updateLanguagePreference.mockImplementation(() => new Promise<void>(resolve => {
+      resolveWrite = resolve;
+    }));
+    const user = userEvent.setup();
+    renderSettings('owner');
+
+    await user.click(screen.getByDisplayValue('tr'));
+
+    expect(useStore.getState().currentUser.language).toBe('tr');
+    await waitFor(() => expect(i18n.language).toBe('tr'));
+    expect(await screen.findByRole('heading', { name: 'Ayarlar' })).toBeInTheDocument();
+    expect(apiMocks.updateLanguagePreference).toHaveBeenCalledWith('tr');
+
+    resolveWrite();
+    expect(await screen.findByText('Dil güncellendi.')).toBeInTheDocument();
+  });
+
+  it('rolls back store and i18n when persistence fails and shows friendly feedback', async () => {
+    const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    apiMocks.updateLanguagePreference.mockRejectedValueOnce(new Error('offline'));
+    const user = userEvent.setup();
+    renderSettings('owner');
+
+    await user.click(screen.getByDisplayValue('tr'));
+
+    await waitFor(() => {
+      expect(useStore.getState().currentUser.language).toBe('en');
+      expect(i18n.language).toBe('en');
+    });
+    expect(screen.getByRole('alert')).toHaveTextContent('Could not save your language. Please try again.');
+    expect(errorSpy).toHaveBeenCalled();
+    errorSpy.mockRestore();
+  });
+});
+
+afterEach(async () => {
   vi.clearAllMocks();
   act(() => {
     useStore.setState({ currentUser: null, authUser: undefined, familyData: null, familyMembers: [] });
   });
+  await i18n.changeLanguage('en');
 });
 
 describe('Settings — role visibility', () => {

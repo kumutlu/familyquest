@@ -10,13 +10,14 @@ const firestore = vi.hoisted(() => {
   })
   return {
     collection, doc, runTransaction: vi.fn(), serverTimestamp: vi.fn(() => ({ server: true })),
-    query: vi.fn(), where: vi.fn(), orderBy: vi.fn(), getDocs: vi.fn(), reset: () => { id = 0 },
+    query: vi.fn(), where: vi.fn(), orderBy: vi.fn(), getDocs: vi.fn(), updateDoc: vi.fn(),
+    reset: () => { id = 0 },
   }
 })
 const authState = vi.hoisted(() => ({ currentUser: { uid: 'child-1' } as any }))
 
 vi.mock('firebase/firestore', () => ({
-  ...firestore, setDoc: vi.fn(), addDoc: vi.fn(), getDoc: vi.fn(), deleteDoc: vi.fn(), updateDoc: vi.fn(), writeBatch: vi.fn(),
+  ...firestore, setDoc: vi.fn(), addDoc: vi.fn(), getDoc: vi.fn(), deleteDoc: vi.fn(), writeBatch: vi.fn(),
 }))
 vi.mock('firebase/auth', () => ({
   createUserWithEmailAndPassword: vi.fn(), signInWithEmailAndPassword: vi.fn(), signInWithPopup: vi.fn(), signOut: vi.fn(),
@@ -35,6 +36,7 @@ import {
   rejectProfileUpdateRequest,
   validateProfileUpdateInput,
   unlockAvatar,
+  updateLanguagePreference,
 } from './api'
 import {
   loadNotificationRecipientsInTransaction,
@@ -95,6 +97,21 @@ describe('profile update request API', () => {
     vi.clearAllMocks()
     firestore.reset()
     authState.currentUser = { uid: 'child-1' }
+  })
+
+  describe('language preference', () => {
+    it('writes the supported preference only to the signed-in user profile', async () => {
+      await updateLanguagePreference('tr')
+      expect(firestore.updateDoc).toHaveBeenCalledWith(
+        { id: 'child-1', path: 'users/child-1' },
+        { language: 'tr' },
+      )
+    })
+
+    it('rejects unsupported values before writing', async () => {
+      await expect(updateLanguagePreference('de' as any)).rejects.toThrow(/unsupported language/i)
+      expect(firestore.updateDoc).not.toHaveBeenCalled()
+    })
   })
 
   describe('validation', () => {

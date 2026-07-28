@@ -18,7 +18,9 @@ import {
   Globe,
 } from 'lucide-react';
 import i18n, {
-  applyDocumentDirection,
+  applyLanguage,
+  isSupportedLanguage,
+  resolveProfileLanguage,
   SUPPORTED_LANGUAGES,
   type SupportedLanguage,
 } from '../i18n';
@@ -27,6 +29,7 @@ import {
   sendPasswordReset,
   getAuthProviderInfo,
   mapAuthErrorMessage,
+  updateLanguagePreference,
 } from '../lib/api';
 import { useStore } from '../store/useStore';
 import {
@@ -333,32 +336,27 @@ export function Settings() {
   const providerInfo = getAuthProviderInfo();
   const canResetPassword = providerInfo.isEmailPassword;
 
-  // Language preference: persisted locally (no authenticated user preference yet).
-  const [language, setLanguage] = useState<SupportedLanguage>(() => {
-    const stored = (() => {
-      try {
-        return localStorage.getItem('familyquest.language');
-      } catch {
-        return null;
-      }
-    })();
-    const base = (stored ?? i18n.language ?? 'en').split('-')[0].toLowerCase();
-    return (SUPPORTED_LANGUAGES as readonly string[]).includes(base)
-      ? (base as SupportedLanguage)
-      : 'en';
-  });
+  const language = isSupportedLanguage(currentUser?.language)
+    ? currentUser.language
+    : resolveProfileLanguage(currentUser?.language);
 
-  const handleLanguageChange = (lang: SupportedLanguage) => {
-    const message = t('languageSaved');
-    setLanguage(lang);
-    i18n.changeLanguage(lang);
-    applyDocumentDirection(lang);
+  const handleLanguageChange = async (lang: SupportedLanguage) => {
+    if (!isSupportedLanguage(lang) || !currentUser || lang === language) return;
+    const previousLanguage = language;
+    const previousUser = currentUser;
+    useStore.setState({ currentUser: { ...currentUser, language: lang } });
+    await applyLanguage(lang);
     try {
-      localStorage.setItem('familyquest.language', lang);
-    } catch {
-      /* ignore persistence errors */
+      await updateLanguagePreference(lang);
+      setStatus({ type: 'success', message: i18n.t('settings:languageSaved') });
+    } catch (error) {
+      console.error('Failed to persist language preference', error);
+      if (useStore.getState().currentUser?.language === lang) {
+        useStore.setState({ currentUser: { ...previousUser, language: previousLanguage } });
+        await applyLanguage(previousLanguage);
+      }
+      setStatus({ type: 'error', message: i18n.t('settings:languageSaveFailed') });
     }
-    setStatus({ type: 'success', message });
   };
 
   const notificationCategories = [

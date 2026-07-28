@@ -94,6 +94,7 @@ vi.mock('../lib/useNotifications', () => ({
 // Import AFTER mocks are registered.
 import { useStore } from './useStore';
 import { AppLayout } from '../components/layout/AppLayout';
+import i18n from '../i18n';
 
 const resetStore = () => {
   useStore.setState({
@@ -121,10 +122,16 @@ const resetStore = () => {
   } as any);
 };
 
-const makeProfileSnapshot = (familyId: string | null) => ({
+const makeProfileSnapshot = (familyId: string | null, language?: unknown) => ({
   exists: () => true,
   id: 'user-1',
-  data: () => ({ uid: 'user-1', role: 'parent', displayName: 'Tester', familyId }),
+  data: () => ({
+    uid: 'user-1',
+    role: 'parent',
+    displayName: 'Tester',
+    familyId,
+    ...(language === undefined ? {} : { language }),
+  }),
 });
 
 const makeAuthUser = () => ({
@@ -166,14 +173,49 @@ beforeEach(() => {
   });
 });
 
-afterEach(() => {
+afterEach(async () => {
   act(() => {
     useStore.getState().cleanup();
   });
+  await i18n.changeLanguage('en');
   vi.clearAllMocks();
 });
 
 describe('auth bootstrap regression', () => {
+  it('hydrates a saved Turkish preference before authenticated readiness', async () => {
+    firestoreState.profileSnapshot = makeProfileSnapshot('fam-1', 'tr');
+    fireSignedIn();
+
+    await waitFor(() => expect(useStore.getState().appReady).toBe(true));
+    expect(useStore.getState().currentUser.language).toBe('tr');
+    expect(i18n.language).toBe('tr');
+    expect(document.documentElement.lang).toBe('tr');
+  });
+
+  it('falls directly to English for an invalid saved preference', async () => {
+    await i18n.changeLanguage('tr');
+    firestoreState.profileSnapshot = makeProfileSnapshot('fam-1', 'de');
+    fireSignedIn();
+
+    await waitFor(() => expect(useStore.getState().appReady).toBe(true));
+    expect(useStore.getState().currentUser.language).toBe('en');
+    expect(i18n.language).toBe('en');
+  });
+
+  it('restores the profile preference again after sign-out and sign-in', async () => {
+    firestoreState.profileSnapshot = makeProfileSnapshot('fam-1', 'tr');
+    fireSignedIn();
+    await waitFor(() => expect(useStore.getState().appReady).toBe(true));
+
+    await act(async () => authState.listener?.(null));
+    await waitFor(() => expect(useStore.getState().authStatus).toBe('unauthenticated'));
+    await i18n.changeLanguage('en');
+    await act(async () => authState.listener?.(makeAuthUser()));
+
+    await waitFor(() => expect(useStore.getState().appReady).toBe(true));
+    expect(i18n.language).toBe('tr');
+  });
+
   it('1. protected route shows loading while auth is initializing and does NOT redirect to /login', () => {
     // authStatus is 'initializing' and no auth event fired yet.
     renderAppLayoutAt('/');

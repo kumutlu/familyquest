@@ -79,6 +79,7 @@
   "english": "İngilizce",
   "turkish": "Türkçe",
   "languageSaved": "Dil güncellendi.",
+  "languageSaveFailed": "Diliniz kaydedilemedi. Lütfen tekrar deneyin.",
   "profileMenuAria": "Profil menüsü",
   "menuSettings": "Ayarlar",
   "menuFamilySettings": "Aile Ayarları",

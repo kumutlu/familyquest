@@ -79,6 +79,7 @@
   "english": "English",
   "turkish": "Turkish",
   "languageSaved": "Language updated.",
+  "languageSaveFailed": "Could not save your language. Please try again.",
   "profileMenuAria": "Profile menu",
   "menuSettings": "Settings",
   "menuFamilySettings": "Family Settings",

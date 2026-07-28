@@ -46,6 +46,7 @@ import {
   periodKeyFor,
 } from './taskRecurrence';
 import type { SupportedCurrencyCode } from '../i18n/format';
+import { isSupportedLanguage, type SupportedLanguage } from '../i18n';
 import { isPetBoxEnabled } from './familyFeatures';
 import {
   computeNetChild,
@@ -217,6 +218,13 @@ export function mapAuthErrorMessage(error: unknown): string {
 // ---------------------------
 // 1. FAMILIES & USERS
 // ---------------------------
+
+/** Persist the signed-in user's only authoritative language preference. */
+export const updateLanguagePreference = async (language: SupportedLanguage): Promise<void> => {
+  const uid = requireActorId();
+  if (!isSupportedLanguage(language)) throw new Error('Unsupported language');
+  await updateDoc(doc(db, 'users', uid), { language });
+};
 
 export const createFamilyAndParent = async (uid: string, _name: string, familyName: string) => {
   const familyRef = doc(collection(db, 'families'));
