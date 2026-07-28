@@ -1,7 +1,7 @@
 import { Home, Users, CheckSquare, Gift } from 'lucide-react';
 
 export interface NavItem {
-  name: string;
+  labelKey: 'nav.home' | 'nav.tasks' | 'nav.rewards' | 'nav.family';
   path: string;
   icon: React.ComponentType<{ size?: number; strokeWidth?: number }> | React.FC;
 }
@@ -16,14 +16,14 @@ export interface NavItem {
 // Both the desktop header and the mobile bottom navigation consume this exact
 // same array so the two can never diverge.
 const baseNavItems: NavItem[] = [
-  { name: 'Home', path: '/', icon: Home },
-  { name: 'Tasks', path: '/tasks', icon: CheckSquare },
-  { name: 'Rewards', path: '/rewards', icon: Gift },
+  { labelKey: 'nav.home', path: '/', icon: Home },
+  { labelKey: 'nav.tasks', path: '/tasks', icon: CheckSquare },
+  { labelKey: 'nav.rewards', path: '/rewards', icon: Gift },
 ];
 
 // Settings is no longer a top-level tab; it lives in the profile dropdown.
 // Family is moved to the end of the navigation for a cleaner layout.
 // Parent and child share the same top-level navigation.
 export function getNavItems(): NavItem[] {
-  return [...baseNavItems, { name: 'Family', path: '/family', icon: Users }];
+  return [...baseNavItems, { labelKey: 'nav.family', path: '/family', icon: Users }];
 }

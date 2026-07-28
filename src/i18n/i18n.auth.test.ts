@@ -24,6 +24,7 @@ describe('i18n auth namespace — English rendering', () => {
     expect(i18n.t('auth:familyCode')).toBe('Family Code');
     expect(i18n.t('auth:username')).toBe('Username');
     expect(i18n.t('auth:signInWithGoogle')).toBe('Sign in with Google');
+    expect(i18n.t('auth:continueWithGoogle')).toBe('Continue with Google');
   });
 
   it('interpolates the app name into auth titles', async () => {
@@ -52,6 +53,7 @@ describe('i18n auth namespace — Turkish rendering', () => {
     expect(i18n.t('auth:familyCode')).toBe('Aile Kodu');
     expect(i18n.t('auth:username')).toBe('Kullanıcı adı');
     expect(i18n.t('auth:signInWithGoogle')).toBe('Google ile giriş yap');
+    expect(i18n.t('auth:continueWithGoogle')).toBe('Google ile devam et');
   });
 
   it('interpolates the app name into auth titles (Turkish)', async () => {

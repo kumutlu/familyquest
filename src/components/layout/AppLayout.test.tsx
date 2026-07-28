@@ -1,9 +1,10 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render } from '@testing-library/react';
+import { act, render, screen } from '@testing-library/react';
 import { AppLayout } from './AppLayout';
 import { useStore } from '../../store/useStore';
 import { MemoryRouter } from 'react-router-dom';
 import '@testing-library/jest-dom/vitest';
+import i18n from '../../i18n/config';
 
 const mockStoreState = {
   authStatus: 'authenticated',
@@ -11,6 +12,9 @@ const mockStoreState = {
   currentUser: { id: 'u1', familyId: 'f1', role: 'parent' },
   appReady: true,
   familyMembers: [],
+  familyData: { id: 'f1', setup: { welcomePromptCompleted: true } },
+  familyLoading: false,
+  bootstrapStatus: { family: 'ready', members: 'ready' },
   bootstrapError: null,
   retryBootstrap: vi.fn(),
 };
@@ -21,9 +25,9 @@ vi.mock('../../store/useStore', () => ({
 
 vi.mock('../../config/navigation', () => ({
   getNavItems: () => [
-    { name: 'Home', path: '/', icon: () => null },
-    { name: 'Tasks', path: '/tasks', icon: () => null },
-    { name: 'Rewards', path: '/rewards', icon: () => null },
+    { labelKey: 'nav.home', path: '/', icon: () => null },
+    { labelKey: 'nav.tasks', path: '/tasks', icon: () => null },
+    { labelKey: 'nav.rewards', path: '/rewards', icon: () => null },
   ],
 }));
 
@@ -83,5 +87,20 @@ describe('AppLayout — mobile bottom navigation layout', () => {
     const nav = container.querySelector('nav.md\\:hidden');
     expect(nav?.className).toMatch(/fixed/);
     expect(nav?.className).toMatch(/bottom-0/);
+  });
+
+  it('updates every mounted navigation label without remounting AppLayout', async () => {
+    await act(async () => { await i18n.changeLanguage('en'); });
+    renderAppLayout();
+    expect(screen.getAllByText('Home')).toHaveLength(2);
+    expect(screen.getAllByText('Tasks')).toHaveLength(2);
+    expect(screen.getAllByText('Rewards')).toHaveLength(2);
+
+    await act(async () => { await i18n.changeLanguage('tr'); });
+
+    expect(screen.getAllByText('Ana Sayfa')).toHaveLength(2);
+    expect(screen.getAllByText('Görevler')).toHaveLength(2);
+    expect(screen.getAllByText('Ödüller')).toHaveLength(2);
+    await act(async () => { await i18n.changeLanguage('en'); });
   });
 });

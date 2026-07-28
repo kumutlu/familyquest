@@ -25,6 +25,12 @@
   "yes": "Evet",
   "no": "Hayır",
   "edit": "Düzenle",
+  "nav": {
+    "home": "Ana Sayfa",
+    "tasks": "Görevler",
+    "rewards": "Ödüller",
+    "family": "Aile"
+  },
   "roles": {
     "owner": "Sahip",
     "parent": "Ebeveyn",

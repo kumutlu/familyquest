@@ -25,6 +25,12 @@
   "yes": "Yes",
   "no": "No",
   "edit": "Edit",
+  "nav": {
+    "home": "Home",
+    "tasks": "Tasks",
+    "rewards": "Rewards",
+    "family": "Family"
+  },
   "roles": {
     "owner": "Owner",
     "parent": "Parent",

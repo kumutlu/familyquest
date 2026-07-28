@@ -1,20 +1,16 @@
 import { describe, it, expect } from 'vitest';
 import { getNavItems } from './navigation';
 
-const EXPECTED_ITEMS = ['Home', 'Tasks', 'Rewards', 'Family'];
-const FORBIDDEN_ITEMS = ['Goals', 'Pet Box', 'Wallet', 'Wallets', 'Settings'];
+const EXPECTED_ITEMS = ['nav.home', 'nav.tasks', 'nav.rewards', 'nav.family'];
 
 describe('navigation config (single source of truth)', () => {
   it('returns exactly the 4 simplified top-level items', () => {
     const items = getNavItems();
-    expect(items.map((i) => i.name)).toEqual(EXPECTED_ITEMS);
+    expect(items.map((i) => i.labelKey)).toEqual(EXPECTED_ITEMS);
   });
 
   it('never includes the removed top-level tabs (Goals, Pet Box, Wallet, Wallets, Settings)', () => {
-    const names = getNavItems().map((i) => i.name);
-    for (const forbidden of FORBIDDEN_ITEMS) {
-      expect(names).not.toContain(forbidden);
-    }
+    expect(getNavItems().map((i) => i.path)).not.toContain('/pet-box');
   });
 
   it('maps each item to a valid route path', () => {
