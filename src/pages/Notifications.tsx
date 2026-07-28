@@ -27,6 +27,7 @@ import {
   type NotificationType,
 } from '../lib/notifications';
 import { getNotificationRoute } from '../lib/notificationRoutes';
+import { isPetBoxEnabled } from '../lib/familyFeatures';
 import { cn } from '../lib/utils';
 
 const ICONS: Record<NotificationType, LucideIcon> = {
@@ -96,6 +97,7 @@ export function Notifications() {
   const [tab, setTab] = useState<TabKey>('all');
   const [readError, setReadError] = useState<string | null>(null);
   const navigate = useNavigate();
+  const familyData = useStore(state => state.familyData);
 
   const filtered = useMemo(() => {
     if (tab === 'unread') {
@@ -111,7 +113,7 @@ export function Notifications() {
 
   const handleRowClick = useCallback(
     async (n: NotificationData) => {
-      const target = getNotificationRoute(n.type, n.actionUrl);
+      const target = getNotificationRoute(n.type, n.actionUrl, isPetBoxEnabled(familyData));
       try {
         await markRead(n.id);
       } catch (e) {
@@ -123,7 +125,7 @@ export function Notifications() {
         navigate('/');
       }
     },
-    [markRead, navigate],
+    [markRead, navigate, familyData, t],
   );
 
   const handleMarkAll = useCallback(async () => {

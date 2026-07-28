@@ -5,6 +5,7 @@ import { Progress } from '../ui/Progress';
 import { CurrencyDisplay } from '../ui/CurrencyDisplay';
 import { useStore } from '../../store/useStore';
 import { PawPrint } from 'lucide-react';
+import { isPetBoxEnabled } from '../../lib/familyFeatures';
 
 /**
  * Compact Pet Box summary for the Home dashboard.
@@ -15,7 +16,8 @@ import { PawPrint } from 'lucide-react';
  */
 export function PetBoxSummaryCard() {
   const navigate = useNavigate();
-  const { funds } = useStore();
+  const { funds, familyData } = useStore();
+  if (!isPetBoxEnabled(familyData)) return null;
 
   const { fundCount, totalBalance, totalEmergencyGoal, pct } = useMemo(() => {
     const list = funds || [];

@@ -149,7 +149,8 @@ describe('FamilySettings — basic rendering', () => {
     // Navigate to Regional section first
     await user.click(screen.getByRole('button', { name: 'Regional' }));
     expect(screen.getByText('British Pound (£)')).toBeInTheDocument();
-    expect(screen.getByText('London (Europe/London)')).toBeInTheDocument();
+    expect(screen.getByRole('option', { name: /London/ })).toHaveValue('Europe/London');
+    expect(screen.getByRole('option', { name: /Istanbul/ })).toHaveValue('Europe/Istanbul');
     expect(screen.getByText('Monday')).toBeInTheDocument();
   });
 
@@ -161,6 +162,20 @@ describe('FamilySettings — basic rendering', () => {
     // Use getAllByText since "Danger Zone" appears multiple times
     expect(screen.getAllByText('Danger Zone').length).toBeGreaterThan(0);
     expect(screen.getByText('Coming soon')).toBeInTheDocument();
+  });
+
+  it('lets only an owner persist the family Pet Box feature setting', async () => {
+    const user = userEvent.setup();
+    renderFamilySettings('owner');
+    await user.click(screen.getByRole('button', { name: 'Gamification' }));
+    const toggle = screen.getByRole('checkbox', { name: /Enable Pet Box/i });
+    expect(toggle).toBeChecked();
+    await user.click(toggle);
+    await user.click(screen.getByRole('button', { name: 'Save' }));
+    await waitFor(() => expect(mockUpdateFamilySettings).toHaveBeenCalledWith(
+      'fam1',
+      expect.objectContaining({ petBoxEnabled: false }),
+    ));
   });
 });
 

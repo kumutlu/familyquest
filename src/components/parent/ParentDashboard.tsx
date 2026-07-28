@@ -18,12 +18,13 @@ import { RecentActivity } from './dashboard/RecentActivity';
 import { WalletSummaryCard } from '../dashboard/WalletSummaryCard';
 import { GoalSummaryCard } from '../dashboard/GoalSummaryCard';
 import { PetBoxSummaryCard } from '../dashboard/PetBoxSummaryCard';
+import { isPetBoxEnabled } from '../../lib/familyFeatures';
 
 const joinRequestProcessingKey = (request: { id: string; uid: string }) => `join:${request.id}:${request.uid}`;
 
 export function ParentDashboard() {
   const { t } = useTranslation('dashboard');
-  const { currentUser, familyMembers, joinRequests, loading, bootstrapError } = useStore();
+  const { currentUser, familyMembers, familyData, joinRequests, loading, bootstrapError } = useStore();
 
   const [joinProcessing, setJoinProcessing] = useState<Record<string, 'approve' | 'reject'>>({});
   const [joinError, setJoinError] = useState('');
@@ -78,6 +79,7 @@ export function ParentDashboard() {
       <DashboardHeader />
 
       <QuickActions
+        petBoxEnabled={isPetBoxEnabled(familyData)}
         onNewTask={() => setIsTaskModalOpen(true)}
         onNewReward={() => setIsRewardModalOpen(true)}
         onLogBehaviour={() => setIsEventModalOpen(true)}
@@ -91,7 +93,7 @@ export function ParentDashboard() {
       <section className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
         <WalletSummaryCard />
         <GoalSummaryCard />
-        <PetBoxSummaryCard />
+        {isPetBoxEnabled(familyData) && <PetBoxSummaryCard />}
       </section>
 
       {/* Join Requests (owner only) */}

@@ -5,7 +5,7 @@ import {
   initializeTestEnvironment,
   type RulesTestEnvironment,
 } from '@firebase/rules-unit-testing';
-import { doc, setDoc, updateDoc } from 'firebase/firestore';
+import { doc, serverTimestamp, setDoc, updateDoc } from 'firebase/firestore';
 import { readFileSync } from 'node:fs';
 
 const FAMILY_ID = 'settings-family';
@@ -72,5 +72,72 @@ describe('family settings ownership', () => {
     await expect(assertFails(updateDoc(familyRef(role), {
       inviteCode: 'FORGED',
     }))).resolves.toBeDefined();
+  });
+
+  it('allows only the owner to persist an audited setup completion and Pet Box toggle', async () => {
+    await expect(assertSucceeds(updateDoc(familyRef('owner'), {
+      setup: {
+        welcomePromptCompleted: true,
+        completedAt: serverTimestamp(),
+        completedBy: 'owner',
+      },
+      petBoxEnabled: false,
+    }))).resolves.toBeUndefined();
+
+    for (const uid of ['parent', 'child'] as const) {
+      await expect(assertFails(updateDoc(familyRef(uid), {
+        setup: {
+          welcomePromptCompleted: true,
+          completedAt: serverTimestamp(),
+          completedBy: uid,
+        },
+        petBoxEnabled: false,
+      }))).resolves.toBeDefined();
+    }
+  });
+
+  it('denies forged or malformed setup audit data and non-boolean Pet Box settings', async () => {
+    await expect(assertFails(updateDoc(familyRef('owner'), {
+      setup: {
+        welcomePromptCompleted: true,
+        completedAt: serverTimestamp(),
+        completedBy: 'parent',
+      },
+    }))).resolves.toBeDefined();
+    await expect(assertFails(updateDoc(familyRef('owner'), {
+      setup: {
+        welcomePromptCompleted: true,
+        completedAt: serverTimestamp(),
+        completedBy: 'owner',
+        role: 'owner',
+      },
+    }))).resolves.toBeDefined();
+    await expect(assertFails(updateDoc(familyRef('owner'), {
+      petBoxEnabled: 'false',
+    }))).resolves.toBeDefined();
+  });
+
+  it('preserves legacy Pet Box writes when missing and denies them when explicitly disabled', async () => {
+    const childDb = testEnv.authenticatedContext('child').firestore();
+    const request = {
+      familyId: FAMILY_ID,
+      fundId: 'fund-1',
+      fundName: 'Pet',
+      childId: 'child',
+      childName: 'Child',
+      amountPence: 100,
+      status: 'pending',
+      createdAt: serverTimestamp(),
+    };
+    await expect(assertSucceeds(setDoc(
+      doc(childDb, `families/${FAMILY_ID}/petbox_requests/legacy-enabled`),
+      request,
+    ))).resolves.toBeUndefined();
+
+    await assertSucceeds(updateDoc(familyRef('owner'), { petBoxEnabled: false }));
+    await expect(assertFails(setDoc(
+      doc(childDb, `families/${FAMILY_ID}/petbox_requests/disabled`),
+      request,
+    ))).resolves.toBeDefined();
   });
 });

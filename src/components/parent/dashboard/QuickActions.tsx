@@ -7,9 +7,10 @@ export interface QuickActionsProps {
   onNewTask: () => void;
   onNewReward: () => void;
   onLogBehaviour: () => void;
+  petBoxEnabled?: boolean;
 }
 
-export function QuickActions({ onNewTask, onNewReward, onLogBehaviour }: QuickActionsProps) {
+export function QuickActions({ onNewTask, onNewReward, onLogBehaviour, petBoxEnabled = true }: QuickActionsProps) {
   const { t } = useTranslation('dashboard');
   const navigate = useNavigate();
 
@@ -46,14 +47,14 @@ export function QuickActions({ onNewTask, onNewReward, onLogBehaviour }: QuickAc
       accent: 'bg-success-50 text-success-500',
       onClick: () => navigate('/wallets'),
     },
-    {
+    ...(petBoxEnabled ? [{
       key: 'petbox',
       label: t('quickActions.petBox'),
       helper: t('quickActions.petBoxHelper'),
       icon: <PawPrint size={20} />,
       accent: 'bg-primary-50 text-primary-600',
       onClick: () => navigate('/pet-box'),
-    },
+    }] : []),
     {
       key: 'invite',
       label: t('quickActions.inviteMember'),

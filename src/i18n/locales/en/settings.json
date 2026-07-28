@@ -119,6 +119,8 @@
     "dailyGoalDesc": "Percentage of eligible tasks to complete for a Perfect Day.",
     "dailyGoalPercentage": "Daily Goal Percentage",
     "dailyGoalPercentageDesc": "Set the percentage of eligible daily tasks required to reach the Daily Goal (50-100%).",
+    "enablePetBox": "Enable Pet Box",
+    "enablePetBoxDesc": "Allow family members to use Pet Box contributions and expenses.",
     "currency": "Currency",
     "currencies": {
       "gbp": "British Pound (£)",

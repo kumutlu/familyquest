@@ -30,6 +30,7 @@ import {
   type NotificationType,
 } from '../../lib/notifications';
 import { getNotificationRoute } from '../../lib/notificationRoutes';
+import { isPetBoxEnabled } from '../../lib/familyFeatures';
 import { cn } from '../../lib/utils';
 
 const ICONS: Record<NotificationType, LucideIcon> = {
@@ -110,6 +111,7 @@ export function NotificationCenter() {
   const dragState = useRef<{ startY: number; startT: number } | null>(null);
   const { t } = useTranslation(['notifications', 'common']);
   const navigate = useNavigate();
+  const familyData = useStore(state => state.familyData);
 
   // Lock background scroll while the sheet is open (mobile + desktop).
   useBodyScrollLock(open);
@@ -131,7 +133,7 @@ export function NotificationCenter() {
 
   const handleRowClick = useCallback(
     async (n: NotificationData) => {
-      const target = getNotificationRoute(n.type, n.actionUrl);
+      const target = getNotificationRoute(n.type, n.actionUrl, isPetBoxEnabled(familyData));
       try {
         await markRead(n.id);
       } catch (e) {
@@ -144,7 +146,7 @@ export function NotificationCenter() {
         navigate('/');
       }
     },
-    [markRead, navigate, close],
+    [markRead, navigate, close, familyData],
   );
 
   const handleMarkAll = useCallback(async () => {

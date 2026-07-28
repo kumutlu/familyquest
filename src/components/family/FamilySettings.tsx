@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { Card, CardContent } from '../ui/Card';
 import { Button } from '../ui/Button';
@@ -12,6 +13,8 @@ import { resolveFamilyCurrencyCode, type SupportedCurrencyCode } from '../../i18
 import { Toast, type ToastData } from '../ui/Toast';
 import { AddChildModal } from './AddChildModal';
 import { EditMemberModal } from './EditMemberModal';
+import { getTimezoneOptions } from '../../lib/timezones';
+import { isPetBoxEnabled } from '../../lib/familyFeatures';
 
 interface FamilySettingsProps {
   onSectionChange?: (section: string) => void;
@@ -23,15 +26,6 @@ const CURRENCY_OPTIONS = [
   { code: 'USD', labelKey: 'familySettings.currencies.usd' },
   { code: 'TRY', labelKey: 'familySettings.currencies.try' },
 ] as const satisfies readonly { code: SupportedCurrencyCode; labelKey: string }[];
-
-const TIMEZONE_OPTIONS = [
-  { value: 'Europe/London', labelKey: 'familySettings.timezones.london' },
-  { value: 'America/New_York', labelKey: 'familySettings.timezones.newYork' },
-  { value: 'America/Los_Angeles', labelKey: 'familySettings.timezones.losAngeles' },
-  { value: 'Asia/Tokyo', labelKey: 'familySettings.timezones.tokyo' },
-  { value: 'Asia/Dubai', labelKey: 'familySettings.timezones.dubai' },
-  { value: 'Australia/Sydney', labelKey: 'familySettings.timezones.sydney' },
-] as const;
 
 const WEEK_START_OPTIONS = [
   { value: 1, labelKey: 'familySettings.weekDays.monday' },
@@ -46,8 +40,10 @@ export function FamilySettings({ onSectionChange }: FamilySettingsProps) {
   const joinRequests = useStore(state => state.joinRequests);
   const loading = useStore(state => state.familyLoading);
   const resolvedCurrencyCode = resolveFamilyCurrencyCode(familyData);
+  const [searchParams] = useSearchParams();
 
-  const [activeSection, setActiveSection] = useState('family');
+  const [activeSection, setActiveSection] = useState(() =>
+    searchParams.get('familySection') === 'members' ? 'members' : 'family');
   const [familyName, setFamilyName] = useState(familyData?.name || '');
   const [isEditingName, setIsEditingName] = useState(false);
   const [isSavingName, setIsSavingName] = useState(false);
@@ -69,6 +65,7 @@ export function FamilySettings({ onSectionChange }: FamilySettingsProps) {
 
   // Gamification settings state
   const [dailyGoalPercentage, setDailyGoalPercentage] = useState(familyData?.gamificationConfig?.dailyGoalPercentage ?? 80);
+  const [petBoxEnabled, setPetBoxEnabled] = useState(isPetBoxEnabled(familyData));
   const [isSavingGamification, setIsSavingGamification] = useState(false);
   const [gamificationError, setGamificationError] = useState<string | null>(null);
 
@@ -109,7 +106,8 @@ export function FamilySettings({ onSectionChange }: FamilySettingsProps) {
   // Reset gamification settings when data changes
   useEffect(() => {
     setDailyGoalPercentage(familyData?.gamificationConfig?.dailyGoalPercentage ?? 80);
-  }, [familyData?.gamificationConfig?.dailyGoalPercentage]);
+    setPetBoxEnabled(isPetBoxEnabled(familyData));
+  }, [familyData?.gamificationConfig?.dailyGoalPercentage, familyData?.petBoxEnabled]);
 
   const handleSaveFamilyName = async () => {
     if (!familyData?.id) return;
@@ -205,6 +203,7 @@ export function FamilySettings({ onSectionChange }: FamilySettingsProps) {
           schemaVersion: 1,
           dailyGoalPercentage,
         },
+        petBoxEnabled,
       });
       showToast(t('familySettings.gamificationSettingsSaved'));
     } catch (error: any) {
@@ -672,8 +671,8 @@ export function FamilySettings({ onSectionChange }: FamilySettingsProps) {
                       disabled={isSavingRegional}
                       className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-primary-500 focus:border-transparent outline-none transition-all"
                     >
-                      {TIMEZONE_OPTIONS.map(opt => (
-                        <option key={opt.value} value={opt.value}>{t(opt.labelKey)}</option>
+                      {getTimezoneOptions(i18n.resolvedLanguage || i18n.language, regionalSettings.timezone).map(opt => (
+                        <option key={opt.value} value={opt.value}>{opt.label}</option>
                       ))}
                     </select>
                   ) : (
@@ -774,6 +773,23 @@ export function FamilySettings({ onSectionChange }: FamilySettingsProps) {
                      {dailyGoalPercentage}%
                    </div>
                  )}
+               </div>
+
+               <div className="py-3">
+                 <label htmlFor="family-settings-pet-box" className="flex items-center justify-between gap-4">
+                   <span>
+                     <span className="block text-sm font-medium text-gray-900">{t('familySettings.enablePetBox')}</span>
+                     <span className="block text-sm text-gray-500">{t('familySettings.enablePetBoxDesc')}</span>
+                   </span>
+                   <input
+                     id="family-settings-pet-box"
+                     type="checkbox"
+                     checked={petBoxEnabled}
+                     onChange={event => setPetBoxEnabled(event.target.checked)}
+                     disabled={!owner || isSavingGamification}
+                     className="h-5 w-5 rounded border-gray-300 text-primary-600"
+                   />
+                 </label>
                </div>
 
                {/* Save Gamification Settings */}

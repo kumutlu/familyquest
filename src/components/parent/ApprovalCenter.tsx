@@ -27,6 +27,7 @@ import {
   canRejectMoneyRequest,
   type MoneyRequestIdentity,
 } from '../../lib/moneyRequestContracts';
+import { isPetBoxEnabled } from '../../lib/familyFeatures';
 
 export function ApprovalCenter() {
   const { t } = useTranslation('approvals');
@@ -67,7 +68,7 @@ export function ApprovalCenter() {
     })));
 
     // 4. Pet Box Requests
-    items.push(...(petboxRequests || []).map(r => ({
+    if (isPetBoxEnabled(familyData)) items.push(...(petboxRequests || []).map(r => ({
       ...r,
       category: 'petbox',
       sortDate: r.createdAt?.toDate ? r.createdAt.toDate() : new Date(),
@@ -96,7 +97,7 @@ export function ApprovalCenter() {
 
     items.sort((a, b) => b.sortDate.getTime() - a.sortDate.getTime());
     return items;
-  }, [taskCompletions, transferRequests, moneyRequests, petboxRequests, profileUpdateRequests, goalRequests, savingsGoals]);
+  }, [taskCompletions, transferRequests, moneyRequests, petboxRequests, profileUpdateRequests, goalRequests, savingsGoals, familyData]);
 
   const itemKey = (item: any) => approvalKey(item.category as ApprovalType, item.id);
   const pendingApprovals = timeline.filter(item => item.isPending && !optimisticallyRemovedIds.has(itemKey(item)));

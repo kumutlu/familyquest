@@ -46,6 +46,7 @@ import {
   periodKeyFor,
 } from './taskRecurrence';
 import type { SupportedCurrencyCode } from '../i18n/format';
+import { isPetBoxEnabled } from './familyFeatures';
 import {
   computeNetChild,
   computeMatchPence,
@@ -290,6 +291,7 @@ export interface FamilySettingsUpdates {
   timezone?: string;
   weekStartsOn?: 0 | 1;
   gamificationConfig?: GamificationConfigInput;
+  petBoxEnabled?: boolean;
 }
 
 /** Update only the owner-managed family settings allowlist. */
@@ -302,9 +304,21 @@ export const updateFamilySettings = async (familyId: string, updates: FamilySett
   if (updates.timezone !== undefined) allowedUpdates.timezone = updates.timezone;
   if (updates.weekStartsOn !== undefined) allowedUpdates.weekStartsOn = updates.weekStartsOn;
   if (updates.gamificationConfig !== undefined) allowedUpdates.gamificationConfig = updates.gamificationConfig;
+  if (updates.petBoxEnabled !== undefined) allowedUpdates.petBoxEnabled = updates.petBoxEnabled;
   if (Object.keys(allowedUpdates).length === 0) throw new Error('No family settings to update');
 
   await updateDoc(doc(db, 'families', familyId), allowedUpdates);
+};
+
+export const completeFamilyWelcomeSetup = async (familyId: string, uid: string) => {
+  if (!familyId.trim() || !uid.trim()) throw new Error('Family and user ids are required');
+  await updateDoc(doc(db, 'families', familyId), {
+    setup: {
+      welcomePromptCompleted: true,
+      completedAt: serverTimestamp(),
+      completedBy: uid,
+    },
+  });
 };
 
 const generateInviteCode = () =>
@@ -2581,10 +2595,22 @@ export const rejectMatchProposal = async (
 // 9. FUNDS & PET BOX
 // ---------------------------
 
+const assertPetBoxEnabled = async (familyId: string) => {
+  const subscribedFamily = useStore.getState().familyData;
+  const snapshot = subscribedFamily?.id === familyId
+    ? null
+    : await getDoc(doc(db, 'families', familyId));
+  const family = subscribedFamily?.id === familyId
+    ? subscribedFamily
+    : snapshot?.data?.();
+  if (!isPetBoxEnabled(family)) throw new Error('Pet Box is disabled for this family');
+};
+
 export const createFund = async (
   familyId: string,
   fundData: { type: string, name: string, species?: string, monthlyBudget: number, emergencyGoal?: number }
 ) => {
+  await assertPetBoxEnabled(familyId);
   const fundsRef = collection(db, `families/${familyId}/funds`);
   return addDoc(fundsRef, {
     ...fundData,
@@ -2607,6 +2633,7 @@ export const addFundExpense = async (
   if (!Number.isInteger(expenseData.amount) || expenseData.amount <= 0) {
     throw new Error('Amount must be a positive integer number of pence');
   }
+  await assertPetBoxEnabled(familyId);
   const fundRef = doc(db, `families/${familyId}/funds`, fundId);
   const txRef = doc(collection(db, `families/${familyId}/fund_transactions`));
   const feedRef = doc(collection(db, `families/${familyId}/feed`));
@@ -2671,6 +2698,7 @@ export const contributeToFund = async (
   fundName: string,
   userName: string
 ) => {
+  await assertPetBoxEnabled(familyId);
   const actorId = auth.currentUser?.uid;
   if (!actorId) throw new Error('Not authenticated');
   if (actorId !== userId) throw new Error('Cannot create a contribution for another user');
@@ -2720,6 +2748,7 @@ export const contributeToFund = async (
 };
 
 export const approvePetBoxDonation = async (familyId: string, requestId: string) => {
+  await assertPetBoxEnabled(familyId);
   const reqRef = doc(db, `families/${familyId}/petbox_requests`, requestId);
   const currentUserUid = auth.currentUser?.uid;
   if (!currentUserUid) throw new Error("Not authenticated");
@@ -2812,6 +2841,7 @@ export const approvePetBoxDonation = async (familyId: string, requestId: string)
 };
 
 export const rejectPetBoxDonation = async (familyId: string, requestId: string, rejectionReason: string) => {
+  await assertPetBoxEnabled(familyId);
   if (!rejectionReason.trim()) throw new Error('Rejection reason is required');
   const reqRef = doc(db, `families/${familyId}/petbox_requests`, requestId);
   const currentUserUid = auth.currentUser?.uid;

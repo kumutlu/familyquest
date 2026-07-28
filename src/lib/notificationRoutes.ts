@@ -53,7 +53,11 @@ function isSafePath(value: unknown): value is string {
 export function getNotificationRoute(
   type: NotificationType | string | undefined,
   actionUrl?: string,
+  petBoxEnabled = true,
 ): string {
+  if (!petBoxEnabled && (type === 'petbox_contribution' || type === 'petbox_expense')) {
+    return '/';
+  }
   if (
     (type === 'behaviour_positive' || type === 'behaviour_negative') &&
     isSafePath(actionUrl)

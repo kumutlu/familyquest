@@ -39,6 +39,18 @@ service cloud.firestore {
       return isParent(familyId);
     }
 
+    function petBoxEnabled(familyId) {
+      return !exists(/databases/$(database)/documents/families/$(familyId))
+        || get(/databases/$(database)/documents/families/$(familyId)).data.get('petBoxEnabled', true) != false;
+    }
+
+    function isValidFamilySetup(data) {
+      return data.keys().hasOnly(['welcomePromptCompleted', 'completedAt', 'completedBy'])
+        && data.welcomePromptCompleted == true
+        && data.completedAt == request.time
+        && data.completedBy == request.auth.uid;
+    }
+
     // -------------------------------------------------------------------------
     // AVATAR CATALOG (authoritative mirror of src/config/avatarCatalog.ts)
     // The cost map below is the single source of truth for premium avatar prices
@@ -1501,7 +1513,11 @@ service cloud.firestore {
       allow create: if isAuthenticated();
       allow update: if isOwner(familyId)
         && (!('gamificationConfig' in request.resource.data)
-            || isValidGamificationConfig(request.resource.data.gamificationConfig));
+            || isValidGamificationConfig(request.resource.data.gamificationConfig))
+        && (!('petBoxEnabled' in request.resource.data)
+            || request.resource.data.petBoxEnabled is bool)
+        && (!('setup' in request.resource.data)
+            || isValidFamilySetup(request.resource.data.setup));
 
       match /join_requests/{requestId} {
         allow create: if isAuthenticated() && request.resource.data.uid == request.auth.uid;
@@ -1846,14 +1862,19 @@ service cloud.firestore {
 
       match /funds/{fundId} {
         allow read: if isFamilyMember(familyId);
-        allow create: if isParent(familyId) && request.resource.data.balance == 0;
-        allow update: if isValidReversalFundUpdate(familyId, fundId) || isValidFundExpenseUpdate(familyId, fundId) || isValidFundDonationInjection(familyId, fundId);
-        allow delete: if isParent(familyId);
+        allow create: if petBoxEnabled(familyId) && isParent(familyId) && request.resource.data.balance == 0;
+        allow update: if isValidReversalFundUpdate(familyId, fundId)
+          || isValidFundDonationInjection(familyId, fundId)
+          || (petBoxEnabled(familyId) && isValidFundExpenseUpdate(familyId, fundId));
+        allow delete: if petBoxEnabled(familyId) && isParent(familyId);
       }
 
       match /fund_transactions/{txId} {
         allow read: if isFamilyMember(familyId);
-        allow create: if (request.resource.data.type == 'reversal' && isValidReversalFundLedger(familyId, txId)) || isValidFundTransactionCreate(familyId, txId);
+        allow create: if (request.resource.data.type == 'reversal' && isValidReversalFundLedger(familyId, txId))
+          || (request.resource.data.type == 'expense'
+            ? petBoxEnabled(familyId) && isValidFundTransactionCreate(familyId, txId)
+            : isValidFundTransactionCreate(familyId, txId));
         allow update, delete: if false;
       }
 
@@ -1930,7 +1951,7 @@ service cloud.firestore {
 
       match /petbox_requests/{requestId} {
         allow read: if isParent(familyId) || (isAuthenticated() && resource.data.childId == request.auth.uid);
-        allow create: if isChildInFamily(familyId, request.auth.uid)
+        allow create: if petBoxEnabled(familyId) && isChildInFamily(familyId, request.auth.uid)
           && request.resource.data.keys().hasAll(['familyId', 'fundId', 'fundName', 'childId', 'childName', 'amountPence', 'status', 'createdAt'])
           && request.resource.data.keys().hasOnly(['familyId', 'fundId', 'fundName', 'childId', 'childName', 'amountPence', 'status', 'createdAt'])
           && request.resource.data.familyId == familyId
@@ -1938,7 +1959,7 @@ service cloud.firestore {
           && request.resource.data.amountPence is int && request.resource.data.amountPence > 0
           && request.resource.data.status == 'pending'
           && request.resource.data.createdAt == request.time;
-        allow update: if (isParent(familyId) && resource.data.status == 'pending'
+        allow update: if petBoxEnabled(familyId) && ((isParent(familyId) && resource.data.status == 'pending'
           && request.resource.data.status in ['approved', 'rejected']
           && request.resource.data.reviewedBy == request.auth.uid
           && request.resource.data.reviewedAt == request.time
@@ -1950,7 +1971,7 @@ service cloud.firestore {
           || (isAuthenticated() && resource.data.status == 'pending' && (resource.data.childId == request.auth.uid || isParent(familyId))
               && request.resource.data.status == 'cancelled' && request.resource.data.cancelledBy == request.auth.uid
               && request.resource.data.cancelledAt == request.time
-              && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'cancelledBy', 'cancelledAt']));
+              && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'cancelledBy', 'cancelledAt'])));
         allow delete: if false;
       }
 

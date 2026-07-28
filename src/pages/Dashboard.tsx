@@ -14,6 +14,7 @@ import { PetBoxSummaryCard } from '../components/dashboard/PetBoxSummaryCard';
 import { TaskSummaryCard } from '../components/dashboard/TaskSummaryCard';
 import { GamificationSummaryCard } from '../components/dashboard/GamificationSummaryCard';
 import { adaptGamificationSummary } from '../lib/gamificationAdapters';
+import { isPetBoxEnabled } from '../lib/familyFeatures';
 
 export function Dashboard() {
   const { t } = useTranslation('dashboard');
@@ -32,6 +33,7 @@ export function Dashboard() {
     redemptions,
     myGamificationSummary,
     myDailyProgress,
+    familyData,
   } = useStore();
   const { openRequest } = useRequestDetail();
 
@@ -73,7 +75,7 @@ export function Dashboard() {
   const rawRequests: any[] = [
     ...(moneyRequests || []).map(r => ({ ...r, category: 'money_request' as RequestCategory })),
     ...(transferRequests || []).map(r => ({ ...r, category: 'transfer' as RequestCategory })),
-    ...(petboxRequests || []).map(r => ({ ...r, category: 'petbox' as RequestCategory })),
+    ...(isPetBoxEnabled(familyData) ? (petboxRequests || []).map(r => ({ ...r, category: 'petbox' as RequestCategory })) : []),
     ...(profileUpdateRequests || []).map(r => ({ ...r, category: 'profile_update' as RequestCategory })),
     ...(taskCompletions || []).map(r => ({ ...r, category: 'task' as RequestCategory })),
     ...(redemptions || []).map(r => ({ ...r, category: 'reward' as RequestCategory })),
@@ -119,7 +121,7 @@ export function Dashboard() {
           <TaskSummaryCard />
           <WalletSummaryCard />
           <GoalSummaryCard />
-          <PetBoxSummaryCard />
+          {isPetBoxEnabled(familyData) && <PetBoxSummaryCard />}
         </div>
       </section>
 

@@ -119,6 +119,8 @@
     "dailyGoalDesc": "Mükemmel Gün için tamamlanması gereken uygun görevlerin yüzdesi.",
     "dailyGoalPercentage": "Günlük Hedef Yüzdesi",
     "dailyGoalPercentageDesc": "Günlük Hedefe ulaşmak için gereken uygun günlük görevlerin yüzdesini ayarlayın (50-100%).",
+    "enablePetBox": "Evcil Kutusunu etkinleştir",
+    "enablePetBoxDesc": "Aile üyelerinin Evcil Kutusu katkılarını ve harcamalarını kullanmasına izin verin.",
     "currency": "Para birimi",
     "currencies": {
       "gbp": "İngiliz sterlini (£)",

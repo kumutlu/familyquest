@@ -7,6 +7,8 @@ import { createFund } from '../lib/api';
 import { Button } from '../components/ui/Button';
 import { CurrencyDisplay } from '../components/ui/CurrencyDisplay';
 import { currencySymbolFromCode, resolveFamilyCurrencyCode } from '../i18n/format';
+import { isPetBoxEnabled } from '../lib/familyFeatures';
+import { Navigate } from 'react-router-dom';
 
 export function FundsDashboard() {
   const { t } = useTranslation(['funds', 'common']);
@@ -23,6 +25,7 @@ export function FundsDashboard() {
 
   const isParent = currentUser?.role === 'parent' || currentUser?.role === 'owner';
   const currencySymbol = currencySymbolFromCode(resolveFamilyCurrencyCode(familyData));
+  if (familyData && !isPetBoxEnabled(familyData)) return <Navigate to="/" replace />;
 
   const handleCreateFund = async (e: React.FormEvent) => {
     e.preventDefault();

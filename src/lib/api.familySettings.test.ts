@@ -44,7 +44,7 @@ vi.mock('./notifications', () => ({
   applyNotificationWrites: vi.fn(),
 }));
 
-import { regenerateInviteCode, updateFamilySettings } from './api';
+import { completeFamilyWelcomeSetup, regenerateInviteCode, updateFamilySettings } from './api';
 
 describe('family settings API', () => {
   beforeEach(() => {
@@ -58,6 +58,7 @@ describe('family settings API', () => {
       currencyCode: 'TRY',
       timezone: 'Europe/Istanbul',
       weekStartsOn: 1,
+      petBoxEnabled: false,
       currency: '₺',
       unrelated: true,
     } as any);
@@ -69,10 +70,25 @@ describe('family settings API', () => {
         currencyCode: 'TRY',
         timezone: 'Europe/Istanbul',
         weekStartsOn: 1,
+        petBoxEnabled: false,
       },
     );
     expect(firestore.updateDoc.mock.calls[0][1]).not.toHaveProperty('currency');
     expect(firestore.updateDoc.mock.calls[0][1]).not.toHaveProperty('unrelated');
+  });
+
+  it('persists audited family setup completion with a server timestamp', async () => {
+    await completeFamilyWelcomeSetup('family-1', 'owner-1');
+    expect(firestore.updateDoc).toHaveBeenCalledWith(
+      { id: 'family-1', path: 'families/family-1' },
+      {
+        setup: {
+          welcomePromptCompleted: true,
+          completedAt: { sentinel: 'server-timestamp' },
+          completedBy: 'owner-1',
+        },
+      },
+    );
   });
 
   it.each(['GBP', 'TRY'] as const)('persists the selected canonical currency code %s', async currencyCode => {
