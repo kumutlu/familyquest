@@ -2087,7 +2087,7 @@ service cloud.firestore {
 
       match /gamification_summaries/{summaryId} {
         // Parent/owner can read all family summaries; child can read only own summary
-        allow read: if isParent(familyId) || (isAuthenticated() && resource.data.childId == request.auth.uid);
+        allow read: if isParent(familyId) || (isAuthenticated() && summaryId == request.auth.uid);
         allow write: if false;
       }
 

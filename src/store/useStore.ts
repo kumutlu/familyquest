@@ -143,6 +143,7 @@ interface AppState {
 
   initAuth: () => void;
   loadFamilyData: (uid: string, familyId: string) => void;
+  refreshCurrentUser: (uid: string, updatedUser: { familyId: string; role: string }) => void;
   retryBootstrap: () => void;
   loadReversals: () => void;
   retryFeature: (name: string) => void;
@@ -775,6 +776,27 @@ export const useStore = create<AppState>((set, get) => ({
     } catch (error: any) {
       handleCriticalListenerError('family', 'Bootstrap', error);
     }
+  },
+
+  /**
+   * Refreshes the current user in the store after an onboarding update.
+   * This is called after the atomic family/owner bootstrap to immediately
+   * publish the authoritative familyId and role while the profile listener
+   * independently converges on the same Firestore document.
+   */
+  refreshCurrentUser: (uid, updatedUser) => {
+    const state = get();
+    if (state.authUser?.uid !== uid) return;
+
+    // Update the currentUser with the new familyId and role
+    set(current => ({
+      currentUser: current.currentUser
+        ? { ...current.currentUser, familyId: updatedUser.familyId, role: updatedUser.role }
+        : { id: uid, familyId: updatedUser.familyId, role: updatedUser.role },
+    }));
+
+    // Now load the family data since we have a familyId
+    get().loadFamilyData(uid, updatedUser.familyId);
   },
 
   loadReversals: () => {

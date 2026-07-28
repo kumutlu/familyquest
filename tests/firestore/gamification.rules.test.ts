@@ -4,7 +4,11 @@ import { readFileSync } from 'fs';
 import { describe, it, beforeAll, afterAll, beforeEach } from 'vitest';
 
 let testEnv: any;
-const projectId = 'familyquest-beta-402cb';
+// Keep this rules suite isolated from goalReturn.integration.test.ts, whose
+// application Firebase instance necessarily uses the real configured project
+// id. Reusing that id lets parallel clearFirestore() calls erase each other's
+// fixtures and produces nondeterministic permission failures.
+const projectId = 'familyquest-gamification-rules';
 const familyId = 'family123';
 const parentId = 'parent456';
 const childId = 'child789';

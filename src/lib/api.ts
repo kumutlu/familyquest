@@ -217,63 +217,48 @@ export function mapAuthErrorMessage(error: unknown): string {
 // 1. FAMILIES & USERS
 // ---------------------------
 
-export const createFamilyAndParent = async (_uid: string, _name: string, familyName: string) => {
+export const createFamilyAndParent = async (uid: string, _name: string, familyName: string) => {
   const familyRef = doc(collection(db, 'families'));
-  const inviteCode = Math.random().toString(36).substring(2, 8).toUpperCase();
-
-  await runTransaction(db, async (transaction) => {
-    transaction.set(familyRef, {
-      name: familyName,
-      inviteCode,
-      createdAt: serverTimestamp()
-    });
-
-    // NOTE: The owner (parent) user doc is already created by signUp()/signInWithGoogle()
-    // with role 'parent' and NO familyId. Re-writing it here with merge:true would be an
-    // UPDATE (the doc already exists), which the users update rule denies because it touches
-    // protected fields (role, rewardPoints, ...). That denial produced the
-    // "Missing or insufficient permissions" error on Step 1. The owner has no wallet doc
-    // (only children do), so the only write needed is the family doc itself.
-  });
-
-  return { familyId: familyRef.id, inviteCode };
-};
-
-/**
- * Updates the parent user to become the family owner after managed members are created.
- * This is called in Step 3 of the onboarding flow to set familyId and role='owner' on
- * the parent user document, which allows the AppLayout route guard to recognize the user
- * as having completed onboarding.
- *
- * The update is performed in a transaction to ensure atomicity with the family document
- * existence check, satisfying the isValidOwnerBootstrap security rule.
- */
-export const updateUserToOwner = async (uid: string, familyId: string) => {
   const userRef = doc(db, 'users', uid);
-  const familyRef = doc(db, 'families', familyId);
+  const inviteCode = Math.random().toString(36).substring(2, 8).toUpperCase();
 
   await runTransaction(db, async (transaction) => {
     const userDoc = await transaction.get(userRef);
     if (!userDoc.exists()) throw new Error('User not found');
-
-    // Verify the user is in the correct state for bootstrap (no familyId, role='parent')
-    if ('familyId' in userDoc.data()) {
-      throw new Error('User already has a family');
-    }
+    if ('familyId' in userDoc.data()) throw new Error('User already has a family');
     if (userDoc.data().role !== 'parent') {
       throw new Error('User is not in parent state for bootstrap');
     }
 
-    // Verify the family exists
-    const familyDoc = await transaction.get(familyRef);
-    if (!familyDoc.exists()) throw new Error('Family not found');
-
-    // Update the user to become the owner
+    transaction.set(familyRef, {
+      name: familyName,
+      inviteCode,
+      ownerId: uid,
+      createdBy: uid,
+      createdAt: serverTimestamp()
+    });
     transaction.update(userRef, {
-      familyId,
-      role: 'owner'
+      familyId: familyRef.id,
+      role: 'owner',
     });
   });
+
+  const updatedUserSnap = await getDoc(userRef);
+  if (!updatedUserSnap.exists()) {
+    throw new Error('User document not found after family creation');
+  }
+  const updatedUser = updatedUserSnap.data() as {
+    uid: string;
+    familyId: string;
+    role: 'owner';
+    [key: string]: unknown;
+  };
+
+  return {
+    familyId: familyRef.id,
+    inviteCode,
+    user: { id: updatedUserSnap.id, ...updatedUser },
+  };
 };
 
 export const requestToJoinFamily = async (uid: string, name: string, inviteCode: string) => {

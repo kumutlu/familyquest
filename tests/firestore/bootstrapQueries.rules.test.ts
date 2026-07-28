@@ -93,6 +93,11 @@ beforeEach(async () => {
 async function executePlan(db: Firestore, userId: string, role: BootstrapRole) {
   const plan = createBootstrapQueryPlan(db, { familyId, userId, role })
   const results = new Map<string, string[]>()
+  const dynamicallySubscribedGoalResources = new Set([
+    'goalContributions',
+    'goalLedger',
+    'goalMatchProposals',
+  ])
 
   for (const entry of plan) {
     const snapshot = await assertSucceeds(readEntry(entry))
@@ -101,7 +106,9 @@ async function executePlan(db: Firestore, userId: string, role: BootstrapRole) {
       : snapshot.docs.map(document => document.id))
   }
 
-  expect(new Set(plan.map(entry => entry.resource))).toEqual(new Set(bootstrapResourcesForRole(role)))
+  const expectedStaticResources = bootstrapResourcesForRole(role)
+    .filter(resource => !dynamicallySubscribedGoalResources.has(resource))
+  expect(new Set(plan.map(entry => entry.resource))).toEqual(new Set(expectedStaticResources))
   return results
 }
 

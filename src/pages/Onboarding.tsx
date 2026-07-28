@@ -2,9 +2,18 @@ import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { Button } from '../components/ui/Button';
-import { createFamilyAndParent, requestToJoinFamily, createManagedMember, updateUserToOwner, signOut } from '../lib/api';
+import { createFamilyAndParent, requestToJoinFamily, createManagedMember, signOut } from '../lib/api';
 import { useStore } from '../store/useStore';
 import { Plus, Shield } from 'lucide-react';
+
+// Temporary development-only trace logging for the onboarding flow.
+// No sensitive user data is ever logged. Remove once the auth bootstrap
+// bugs are confirmed fixed in production.
+const logOnboardingTrace = (event: string, detail?: Record<string, unknown>) => {
+  if (import.meta.env?.PROD) return;
+  // eslint-disable-next-line no-console
+  console.info(`[onboarding-trace] ${new Date().toISOString()} ${event}`, detail ?? {});
+};
 
 export function Onboarding() {
   const { t } = useTranslation(['auth', 'common']);
@@ -27,6 +36,7 @@ export function Onboarding() {
   const [loading, setLoading] = useState(false);
 
   const currentUser = useStore(state => state.currentUser);
+  const refreshCurrentUser = useStore(state => state.refreshCurrentUser);
   const navigate = useNavigate();
 
   const handleCreateFamily = async (e: React.FormEvent) => {
@@ -34,7 +44,8 @@ export function Onboarding() {
     if (!currentUser) return;
     setLoading(true);
     try {
-      const { familyId, inviteCode } = await createFamilyAndParent(currentUser.uid, currentUser.displayName, familyName);
+      const { familyId, inviteCode, user } = await createFamilyAndParent(currentUser.uid, currentUser.displayName, familyName);
+      refreshCurrentUser(currentUser.uid, { familyId: user.familyId, role: user.role });
       setGeneratedFamilyId(familyId);
       setGeneratedInviteCode(inviteCode);
       setStep(2);
@@ -97,13 +108,16 @@ export function Onboarding() {
     if (!currentUser) return;
     setLoading(true);
     try {
+      logOnboardingTrace('before-managed-member-creation', {
+        authUid: currentUser.uid,
+        currentUserRole: currentUser.role,
+        currentUserFamilyId: currentUser.familyId,
+      });
+
       // Create all managed members in Firestore
       for (const member of members) {
         await createManagedMember(generatedFamilyId, member.role, member.name);
       }
-      // Update the parent user to become the owner (set familyId and role='owner')
-      await updateUserToOwner(currentUser.uid, generatedFamilyId);
-      // Only navigate on success - the route guard will redirect once auth is ready
       navigate('/');
     } catch (err: any) {
       setError(err.message || t('auth:failedToAddMember'));
