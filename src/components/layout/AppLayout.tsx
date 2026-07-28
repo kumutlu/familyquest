@@ -1,18 +1,26 @@
+import { useState } from 'react';
 import { Link, Outlet, useLocation, Navigate } from 'react-router-dom';
+import { useTranslation } from 'react-i18next';
 import { cn } from '../../lib/utils';
 import { useStore } from '../../store/useStore';
 import { getNavItems } from '../../config/navigation';
 import { ProfileDropdown } from './ProfileDropdown';
 import { NotificationCenter } from './NotificationCenter';
-import { shouldStartChildOnboarding } from '../../lib/childOnboarding';
+import { shouldShowFamilySetupPrompt } from '../../lib/familySetup';
+import { FamilySetupPrompt } from '../family/FamilySetupPrompt';
 
 export function AppLayout() {
+  const { t } = useTranslation('common');
+  const [setupPromptHidden, setSetupPromptHidden] = useState(false);
   const location = useLocation();
   const authStatus = useStore(state => state.authStatus);
   const authUser = useStore(state => state.authUser);
   const currentUser = useStore(state => state.currentUser);
   const appReady = useStore(state => state.appReady);
   const familyMembers = useStore(state => state.familyMembers);
+  const familyData = useStore(state => state.familyData);
+  const familyLoading = useStore(state => state.familyLoading);
+  const bootstrapStatus = useStore(state => state.bootstrapStatus);
   const bootstrapError = useStore(state => state.bootstrapError);
   const retryBootstrap = useStore(state => state.retryBootstrap);
 
@@ -65,13 +73,6 @@ export function AppLayout() {
     return <div className="min-h-screen bg-gray-50 flex items-center justify-center animate-pulse">Loading Dashboard...</div>;
   }
 
-  // Logged in, family exists, but the family has zero child profiles -> start
-  // the Parent First-Run Child Onboarding. Once a child exists this never shows
-  // again (enforced inside shouldStartChildOnboarding).
-  if (shouldStartChildOnboarding({ currentUser, familyMembers, appReady, pathname: location.pathname })) {
-    return <Navigate to="/child-onboarding" replace />;
-  }
-
   // Single source of truth for navigation, shared by the desktop header and the
   // mobile bottom navigation. See src/config/navigation.ts.
   const navItems = getNavItems();
@@ -88,29 +89,29 @@ export function AppLayout() {
               </div>
               <span className="text-xl font-extrabold tracking-tight text-gray-900">FamilyQuest</span>
             </Link>
-            
+
             {/* Desktop Navigation */}
             <nav className="hidden md:flex ml-8 space-x-6">
               {navItems.map((item) => {
                 const isActive = location.pathname === item.path;
                 const IconComp = item.icon as any;
                 return (
-                  <Link 
-                    key={item.name} 
-                    to={item.path} 
+                  <Link
+                    key={item.path}
+                    to={item.path}
                     className={cn(
-                      "flex items-center space-x-2 text-sm font-bold transition-colors", 
+                      "flex items-center space-x-2 text-sm font-bold transition-colors",
                       isActive ? "text-primary-600" : "text-gray-500 hover:text-gray-900"
                     )}
                   >
                     {typeof item.icon === 'function' ? <IconComp /> : <IconComp size={16} />}
-                    <span>{item.name}</span>
+                    <span>{t(item.labelKey)}</span>
                   </Link>
                 );
               })}
             </nav>
           </div>
-          
+
           <div className="flex items-center space-x-4">
             <NotificationCenter />
             <ProfileDropdown />
@@ -129,10 +130,10 @@ export function AppLayout() {
           {navItems.map((item) => {
             const isActive = location.pathname === item.path;
             const IconComp = item.icon as any;
-            
+
             return (
               <Link
-                key={item.name}
+                key={item.path}
                 to={item.path}
                 className={cn(
                   "flex flex-col items-center justify-center w-full h-full space-y-1 transition-colors",
@@ -145,12 +146,27 @@ export function AppLayout() {
                 )}>
                   {typeof item.icon === 'function' ? <IconComp /> : <IconComp size={22} strokeWidth={isActive ? 2.5 : 2} />}
                 </div>
-                <span className="text-[10px] font-semibold">{item.name}</span>
+                <span className="text-[10px] font-semibold">{t(item.labelKey)}</span>
               </Link>
             );
           })}
         </div>
       </nav>
+      {!setupPromptHidden && shouldShowFamilySetupPrompt({
+        appReady,
+        familyLoading,
+        familyData,
+        familyMembers,
+        currentUser,
+        bootstrapStatus,
+      }) && currentUser?.familyId && (currentUser?.uid || currentUser?.id) && (
+        <FamilySetupPrompt
+          familyId={currentUser.familyId}
+          ownerId={currentUser.uid || currentUser.id}
+          familyMembers={familyMembers}
+          onHide={() => setSetupPromptHidden(true)}
+        />
+      )}
     </div>
   );
 }

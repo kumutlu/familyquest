@@ -14,12 +14,13 @@ interface AddChildModalProps {
   familyId: string;
   onClose: () => void;
   onChildAdded?: () => void;
+  startAtForm?: boolean;
 }
 
-export function AddChildModal({ familyId, onClose, onChildAdded }: AddChildModalProps) {
+export function AddChildModal({ familyId, onClose, onChildAdded, startAtForm = false }: AddChildModalProps) {
   const { t } = useTranslation(['auth', 'common']);
   const navigate = useNavigate();
-  const [step, setStep] = useState<number>(1);
+  const [step, setStep] = useState<number>(startAtForm ? 2 : 1);
 
   // Step 2 — create child form state
   const [name, setName] = useState('');
