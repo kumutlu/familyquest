@@ -6,9 +6,9 @@ import i18n from '../i18n/config';
 
 const api = vi.hoisted(() => ({
   createFamilyAndParent: vi.fn(),
-  requestToJoinFamily: vi.fn(),
   signOut: vi.fn(),
 }));
+const membershipApi = vi.hoisted(() => ({ requestFamilyJoin: vi.fn() }));
 const navigate = vi.hoisted(() => vi.fn());
 const store = vi.hoisted(() => ({
   currentUser: { uid: 'user-1', displayName: 'Test Parent', role: 'parent' },
@@ -16,6 +16,7 @@ const store = vi.hoisted(() => ({
 }));
 
 vi.mock('../lib/api', () => api);
+vi.mock('../lib/familyMembershipApi', () => membershipApi);
 vi.mock('react-router-dom', async () => ({
   ...(await vi.importActual('react-router-dom')),
   useNavigate: () => navigate,
@@ -35,7 +36,7 @@ beforeEach(async () => {
     inviteCode: 'ABC123',
     user: { uid: 'user-1', familyId: 'family-1', role: 'owner' },
   });
-  api.requestToJoinFamily.mockResolvedValue('family-1');
+  membershipApi.requestFamilyJoin.mockResolvedValue({ familyId: 'family-1', status: 'pending' });
   await i18n.loadNamespaces(['auth', 'common']);
   await act(async () => { await i18n.changeLanguage('en'); });
 });
@@ -96,7 +97,7 @@ describe('Onboarding', () => {
     await user.type(screen.getByLabelText(/invite code/i), 'ABC123');
     await user.click(screen.getByRole('button', { name: /request to join/i }));
 
-    expect(api.requestToJoinFamily).toHaveBeenCalledWith('user-1', 'Test Parent', 'ABC123');
+    expect(membershipApi.requestFamilyJoin).toHaveBeenCalledWith('ABC123');
     expect(await screen.findByText(/request.*sent/i)).toBeInTheDocument();
   });
 });

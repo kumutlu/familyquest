@@ -249,24 +249,6 @@ export const createFamilyAndParent = async (uid: string, _name: string, familyNa
   };
 };
 
-export const requestToJoinFamily = async (uid: string, name: string, inviteCode: string) => {
-  const code = inviteCode.toUpperCase().trim();
-  const q = query(collection(db, 'families'), where('inviteCode', '==', code));
-  const snap = await getDocs(q);
-  if (snap.empty) throw new Error('Invalid invite code');
-
-  const familyId = snap.docs[0].id;
-
-  await setDoc(doc(db, `families/${familyId}/join_requests`, uid), {
-    uid,
-    displayName: name,
-    status: 'pending',
-    createdAt: serverTimestamp()
-  });
-
-  return familyId;
-};
-
 export interface GamificationConfigInput {
   schemaVersion: 1;
   dailyGoalPercentage: number;
@@ -306,24 +288,6 @@ export const completeFamilyWelcomeSetup = async (familyId: string, uid: string) 
       completedBy: uid,
     },
   });
-};
-
-const generateInviteCode = () =>
-  Math.random().toString(36).slice(2, 8).padEnd(6, '0').toUpperCase();
-
-/** Replace the family invite code atomically so live listeners observe one update. */
-export const regenerateInviteCode = async (familyId: string) => {
-  if (!familyId.trim()) throw new Error('Family id is required');
-  const familyRef = doc(db, 'families', familyId);
-  const inviteCode = generateInviteCode();
-
-  await runTransaction(db, async transaction => {
-    const familyDoc = await transaction.get(familyRef);
-    if (!familyDoc.exists()) throw new Error('Family not found');
-    transaction.update(familyRef, { inviteCode });
-  });
-
-  return { inviteCode };
 };
 
 export const approveJoinRequest = async (familyId: string, requestId: string, role: 'parent' | 'child') => {

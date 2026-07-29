@@ -3,7 +3,8 @@ import { useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { Shield } from 'lucide-react';
 import { Button } from '../components/ui/Button';
-import { createFamilyAndParent, requestToJoinFamily, signOut } from '../lib/api';
+import { createFamilyAndParent, signOut } from '../lib/api';
+import { requestFamilyJoin } from '../lib/familyMembershipApi';
 import { useStore } from '../store/useStore';
 
 export function Onboarding() {
@@ -44,11 +45,11 @@ export function Onboarding() {
     setLoading(true);
     setError('');
     try {
-      await requestToJoinFamily(currentUser.uid, currentUser.displayName, inviteCode);
+      await requestFamilyJoin(inviteCode);
       setJoinRequested(true);
     } catch (caught: any) {
       setError(
-        caught?.message === 'Invalid invite code'
+        caught?.code === 'functions/not-found' || caught?.message === 'INVALID_FAMILY_CODE'
           ? t('auth:invalidInviteOrClaimCode')
           : caught?.message || t('common:errorOccurred'),
       );

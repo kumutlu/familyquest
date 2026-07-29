@@ -41,6 +41,10 @@ export default defineConfig(({ mode }) => {
     environment: 'jsdom',
     globals: true,
     setupFiles: './src/test/setup.ts',
+    // Firestore rules suites share one emulator process. Serial files prevent
+    // parallel project initialization from exhausting the emulator and
+    // turning valid assertions into hook/test timeouts.
+    fileParallelism: false,
     // The `functions/` directory is a separate deployable package with its own
     // test runner; exclude it (and its nested node_modules) from the web app's
     // test run. Root-level `tests/functions/**` is still included.

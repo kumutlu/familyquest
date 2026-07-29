@@ -117,6 +117,24 @@ afterAll(async () => {
 
 describe('Approval Center Actions', () => {
 
+  it('denies direct client-created join requests, including requester-supplied roles', async () => {
+    const db = testEnv.authenticatedContext('joiner1').firestore();
+    await assertFails(setDoc(doc(db, `families/${familyId}/join_requests/forged`), {
+      uid: 'joiner1',
+      displayName: 'New Child',
+      status: 'pending',
+      requestedRole: 'parent',
+      createdAt: serverTimestamp(),
+    }));
+  });
+
+  it('lets a pending requester read only their request, not private family data', async () => {
+    const db = testEnv.authenticatedContext('joiner1').firestore();
+    await assertSucceeds(getDoc(doc(db, `families/${familyId}/join_requests/joiner1`)));
+    await assertFails(getDoc(doc(db, `families/${familyId}`)));
+    await assertFails(getDoc(doc(db, `families/${familyId}/wallets/${childId}`)));
+  });
+
   it('originator can cancel a pending transfer without moving balances', async () => {
     const db = testEnv.authenticatedContext(childId).firestore();
     await assertSucceeds(updateDoc(doc(db, `families/${familyId}/transfer_requests`, 'trans1'), {

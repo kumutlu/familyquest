@@ -92,10 +92,11 @@
     "rejecting": "Reddediliyor…",
     "approve": "Çocuk Olarak Onayla",
     "approveChild": "Çocuk olarak onayla",
-    "approveParent": "Ebeveyn/yetişkin olarak onayla",
+    "approveParent": "Ebeveyn veya yetişkin olarak onayla",
     "confirmChild": "Çocuk rolünü onayla",
     "confirmParent": "Ebeveyn/yetişkin rolünü onayla",
-    "parentWarning": "Ebeveyn/yetişkin olarak onaylansın mı? Bu seçim yetişkin aile izinleri verir.",
+    "parentWarning": "Bu kişi aileyi yönetmeye yardımcı olabilecek.",
+    "roleHelp": "Bir çocuk hesabı için Çocuk seçin; aileyi yönetmesine güvendiğiniz bir yetişkin için Ebeveyn veya yetişkin seçin.",
     "approving": "Onaylanıyor…"
   },
   "loadError": {

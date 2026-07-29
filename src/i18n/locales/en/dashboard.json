@@ -92,10 +92,11 @@
     "rejecting": "Rejecting…",
     "approve": "Approve as Child",
     "approveChild": "Approve as child",
-    "approveParent": "Approve as parent/adult",
+    "approveParent": "Approve as parent or adult",
     "confirmChild": "Confirm child",
     "confirmParent": "Confirm parent/adult",
-    "parentWarning": "Approve as parent/adult? This grants adult family permissions.",
+    "parentWarning": "This person will be able to help manage the family.",
+    "roleHelp": "Choose child for a child account, or parent/adult for a trusted adult who should help manage the family.",
     "approving": "Approving…"
   },
   "loadError": {

@@ -44,7 +44,7 @@ vi.mock('./notifications', () => ({
   applyNotificationWrites: vi.fn(),
 }));
 
-import { completeFamilyWelcomeSetup, regenerateInviteCode, updateFamilySettings } from './api';
+import { completeFamilyWelcomeSetup, updateFamilySettings } from './api';
 
 describe('family settings API', () => {
   beforeEach(() => {
@@ -100,21 +100,4 @@ describe('family settings API', () => {
     );
   });
 
-  it('regenerates the invite code in a transaction', async () => {
-    const transaction = {
-      get: vi.fn(async () => ({ exists: () => true })),
-      update: vi.fn(),
-    };
-    firestore.runTransaction.mockImplementation(async (_db: unknown, callback: any) => callback(transaction));
-
-    const result = await regenerateInviteCode('family-1');
-
-    expect(firestore.runTransaction).toHaveBeenCalledTimes(1);
-    expect(transaction.get).toHaveBeenCalledWith({ id: 'family-1', path: 'families/family-1' });
-    expect(transaction.update).toHaveBeenCalledWith(
-      { id: 'family-1', path: 'families/family-1' },
-      { inviteCode: expect.stringMatching(/^[A-Z0-9]{6}$/) },
-    );
-    expect(result).toEqual({ inviteCode: expect.stringMatching(/^[A-Z0-9]{6}$/) });
-  });
 });

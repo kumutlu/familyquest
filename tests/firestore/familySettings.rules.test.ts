@@ -56,10 +56,10 @@ describe('family settings ownership', () => {
     }))).resolves.toBeUndefined();
   });
 
-  it('allows the owner to persist a regenerated invite code', async () => {
-    await expect(assertSucceeds(updateDoc(familyRef('owner'), {
+  it('denies direct invite-code regeneration even for the owner', async () => {
+    await expect(assertFails(updateDoc(familyRef('owner'), {
       inviteCode: 'NEW456',
-    }))).resolves.toBeUndefined();
+    }))).resolves.toBeDefined();
   });
 
   it.each(['parent', 'child'] as const)('denies %s family settings and invite-code updates', async role => {

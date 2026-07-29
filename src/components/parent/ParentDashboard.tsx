@@ -130,6 +130,9 @@ export function ParentDashboard() {
             <UserPlus size={20} />
             {t('joinRequests.heading')}
           </h2>
+          <p className="mb-3 text-sm text-primary-800">
+            {t('joinRequests.roleHelp')}
+          </p>
           {joinError && <div className="mb-3 rounded-lg bg-danger-50 p-3 text-sm font-medium text-danger-600">{joinError}</div>}
           <div className="space-y-3">
             {joinRequests.filter((request: any) => request.status === 'pending').map((req: any) => {

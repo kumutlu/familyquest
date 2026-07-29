@@ -8,7 +8,8 @@ import { Users, Globe, AlertTriangle, Copy, Save, Edit, CheckCircle, Loader2, Sh
 import { useStore } from '../../store/useStore';
 import { isOwnerRole, isParentRole, isChildRole } from '../../lib/roles';
 import { getRoleLabel } from '../../lib/roles';
-import { updateFamilySettings, regenerateInviteCode, approveJoinRequest, rejectJoinRequest } from '../../lib/api';
+import { updateFamilySettings, approveJoinRequest, rejectJoinRequest } from '../../lib/api';
+import { regenerateFamilyCode } from '../../lib/familyMembershipApi';
 import { resolveFamilyCurrencyCode, type SupportedCurrencyCode } from '../../i18n/format';
 import { Toast, type ToastData } from '../ui/Toast';
 import { AddChildModal } from './AddChildModal';
@@ -165,9 +166,10 @@ export function FamilySettings({ onSectionChange }: FamilySettingsProps) {
 
   const handleRegenerateInviteCode = async () => {
     if (!familyData?.id) return;
+    if (!window.confirm(t('familySettings.regenerateInviteConfirmation'))) return;
 
     try {
-      await regenerateInviteCode(familyData.id);
+      await regenerateFamilyCode();
       showToast(t('familySettings.inviteCodeRegenerated'));
     } catch (error: any) {
       console.error('Failed to regenerate invite code:', error);
@@ -605,7 +607,7 @@ export function FamilySettings({ onSectionChange }: FamilySettingsProps) {
                         {t('familySettings.pendingRequestCount', { count: pendingJoinRequests.length })}
                       </p>
                       <p className="text-sm text-amber-800 mt-1 mb-3">
-                        {t('familySettings.pendingChildApprovalExplanation')}
+                        {t('familySettings.approvalRoleHelp')}
                       </p>
                       <div className="space-y-2">
                         {pendingJoinRequests.map(request => (

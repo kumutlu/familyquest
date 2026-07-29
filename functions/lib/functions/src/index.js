@@ -8,7 +8,7 @@
 // is triggered, keeping the existing business notification system untouched.
 // ---------------------------------------------------------------------------
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.completeChildPasswordChange = exports.changeChildUsername = exports.revokeChildSessions = exports.enableChildLogin = exports.disableChildLogin = exports.resetChildPassword = exports.signInChild = exports.createChildLogin = exports.onUserWritten = exports.onNotificationCreated = exports.finalizeGamificationDays = exports.onGamificationReversalCreated = exports.onTaskCompletionWritten = void 0;
+exports.regenerateFamilyCode = exports.requestFamilyJoin = exports.completeChildPasswordChange = exports.changeChildUsername = exports.revokeChildSessions = exports.enableChildLogin = exports.disableChildLogin = exports.resetChildPassword = exports.signInChild = exports.createChildLogin = exports.onUserWritten = exports.onNotificationCreated = exports.finalizeGamificationDays = exports.onGamificationReversalCreated = exports.onTaskCompletionWritten = void 0;
 const app_1 = require("firebase-admin/app");
 const firestore_1 = require("firebase-admin/firestore");
 const messaging_1 = require("firebase-admin/messaging");
@@ -119,4 +119,7 @@ Object.defineProperty(exports, "enableChildLogin", { enumerable: true, get: func
 Object.defineProperty(exports, "revokeChildSessions", { enumerable: true, get: function () { return childLogin_1.revokeChildSessions; } });
 Object.defineProperty(exports, "changeChildUsername", { enumerable: true, get: function () { return childLogin_1.changeChildUsername; } });
 Object.defineProperty(exports, "completeChildPasswordChange", { enumerable: true, get: function () { return childLogin_1.completeChildPasswordChange; } });
+var familyMembership_1 = require("./familyMembership");
+Object.defineProperty(exports, "requestFamilyJoin", { enumerable: true, get: function () { return familyMembership_1.requestFamilyJoin; } });
+Object.defineProperty(exports, "regenerateFamilyCode", { enumerable: true, get: function () { return familyMembership_1.regenerateFamilyCode; } });
 //# sourceMappingURL=index.js.map

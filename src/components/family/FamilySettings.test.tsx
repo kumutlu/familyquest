@@ -16,9 +16,11 @@ const mockRejectJoinRequest = vi.fn();
 
 vi.mock('../../lib/api', () => ({
   updateFamilySettings: (...args: any[]) => mockUpdateFamilySettings(...args),
-  regenerateInviteCode: (...args: any[]) => mockRegenerateInviteCode(...args),
   approveJoinRequest: (...args: any[]) => mockApproveJoinRequest(...args),
   rejectJoinRequest: (...args: any[]) => mockRejectJoinRequest(...args),
+}));
+vi.mock('../../lib/familyMembershipApi', () => ({
+  regenerateFamilyCode: (...args: any[]) => mockRegenerateInviteCode(...args),
 }));
 
 // Mock the clipboard API
@@ -466,7 +468,7 @@ describe('FamilySettings — localization and accessibility', () => {
     await user.click(screen.getByRole('button', { name: 'Üyeler' }));
     expect(screen.getByText(/Mevcut aile koduyla başka bir yetişkini davet edin/)).toBeInTheDocument();
     expect(screen.getByText('1 istek onay bekliyor')).toBeInTheDocument();
-    expect(screen.getByText('Bu isteği çocuk veya ebeveyn/yetişkin olarak onaylamayı seçin.')).toBeInTheDocument();
+    expect(screen.getByText('Bir çocuk hesabı için Çocuk seçin; aileyi yönetmesine güvendiğiniz bir yetişkin için Ebeveyn veya yetişkin seçin.')).toBeInTheDocument();
     expect(screen.getByText(/İstek tarihi:/)).toHaveTextContent('02.01.2026');
     expect(screen.getByRole('button', { name: 'Çocuk rolünü onayla' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Reddet' })).toBeInTheDocument();
@@ -506,7 +508,7 @@ describe('FamilySettings — pending join requests', () => {
     expect(screen.getByText('Pending Approvals')).toBeInTheDocument();
     const childrenSection = screen.getByRole('region', { name: 'Children' });
     expect(within(childrenSection).getByText('Joining Child')).toBeInTheDocument();
-    expect(within(childrenSection).getByText('Choose whether to approve this request as a child or a parent/adult.')).toBeInTheDocument();
+    expect(within(childrenSection).getByText('Choose child for a child account, or parent/adult for a trusted adult who should help manage the family.')).toBeInTheDocument();
   });
 
   it('25. Owner can approve join request', async () => {

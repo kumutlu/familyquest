@@ -102,6 +102,24 @@ describe('approval API transaction contracts', () => {
     )
   })
 
+  it('ignores a legacy requester role and writes only the owner-selected role', async () => {
+    const tx = transactionWith({
+      'families/family-1/join_requests/request-1': {
+        uid: 'target-1',
+        displayName: 'Stored Name',
+        status: 'pending',
+        requestedRole: 'owner',
+      },
+      'users/owner-1': { familyId: 'family-1', role: 'owner', displayName: 'Owner' },
+    })
+    await approveJoinRequest('family-1', 'request-1', 'child')
+    expect(tx.set).toHaveBeenCalledWith(
+      expect.objectContaining({ path: 'users/target-1' }),
+      expect.objectContaining({ role: 'child' }),
+      { merge: true },
+    )
+  })
+
   it('rejects an unsupported approval role before starting a transaction', async () => {
     await expect(
       approveJoinRequest('family-1', 'request-1', 'owner' as any),

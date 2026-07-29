@@ -110,6 +110,19 @@ describe('ParentDashboard', () => {
     ));
   });
 
+  it('offers only child or parent/adult approval roles and explains parent permissions', () => {
+    render(<MemoryRouter><ParentDashboard /></MemoryRouter>);
+    const roleSelect = screen.getByLabelText('Approval role for First Joiner');
+    expect(roleSelect).toHaveValue('child');
+    expect(screen.getAllByRole('option', { name: 'Approve as child' }).length).toBeGreaterThan(0);
+    expect(screen.getAllByRole('option', { name: 'Approve as parent or adult' }).length).toBeGreaterThan(0);
+    expect(screen.queryByRole('option', { name: /^Approve as adult$/ })).not.toBeInTheDocument();
+    expect(screen.queryByRole('option', { name: /owner/i })).not.toBeInTheDocument();
+    expect(screen.getByText(
+      'Choose child for a child account, or parent/adult for a trusted adult who should help manage the family.',
+    )).toBeInTheDocument();
+  });
+
   it('renders the dashboard sections (approvals + activity + quick actions)', () => {
     render(<MemoryRouter><ParentDashboard /></MemoryRouter>);
     expect(screen.getByText('Approval Center Section')).toBeInTheDocument();

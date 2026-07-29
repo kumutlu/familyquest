@@ -147,3 +147,8 @@ export {
   changeChildUsername,
   completeChildPasswordChange,
 } from './childLogin';
+
+export {
+  requestFamilyJoin,
+  regenerateFamilyCode,
+} from './familyMembership';
