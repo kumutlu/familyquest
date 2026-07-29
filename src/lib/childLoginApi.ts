@@ -40,6 +40,17 @@ export interface ChildLoginLifecycleResult {
   requiresPasswordChange?: boolean;
 }
 
+export interface DeleteChildInput {
+  childId: string;
+  displayNameConfirmation: string;
+  clientReqId: string;
+}
+
+export interface DeleteChildResult {
+  childId: string;
+  deleted: boolean;
+}
+
 // --- Policy constants (kept in sync with the backend; backend is authoritative)
 // ---
 
@@ -142,6 +153,13 @@ export const completeChildPasswordChange = (newPassword: string) =>
     { newPassword },
   );
 
+export const deleteChild = (childId: string, displayNameConfirmation: string) =>
+  invokeLifecycle<DeleteChildInput, DeleteChildResult>('deleteChild', {
+    childId,
+    displayNameConfirmation,
+    clientReqId: generateClientReqId(),
+  });
+
 // --- Sign-in (Phase 3) ------------------------------------------------------
 
 export interface SignInChildInput {
@@ -190,7 +208,7 @@ export function mapSignInChildError(_err: unknown): string {
 // --- Friendly error mapping -------------------------------------------------
 
 /**
- * Map a backend HttpsError to a friendly, non-leaky message. We never reveal
+ * Map a backend HttpsError to a friendly, non-leaking message. We never reveal
  * whether a username exists *outside* the family; within-family collisions are
  * safe to surface. Backend error codes are carried in `error.message`.
  */

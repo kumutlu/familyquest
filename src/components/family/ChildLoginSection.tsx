@@ -8,6 +8,7 @@ import {
   mapChildLoginError,
   resetChildPassword,
   validatePasswordClient,
+  deleteChild,
 } from '../../lib/childLoginApi';
 
 export interface ChildLoginMember {
@@ -19,6 +20,8 @@ export interface ChildLoginMember {
   requiresPasswordChange?: boolean;
   /** Optional last-login timestamp (Firestore Timestamp, Date, or epoch ms). */
   lastLogin?: unknown;
+  /** Whether this child is a managed child (parent-created). */
+  isManaged?: boolean;
 }
 
 interface ChildLoginSectionProps {
@@ -50,10 +53,6 @@ function formatLastLogin(value: unknown, neverLabel: string): string {
 /**
  * Compact "Login" block for a managed child card. Never renders authUid,
  * synthetic email, internal IDs, or server-only fields.
- *
- * Reset / Disable / Enable actions are part of a later phase; the backend
- * callables do not exist yet, so the buttons are shown disabled with a
- * "Coming soon" hint (we do not invent temporary APIs).
  */
 export function ChildLoginSection({ member, onRequestCreate }: ChildLoginSectionProps) {
   const { t } = useTranslation('family');
@@ -61,6 +60,12 @@ export function ChildLoginSection({ member, onRequestCreate }: ChildLoginSection
   const [temporaryPassword, setTemporaryPassword] = useState('');
   const [busy, setBusy] = useState(false);
   const [feedback, setFeedback] = useState('');
+
+  // Delete child state
+  const [deleteOpen, setDeleteOpen] = useState(false);
+  const [deleteNameInput, setDeleteNameInput] = useState('');
+  const [deleteBusy, setDeleteBusy] = useState(false);
+  const [deleteFeedback, setDeleteFeedback] = useState('');
 
   const changeEnabledState = async () => {
     setBusy(true);
@@ -94,6 +99,37 @@ export function ChildLoginSection({ member, onRequestCreate }: ChildLoginSection
       setBusy(false);
     }
   };
+
+  const openDeleteDialog = () => {
+    setDeleteNameInput('');
+    setDeleteFeedback('');
+    setDeleteOpen(true);
+  };
+
+  const closeDeleteDialog = () => {
+    setDeleteOpen(false);
+    setDeleteNameInput('');
+    setDeleteFeedback('');
+  };
+
+  const submitDelete = async () => {
+    if (deleteNameInput.trim() !== member.displayName) {
+      setDeleteFeedback(t('login.deleteNameMismatch'));
+      return;
+    }
+    setDeleteBusy(true);
+    setDeleteFeedback('');
+    try {
+      await deleteChild(member.id, member.displayName);
+      closeDeleteDialog();
+      setFeedback(t('login.deleteSuccess'));
+    } catch (error) {
+      setDeleteFeedback(mapChildLoginError(error));
+    } finally {
+      setDeleteBusy(false);
+    }
+  };
+
   if (!member.hasLogin) {
     return (
       <div className="mt-3 pt-3 border-t border-gray-100">
@@ -158,7 +194,25 @@ export function ChildLoginSection({ member, onRequestCreate }: ChildLoginSection
           </Button>
         )}
       </div>
+
+      {/* Delete Child action — only for managed children */}
+      {member.isManaged !== false && (
+        <div className="pt-1">
+          <Button
+            type="button"
+            size="sm"
+            variant="outline"
+            className="text-red-600 border-red-300 hover:bg-red-50 hover:text-red-700"
+            onClick={openDeleteDialog}
+          >
+            {t('login.deleteChild')}
+          </Button>
+        </div>
+      )}
+
       {feedback && <p className="text-xs text-gray-600" role="status">{feedback}</p>}
+      {deleteFeedback && <p className="text-xs text-red-600" role="alert">{deleteFeedback}</p>}
+
       {resetOpen && (
         <div className="rounded-xl border border-amber-200 bg-amber-50 p-3 space-y-3">
           <p className="text-sm text-amber-900">
@@ -182,6 +236,71 @@ export function ChildLoginSection({ member, onRequestCreate }: ChildLoginSection
             }}>
               Cancel
             </Button>
+          </div>
+        </div>
+      )}
+
+      {/* Delete confirmation dialog */}
+      {deleteOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-gray-900/40 backdrop-blur-sm p-4">
+          <div
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="delete-child-dialog-title"
+            tabIndex={-1}
+            className="bg-white w-full max-w-sm rounded-3xl shadow-xl overflow-hidden flex flex-col animate-in fade-in zoom-in-95 duration-200 outline-none"
+          >
+            <div className="px-6 py-4 border-b border-gray-100 flex justify-between items-center">
+              <h3 id="delete-child-dialog-title" className="text-xl font-bold text-red-600">{t('login.deleteChildTitle')}</h3>
+              <button type="button" aria-label={t('common:closeDialog')} onClick={closeDeleteDialog} className="p-2 -mr-2 bg-gray-100 hover:bg-gray-200 rounded-full text-gray-500 transition-colors">
+                ✕
+              </button>
+            </div>
+            <div className="p-6 space-y-4">
+              <p className="text-sm text-gray-700">
+                {t('login.deleteChildExplanation')}
+              </p>
+              <p className="text-sm font-medium text-red-600">
+                {t('login.deleteChildWarning')}
+              </p>
+              <div>
+                <label htmlFor="delete-child-name" className="block text-sm font-medium text-gray-700 mb-1">
+                  {t('login.deleteChildNameLabel')}
+                </label>
+                <input
+                  id="delete-child-name"
+                  type="text"
+                  value={deleteNameInput}
+                  onChange={e => setDeleteNameInput(e.target.value)}
+                  placeholder={member.displayName}
+                  className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-red-500 focus:border-transparent outline-none transition-all"
+                  autoFocus
+                />
+              </div>
+              {deleteFeedback && (
+                <p className="text-sm text-red-600" role="alert">{deleteFeedback}</p>
+              )}
+              <div className="flex gap-3 pt-2">
+                <Button
+                  type="button"
+                  variant="outline"
+                  fullWidth
+                  disabled={deleteBusy}
+                  onClick={closeDeleteDialog}
+                >
+                  {t('common:cancel')}
+                </Button>
+                <Button
+                  type="button"
+                  fullWidth
+                  disabled={deleteBusy || deleteNameInput.trim() !== member.displayName}
+                  className="bg-red-500 hover:bg-red-600"
+                  onClick={submitDelete}
+                >
+                  {deleteBusy ? t('common:deleting') : t('login.deleteChildConfirm')}
+                </Button>
+              </div>
+            </div>
           </div>
         </div>
       )}

@@ -26,7 +26,7 @@
   "ptsThisWeek": "{{value}} pts this week",
   "noPastChampions": {
     "title": "No Past Champions",
-    "subtitle": "Check back next week to see who won this week’s leaderboard!"
+    "subtitle": "Check back next week to see who won this week's leaderboard!"
   },
   "newChallenge": {
     "title": "New Family Challenge",
@@ -54,7 +54,15 @@
     "resetPassword": "Reset Password",
     "disableLogin": "Disable Login",
     "enableLogin": "Enable Login",
-    "comingSoon": "Coming soon"
+    "comingSoon": "Coming soon",
+    "deleteChild": "Delete child",
+    "deleteChildTitle": "Delete child?",
+    "deleteChildExplanation": "This will permanently remove this child from your family. This action cannot be undone.",
+    "deleteChildWarning": "All data for this child will be permanently deleted, including login, profile, tasks, and gamification progress.",
+    "deleteChildNameLabel": "Type the child's full name to confirm:",
+    "deleteChildConfirm": "Delete child",
+    "deleteNameMismatch": "The name does not match. Please type the child's full name exactly as shown.",
+    "deleteSuccess": "Child has been deleted."
   },
   "editMember": {
     "title": "Edit Member",

@@ -54,7 +54,15 @@
     "resetPassword": "Parolayı Sıfırla",
     "disableLogin": "Girişi Devre Dışı Bırak",
     "enableLogin": "Girişi Etkinleştir",
-    "comingSoon": "Yakında"
+    "comingSoon": "Yakında",
+    "deleteChild": "Çocuku sil",
+    "deleteChildTitle": "Çocuk silinsin mi?",
+    "deleteChildExplanation": "Bu işlem bu çocuğu aileden kalıcı olarak kaldıracaktır. Bu işlem geri alınamaz.",
+    "deleteChildWarning": "Bu çocuğun tüm verileri kalıcı olarak silinecektir, giriş, profil, görevler ve gamification ilerlemesi dahil.",
+    "deleteChildNameLabel": "Onaylamak için çocuğun tam adını yazın:",
+    "deleteChildConfirm": "Çocuku sil",
+    "deleteNameMismatch": "Ad eşleşmiyor. Lütfen çocuğun tam adını tam olarak yazın.",
+    "deleteSuccess": "Çocuk silindi."
   },
   "editMember": {
     "title": "Üyeyi Düzenle",

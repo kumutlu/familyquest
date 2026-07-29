@@ -148,6 +148,10 @@ export {
   completeChildPasswordChange,
 } from './childLogin';
 
+// Managed child deletion (Phase 4B).
+// Trusted callable; see childDeletion.ts.
+export { deleteChild } from './childDeletion';
+
 export {
   requestFamilyJoin,
   regenerateFamilyCode,
