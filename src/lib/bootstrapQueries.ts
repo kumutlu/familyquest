@@ -105,6 +105,14 @@ export const bootstrapCompositeIndexes = [
     ],
   },
   {
+    collectionGroup: 'announcements',
+    queryScope: 'COLLECTION',
+    fields: [
+      { fieldPath: 'audienceType', order: 'ASCENDING' },
+      { fieldPath: 'audienceUserIds', arrayConfig: 'CONTAINS' },
+    ],
+  },
+  {
     collectionGroup: 'push_tokens',
     queryScope: 'COLLECTION_GROUP',
     fields: [

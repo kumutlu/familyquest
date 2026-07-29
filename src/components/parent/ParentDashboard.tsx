@@ -19,6 +19,7 @@ import { WalletSummaryCard } from '../dashboard/WalletSummaryCard';
 import { GoalSummaryCard } from '../dashboard/GoalSummaryCard';
 import { PetBoxSummaryCard } from '../dashboard/PetBoxSummaryCard';
 import { isPetBoxEnabled } from '../../lib/familyFeatures';
+import { FamilyBulletin } from '../bulletin/FamilyBulletin';
 
 const joinRequestProcessingKey = (request: { id: string; uid: string }) => `join:${request.id}:${request.uid}`;
 
@@ -85,6 +86,8 @@ export function ParentDashboard() {
   return (
     <div className="space-y-8 animate-in fade-in duration-300 pb-8">
       <DashboardHeader />
+
+      <FamilyBulletin />
 
       <QuickActions
         petBoxEnabled={isPetBoxEnabled(familyData)}

@@ -15,6 +15,7 @@ import { TaskSummaryCard } from '../components/dashboard/TaskSummaryCard';
 import { GamificationSummaryCard } from '../components/dashboard/GamificationSummaryCard';
 import { adaptGamificationSummary } from '../lib/gamificationAdapters';
 import { isPetBoxEnabled } from '../lib/familyFeatures';
+import { FamilyBulletin } from '../components/bulletin/FamilyBulletin';
 
 export function Dashboard() {
   const { t } = useTranslation('dashboard');
@@ -98,6 +99,8 @@ export function Dashboard() {
         <h1 className="text-2xl font-bold text-gray-900 tracking-tight">Good Morning, {currentUser.displayName}! ☀️</h1>
         <p className="mt-1 text-gray-500">You're doing great this week.</p>
       </header>
+
+      <FamilyBulletin />
 
       <div className="grid grid-cols-2 gap-4">
         <div className="flex items-center justify-center gap-2 rounded-2xl bg-white p-4 shadow-sm border border-gray-100">

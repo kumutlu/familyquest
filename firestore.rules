@@ -94,6 +94,46 @@ service cloud.firestore {
         && data.completedBy == authProfileId();
     }
 
+    function canReadAnnouncement(familyId, data) {
+      return isFamilyMember(familyId)
+        && (
+          isParent(familyId)
+          || data.audienceType == 'family'
+          || data.audienceType == 'children'
+          || (data.audienceType == 'selected' && authProfileId() in data.audienceUserIds)
+        );
+    }
+
+    function hasValidAnnouncementLinks(familyId, data) {
+      return (!('linkedTaskId' in data)
+          || exists(/databases/$(database)/documents/families/$(familyId)/tasks/$(data.linkedTaskId)))
+        && (!('linkedRewardId' in data)
+          || exists(/databases/$(database)/documents/families/$(familyId)/rewards/$(data.linkedRewardId)));
+    }
+
+    function isValidAnnouncementCreate(familyId) {
+      let data = request.resource.data;
+      return isParent(familyId)
+        && data.keys().hasAll(['familyId', 'title', 'message', 'type', 'audienceType', 'audienceUserIds', 'priority', 'pinned', 'status', 'createdBy', 'createdAt', 'updatedAt'])
+        && data.keys().hasOnly(['familyId', 'title', 'message', 'type', 'audienceType', 'audienceUserIds', 'priority', 'pinned', 'status', 'createdBy', 'createdAt', 'updatedAt', 'startsAt', 'expiresAt', 'linkedTaskId', 'linkedRewardId', 'linkedSettingChangeId'])
+        && data.familyId == familyId
+        && data.title is string && data.title.trim().size() > 0 && data.title.size() <= 120
+        && data.message is string && data.message.trim().size() > 0 && data.message.size() <= 2000
+        && data.type in ['general', 'rule_change', 'consequence', 'new_task', 'reward_update', 'event', 'urgent']
+        && data.audienceType in ['family', 'children', 'adults', 'selected']
+        && data.audienceUserIds is list && data.audienceUserIds.size() <= 50
+        && ((data.audienceType == 'selected' && data.audienceUserIds.size() > 0)
+            || (data.audienceType != 'selected' && data.audienceUserIds.size() == 0))
+        && data.priority in ['normal', 'important', 'urgent']
+        && data.pinned is bool && data.status in ['active', 'archived']
+        && data.createdBy == authProfileId()
+        && data.createdAt == request.time && data.updatedAt == request.time
+        && (!('startsAt' in data) || data.startsAt is timestamp)
+        && (!('expiresAt' in data) || data.expiresAt is timestamp)
+        && (!('startsAt' in data) || !('expiresAt' in data) || data.expiresAt > data.startsAt)
+        && hasValidAnnouncementLinks(familyId, data);
+    }
+
     // -------------------------------------------------------------------------
     // AVATAR CATALOG (authoritative mirror of src/config/avatarCatalog.ts)
     // The cost map below is the single source of truth for premium avatar prices
@@ -1583,6 +1623,66 @@ service cloud.firestore {
           && ((request.resource.data.status == 'rejected' && request.resource.data.rejectionReason is string && request.resource.data.rejectionReason.trim().size() > 0)
               || hasValidJoinApproval(familyId, requestId, resource.data, request.resource.data));
         allow read: if isFamilyMember(familyId) || (isAuthenticated() && resource.data.uid == authProfileId());
+        allow delete: if false;
+      }
+
+      match /announcements/{announcementId} {
+        allow read: if canReadAnnouncement(familyId, resource.data);
+        allow create: if isValidAnnouncementCreate(familyId);
+        allow update: if isParent(familyId)
+          && request.resource.data.familyId == resource.data.familyId
+          && request.resource.data.createdBy == resource.data.createdBy
+          && request.resource.data.createdAt == resource.data.createdAt
+          && request.resource.data.updatedAt == request.time
+          && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+            'title', 'message', 'type', 'audienceType', 'audienceUserIds', 'priority',
+            'startsAt', 'expiresAt', 'pinned', 'status', 'linkedTaskId',
+            'linkedRewardId', 'linkedSettingChangeId', 'updatedAt'
+          ])
+          && request.resource.data.type in ['general', 'rule_change', 'consequence', 'new_task', 'reward_update', 'event', 'urgent']
+          && request.resource.data.audienceType in ['family', 'children', 'adults', 'selected']
+          && request.resource.data.priority in ['normal', 'important', 'urgent']
+          && request.resource.data.status in ['active', 'archived']
+          && request.resource.data.audienceUserIds is list
+          && request.resource.data.audienceUserIds.size() <= 50
+          && ((request.resource.data.audienceType == 'selected' && request.resource.data.audienceUserIds.size() > 0)
+              || (request.resource.data.audienceType != 'selected' && request.resource.data.audienceUserIds.size() == 0))
+          && request.resource.data.title is string
+          && request.resource.data.title.trim().size() > 0
+          && request.resource.data.title.size() <= 120
+          && request.resource.data.message is string
+          && request.resource.data.message.trim().size() > 0
+          && request.resource.data.message.size() <= 2000
+          && request.resource.data.pinned is bool
+          && (!('startsAt' in request.resource.data) || request.resource.data.startsAt is timestamp)
+          && (!('expiresAt' in request.resource.data) || request.resource.data.expiresAt is timestamp)
+          && (!('startsAt' in request.resource.data) || !('expiresAt' in request.resource.data)
+              || request.resource.data.expiresAt > request.resource.data.startsAt)
+          && hasValidAnnouncementLinks(familyId, request.resource.data);
+        allow delete: if isParent(familyId);
+      }
+
+      match /announcement_reads/{readId} {
+        allow read: if isFamilyMember(familyId)
+          && (resource.data.userId == authProfileId() || isParent(familyId));
+        allow create: if isFamilyMember(familyId)
+          && request.resource.data.keys().hasOnly(['familyId', 'announcementId', 'userId', 'readAt'])
+          && request.resource.data.familyId == familyId
+          && request.resource.data.userId == authProfileId()
+          && readId == request.resource.data.announcementId + '_' + authProfileId()
+          && request.resource.data.readAt == request.time
+          && exists(/databases/$(database)/documents/families/$(familyId)/announcements/$(request.resource.data.announcementId))
+          && canReadAnnouncement(
+            familyId,
+            get(/databases/$(database)/documents/families/$(familyId)/announcements/$(request.resource.data.announcementId)).data
+          );
+        allow update: if isFamilyMember(familyId)
+          && request.resource.data.familyId == resource.data.familyId
+          && request.resource.data.announcementId == resource.data.announcementId
+          && request.resource.data.userId == resource.data.userId
+          && request.resource.data.userId == authProfileId()
+          && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['readAt'])
+          && request.resource.data.readAt == request.time;
         allow delete: if false;
       }
 
