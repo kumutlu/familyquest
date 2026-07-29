@@ -122,6 +122,7 @@ const CHILD_LOGIN_INDEX = 'childLoginIndex';
 const CHILD_LOGINS = 'childLogins';
 const CHILD_LOGIN_AUDIT = 'childLoginAudit';
 const CHILD_LOGIN_IDEMPOTENCY = 'childLoginIdempotency';
+const FAMILY_CODE = /^[A-Z0-9]{6}$/;
 
 // Public (client-readable) child-profile fields we maintain.
 export const PUBLIC_LOGIN_FIELDS = ['hasLogin', 'username', 'loginEnabled', 'requiresPasswordChange'] as const;
@@ -256,8 +257,13 @@ export async function verifyPasswordViaAuthApi(
   const base = emulatorHost
     ? `http://${emulatorHost}/identitytoolkit.googleapis.com/v1`
     : 'https://identitytoolkit.googleapis.com/v1';
-  // The auth emulator accepts any non-empty key; production requires the web API key.
-  const apiKey = process.env.FIREBASE_WEB_API_KEY ?? 'emulator';
+  // The auth emulator accepts any non-empty key; production requires the
+  // project Web API key bound to signInChild through Secret Manager.
+  const apiKey =
+    process.env.MANAGED_CHILD_WEB_API_KEY ?? (emulatorHost ? 'emulator' : '');
+  if (!apiKey) {
+    throw new Error('MANAGED_CHILD_WEB_API_KEY_MISSING');
+  }
   const url = `${base}/accounts:signInWithPassword?key=${apiKey}`;
   try {
     const res = await fetch(url, {
@@ -603,10 +609,11 @@ export async function signInChildImpl(
 ): Promise<SignInChildResult> {
   // --- Input validation --------------------------------------------------
   if (!data || typeof data !== 'object') throwGenericLoginFailure();
-  const familyCode = typeof data.familyCode === 'string' ? data.familyCode : '';
+  const familyCode =
+    typeof data.familyCode === 'string' ? data.familyCode.trim().toUpperCase() : '';
   const usernameRaw = typeof data.username === 'string' ? data.username : '';
   const password = typeof data.password === 'string' ? data.password : '';
-  if (!familyCode || !usernameRaw || !password) throwGenericLoginFailure();
+  if (!FAMILY_CODE.test(familyCode) || !usernameRaw || !password) throwGenericLoginFailure();
 
   let normalizedUsername: string;
   try {
@@ -622,59 +629,73 @@ export async function signInChildImpl(
   const rlKey = `${familyCode}:${normalizedUsername}`;
   const rlKeyIp = `${meta.ip ?? 'noip'}:${familyCode}:${normalizedUsername}`;
   if (!limiter(rlKey) || !limiter(rlKeyIp)) {
-    await auditSignInAttempt(ctx, familyCode, normalizedUsername, false, 'rate_limited');
     throwGenericLoginFailure();
   }
 
+  // --- Resolve the public family code to the private Firestore family id --
+  const familyMatches = await db
+    .collection(FAMILIES)
+    .where('inviteCode', '==', familyCode)
+    .limit(2)
+    .get();
+  if (familyMatches.empty || familyMatches.docs.length !== 1) {
+    throwGenericLoginFailure();
+  }
+  const familyId = familyMatches.docs[0].id;
+
   // --- Resolve the private record (server-owned) -------------------------
   const indexRef = db.doc(
-    `${FAMILIES}/${familyCode}/${CHILD_LOGIN_INDEX}/${normalizedUsername}`,
+    `${FAMILIES}/${familyId}/${CHILD_LOGIN_INDEX}/${normalizedUsername}`,
   );
   const indexSnap = await indexRef.get();
   if (!indexSnap.exists) {
-    await auditSignInAttempt(ctx, familyCode, normalizedUsername, false, 'no_user');
+    await auditSignInAttempt(ctx, familyId, normalizedUsername, false, 'no_user');
     throwGenericLoginFailure();
   }
   const childId = (indexSnap.data() as Record<string, unknown>).childId as string;
 
-  const privateRef = db.doc(`${FAMILIES}/${familyCode}/${CHILD_LOGINS}/${childId}`);
+  const privateRef = db.doc(`${FAMILIES}/${familyId}/${CHILD_LOGINS}/${childId}`);
   const privateSnap = await privateRef.get();
   if (!privateSnap.exists) {
-    await auditSignInAttempt(ctx, familyCode, normalizedUsername, false, 'no_record');
+    await auditSignInAttempt(ctx, familyId, normalizedUsername, false, 'no_record');
     throwGenericLoginFailure();
   }
   const priv = privateSnap.data() as Record<string, unknown>;
   if (priv.status !== 'enabled') {
-    await auditSignInAttempt(ctx, familyCode, normalizedUsername, false, 'disabled_login');
+    await auditSignInAttempt(ctx, familyId, normalizedUsername, false, 'disabled_login');
     throwGenericLoginFailure();
   }
   const syntheticEmail = priv.syntheticEmail as string;
   const authUid = priv.authUid as string;
-  const familyId = priv.familyId as string;
 
   // --- Login mapping consistency + Firebase Auth disabled check -----------
   // A disabled child must never obtain a custom token. We reject with the same
   // generic error for every failure class so no condition is revealed.
-  if (priv.childId !== childId || typeof authUid !== 'string' || !authUid) {
-    await auditSignInAttempt(ctx, familyCode, normalizedUsername, false, 'mapping_inconsistent');
+  if (
+    priv.childId !== childId ||
+    priv.familyId !== familyId ||
+    typeof authUid !== 'string' ||
+    !authUid
+  ) {
+    await auditSignInAttempt(ctx, familyId, normalizedUsername, false, 'mapping_inconsistent');
     throwGenericLoginFailure();
   }
   let authUser;
   try {
     authUser = await auth.getUser(authUid);
   } catch {
-    await auditSignInAttempt(ctx, familyCode, normalizedUsername, false, 'auth_lookup_failed');
+    await auditSignInAttempt(ctx, familyId, normalizedUsername, false, 'auth_lookup_failed');
     throwGenericLoginFailure();
   }
   if (authUser.disabled) {
-    await auditSignInAttempt(ctx, familyCode, normalizedUsername, false, 'auth_disabled');
+    await auditSignInAttempt(ctx, familyId, normalizedUsername, false, 'auth_disabled');
     throwGenericLoginFailure();
   }
 
   // --- Child must still be active & managed ------------------------------
   const childSnap = await db.doc(`${USERS}/${childId}`).get();
   if (!childSnap.exists) {
-    await auditSignInAttempt(ctx, familyCode, normalizedUsername, false, 'no_child');
+    await auditSignInAttempt(ctx, familyId, normalizedUsername, false, 'no_child');
     throwGenericLoginFailure();
   }
   const child = childSnap.data() as Record<string, unknown>;
@@ -685,15 +706,27 @@ export async function signInChildImpl(
     child.disabled === true ||
     child.status === 'deleted'
   ) {
-    await auditSignInAttempt(ctx, familyCode, normalizedUsername, false, 'child_ineligible');
+    await auditSignInAttempt(ctx, familyId, normalizedUsername, false, 'child_ineligible');
     throwGenericLoginFailure();
   }
 
   // --- Verify password (server-side, email stays server-side) ------------
   const verify = ctx.verifyPassword ?? verifyPasswordViaAuthApi;
-  const ok = await verify(syntheticEmail, password);
+  let ok = false;
+  try {
+    ok = await verify(syntheticEmail, password);
+  } catch {
+    await auditSignInAttempt(
+      ctx,
+      familyId,
+      normalizedUsername,
+      false,
+      'auth_verification_failed',
+    );
+    throwGenericLoginFailure();
+  }
   if (!ok) {
-    await auditSignInAttempt(ctx, familyCode, normalizedUsername, false, 'bad_password');
+    await auditSignInAttempt(ctx, familyId, normalizedUsername, false, 'bad_password');
     throwGenericLoginFailure();
   }
 
@@ -706,28 +739,50 @@ export async function signInChildImpl(
       childId,
       managedChild: true,
     });
-  } catch {
-    await auditSignInAttempt(ctx, familyCode, normalizedUsername, false, 'token_failed');
+  } catch (error) {
+    const authError = error as { code?: unknown; name?: unknown; message?: unknown };
+    console.error('[child-login] custom-token-failed', {
+      familyId,
+      childId,
+      code: typeof authError.code === 'string' ? authError.code : 'unknown',
+      name: typeof authError.name === 'string' ? authError.name : 'Error',
+      message:
+        typeof authError.message === 'string'
+          ? authError.message.slice(0, 300)
+          : 'Unknown custom-token error',
+    });
+    await auditSignInAttempt(ctx, familyId, normalizedUsername, false, 'token_failed');
     throwGenericLoginFailure();
   }
 
-  await auditSignInAttempt(ctx, familyCode, normalizedUsername, true, 'success');
+  try {
+    await db.runTransaction(async transaction => {
+      const lastLogin = FieldValue.serverTimestamp();
+      transaction.update(childSnap.ref, { lastLogin });
+      transaction.update(privateRef, { lastLogin });
+    });
+  } catch {
+    await auditSignInAttempt(ctx, familyId, normalizedUsername, false, 'last_login_failed');
+    throwGenericLoginFailure();
+  }
+
+  await auditSignInAttempt(ctx, familyId, normalizedUsername, true, 'success');
   return { customToken };
 }
 
 async function auditSignInAttempt(
   ctx: ChildLoginContext,
-  familyCode: string,
+  familyId: string,
   normalizedUsername: string,
   success: boolean,
   reason: string,
 ): Promise<void> {
   try {
     await ctx.db
-      .collection(`${FAMILIES}/${familyCode}/${CHILD_LOGIN_AUDIT}`)
+      .collection(`${FAMILIES}/${familyId}/${CHILD_LOGIN_AUDIT}`)
       .add({
         type: success ? 'login_signin_success' : 'login_signin_failure',
-        familyCode,
+        familyId,
         normalizedUsername,
         success,
         reason,
@@ -1541,6 +1596,7 @@ export const createChildLogin = onCall(
 );
 
 export const signInChild = onCall(
+  { secrets: ['MANAGED_CHILD_WEB_API_KEY'] },
   async (request: CallableRequest<SignInChildInput>): Promise<SignInChildResult> => {
     const ip =
       (request.rawRequest as { ip?: string } | undefined)?.ip ??

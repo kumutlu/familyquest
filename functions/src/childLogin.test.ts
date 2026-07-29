@@ -72,7 +72,12 @@ function makeFakeDb(enforceReadBeforeWrite = false) {
     id: path.split('/').pop() as string,
     get: async () => {
       const data = store.get(path);
-      return { exists: data !== undefined, data: () => data, id: path.split('/').pop() };
+      return {
+        exists: data !== undefined,
+        data: () => data,
+        id: path.split('/').pop(),
+        ref: makeRef(path),
+      };
     },
     set: (data: Record<string, unknown>) => applyWrite({ path } as FakeRef, data, 'set'),
     update: (data: Record<string, unknown>) => applyWrite({ path } as FakeRef, data, 'update'),
@@ -84,17 +89,46 @@ function makeFakeDb(enforceReadBeforeWrite = false) {
       failAt = n;
     },
     doc: (path: string) => makeRef(path),
-    collection: (path: string) => ({
-      doc: (id?: string) => {
-        const realId = id || Math.random().toString(36).slice(2);
-        return makeRef(`${path}/${realId}`);
-      },
-      add: async (data: Record<string, unknown>) => {
-        const ref = db.collection(path).doc();
-        applyWrite(ref, data, 'set');
-        return ref;
-      },
-    }),
+    collection: (path: string) => {
+      const query = (
+        field: string,
+        value: unknown,
+        maxResults = Number.POSITIVE_INFINITY,
+      ) => ({
+        limit: (limit: number) => query(field, value, limit),
+        get: async () => {
+          const prefix = `${path}/`;
+          const docs = Array.from(store.entries())
+            .filter(([key, data]) =>
+              key.startsWith(prefix) &&
+              !key.slice(prefix.length).includes('/') &&
+              data[field] === value)
+            .slice(0, maxResults)
+            .map(([key, data]) => ({
+              id: key.slice(prefix.length),
+              exists: true,
+              data: () => data,
+              ref: makeRef(key),
+            }));
+          return { empty: docs.length === 0, docs, size: docs.length };
+        },
+      });
+      return {
+        doc: (id?: string) => {
+          const realId = id || Math.random().toString(36).slice(2);
+          return makeRef(`${path}/${realId}`);
+        },
+        add: async (data: Record<string, unknown>) => {
+          const ref = db.collection(path).doc();
+          applyWrite(ref, data, 'set');
+          return ref;
+        },
+        where: (field: string, op: string, value: unknown) => {
+          if (op !== '==') throw new Error(`Unsupported fake query operator: ${op}`);
+          return query(field, value);
+        },
+      };
+    },
     runTransaction: async (cb: (tx: any) => Promise<any>) => {
       txnCount += 1;
       if (failAt && txnCount === failAt) throw new Error('simulated transaction failure');
@@ -674,6 +708,7 @@ describe('signInChild — design/backend', () => {
     const norm = normalizeUsername('Alex');
     const email = generateSyntheticEmail(familyId, norm);
     const authUid = `auth-seed-${childId}`;
+    db.store.set(`families/${familyId}`, { inviteCode: 'ABC123' });
     db.store.set(`${familyId ? `families/${familyId}` : 'families/F1'}/childLoginIndex/${norm}`, {
       childId,
       normalizedUsername: norm,
@@ -700,7 +735,7 @@ describe('signInChild — design/backend', () => {
     const { authUid } = seedLogin('F1', 'child1');
     const ctx = makeCtx(db, auth, { verifyPassword: async () => true });
     const res = await signInChildImpl(ctx, {
-      familyCode: 'F1',
+      familyCode: 'ABC123',
       username: 'Alex',
       password: 'whatever',
     });
@@ -708,11 +743,59 @@ describe('signInChild — design/backend', () => {
     expect((res as any).syntheticEmail).toBeUndefined();
   });
 
+  it('records the successful sign-in time on the managed-child profile', async () => {
+    seedLogin('F1', 'child1');
+    const ctx = makeCtx(db, auth, { verifyPassword: async () => true });
+
+    await signInChildImpl(ctx, {
+      familyCode: 'ABC123',
+      username: 'Alex',
+      password: 'whatever',
+    });
+
+    expect(db.store.get('users/child1')?.lastLogin).toEqual(SERVER_TS);
+  });
+
+  it('resolves a family invite code before reading the family-scoped username index', async () => {
+    const familyId = 'firestore-family-id';
+    const familyCode = 'ABC123';
+    db.store.set(`families/${familyId}`, { inviteCode: familyCode });
+    const { authUid } = seedLogin(familyId, 'child1');
+    const ctx = makeCtx(db, auth, { verifyPassword: async () => true });
+
+    const res = await signInChildImpl(ctx, {
+      familyCode: ` ${familyCode.toLowerCase()} `,
+      username: ' Alex ',
+      password: 'whatever',
+    });
+
+    expect(res.customToken).toBe(`token-for-${authUid}`);
+    expect(db.store.has(`families/${familyId}/childLoginIndex/alex`)).toBe(true);
+    expect(db.store.has(`families/${familyCode}/childLoginIndex/alex`)).toBe(false);
+  });
+
   it('returns a generic failure for a wrong password', async () => {
     seedLogin('F1', 'child1');
     const ctx = makeCtx(db, auth, { verifyPassword: async () => false });
     await expect(
-      signInChildImpl(ctx, { familyCode: 'F1', username: 'Alex', password: 'x' }),
+      signInChildImpl(ctx, { familyCode: 'ABC123', username: 'Alex', password: 'x' }),
+    ).rejects.toMatchObject({ code: 'invalid-argument', message: 'INVALID_CREDENTIALS' });
+  });
+
+  it('does not expose a password-verifier configuration or transport failure', async () => {
+    seedLogin('F1', 'child1');
+    const ctx = makeCtx(db, auth, {
+      verifyPassword: async () => {
+        throw new Error('MANAGED_CHILD_WEB_API_KEY_MISSING');
+      },
+    });
+
+    await expect(
+      signInChildImpl(ctx, {
+        familyCode: 'ABC123',
+        username: 'Alex',
+        password: 'x',
+      }),
     ).rejects.toMatchObject({ code: 'invalid-argument', message: 'INVALID_CREDENTIALS' });
   });
 
@@ -720,7 +803,7 @@ describe('signInChild — design/backend', () => {
     seedLogin('F1', 'child1', 'disabled');
     const ctx = makeCtx(db, auth, { verifyPassword: async () => true });
     await expect(
-      signInChildImpl(ctx, { familyCode: 'F1', username: 'Alex', password: 'x' }),
+      signInChildImpl(ctx, { familyCode: 'ABC123', username: 'Alex', password: 'x' }),
     ).rejects.toMatchObject({ code: 'invalid-argument', message: 'INVALID_CREDENTIALS' });
   });
 
@@ -730,7 +813,7 @@ describe('signInChild — design/backend', () => {
     db.store.delete('users/child1');
     const ctx = makeCtx(db, auth, { verifyPassword: async () => true });
     await expect(
-      signInChildImpl(ctx, { familyCode: 'F1', username: 'Alex', password: 'x' }),
+      signInChildImpl(ctx, { familyCode: 'ABC123', username: 'Alex', password: 'x' }),
     ).rejects.toMatchObject({ code: 'invalid-argument', message: 'INVALID_CREDENTIALS' });
     expect(authUid).toBeTruthy();
   });
@@ -742,7 +825,7 @@ describe('signInChild — design/backend', () => {
       rateLimiter: () => false,
     });
     await expect(
-      signInChildImpl(ctx, { familyCode: 'F1', username: 'Alex', password: 'x' }),
+      signInChildImpl(ctx, { familyCode: 'ABC123', username: 'Alex', password: 'x' }),
     ).rejects.toMatchObject({ code: 'invalid-argument', message: 'INVALID_CREDENTIALS' });
   });
 
@@ -752,7 +835,7 @@ describe('signInChild — design/backend', () => {
     await auth.updateUser(authUid, { disabled: true });
     const ctx = makeCtx(db, auth, { verifyPassword: async () => true });
     await expect(
-      signInChildImpl(ctx, { familyCode: 'F1', username: 'Alex', password: 'x' }),
+      signInChildImpl(ctx, { familyCode: 'ABC123', username: 'Alex', password: 'x' }),
     ).rejects.toMatchObject({ code: 'invalid-argument', message: 'INVALID_CREDENTIALS' });
   });
 });
@@ -764,6 +847,8 @@ describe('signInChild — design/backend', () => {
 const NEW_PW = 'N3wStr0ng!';
 
 function seedStandardFamily(db: any, auth: any) {
+  db.store.set('families/F1', { inviteCode: 'ABC123' });
+  db.store.set('families/F2', { inviteCode: 'DEF456' });
   seedUser(db, 'owner1', { familyId: 'F1', role: 'owner', displayName: 'Owner' });
   seedUser(db, 'parent1', { familyId: 'F1', role: 'parent', displayName: 'Parent' });
   seedUser(db, 'child1', { familyId: 'F1', role: 'child', isManaged: true, displayName: 'Alex' });
@@ -815,7 +900,10 @@ describe('resetChildPassword', () => {
   });
 
   it('same-family parent can reset the password', async () => {
-    await seedLoginViaCreate(db, auth, { childId: 'child1', username: 'Alex' });
+    const { authUid } = await seedLoginViaCreate(db, auth, {
+      childId: 'child1',
+      username: 'Alex',
+    });
     const ctx = makeCtx(db, auth);
     const res = await resetChildPasswordImpl(ctx, 'parent1', {
       childId: 'child1',
@@ -827,6 +915,9 @@ describe('resetChildPassword', () => {
     expect(res.requiresPasswordChange).toBe(true);
     expect((res as any).authUid).toBeUndefined();
     expect((res as any).syntheticEmail).toBeUndefined();
+    expect(db.store.get('families/F1/childLogins/child1').authUid).toBe(authUid);
+    expect(auth.users.get(authUid).password).toBe(NEW_PW);
+    expect(auth.users.size).toBe(1);
   });
 
   it('unrelated-family parent is denied', async () => {
@@ -977,7 +1068,7 @@ describe('disable / enable child login', () => {
     const ctx = makeCtx(db, auth, { verifyPassword: async () => true });
     await disableChildLoginImpl(ctx, 'owner1', { childId: 'child1', clientReqId: 'd1' });
     await expect(
-      signInChildImpl(ctx, { familyCode: 'F1', username: 'Alex', password: 'x' }),
+      signInChildImpl(ctx, { familyCode: 'ABC123', username: 'Alex', password: 'x' }),
     ).rejects.toMatchObject({ code: 'invalid-argument', message: 'INVALID_CREDENTIALS' });
     expect(authUid).toBeTruthy();
   });
@@ -987,7 +1078,7 @@ describe('disable / enable child login', () => {
     const ctx = makeCtx(db, auth, { verifyPassword: async () => true });
     await disableChildLoginImpl(ctx, 'owner1', { childId: 'child1', clientReqId: 'd1' });
     await enableChildLoginImpl(ctx, 'owner1', { childId: 'child1', clientReqId: 'e1' });
-    const res = await signInChildImpl(ctx, { familyCode: 'F1', username: 'Alex', password: 'x' });
+    const res = await signInChildImpl(ctx, { familyCode: 'ABC123', username: 'Alex', password: 'x' });
     expect(res.customToken).toBeTruthy();
   });
 

@@ -1,8 +1,13 @@
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 import { deleteApp, initializeApp, type App } from 'firebase-admin/app';
+import { getAuth } from 'firebase-admin/auth';
 import { getFirestore, type Firestore } from 'firebase-admin/firestore';
 
-import { createChildLoginImpl } from './childLogin';
+import {
+  createChildLoginImpl,
+  resetChildPasswordImpl,
+  signInChildImpl,
+} from './childLogin';
 
 const emulatorAvailable = Boolean(process.env.FIRESTORE_EMULATOR_HOST);
 const describeWithEmulator = emulatorAvailable ? describe : describe.skip;
@@ -12,7 +17,7 @@ describeWithEmulator('createChildLogin Firestore emulator integration', () => {
   let db: Firestore;
 
   beforeAll(async () => {
-    app = initializeApp({ projectId: 'familyquest-child-login-integration' }, 'child-login-integration');
+    app = initializeApp({ projectId: 'familyquest-beta-402cb' }, 'child-login-integration');
     db = getFirestore(app);
     await db.doc('users/owner-1').set({
       uid: 'owner-1',
@@ -75,5 +80,84 @@ describeWithEmulator('createChildLogin Firestore emulator integration', () => {
     expect(privateLogin.exists).toBe(true);
     expect(usernameIndex.data()?.childId).toBe('profile-only-child');
     expect(authUsers.size).toBe(1);
+  });
+});
+
+const authEmulatorAvailable = Boolean(process.env.FIREBASE_AUTH_EMULATOR_HOST);
+const describeWithFirestoreAndAuth =
+  emulatorAvailable && authEmulatorAvailable ? describe : describe.skip;
+
+describeWithFirestoreAndAuth('managed child sign-in emulator integration', () => {
+  let app: App;
+  let db: Firestore;
+
+  beforeAll(async () => {
+    app = initializeApp(
+      { projectId: 'familyquest-beta-402cb' },
+      'child-signin-integration',
+    );
+    db = getFirestore(app);
+    await Promise.all([
+      db.doc('families/firestore-family-id').set({
+        name: 'Integration Family',
+        inviteCode: 'ABC123',
+      }),
+      db.doc('users/owner-signin').set({
+        uid: 'owner-signin',
+        familyId: 'firestore-family-id',
+        role: 'owner',
+        displayName: 'Owner',
+      }),
+      db.doc('users/profile-only-signin-child').set({
+        uid: 'profile-only-signin-child',
+        familyId: 'firestore-family-id',
+        role: 'child',
+        isManaged: true,
+        displayName: 'Sign-in Child',
+      }),
+    ]);
+  });
+
+  afterAll(async () => {
+    if (app) await deleteApp(app);
+  });
+
+  it('provisioning, reset, and sign-in share one Auth UID and one username index', async () => {
+    const auth = getAuth(app);
+    const context = { db, auth };
+    await createChildLoginImpl(context, 'owner-signin', {
+      childId: 'profile-only-signin-child',
+      username: 'test_child',
+      password: 'Initial123!',
+      clientReqId: 'emulator-signin-create',
+    });
+    const privateRef = db.doc(
+      'families/firestore-family-id/childLogins/profile-only-signin-child',
+    );
+    const provisioned = (await privateRef.get()).data();
+    const provisionedAuthUid = String(provisioned?.authUid);
+
+    await resetChildPasswordImpl(context, 'owner-signin', {
+      childId: 'profile-only-signin-child',
+      newPassword: 'Temporary456!',
+      clientReqId: 'emulator-signin-reset',
+    });
+    const reset = (await privateRef.get()).data();
+
+    await expect(signInChildImpl(context, {
+      familyCode: ' abc123 ',
+      username: ' TEST_CHILD ',
+      password: 'Temporary456!',
+    })).resolves.toMatchObject({ customToken: expect.any(String) });
+
+    const [profile, usernameIndex, authUsers] = await Promise.all([
+      db.doc('users/profile-only-signin-child').get(),
+      db.doc('families/firestore-family-id/childLoginIndex/test_child').get(),
+      auth.listUsers(),
+    ]);
+    expect(reset?.authUid).toBe(provisionedAuthUid);
+    expect(usernameIndex.data()?.childId).toBe('profile-only-signin-child');
+    expect(profile.data()?.lastLogin).toBeTruthy();
+    expect(authUsers.users.filter(user => user.uid === provisionedAuthUid)).toHaveLength(1);
   });
 });
