@@ -59,7 +59,7 @@ afterEach(() => {
   useStore.setState({ currentUser: null, familyData: null, familyMembers: [], joinRequests: [] });
 });
 
-function seedStore(role: string, options: { joinRequests?: any[]; familyData?: Record<string, unknown> } = {}) {
+function seedStore(role: string, options: { joinRequests?: any[]; familyData?: Record<string, unknown>; familyMembers?: any[] } = {}) {
   act(() => {
     useStore.setState({
       currentUser: {
@@ -79,7 +79,7 @@ function seedStore(role: string, options: { joinRequests?: any[]; familyData?: R
         weekStartsOn: 1,
         ...options.familyData,
       },
-      familyMembers: [
+      familyMembers: options.familyMembers ?? [
         { id: 'u1', displayName: 'Test User', role },
         { id: 'u2', displayName: 'Kid One', role: 'child' },
         { id: 'u3', displayName: 'Parent Two', role: 'parent' },
@@ -90,7 +90,7 @@ function seedStore(role: string, options: { joinRequests?: any[]; familyData?: R
   });
 }
 
-function renderFamilySettings(role: string, options: { joinRequests?: any[]; familyData?: Record<string, unknown> } = {}) {
+function renderFamilySettings(role: string, options: { joinRequests?: any[]; familyData?: Record<string, unknown>; familyMembers?: any[] } = {}) {
   seedStore(role, options);
   return render(
     <MemoryRouter>
@@ -141,6 +141,43 @@ describe('FamilySettings — basic rendering', () => {
     expect(screen.getByText(/Test User/)).toBeInTheDocument();
     expect(screen.getByText('Parent Two')).toBeInTheDocument();
     expect(screen.getByText('Kid One')).toBeInTheDocument();
+  });
+
+  it('exposes setup login for a managed child whose credentials do not exist', async () => {
+    const user = userEvent.setup();
+    renderFamilySettings('owner', {
+      familyMembers: [
+        { id: 'u1', displayName: 'Owner', role: 'owner' },
+        { id: 'child-1', displayName: 'test', role: 'child', isManaged: true, hasLogin: false, loginEnabled: false },
+      ],
+    });
+    await user.click(screen.getByRole('button', { name: 'Members' }));
+    expect(screen.getByText('No login created')).toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: 'Create Login' }));
+    expect(screen.getByRole('dialog')).toBeInTheDocument();
+    expect(screen.getByText(/family code, their family-scoped username/i)).toBeInTheDocument();
+  });
+
+  it('exposes existing secure lifecycle controls for an enabled managed child', async () => {
+    const user = userEvent.setup();
+    renderFamilySettings('owner', {
+      familyMembers: [
+        { id: 'u1', displayName: 'Owner', role: 'owner' },
+        {
+          id: 'child-1',
+          displayName: 'test',
+          role: 'child',
+          isManaged: true,
+          hasLogin: true,
+          username: 'test',
+          loginEnabled: true,
+        },
+      ],
+    });
+    await user.click(screen.getByRole('button', { name: 'Members' }));
+    expect(screen.getAllByText('test')).toHaveLength(2);
+    expect(screen.getByRole('button', { name: 'Reset Password' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Disable Login' })).toBeInTheDocument();
   });
 
   it('6. Regional section shows currency, timezone, week starts', async () => {

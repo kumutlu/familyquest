@@ -13,6 +13,8 @@ import { resolveFamilyCurrencyCode, type SupportedCurrencyCode } from '../../i18
 import { Toast, type ToastData } from '../ui/Toast';
 import { AddChildModal } from './AddChildModal';
 import { EditMemberModal } from './EditMemberModal';
+import { ChildLoginSection, type ChildLoginMember } from './ChildLoginSection';
+import { CreateChildLoginDialog } from './CreateChildLoginDialog';
 import { getTimezoneOptions } from '../../lib/timezones';
 import { isPetBoxEnabled } from '../../lib/familyFeatures';
 
@@ -54,6 +56,7 @@ export function FamilySettings({ onSectionChange }: FamilySettingsProps) {
   const [showAddChildModal, setShowAddChildModal] = useState(false);
   const [showAdultInvite, setShowAdultInvite] = useState(false);
   const [editingMember, setEditingMember] = useState<any>(null);
+  const [createLoginFor, setCreateLoginFor] = useState<ChildLoginMember | null>(null);
   const [approvalRoles, setApprovalRoles] = useState<Record<string, 'child' | 'parent'>>({});
 
   // Regional settings state
@@ -562,30 +565,33 @@ export function FamilySettings({ onSectionChange }: FamilySettingsProps) {
                 <div className="space-y-3">
                   {familyMembers.filter(m => isChildRole(m.role)).map(member => (
                     <Card key={member.id}>
-                      <CardContent className="p-4 flex items-center justify-between">
-                        <div className="flex items-center gap-4">
-                          <Avatar src={member.avatarUrl} fallback={member.displayName[0]} />
-                          <div>
-                            <h4 className="font-semibold text-gray-900 flex items-center gap-2">
-                              {member.displayName}
-                              {member.isManaged && (
-                                <span className="text-xs font-medium text-amber-600 bg-amber-50 px-2 py-1 rounded-full">
-                                  {t('familySettings.managed')}
-                                </span>
-                              )}
-                            </h4>
+                      <CardContent className="p-4">
+                        <div className="flex items-center justify-between gap-3">
+                          <div className="flex items-center gap-4">
+                            <Avatar src={member.avatarUrl} fallback={member.displayName[0]} />
+                            <div>
+                              <h4 className="font-semibold text-gray-900 flex items-center gap-2">
+                                {member.displayName}
+                                {member.isManaged && (
+                                  <span className="text-xs font-medium text-amber-600 bg-amber-50 px-2 py-1 rounded-full">
+                                    {t('familySettings.managed')}
+                                  </span>
+                                )}
+                              </h4>
+                            </div>
                           </div>
-                        </div>
-                        <div className="flex items-center gap-2">
-                          <span className="text-sm text-gray-500">
-                            {t('familySettings.loginEnabled')}: {member.loginEnabled ? t('common:yes') : t('common:no')}
-                          </span>
                           {isParentOrOwner && (
                             <Button variant="ghost" size="sm" className="text-gray-500 hover:text-gray-700" onClick={() => setEditingMember(member)}>
                               {t('common:edit')}
                             </Button>
                           )}
                         </div>
+                        {member.isManaged && isParentOrOwner && (
+                          <ChildLoginSection
+                            member={member}
+                            onRequestCreate={setCreateLoginFor}
+                          />
+                        )}
                       </CardContent>
                     </Card>
                   ))}
@@ -919,6 +925,16 @@ export function FamilySettings({ onSectionChange }: FamilySettingsProps) {
           onClose={() => setEditingMember(null)}
         />
       )}
+
+      <CreateChildLoginDialog
+        member={createLoginFor}
+        onClose={() => setCreateLoginFor(null)}
+        onSuccess={() => {
+          const name = createLoginFor?.displayName ?? 'child';
+          setCreateLoginFor(null);
+          showToast(t('family:loginCreated', { name }));
+        }}
+      />
 
     </div>
   );
