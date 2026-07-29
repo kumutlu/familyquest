@@ -47,7 +47,7 @@ interface FakeRef {
   id: string;
 }
 
-function makeFakeDb() {
+function makeFakeDb(enforceReadBeforeWrite = false) {
   const store = new Map<string, Record<string, unknown>>();
   let txnCount = 0;
   let failAt = 0;
@@ -99,14 +99,27 @@ function makeFakeDb() {
       txnCount += 1;
       if (failAt && txnCount === failAt) throw new Error('simulated transaction failure');
       const writes: Array<['set' | 'update', FakeRef, Record<string, unknown>]> = [];
+      let hasWritten = false;
       const tx = {
         get: async (ref: FakeRef) => {
+          if (enforceReadBeforeWrite && hasWritten) {
+            throw new Error('Firestore transactions require all reads to be executed before all writes.');
+          }
           const data = store.get(ref.path);
           return { exists: data !== undefined, data: () => data, id: ref.id };
         },
-        set: (ref: FakeRef, data: Record<string, unknown>) => writes.push(['set', ref, data]),
-        update: (ref: FakeRef, data: Record<string, unknown>) => writes.push(['update', ref, data]),
-        delete: (ref: FakeRef) => writes.push(['delete', ref, {} as Record<string, unknown>]),
+        set: (ref: FakeRef, data: Record<string, unknown>) => {
+          hasWritten = true;
+          writes.push(['set', ref, data]);
+        },
+        update: (ref: FakeRef, data: Record<string, unknown>) => {
+          hasWritten = true;
+          writes.push(['update', ref, data]);
+        },
+        delete: (ref: FakeRef) => {
+          hasWritten = true;
+          writes.push(['delete', ref, {} as Record<string, unknown>]);
+        },
       };
       const result = await cb(tx);
       for (const [op, ref, data] of writes) applyWrite(ref, data, op);
@@ -276,6 +289,30 @@ describe('createChildLogin — ALLOWED', () => {
     // authUid must NOT be in the response.
     expect((res as any).authUid).toBeUndefined();
     expect((res as any).syntheticEmail).toBeUndefined();
+  });
+
+  it('provisions an existing profile-only managed child using production transaction ordering', async () => {
+    const orderedDb = makeFakeDb(true);
+    const orderedAuth = makeFakeAuth();
+    seedUser(orderedDb, 'owner1', { familyId: 'F1', role: 'owner', displayName: 'Owner' });
+    seedUser(orderedDb, 'profile-only-child', {
+      familyId: 'F1',
+      role: 'child',
+      isManaged: true,
+      displayName: 'Profile Only',
+    });
+
+    await expect(createChildLoginImpl(makeCtx(orderedDb, orderedAuth), 'owner1', {
+      childId: 'profile-only-child',
+      username: 'profile_only',
+      password: GOOD_PW,
+      clientReqId: 'profile-only-request',
+    })).resolves.toEqual({
+      childId: 'profile-only-child',
+      username: 'profile_only',
+      loginEnabled: true,
+    });
+    expect(orderedAuth.users.size).toBe(1);
   });
 
   it('parent creates login if existing role model permits', async () => {

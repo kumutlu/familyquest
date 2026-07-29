@@ -372,6 +372,7 @@ export async function createChildLoginImpl(
       `${FAMILIES}/${familyId}/${CHILD_LOGIN_IDEMPOTENCY}/${data.clientReqId}`,
     );
     const idemSnap = await t.get(idemRefReal);
+    const needsIdempotencyRecord = !idemSnap.exists;
     if (idemSnap.exists) {
       const d = idemSnap.data() as Record<string, unknown>;
       // A replay with the SAME clientReqId but a DIFFERENT payload (childId or
@@ -390,18 +391,6 @@ export async function createChildLoginImpl(
         return { kind: 'done' as const, result: d.result as CreateChildLoginResult };
       }
       // processing/failed with same payload => allow retry
-    } else {
-      t.set(idemRefReal, {
-        clientReqId: data.clientReqId,
-        operation: 'createChildLogin',
-        payloadHash: computePayloadHash(
-          data.childId,
-          normalizedUsername,
-          String(requiresPasswordChange),
-        ),
-        status: 'processing',
-        createdAt: FieldValue.serverTimestamp(),
-      });
     }
 
     const childSnap = await t.get(childRef);
@@ -422,6 +411,23 @@ export async function createChildLoginImpl(
     );
     const indexSnap = await t.get(indexRef);
     if (indexSnap.exists) throw httpError('already-exists', 'USERNAME_TAKEN');
+
+    // Firestore requires every transaction read to happen before its first
+    // write. Create the idempotency marker only after caller, idempotency,
+    // child-profile, and username-index reads have completed.
+    if (needsIdempotencyRecord) {
+      t.set(idemRefReal, {
+        clientReqId: data.clientReqId,
+        operation: 'createChildLogin',
+        payloadHash: computePayloadHash(
+          data.childId,
+          normalizedUsername,
+          String(requiresPasswordChange),
+        ),
+        status: 'processing',
+        createdAt: FieldValue.serverTimestamp(),
+      });
+    }
 
     return { kind: 'proceed' as const, familyId };
   });

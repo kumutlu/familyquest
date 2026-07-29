@@ -287,6 +287,7 @@ async function createChildLoginImpl(ctx, callerUid, data) {
         // before the cached result can be returned.
         const idemRefReal = db.doc(`${FAMILIES}/${familyId}/${CHILD_LOGIN_IDEMPOTENCY}/${data.clientReqId}`);
         const idemSnap = await t.get(idemRefReal);
+        const needsIdempotencyRecord = !idemSnap.exists;
         if (idemSnap.exists) {
             const d = idemSnap.data();
             // A replay with the SAME clientReqId but a DIFFERENT payload (childId or
@@ -301,15 +302,6 @@ async function createChildLoginImpl(ctx, callerUid, data) {
                 return { kind: 'done', result: d.result };
             }
             // processing/failed with same payload => allow retry
-        }
-        else {
-            t.set(idemRefReal, {
-                clientReqId: data.clientReqId,
-                operation: 'createChildLogin',
-                payloadHash: computePayloadHash(data.childId, normalizedUsername, String(requiresPasswordChange)),
-                status: 'processing',
-                createdAt: firestore_1.FieldValue.serverTimestamp(),
-            });
         }
         const childSnap = await t.get(childRef);
         if (!childSnap.exists)
@@ -328,6 +320,18 @@ async function createChildLoginImpl(ctx, callerUid, data) {
         const indexSnap = await t.get(indexRef);
         if (indexSnap.exists)
             throw httpError('already-exists', 'USERNAME_TAKEN');
+        // Firestore requires every transaction read to happen before its first
+        // write. Create the idempotency marker only after caller, idempotency,
+        // child-profile, and username-index reads have completed.
+        if (needsIdempotencyRecord) {
+            t.set(idemRefReal, {
+                clientReqId: data.clientReqId,
+                operation: 'createChildLogin',
+                payloadHash: computePayloadHash(data.childId, normalizedUsername, String(requiresPasswordChange)),
+                status: 'processing',
+                createdAt: firestore_1.FieldValue.serverTimestamp(),
+            });
+        }
         return { kind: 'proceed', familyId };
     });
     if (pre.kind === 'done')
