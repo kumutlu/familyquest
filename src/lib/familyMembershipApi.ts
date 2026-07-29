@@ -8,7 +8,7 @@ export interface FamilyJoinResult {
 
 export async function requestFamilyJoin(
   familyCode: string,
-  clientReqId = crypto.randomUUID(),
+  clientReqId: string = crypto.randomUUID(),
 ): Promise<FamilyJoinResult> {
   const callable = httpsCallable<
     { familyCode: string; clientReqId: string },
@@ -19,7 +19,7 @@ export async function requestFamilyJoin(
 }
 
 export async function regenerateFamilyCode(
-  clientReqId = crypto.randomUUID(),
+  clientReqId: string = crypto.randomUUID(),
 ): Promise<{ familyCode: string }> {
   const callable = httpsCallable<
     { clientReqId: string },

@@ -17,7 +17,7 @@ describe('QuickActions', () => {
     const onNewTask = vi.fn();
     render(
       <MemoryRouter>
-        <QuickActions onNewTask={onNewTask} onNewReward={vi.fn()} onLogBehaviour={vi.fn()} />
+        <QuickActions onAddChild={vi.fn()} onNewTask={onNewTask} onNewReward={vi.fn()} onLogBehaviour={vi.fn()} />
       </MemoryRouter>,
     );
     fireEvent.click(screen.getByRole('button', { name: 'New Task' }));
@@ -28,7 +28,7 @@ describe('QuickActions', () => {
     const onNewReward = vi.fn();
     render(
       <MemoryRouter>
-        <QuickActions onNewTask={vi.fn()} onNewReward={onNewReward} onLogBehaviour={vi.fn()} />
+        <QuickActions onAddChild={vi.fn()} onNewTask={vi.fn()} onNewReward={onNewReward} onLogBehaviour={vi.fn()} />
       </MemoryRouter>,
     );
     fireEvent.click(screen.getByRole('button', { name: 'New Reward' }));
@@ -39,7 +39,7 @@ describe('QuickActions', () => {
     const onLogBehaviour = vi.fn();
     render(
       <MemoryRouter>
-        <QuickActions onNewTask={vi.fn()} onNewReward={vi.fn()} onLogBehaviour={onLogBehaviour} />
+        <QuickActions onAddChild={vi.fn()} onNewTask={vi.fn()} onNewReward={vi.fn()} onLogBehaviour={onLogBehaviour} />
       </MemoryRouter>,
     );
     fireEvent.click(screen.getByRole('button', { name: 'Log Behaviour' }));
@@ -49,7 +49,7 @@ describe('QuickActions', () => {
   it('navigates to the wallet page for Manage Wallet', () => {
     render(
       <MemoryRouter>
-        <QuickActions onNewTask={vi.fn()} onNewReward={vi.fn()} onLogBehaviour={vi.fn()} />
+        <QuickActions onAddChild={vi.fn()} onNewTask={vi.fn()} onNewReward={vi.fn()} onLogBehaviour={vi.fn()} />
       </MemoryRouter>,
     );
     fireEvent.click(screen.getByRole('button', { name: 'Manage Wallet' }));
@@ -59,7 +59,7 @@ describe('QuickActions', () => {
   it('navigates to the pet box page', () => {
     render(
       <MemoryRouter>
-        <QuickActions onNewTask={vi.fn()} onNewReward={vi.fn()} onLogBehaviour={vi.fn()} />
+        <QuickActions onAddChild={vi.fn()} onNewTask={vi.fn()} onNewReward={vi.fn()} onLogBehaviour={vi.fn()} />
       </MemoryRouter>,
     );
     fireEvent.click(screen.getByRole('button', { name: 'Pet Box' }));
@@ -69,7 +69,7 @@ describe('QuickActions', () => {
   it('navigates to settings for Invite Member', () => {
     render(
       <MemoryRouter>
-        <QuickActions onNewTask={vi.fn()} onNewReward={vi.fn()} onLogBehaviour={vi.fn()} />
+        <QuickActions onAddChild={vi.fn()} onNewTask={vi.fn()} onNewReward={vi.fn()} onLogBehaviour={vi.fn()} />
       </MemoryRouter>,
     );
     fireEvent.click(screen.getByRole('button', { name: 'Invite Member' }));
@@ -79,10 +79,10 @@ describe('QuickActions', () => {
   it('renders all six quick actions with visible labels', () => {
     render(
       <MemoryRouter>
-        <QuickActions onNewTask={vi.fn()} onNewReward={vi.fn()} onLogBehaviour={vi.fn()} />
+        <QuickActions onAddChild={vi.fn()} onNewTask={vi.fn()} onNewReward={vi.fn()} onLogBehaviour={vi.fn()} />
       </MemoryRouter>,
     );
-    ['New Task', 'New Reward', 'Log Behaviour', 'Manage Wallet', 'Pet Box', 'Invite Member'].forEach(label => {
+    ['Add a child', 'New Task', 'New Reward', 'Log Behaviour', 'Manage Wallet', 'Pet Box', 'Invite Member'].forEach(label => {
       expect(screen.getByRole('button', { name: label })).toBeInTheDocument();
     });
   });
