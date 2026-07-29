@@ -1,283 +1,102 @@
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { render, screen, waitFor, act } from '@testing-library/react';
+import { act, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter } from 'react-router-dom';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import i18n from '../i18n/config';
 
-// Mock the API functions used by Onboarding
-const apiMocks = vi.hoisted(() => ({
-  createFamilyAndParent: vi.fn(async () => ({
-    familyId: 'fam-123',
-    inviteCode: 'ABC123',
-    user: { id: 'user-123', uid: 'user-123', familyId: 'fam-123', role: 'owner', displayName: 'Test User' },
-  })),
-  createManagedMember: vi.fn(async () => 'member-123'),
-  signOut: vi.fn(async () => {}),
+const api = vi.hoisted(() => ({
+  createFamilyAndParent: vi.fn(),
+  requestToJoinFamily: vi.fn(),
+  signOut: vi.fn(),
 }));
-vi.mock('../lib/api', () => ({
-  createFamilyAndParent: apiMocks.createFamilyAndParent,
-  createManagedMember: apiMocks.createManagedMember,
-  signOut: apiMocks.signOut,
+const navigate = vi.hoisted(() => vi.fn());
+const store = vi.hoisted(() => ({
+  currentUser: { uid: 'user-1', displayName: 'Test Parent', role: 'parent' },
+  refreshCurrentUser: vi.fn(),
 }));
 
-// Mock navigate at the top level
-const navigateMock = vi.hoisted(() => vi.fn());
+vi.mock('../lib/api', () => api);
 vi.mock('react-router-dom', async () => ({
   ...(await vi.importActual('react-router-dom')),
-  useNavigate: () => navigateMock,
-}));
-
-// Mock the store with a parent user (no familyId)
-const storeMocks = vi.hoisted(() => ({
-  refreshCurrentUser: vi.fn(),
-  currentUser: { uid: 'user-123', displayName: 'Test User', role: 'parent' },
-  authStatus: 'authenticated',
+  useNavigate: () => navigate,
 }));
 vi.mock('../store/useStore', () => ({
-  useStore: (selector: any) => selector(storeMocks),
+  useStore: (selector: (state: typeof store) => unknown) => selector(store),
 }));
 
 import { Onboarding } from './Onboarding';
 
-function renderOnboarding() {
-  return render(
-    <MemoryRouter>
-      <Onboarding />
-    </MemoryRouter>,
-  );
-}
+const renderPage = () => render(<MemoryRouter><Onboarding /></MemoryRouter>);
 
 beforeEach(async () => {
-  apiMocks.createFamilyAndParent.mockReset().mockResolvedValue({
-    familyId: 'fam-123',
+  vi.clearAllMocks();
+  api.createFamilyAndParent.mockResolvedValue({
+    familyId: 'family-1',
     inviteCode: 'ABC123',
-    user: { id: 'user-123', uid: 'user-123', familyId: 'fam-123', role: 'owner', displayName: 'Test User' },
+    user: { uid: 'user-1', familyId: 'family-1', role: 'owner' },
   });
-  apiMocks.createManagedMember.mockReset().mockResolvedValue('member-123');
-  apiMocks.signOut.mockClear();
-  storeMocks.refreshCurrentUser.mockClear();
-  navigateMock.mockClear();
+  api.requestToJoinFamily.mockResolvedValue('family-1');
   await i18n.loadNamespaces(['auth', 'common']);
   await act(async () => { await i18n.changeLanguage('en'); });
 });
 
-afterEach(async () => {
-  await act(async () => { await i18n.changeLanguage('en'); });
-});
+describe('Onboarding', () => {
+  it('offers create-family and join-family paths', () => {
+    renderPage();
+    expect(screen.getByRole('button', { name: /create family/i })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /invite.*code/i })).toBeInTheDocument();
+  });
 
-describe('Onboarding — Finish Setup flow', () => {
-  it('successful Finish Setup updates the parent user to owner', async () => {
+  it('completes family creation and enters Home without asking about children', async () => {
     const user = userEvent.setup();
-    renderOnboarding();
+    renderPage();
 
-    // Step 1: Create family
-    await user.click(screen.getByRole('button', { name: /i'm a parent \(create family\)/i }));
-    const familyNameInput = screen.getByPlaceholderText(/e\.g\., the smiths/i);
-    await user.type(familyNameInput, 'Test Family');
+    await user.click(screen.getByRole('button', { name: /create family/i }));
+    await user.type(screen.getByPlaceholderText(/the smiths/i), 'Test Family');
     await user.click(screen.getByRole('button', { name: /continue/i }));
 
-    await waitFor(() => expect(apiMocks.createFamilyAndParent).toHaveBeenCalled());
-
-    // Step 2: Add a member
-    const memberNameInput = screen.getByPlaceholderText(/name/i);
-    await user.type(memberNameInput, 'Child One');
-    await user.click(screen.getByRole('button', { name: '' })); // Plus button
-
-    // Step 3: Continue to invite code
-    await user.click(screen.getByRole('button', { name: /continue to invite code/i }));
-
-    // Step 3: Finish Setup
-    await user.click(screen.getByRole('button', { name: /finish setup/i }));
-
-    await waitFor(() => expect(storeMocks.refreshCurrentUser).toHaveBeenCalledWith(
-      'user-123',
-      { familyId: 'fam-123', role: 'owner' },
-    ));
+    await waitFor(() => expect(navigate).toHaveBeenCalledWith('/', { replace: true }));
+    expect(store.refreshCurrentUser).toHaveBeenCalledWith(
+      'user-1',
+      { familyId: 'family-1', role: 'owner' },
+    );
+    expect(screen.queryByText(/add family members/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/child/i)).not.toBeInTheDocument();
   });
 
-  it('successful Finish Setup navigates to dashboard', async () => {
+  it('does not ask child count, child details, or member roles', async () => {
     const user = userEvent.setup();
-    renderOnboarding();
+    renderPage();
+    await user.click(screen.getByRole('button', { name: /create family/i }));
 
-    // Step 1: Create family
-    await user.click(screen.getByRole('button', { name: /i'm a parent \(create family\)/i }));
-    const familyNameInput = screen.getByPlaceholderText(/e\.g\., the smiths/i);
-    await user.type(familyNameInput, 'Test Family');
+    expect(screen.queryByRole('option', { name: /child/i })).not.toBeInTheDocument();
+    expect(screen.queryByLabelText(/date of birth/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/add family members/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/invite others/i)).not.toBeInTheDocument();
+  });
+
+  it('keeps the create screen usable when family creation fails', async () => {
+    const user = userEvent.setup();
+    api.createFamilyAndParent.mockRejectedValue(new Error('Family creation failed'));
+    renderPage();
+
+    await user.click(screen.getByRole('button', { name: /create family/i }));
+    await user.type(screen.getByPlaceholderText(/the smiths/i), 'Test Family');
     await user.click(screen.getByRole('button', { name: /continue/i }));
 
-    // Step 2: Add a member
-    const memberNameInput = screen.getByPlaceholderText(/name/i);
-    await user.type(memberNameInput, 'Child One');
-    await user.click(screen.getByRole('button', { name: '' })); // Plus button
-
-    // Step 3: Continue to invite code
-    await user.click(screen.getByRole('button', { name: /continue to invite code/i }));
-
-    // Step 3: Finish Setup
-    await user.click(screen.getByRole('button', { name: /finish setup/i }));
-
-    await waitFor(() => expect(navigateMock).toHaveBeenCalledWith('/'));
+    expect(await screen.findByRole('alert')).toHaveTextContent('Family creation failed');
+    expect(navigate).not.toHaveBeenCalled();
   });
 
-  it('failed Finish Setup preserves the current wizard state and shows the error', async () => {
+  it('submits a family-code join request and shows pending approval', async () => {
     const user = userEvent.setup();
-    apiMocks.createManagedMember.mockRejectedValue(new Error('Failed to create member'));
+    renderPage();
 
-    renderOnboarding();
+    await user.click(screen.getByRole('button', { name: /invite.*code/i }));
+    await user.type(screen.getByLabelText(/invite code/i), 'ABC123');
+    await user.click(screen.getByRole('button', { name: /request to join/i }));
 
-    // Step 1: Create family
-    await user.click(screen.getByRole('button', { name: /i'm a parent \(create family\)/i }));
-    const familyNameInput = screen.getByPlaceholderText(/e\.g\., the smiths/i);
-    await user.type(familyNameInput, 'Test Family');
-    await user.click(screen.getByRole('button', { name: /continue/i }));
-
-    // Step 2: Add a member
-    const memberNameInput = screen.getByPlaceholderText(/name/i);
-    await user.type(memberNameInput, 'Child One');
-    await user.click(screen.getByRole('button', { name: '' })); // Plus button
-
-    // Step 3: Continue to invite code
-    await user.click(screen.getByRole('button', { name: /continue to invite code/i }));
-
-    // Step 3: Finish Setup (should fail)
-    await user.click(screen.getByRole('button', { name: /finish setup/i }));
-
-    // Error should be shown
-    await waitFor(() => expect(screen.getByText(/failed to create member/i)).toBeInTheDocument());
-
-    // Should still be on step 3 (invite code screen)
-    expect(screen.getByRole('heading', { name: /invite others to join/i })).toBeInTheDocument();
-    expect(screen.getByText(/your invite code/i)).toBeInTheDocument();
-  });
-
-  it('Finish Setup creates managed members after family ownership is established', async () => {
-    const user = userEvent.setup();
-    renderOnboarding();
-
-    // Step 1: Create family
-    await user.click(screen.getByRole('button', { name: /i'm a parent \(create family\)/i }));
-    const familyNameInput = screen.getByPlaceholderText(/e\.g\., the smiths/i);
-    await user.type(familyNameInput, 'Test Family');
-    await user.click(screen.getByRole('button', { name: /continue/i }));
-
-    // Step 2: Add two members
-    const memberNameInput = screen.getByPlaceholderText(/name/i);
-    await user.type(memberNameInput, 'Child One');
-    await user.click(screen.getByRole('button', { name: '' })); // Plus button
-
-    await user.type(memberNameInput, 'Child Two');
-    await user.click(screen.getByRole('button', { name: '' })); // Plus button
-
-    // Step 3: Continue to invite code
-    await user.click(screen.getByRole('button', { name: /continue to invite code/i }));
-
-    // Step 3: Finish Setup
-    await user.click(screen.getByRole('button', { name: /finish setup/i }));
-
-    await waitFor(() => {
-      expect(apiMocks.createManagedMember).toHaveBeenCalledTimes(2);
-      expect(apiMocks.createManagedMember).toHaveBeenCalledWith('fam-123', 'child', 'Child One');
-      expect(apiMocks.createManagedMember).toHaveBeenCalledWith('fam-123', 'child', 'Child Two');
-    });
-  });
-
-  it('family creation refreshes the store with the authoritative owner profile before Finish Setup', async () => {
-    const user = userEvent.setup();
-    renderOnboarding();
-
-    // Step 1: Create family
-    await user.click(screen.getByRole('button', { name: /i'm a parent \(create family\)/i }));
-    const familyNameInput = screen.getByPlaceholderText(/e\.g\., the smiths/i);
-    await user.type(familyNameInput, 'Test Family');
-    await user.click(screen.getByRole('button', { name: /continue/i }));
-
-    await waitFor(() => {
-      expect(storeMocks.refreshCurrentUser).toHaveBeenCalledWith(
-        'user-123',
-        { familyId: 'fam-123', role: 'owner' },
-      );
-    });
-
-    // Step 2: Add a member
-    const memberNameInput = screen.getByPlaceholderText(/name/i);
-    await user.type(memberNameInput, 'Child One');
-    await user.click(screen.getByRole('button', { name: '' })); // Plus button
-
-    // Step 3: Continue to invite code
-    await user.click(screen.getByRole('button', { name: /continue to invite code/i }));
-
-    // Step 3: Finish Setup
-    await user.click(screen.getByRole('button', { name: /finish setup/i }));
-
-    await waitFor(() => {
-      expect(storeMocks.refreshCurrentUser).toHaveBeenCalledWith('user-123', { familyId: 'fam-123', role: 'owner' });
-    });
-  });
-});
-
-describe('Onboarding — Create flow', () => {
-  it('renders the select screen with create and join options', () => {
-    renderOnboarding();
-    expect(screen.getByRole('heading', { name: /welcome to familyquest/i })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: /i'm a parent \(create family\)/i })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: /i have an invite \/ claim code/i })).toBeInTheDocument();
-  });
-
-  it('shows step 1 when create family is selected', async () => {
-    const user = userEvent.setup();
-    renderOnboarding();
-    await user.click(screen.getByRole('button', { name: /i'm a parent \(create family\)/i }));
-    expect(screen.getByRole('heading', { name: /name your family/i })).toBeInTheDocument();
-    expect(screen.getByText(/step 1 of 3/i)).toBeInTheDocument();
-  });
-
-  it('shows step 2 after family is created', async () => {
-    const user = userEvent.setup();
-    renderOnboarding();
-    await user.click(screen.getByRole('button', { name: /i'm a parent \(create family\)/i }));
-    const familyNameInput = screen.getByPlaceholderText(/e\.g\., the smiths/i);
-    await user.type(familyNameInput, 'Test Family');
-    await user.click(screen.getByRole('button', { name: /continue/i }));
-
-    await waitFor(() => expect(screen.getByRole('heading', { name: /add family members/i })).toBeInTheDocument());
-    expect(screen.getByText(/step 2 of 3/i)).toBeInTheDocument();
-  });
-
-  it('shows step 3 after adding members', async () => {
-    const user = userEvent.setup();
-    renderOnboarding();
-    await user.click(screen.getByRole('button', { name: /i'm a parent \(create family\)/i }));
-    const familyNameInput = screen.getByPlaceholderText(/e\.g\., the smiths/i);
-    await user.type(familyNameInput, 'Test Family');
-    await user.click(screen.getByRole('button', { name: /continue/i }));
-
-    const memberNameInput = screen.getByPlaceholderText(/name/i);
-    await user.type(memberNameInput, 'Child One');
-    await user.click(screen.getByRole('button', { name: '' })); // Plus button
-
-    await user.click(screen.getByRole('button', { name: /continue to invite code/i }));
-
-    expect(screen.getByRole('heading', { name: /invite others to join/i })).toBeInTheDocument();
-    expect(screen.getByText(/step 3 of 3/i)).toBeInTheDocument();
-  });
-});
-
-describe('Onboarding — Join flow', () => {
-  it('shows join form when join option is selected', async () => {
-    const user = userEvent.setup();
-    renderOnboarding();
-    await user.click(screen.getByRole('button', { name: /i have an invite \/ claim code/i }));
-    // Use placeholder text since the label is not properly associated with the input
-    expect(screen.getByPlaceholderText(/e\.g\., a1b2c3/i)).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: /request to join/i })).toBeInTheDocument();
-  });
-});
-
-describe('Onboarding — i18n', () => {
-  it('renders Turkish strings when language is switched', async () => {
-    await act(async () => { await i18n.changeLanguage('tr'); });
-    renderOnboarding();
-    expect(screen.getByRole('heading', { name: /familyquest'e hoş geldiniz/i })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: /ebeveynim \(aile oluştur\)/i })).toBeInTheDocument();
+    expect(api.requestToJoinFamily).toHaveBeenCalledWith('user-1', 'Test Parent', 'ABC123');
+    expect(await screen.findByText(/request.*sent/i)).toBeInTheDocument();
   });
 });
