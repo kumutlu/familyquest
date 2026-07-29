@@ -74,7 +74,9 @@ Reset is fail-closed:
 5. Revoke all refresh tokens as a required operation.
 6. Persist the completed restricted state and audit success.
 
-An external failure is not marked successful. The profile stays restricted, idempotency records the recoverable phase, and an audit entry records the failure without secrets. A same-payload retry resumes safely. Temporary and replacement passwords are hashed only for idempotency comparison and never stored or logged in plaintext.
+An external failure is not marked successful. The profile stays restricted, idempotency records the recoverable phase, and an audit entry records the failure without secrets. A retry with compatible non-secret operation metadata resumes safely.
+
+No plaintext password, password hash, password digest, or password-derived value is written to Firestore, audit, logs, idempotency records, analytics, or responses. Idempotency uses only `clientReqId`, operation type, child ID, requester UID, operation phase, server timestamps, and a non-secret request fingerprint that excludes all password material. Reusing a request ID with incompatible non-secret metadata is rejected.
 
 After temporary-password authentication, only these capabilities are available:
 
@@ -90,11 +92,12 @@ Password replacement:
 
 1. Verifies the managed-child custom claims, Auth UID caller, `childId`, family ID, public profile, and private linkage all agree.
 2. Requires the private/public restriction to be active.
-3. Verifies the temporary password server-side.
-4. Validates and writes the new private Firebase Auth password.
-5. Revokes refresh tokens.
-6. Only then clears public/private `requiresPasswordChange`.
-7. Completes idempotency and writes the audit event.
+3. Relies on the already-authenticated Firebase caller and a recent/valid token as appropriate; it does not accept or re-verify the temporary password.
+4. Accepts only the new private password and stable request ID.
+5. Validates and writes the new private Firebase Auth password.
+6. Requires successful refresh-token revocation.
+7. Only then clears public/private `requiresPasswordChange`.
+8. Completes idempotency and writes the audit event.
 
 Failure never clears the flag. On success, the old temporary credential no longer authenticates and the profile subscription unlocks the normal child experience.
 
