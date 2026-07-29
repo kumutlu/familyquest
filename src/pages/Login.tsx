@@ -27,6 +27,13 @@ export function Login() {
   const [signingIn, setSigningIn] = useState(false);
   const navigate = useNavigate();
   const authStatus = useStore(state => state.authStatus);
+  const bootstrapError = useStore(state => state.bootstrapError);
+
+  useEffect(() => {
+    if (bootstrapError === 'Google sign-in could not be completed. Please try again.') {
+      setError(t('auth:googleRedirectStateError'));
+    }
+  }, [bootstrapError, t]);
 
   // Initial focus on Family Code when the Child tab is shown (accessibility).
   const familyCodeRef = useRef<HTMLInputElement>(null);

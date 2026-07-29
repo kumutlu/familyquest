@@ -5,11 +5,11 @@ import {
 import {
   createUserWithEmailAndPassword,
   signInWithEmailAndPassword,
-  signInWithPopup,
   signOut as firebaseSignOut,
   sendPasswordResetEmail as firebaseSendPasswordResetEmail
 } from 'firebase/auth';
-import { db, auth, googleProvider } from './firebase';
+import { db, auth } from './firebase';
+import { startGoogleAuthentication } from './googleRedirectAuth';
 import { FAMILYQUEST_BUILD } from '../buildInfo';
 import { calculateBehaviourEffect, DEFAULT_DEBT_LIMIT_PENCE } from './behaviour';
 import type { BehaviourEventInput } from './behaviour';
@@ -100,28 +100,7 @@ export const signIn = async (email: string, pass: string) => {
 };
 
 export const signInWithGoogle = async () => {
-  const cred = await signInWithPopup(auth, googleProvider);
-
-  // Check if user doc exists
-  const userDocRef = doc(db, 'users', cred.user.uid);
-  const userSnap = await getDoc(userDocRef);
-
-  if (!userSnap.exists()) {
-    // Create new user document defaulting to 'parent' role
-    await setDoc(userDocRef, {
-      uid: cred.user.uid,
-      role: 'parent',
-      displayName: cred.user.displayName || 'User',
-      avatarUrl: cred.user.photoURL || `https://api.dicebear.com/7.x/avataaars/svg?seed=${cred.user.displayName || 'User'}`,
-      rewardPoints: 0,
-      lifetimeXP: 0,
-      currentStreak: 0,
-      longestStreak: 0,
-      lastActiveDate: serverTimestamp()
-    });
-  }
-
-  return cred.user;
+  return startGoogleAuthentication();
 };
 
 export const signOut = async () => {

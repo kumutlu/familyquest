@@ -21,12 +21,24 @@ import { useStore } from './store/useStore';
 import { initForegroundMessaging } from './lib/pushNotifications';
 import { RequestDetailProvider } from './components/requests/RequestDetailContext';
 import { useEffect } from 'react';
+import { consumeGoogleRedirectResult } from './lib/googleRedirectAuth';
 
 function App() {
   const initAuth = useStore(state => state.initAuth);
 
   useEffect(() => {
     initAuth();
+    void consumeGoogleRedirectResult()
+      .then(result => {
+        if (result.error === 'redirect-state-missing') {
+          useStore.setState({
+            bootstrapError: 'Google sign-in could not be completed. Please try again.',
+          });
+        }
+      })
+      .catch(error => {
+        console.error('[auth] Google redirect bootstrap failed', { code: error?.code });
+      });
   }, [initAuth]);
 
   useEffect(() => {
