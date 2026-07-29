@@ -1,6 +1,14 @@
+import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Button } from '../ui/Button';
 import { formatDate } from '../../i18n/format';
+import {
+  disableChildLogin,
+  enableChildLogin,
+  mapChildLoginError,
+  resetChildPassword,
+  validatePasswordClient,
+} from '../../lib/childLoginApi';
 
 export interface ChildLoginMember {
   id: string;
@@ -49,6 +57,43 @@ function formatLastLogin(value: unknown, neverLabel: string): string {
  */
 export function ChildLoginSection({ member, onRequestCreate }: ChildLoginSectionProps) {
   const { t } = useTranslation('family');
+  const [resetOpen, setResetOpen] = useState(false);
+  const [temporaryPassword, setTemporaryPassword] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [feedback, setFeedback] = useState('');
+
+  const changeEnabledState = async () => {
+    setBusy(true);
+    setFeedback('');
+    try {
+      if (member.loginEnabled) await disableChildLogin(member.id);
+      else await enableChildLogin(member.id);
+    } catch (error) {
+      setFeedback(mapChildLoginError(error));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const submitReset = async () => {
+    const validation = validatePasswordClient(temporaryPassword);
+    if (validation) {
+      setFeedback(validation);
+      return;
+    }
+    setBusy(true);
+    setFeedback('');
+    try {
+      await resetChildPassword(member.id, temporaryPassword);
+      setTemporaryPassword('');
+      setResetOpen(false);
+      setFeedback('Temporary password set. The child has been signed out and must create a new private password.');
+    } catch (error) {
+      setFeedback(mapChildLoginError(error));
+    } finally {
+      setBusy(false);
+    }
+  };
   if (!member.hasLogin) {
     return (
       <div className="mt-3 pt-3 border-t border-gray-100">
@@ -100,20 +145,46 @@ export function ChildLoginSection({ member, onRequestCreate }: ChildLoginSection
       </dl>
 
       <div className="flex flex-wrap items-center gap-2 pt-1">
-        <Button type="button" size="sm" variant="outline" disabled title={t('login.comingSoon')}>
+        <Button type="button" size="sm" variant="outline" disabled={busy} onClick={() => setResetOpen(true)}>
           {t('login.resetPassword')}
         </Button>
         {member.loginEnabled ? (
-          <Button type="button" size="sm" variant="outline" disabled title={t('login.comingSoon')}>
+          <Button type="button" size="sm" variant="outline" disabled={busy} onClick={changeEnabledState}>
             {t('login.disableLogin')}
           </Button>
         ) : (
-          <Button type="button" size="sm" variant="outline" disabled title={t('login.comingSoon')}>
+          <Button type="button" size="sm" variant="outline" disabled={busy} onClick={changeEnabledState}>
             {t('login.enableLogin')}
           </Button>
         )}
-        <span className="text-xs text-gray-400">{t('login.comingSoon')}</span>
       </div>
+      {feedback && <p className="text-xs text-gray-600" role="status">{feedback}</p>}
+      {resetOpen && (
+        <div className="rounded-xl border border-amber-200 bg-amber-50 p-3 space-y-3">
+          <p className="text-sm text-amber-900">
+            Set a temporary password. The child will be signed out on all devices and must create a new private password the next time they sign in.
+          </p>
+          <input
+            type="password"
+            value={temporaryPassword}
+            onChange={event => setTemporaryPassword(event.target.value)}
+            aria-label="Temporary password"
+            autoComplete="new-password"
+            className="w-full rounded-lg border border-amber-200 bg-white px-3 py-2"
+          />
+          <div className="flex gap-2">
+            <Button type="button" size="sm" disabled={busy} onClick={submitReset}>
+              Set temporary password
+            </Button>
+            <Button type="button" size="sm" variant="outline" disabled={busy} onClick={() => {
+              setTemporaryPassword('');
+              setResetOpen(false);
+            }}>
+              Cancel
+            </Button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

@@ -745,7 +745,6 @@ async function auditSignInAttempt(
 export interface ResetChildPasswordInput {
   childId: string;
   newPassword: string;
-  requirePasswordChange?: boolean;
   clientReqId: string;
 }
 
@@ -800,7 +799,6 @@ export interface ChangeChildUsernameResult {
 }
 
 export interface CompleteChildPasswordChangeInput {
-  currentPassword: string;
   newPassword: string;
   clientReqId: string;
 }
@@ -810,11 +808,6 @@ export interface CompleteChildPasswordChangeResult {
 }
 
 // --- Shared lifecycle helpers ----------------------------------------------
-
-/** Hash a secret (password) for inclusion in an idempotency payload hash. */
-function hashSecret(value: string): string {
-  return createHash('sha256').update(`secret:${value}`).digest('hex');
-}
 
 /** Stable hash of a lifecycle operation's idempotency payload. */
 export function computeLifecyclePayloadHash(operation: string, fields: string[]): string {
@@ -883,6 +876,16 @@ async function writeAudit(
   }
 }
 
+async function writeRequiredAudit(
+  ctx: ChildLoginContext,
+  familyId: string,
+  entry: Record<string, unknown>,
+): Promise<void> {
+  await ctx.db
+    .collection(`${FAMILIES}/${familyId}/${CHILD_LOGIN_AUDIT}`)
+    .add({ ...entry, createdAt: FieldValue.serverTimestamp() });
+}
+
 type IdemResult =
   | { kind: 'done'; result: unknown }
   | { kind: 'replayMismatch' }
@@ -894,6 +897,7 @@ async function lifecycleIdempotencyPrecheck(
   clientReqId: string,
   operation: string,
   payloadHash: string,
+  metadata: { childId: string; requesterUid: string },
 ): Promise<IdemResult> {
   return ctx.db.runTransaction(async (t: Transaction) => {
     const idemRef = ctx.db.doc(
@@ -909,6 +913,9 @@ async function lifecycleIdempotencyPrecheck(
         clientReqId,
         operation,
         payloadHash,
+        childId: metadata.childId,
+        requesterUid: metadata.requesterUid,
+        phase: 'processing',
         status: 'processing',
         createdAt: FieldValue.serverTimestamp(),
       });
@@ -927,6 +934,7 @@ async function markIdempotencyCompleted(
     .doc(`${FAMILIES}/${familyId}/${CHILD_LOGIN_IDEMPOTENCY}/${clientReqId}`)
     .update({
       status: 'completed',
+      phase: 'completed',
       result,
       completedAt: FieldValue.serverTimestamp(),
     });
@@ -946,8 +954,7 @@ export async function resetChildPasswordImpl(
   if (typeof data.clientReqId !== 'string' || !data.clientReqId) {
     throw httpError('invalid-argument', 'CLIENT_REQ_ID_REQUIRED');
   }
-  const requiresPasswordChange =
-    typeof data.requirePasswordChange === 'boolean' ? data.requirePasswordChange : true;
+  const requiresPasswordChange = true;
 
   const { familyId } = await requireParentOrOwner(ctx, callerUid);
   const { priv, authUid } = await resolveManagedChildWithLogin(ctx, familyId, data.childId);
@@ -958,8 +965,7 @@ export async function resetChildPasswordImpl(
 
   const payloadHash = computeLifecyclePayloadHash('resetChildPassword', [
     data.childId,
-    String(requiresPasswordChange),
-    hashSecret(data.newPassword),
+    callerUid,
   ]);
   const pre = await lifecycleIdempotencyPrecheck(
     ctx,
@@ -967,27 +973,73 @@ export async function resetChildPasswordImpl(
     data.clientReqId,
     'resetChildPassword',
     payloadHash,
+    { childId: data.childId, requesterUid: callerUid },
   );
   if (pre.kind === 'done') return pre.result as ResetChildPasswordResult;
   if (pre.kind === 'replayMismatch') {
     throw httpError('already-exists', 'CLIENT_REQ_ID_REPLAY_MISMATCH');
   }
 
+  const privateRef = ctx.db.doc(`${FAMILIES}/${familyId}/${CHILD_LOGINS}/${data.childId}`);
+  const childRef = ctx.db.doc(`${USERS}/${data.childId}`);
+  await privateRef.update({
+    requiresPasswordChange: true,
+    recoveryState: 'reset_in_progress',
+    updatedAt: FieldValue.serverTimestamp(),
+  });
+  await childRef.update({ requiresPasswordChange: true, updatedAt: FieldValue.serverTimestamp() });
+
   try {
     await ctx.auth.updateUser(authUid, { password: data.newPassword });
   } catch {
+    try {
+      await ctx.auth.revokeRefreshTokens(authUid);
+    } catch {
+      // The explicit recovery state below remains authoritative when revocation
+      // also fails; a retry is safe because the operation is still processing.
+    }
+    await privateRef.update({
+      recoveryState: 'auth_update_failed',
+      updatedAt: FieldValue.serverTimestamp(),
+    });
+    await writeRequiredAudit(ctx, familyId, {
+      type: 'password_reset_failed',
+      childId: data.childId,
+      actorId: callerUid,
+      operationPhase: 'auth_update',
+      clientReqId: data.clientReqId,
+    });
     throw httpError('internal', 'AUTH_UPDATE_FAILED');
   }
   try {
     await ctx.auth.revokeRefreshTokens(authUid);
   } catch {
-    /* best-effort */
+    await privateRef.update({
+      recoveryState: 'revocation_failed',
+      updatedAt: FieldValue.serverTimestamp(),
+    });
+    await writeRequiredAudit(ctx, familyId, {
+      type: 'password_reset_failed',
+      childId: data.childId,
+      actorId: callerUid,
+      operationPhase: 'session_revocation',
+      clientReqId: data.clientReqId,
+    });
+    throw httpError('internal', 'SESSION_REVOCATION_FAILED');
   }
+  await writeRequiredAudit(ctx, familyId, {
+    type: 'sessions_revoked',
+    childId: data.childId,
+    actorId: callerUid,
+    operation: 'password_reset',
+    clientReqId: data.clientReqId,
+  });
 
-  const privateRef = ctx.db.doc(`${FAMILIES}/${familyId}/${CHILD_LOGINS}/${data.childId}`);
-  const childRef = ctx.db.doc(`${USERS}/${data.childId}`);
-  await privateRef.update({ requiresPasswordChange, updatedAt: FieldValue.serverTimestamp() });
-  await childRef.update({ requiresPasswordChange, updatedAt: FieldValue.serverTimestamp() });
+  await privateRef.update({
+    requiresPasswordChange: true,
+    recoveryState: null,
+    updatedAt: FieldValue.serverTimestamp(),
+  });
 
   const result: ResetChildPasswordResult = {
     childId: data.childId,
@@ -996,7 +1048,7 @@ export async function resetChildPasswordImpl(
     requiresPasswordChange,
   };
   await markIdempotencyCompleted(ctx, familyId, data.clientReqId, result);
-  await writeAudit(ctx, familyId, {
+  await writeRequiredAudit(ctx, familyId, {
     type: 'password_reset',
     childId: data.childId,
     actorId: callerUid,
@@ -1032,6 +1084,7 @@ export async function disableChildLoginImpl(
     data.clientReqId,
     'disableChildLogin',
     payloadHash,
+    { childId: data.childId, requesterUid: callerUid },
   );
   if (pre.kind === 'done') return pre.result as DisableChildLoginResult;
   if (pre.kind === 'replayMismatch') {
@@ -1096,6 +1149,7 @@ export async function enableChildLoginImpl(
     data.clientReqId,
     'enableChildLogin',
     payloadHash,
+    { childId: data.childId, requesterUid: callerUid },
   );
   if (pre.kind === 'done') return pre.result as EnableChildLoginResult;
   if (pre.kind === 'replayMismatch') {
@@ -1154,6 +1208,7 @@ export async function revokeChildSessionsImpl(
     data.clientReqId,
     'revokeChildSessions',
     payloadHash,
+    { childId: data.childId, requesterUid: callerUid },
   );
   if (pre.kind === 'done') return pre.result as RevokeChildSessionsResult;
   if (pre.kind === 'replayMismatch') {
@@ -1211,6 +1266,7 @@ export async function changeChildUsernameImpl(
     data.clientReqId,
     'changeChildUsername',
     payloadHash,
+    { childId: data.childId, requesterUid: callerUid },
   );
   if (pre.kind === 'done') return pre.result as ChangeChildUsernameResult;
   if (pre.kind === 'replayMismatch') {
@@ -1341,9 +1397,6 @@ export async function completeChildPasswordChangeImpl(
   data: CompleteChildPasswordChangeInput,
 ): Promise<CompleteChildPasswordChangeResult> {
   if (!data || typeof data !== 'object') throw httpError('invalid-argument', 'BAD_REQUEST');
-  if (typeof data.currentPassword !== 'string' || !data.currentPassword) {
-    throw httpError('invalid-argument', 'CURRENT_PASSWORD_REQUIRED');
-  }
   if (typeof data.newPassword !== 'string' || !data.newPassword) {
     throw httpError('invalid-argument', 'NEW_PASSWORD_REQUIRED');
   }
@@ -1360,6 +1413,11 @@ export async function completeChildPasswordChangeImpl(
   ) {
     throw httpError('permission-denied', 'NOT_AUTHORIZED');
   }
+  const authTime = callerClaims.auth_time;
+  const nowSeconds = Math.floor((ctx.clock?.() ?? new Date()).getTime() / 1000);
+  if (typeof authTime !== 'number' || nowSeconds - authTime > 15 * 60 || authTime > nowSeconds + 60) {
+    throw httpError('unauthenticated', 'RECENT_AUTH_REQUIRED');
+  }
   const childId = callerClaims.childId as string;
   const familyId = callerClaims.familyId as string;
 
@@ -1371,11 +1429,25 @@ export async function completeChildPasswordChangeImpl(
   if (typeof authUid !== 'string' || !authUid) {
     throw httpError('failed-precondition', 'NO_LOGIN_LINK');
   }
+  if (callerUid !== authUid) {
+    throw httpError('permission-denied', 'AUTH_LINK_MISMATCH');
+  }
+
+  const publicSnap = await ctx.db.doc(`${USERS}/${childId}`).get();
+  if (!publicSnap.exists) throw httpError('failed-precondition', 'CHILD_NOT_FOUND');
+  const child = publicSnap.data() as Record<string, unknown>;
+  if (
+    child.familyId !== familyId ||
+    child.role !== 'child' ||
+    child.isManaged !== true ||
+    child.authUid !== authUid
+  ) {
+    throw httpError('permission-denied', 'IDENTITY_LINK_MISMATCH');
+  }
 
   const payloadHash = computeLifecyclePayloadHash('completeChildPasswordChange', [
     childId,
-    hashSecret(data.currentPassword),
-    hashSecret(data.newPassword),
+    callerUid,
   ]);
   const pre = await lifecycleIdempotencyPrecheck(
     ctx,
@@ -1383,6 +1455,7 @@ export async function completeChildPasswordChangeImpl(
     data.clientReqId,
     'completeChildPasswordChange',
     payloadHash,
+    { childId, requesterUid: callerUid },
   );
   if (pre.kind === 'done') return pre.result as CompleteChildPasswordChangeResult;
   if (pre.kind === 'replayMismatch') {
@@ -1398,13 +1471,6 @@ export async function completeChildPasswordChangeImpl(
   const pw = validatePasswordStrength(data.newPassword, normalizedUsername);
   if (!pw.ok) throw httpError('invalid-argument', pw.reason ?? 'WEAK_PASSWORD');
 
-  // Verify current password server-side via the trusted Identity Toolkit REST
-  // pattern (Admin SDK has no verifyPassword). Synthetic email stays server-side.
-  const syntheticEmail = priv.syntheticEmail as string;
-  const verify = ctx.verifyPassword ?? verifyPasswordViaAuthApi;
-  const ok = await verify(syntheticEmail, data.currentPassword);
-  if (!ok) throw httpError('invalid-argument', 'INVALID_CREDENTIALS');
-
   try {
     await ctx.auth.updateUser(authUid, { password: data.newPassword });
   } catch {
@@ -1413,17 +1479,39 @@ export async function completeChildPasswordChangeImpl(
   try {
     await ctx.auth.revokeRefreshTokens(authUid);
   } catch {
-    /* best-effort */
+    await privateRef.update({
+      recoveryState: 'password_changed_revocation_failed',
+      updatedAt: FieldValue.serverTimestamp(),
+    });
+    await writeRequiredAudit(ctx, familyId, {
+      type: 'password_change_failed',
+      childId,
+      actorId: childId,
+      operationPhase: 'session_revocation',
+      clientReqId: data.clientReqId,
+    });
+    throw httpError('internal', 'SESSION_REVOCATION_FAILED');
   }
+  await writeRequiredAudit(ctx, familyId, {
+    type: 'sessions_revoked',
+    childId,
+    actorId: childId,
+    operation: 'password_change_completion',
+    clientReqId: data.clientReqId,
+  });
 
-  await privateRef.update({ requiresPasswordChange: false, updatedAt: FieldValue.serverTimestamp() });
+  await privateRef.update({
+    requiresPasswordChange: false,
+    recoveryState: null,
+    updatedAt: FieldValue.serverTimestamp(),
+  });
   await ctx.db
     .doc(`${USERS}/${childId}`)
     .update({ requiresPasswordChange: false, updatedAt: FieldValue.serverTimestamp() });
 
   const result: CompleteChildPasswordChangeResult = { success: true };
   await markIdempotencyCompleted(ctx, familyId, data.clientReqId, result);
-  await writeAudit(ctx, familyId, {
+  await writeRequiredAudit(ctx, familyId, {
     type: 'password_change_completed',
     childId,
     actorId: childId,

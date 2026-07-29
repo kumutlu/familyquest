@@ -52,7 +52,9 @@ export function FamilySettings({ onSectionChange }: FamilySettingsProps) {
   const [copyStatus, setCopyStatus] = useState<'idle' | 'success' | 'error'>('idle');
   const [toast, setToast] = useState<ToastData | null>(null);
   const [showAddChildModal, setShowAddChildModal] = useState(false);
+  const [showAdultInvite, setShowAdultInvite] = useState(false);
   const [editingMember, setEditingMember] = useState<any>(null);
+  const [approvalRoles, setApprovalRoles] = useState<Record<string, 'child' | 'parent'>>({});
 
   // Regional settings state
   const [regionalSettings, setRegionalSettings] = useState({
@@ -216,9 +218,14 @@ export function FamilySettings({ onSectionChange }: FamilySettingsProps) {
 
   const handleApproveJoinRequest = async (requestId: string) => {
     if (!familyData?.id) return;
+    const selectedRole = approvalRoles[requestId] ?? 'child';
+    if (
+      selectedRole === 'parent' &&
+      !window.confirm(t('familySettings.parentApprovalWarning'))
+    ) return;
 
     try {
-      await approveJoinRequest(familyData.id, requestId, 'child');
+      await approveJoinRequest(familyData.id, requestId, selectedRole);
       showToast(t('familySettings.joinRequestApproved'));
     } catch (error: any) {
       console.error('Failed to approve join request:', error);
@@ -511,9 +518,27 @@ export function FamilySettings({ onSectionChange }: FamilySettingsProps) {
                       <p className="text-sm text-gray-500">
                         {t('familySettings.addParentInviteExplanation')}
                       </p>
-                      <Button variant="outline" className="w-full" onClick={handleCopyInviteCode}>
-                        {t('familySettings.copyInviteForAdult')}
+                      <Button variant="outline" className="w-full" onClick={() => setShowAdultInvite(true)}>
+                        {t('familySettings.addParentOrAdult')}
                       </Button>
+                      {showAdultInvite && (
+                        <div className="rounded-xl border border-primary-100 bg-primary-50 p-4 space-y-3">
+                          <p className="text-sm text-primary-900">
+                            Share this family code. The adult signs up normally and requests to join this family.
+                          </p>
+                          <p className="font-mono text-xl font-bold tracking-widest text-primary-700">
+                            {inviteCode || '—'}
+                          </p>
+                          <Button
+                            variant="secondary"
+                            size="sm"
+                            onClick={handleCopyInviteCode}
+                            disabled={!inviteCode || copyingInviteCode}
+                          >
+                            {t('common:copy')}
+                          </Button>
+                        </div>
+                      )}
                       {copyStatus === 'success' && (
                         <p className="text-sm text-green-600" role="status">
                           {t('familySettings.inviteCodeCopied')}
@@ -590,12 +615,28 @@ export function FamilySettings({ onSectionChange }: FamilySettingsProps) {
                               </p>
                             </div>
                             <div className="flex gap-2">
+                              <select
+                                aria-label={`Approval role for ${request.displayName}`}
+                                value={approvalRoles[request.id] ?? 'child'}
+                                onChange={event => setApprovalRoles(previous => ({
+                                  ...previous,
+                                  [request.id]: event.target.value as 'child' | 'parent',
+                                }))}
+                                className="rounded-lg border border-gray-200 px-2 text-sm"
+                              >
+                                <option value="child">{t('familySettings.approveAsChild')}</option>
+                                <option value="parent">{t('familySettings.approveAsParent')}</option>
+                              </select>
                               <Button
                                 size="sm"
                                 className="bg-green-500 hover:bg-green-600"
                                 onClick={() => handleApproveJoinRequest(request.id)}
                               >
-                                {t('familySettings.approve')}
+                                {t(
+                                  (approvalRoles[request.id] ?? 'child') === 'parent'
+                                    ? 'familySettings.confirmParent'
+                                    : 'familySettings.confirmChild',
+                                )}
                               </Button>
                               <Button
                                 size="sm"

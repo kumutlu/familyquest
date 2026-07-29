@@ -8,6 +8,7 @@ import { ProfileDropdown } from './ProfileDropdown';
 import { NotificationCenter } from './NotificationCenter';
 import { shouldShowFamilySetupPrompt } from '../../lib/familySetup';
 import { FamilySetupPrompt } from '../family/FamilySetupPrompt';
+import { MandatoryChildPasswordChange } from '../auth/MandatoryChildPasswordChange';
 
 export function AppLayout() {
   const { t } = useTranslation('common');
@@ -71,6 +72,14 @@ export function AppLayout() {
 
   if (currentUser?.familyId && !appReady) {
     return <div className="min-h-screen bg-gray-50 flex items-center justify-center animate-pulse">Loading Dashboard...</div>;
+  }
+
+  if (
+    currentUser?.role === 'child' &&
+    currentUser?.isManaged === true &&
+    currentUser?.requiresPasswordChange === true
+  ) {
+    return <MandatoryChildPasswordChange />;
   }
 
   // Single source of truth for navigation, shared by the desktop header and the

@@ -115,6 +115,9 @@ export function CreateChildLoginDialog({ member, onClose, onSuccess }: CreateChi
       title={t('family:createLogin.title', { name: member.displayName })}
     >
       <form id={FORM_ID} onSubmit={handleSubmit} className="space-y-4" noValidate>
+        <p className="rounded-xl bg-primary-50 p-3 text-sm text-primary-900">
+          The child signs in with your family code, their family-scoped username, and their password.
+        </p>
         {/* Username */}
         <div>
           <label htmlFor="cl-username" className="block text-sm font-medium text-gray-700">

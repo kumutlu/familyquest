@@ -18,6 +18,7 @@ const familyId = 'familyABC';
 const ownerId = 'owner1';
 const parentId = 'parent1';
 const childId = 'child1';
+const childAuthUid = 'auth-child1';
 const strangerId = 'stranger1';
 
 beforeAll(async () => {
@@ -37,9 +38,39 @@ beforeEach(async () => {
       familyId,
       role: 'child',
       isManaged: true,
+      authUid: childAuthUid,
       displayName: 'Alex',
     });
     await setDoc(doc(db, 'users', strangerId), { familyId: 'other', role: 'parent', displayName: 'Stranger' });
+  });
+});
+
+describe('managed-child restricted identity', () => {
+  const managedClaims = {
+    role: 'child',
+    managedChild: true,
+    childId,
+    familyId,
+  };
+
+  it('allows the linked Firebase Auth identity to hydrate its managed profile', async () => {
+    const db = testEnv.authenticatedContext(childAuthUid, managedClaims).firestore();
+    await assertSucceeds(getDoc(doc(db, 'users', childId)));
+  });
+
+  it('denies family data while requiresPasswordChange is active', async () => {
+    await testEnv.withSecurityRulesDisabled(async (context: any) => {
+      await updateDoc(doc(context.firestore(), 'users', childId), { requiresPasswordChange: true });
+      await setDoc(doc(context.firestore(), 'families', familyId), { name: 'Family' });
+    });
+    const db = testEnv.authenticatedContext(childAuthUid, managedClaims).firestore();
+    await assertSucceeds(getDoc(doc(db, 'users', childId)));
+    await assertFails(getDoc(doc(db, 'families', familyId)));
+  });
+
+  it('rejects forged claims when Auth UID linkage does not match', async () => {
+    const db = testEnv.authenticatedContext('wrong-auth-uid', managedClaims).firestore();
+    await assertFails(getDoc(doc(db, 'users', childId)));
   });
 });
 

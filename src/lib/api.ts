@@ -348,6 +348,7 @@ export const regenerateInviteCode = async (familyId: string) => {
 };
 
 export const approveJoinRequest = async (familyId: string, requestId: string, role: 'parent' | 'child') => {
+  if (role !== 'child' && role !== 'parent') throw new Error('Unsupported approval role');
   const reviewerUid = auth.currentUser?.uid;
   if (!reviewerUid) throw new Error('Not authenticated');
   await runTransaction(db, async (transaction) => {

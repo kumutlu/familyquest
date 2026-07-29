@@ -28,6 +28,7 @@ export function ParentDashboard() {
 
   const [joinProcessing, setJoinProcessing] = useState<Record<string, 'approve' | 'reject'>>({});
   const [joinError, setJoinError] = useState('');
+  const [approvalRoles, setApprovalRoles] = useState<Record<string, 'child' | 'parent'>>({});
   const joinInFlight = useRef(new Set<string>());
 
   const [isTaskModalOpen, setIsTaskModalOpen] = useState(false);
@@ -58,7 +59,14 @@ export function ParentDashboard() {
     setJoinProcessing(previous => ({ ...previous, [key]: action }));
     setJoinError('');
     try {
-      if (action === 'approve') await approveJoinRequest(currentUser.familyId, request.id, 'child');
+      if (action === 'approve') {
+        const selectedRole = approvalRoles[request.id] ?? 'child';
+        if (
+          selectedRole === 'parent' &&
+          !window.confirm(t('joinRequests.parentWarning'))
+        ) return;
+        await approveJoinRequest(currentUser.familyId, request.id, selectedRole);
+      }
       else {
         await rejectJoinRequest(currentUser.familyId, request.id, 'Rejected');
       }
@@ -124,9 +132,29 @@ export function ParentDashboard() {
                         {joinProcessing[processingKey] === 'reject' ? t('joinRequests.rejecting') : t('joinRequests.reject')}
                       </Button>
                       {!req.claimCode && (
-                        <Button size="sm" disabled={processingKey in joinProcessing} onClick={() => reviewJoin(req, 'approve')}>
-                          {joinProcessing[processingKey] === 'approve' ? t('joinRequests.approving') : t('joinRequests.approve')}
-                        </Button>
+                        <>
+                          <select
+                            aria-label={`Approval role for ${req.displayName}`}
+                            value={approvalRoles[req.id] ?? 'child'}
+                            onChange={event => setApprovalRoles(previous => ({
+                              ...previous,
+                              [req.id]: event.target.value as 'child' | 'parent',
+                            }))}
+                            className="rounded-lg border border-primary-200 bg-white px-2 text-sm"
+                          >
+                            <option value="child">{t('joinRequests.approveChild')}</option>
+                            <option value="parent">{t('joinRequests.approveParent')}</option>
+                          </select>
+                          <Button size="sm" disabled={processingKey in joinProcessing} onClick={() => reviewJoin(req, 'approve')}>
+                            {joinProcessing[processingKey] === 'approve'
+                              ? t('joinRequests.approving')
+                              : t(
+                                (approvalRoles[req.id] ?? 'child') === 'parent'
+                                  ? 'joinRequests.confirmParent'
+                                  : 'joinRequests.confirmChild',
+                              )}
+                          </Button>
+                        </>
                       )}
                     </div>
                   </CardContent>

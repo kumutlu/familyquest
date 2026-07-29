@@ -89,6 +89,11 @@
     "reject": "Reddet",
     "rejecting": "Reddediliyor…",
     "approve": "Çocuk Olarak Onayla",
+    "approveChild": "Çocuk olarak onayla",
+    "approveParent": "Ebeveyn/yetişkin olarak onayla",
+    "confirmChild": "Çocuk rolünü onayla",
+    "confirmParent": "Ebeveyn/yetişkin rolünü onayla",
+    "parentWarning": "Ebeveyn/yetişkin olarak onaylansın mı? Bu seçim yetişkin aile izinleri verir.",
     "approving": "Onaylanıyor…"
   },
   "loadError": {

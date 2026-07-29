@@ -89,6 +89,11 @@
     "reject": "Reject",
     "rejecting": "Rejecting…",
     "approve": "Approve as Child",
+    "approveChild": "Approve as child",
+    "approveParent": "Approve as parent/adult",
+    "confirmChild": "Confirm child",
+    "confirmParent": "Confirm parent/adult",
+    "parentWarning": "Approve as parent/adult? This grants adult family permissions.",
     "approving": "Approving…"
   },
   "loadError": {

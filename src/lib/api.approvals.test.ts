@@ -89,6 +89,26 @@ describe('approval API transaction contracts', () => {
     }), { merge: true })
   })
 
+  it('passes an owner-selected parent role through the validated approval transaction', async () => {
+    const tx = transactionWith({
+      'families/family-1/join_requests/request-1': { uid: 'target-1', displayName: 'Stored Name', status: 'pending' },
+      'users/owner-1': { familyId: 'family-1', role: 'owner', displayName: 'Owner' },
+    })
+    await approveJoinRequest('family-1', 'request-1', 'parent')
+    expect(tx.set).toHaveBeenCalledWith(
+      expect.objectContaining({ path: 'users/target-1' }),
+      expect.objectContaining({ role: 'parent', familyId: 'family-1' }),
+      { merge: true },
+    )
+  })
+
+  it('rejects an unsupported approval role before starting a transaction', async () => {
+    await expect(
+      approveJoinRequest('family-1', 'request-1', 'owner' as any),
+    ).rejects.toThrow('Unsupported approval role')
+    expect(firestore.runTransaction).not.toHaveBeenCalled()
+  })
+
   it('uses the production parent-funded money path for an existing wallet', async () => {
     const tx = transactionWith({
       'families/family-1/money_requests/money-1': { requesterId: 'child-1', requestedFromId: 'parent-source', amountPence: 100, status: 'pending', message: 'Lunch' },

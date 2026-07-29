@@ -281,7 +281,16 @@ export const useStore = create<AppState>((set, get) => ({
         await user.getIdToken();
         if (generation !== authGeneration || get().authUser?.uid !== user.uid) return;
 
-        const profileReference = doc(db, 'users', user.uid);
+        const tokenResult = typeof user.getIdTokenResult === 'function'
+          ? await user.getIdTokenResult()
+          : { claims: {} };
+        const claims = tokenResult.claims as Record<string, unknown>;
+        const managedChildId =
+          claims.managedChild === true && typeof claims.childId === 'string'
+            ? claims.childId
+            : null;
+        const profileId = managedChildId || user.uid;
+        const profileReference = doc(db, 'users', profileId);
         let profileResolved = false;
 
         const handleProfileSnapshot = (profileSnapshot: any) => {
@@ -299,6 +308,25 @@ export const useStore = create<AppState>((set, get) => ({
           }
 
           const profile: any = { id: profileSnapshot.id, ...profileSnapshot.data() };
+          if (
+            managedChildId &&
+            (
+              profileSnapshot.id !== managedChildId ||
+              profile.authUid !== user.uid ||
+              profile.familyId !== claims.familyId ||
+              profile.role !== 'child' ||
+              profile.isManaged !== true
+            )
+          ) {
+            set({
+              currentUser: null,
+              profileLoading: false,
+              bootstrapError: '[Profile] managed-child-link-invalid: Managed child identity could not be verified',
+              appReady: false,
+              loading: false,
+            });
+            return;
+          }
           let familyId: string | null;
           try {
             familyId = validatedFamilyId(profile.familyId);
@@ -324,6 +352,22 @@ export const useStore = create<AppState>((set, get) => ({
             };
             set({ currentUser: validatedProfile, profileLoading: false, bootstrapError: null });
             logAuthTrace('profile-request-completed', { hasFamilyId: Boolean(familyId) });
+
+            if (
+              managedChildId &&
+              validatedProfile.requiresPasswordChange === true
+            ) {
+              stopFamilyListeners();
+              set({
+                ...emptyFamilyState(),
+                bootstrapStatus: createBootstrapStatus('ready'),
+                familyLoading: false,
+                activeFamilyId: familyId,
+                appReady: true,
+                loading: false,
+              });
+              return;
+            }
 
             if (!familyId) {
               stopFamilyListeners();

@@ -8,15 +8,57 @@ service cloud.firestore {
       return request.auth != null;
     }
 
+    function managedChildProfileId() {
+      return request.auth.token.get('childId', request.auth.uid);
+    }
+
+    function rawAuthUid() {
+      return request.auth.uid;
+    }
+
+    function isTrustedManagedChildCaller() {
+      return request.auth.token.get('managedChild', false) == true
+        && request.auth.token.get('role', '') == 'child'
+        && get(/databases/$(database)/documents/users/$(managedChildProfileId())).data.get('authUid', '') == rawAuthUid()
+        && get(/databases/$(database)/documents/users/$(managedChildProfileId())).data.get('isManaged', false) == true
+        && get(/databases/$(database)/documents/users/$(managedChildProfileId())).data.get('familyId', 'null')
+          == request.auth.token.get('familyId', '');
+    }
+
+    function requiresManagedChildPasswordChange() {
+      return isAuthenticated()
+        && request.auth.token.get('managedChild', false) == true
+        && get(/databases/$(database)/documents/users/$(managedChildProfileId())).data.get('requiresPasswordChange', false) == true;
+    }
+
+    function authProfileId() {
+      return request.auth.token.get('managedChild', false) == true
+        ? (isTrustedManagedChildCaller()
+          ? (requiresManagedChildPasswordChange()
+            ? '__restricted_managed_child__'
+            : managedChildProfileId())
+          : '__invalid_managed_child__')
+        : request.auth.uid;
+    }
+
+    function isManagedChildIdentity(uid) {
+      return isAuthenticated()
+        && isTrustedManagedChildCaller()
+        && managedChildProfileId() == uid
+        && request.auth.token.get('familyId', '') == resource.data.get('familyId', 'null')
+        && resource.data.get('authUid', '') == rawAuthUid()
+        && resource.data.get('isManaged', false) == true;
+    }
+
     function isOwner(familyId) {
-      let userDoc = get(/databases/$(database)/documents/users/$(request.auth.uid));
+      let userDoc = get(/databases/$(database)/documents/users/$(authProfileId()));
       return userDoc != null
         && userDoc.data.get('familyId', 'null') == familyId
         && userDoc.data.get('role', 'null') == 'owner';
     }
 
     function isParent(familyId) {
-      let userDoc = get(/databases/$(database)/documents/users/$(request.auth.uid));
+      let userDoc = get(/databases/$(database)/documents/users/$(authProfileId()));
       return userDoc != null
         && userDoc.data.get('familyId', 'null') == familyId
         && (userDoc.data.get('role', 'null') == 'parent' || userDoc.data.get('role', 'null') == 'owner');
@@ -30,8 +72,9 @@ service cloud.firestore {
     }
 
     function isFamilyMember(familyId) {
-      let userDoc = get(/databases/$(database)/documents/users/$(request.auth.uid));
+      let userDoc = get(/databases/$(database)/documents/users/$(authProfileId()));
       return userDoc != null
+        && !requiresManagedChildPasswordChange()
         && userDoc.data.get('familyId', 'null') == familyId;
     }
 
@@ -48,7 +91,7 @@ service cloud.firestore {
       return data.keys().hasOnly(['welcomePromptCompleted', 'completedAt', 'completedBy'])
         && data.welcomePromptCompleted == true
         && data.completedAt == request.time
-        && data.completedBy == request.auth.uid;
+        && data.completedBy == authProfileId();
     }
 
     // -------------------------------------------------------------------------
@@ -84,7 +127,7 @@ service cloud.firestore {
     }
 
     function hasValidCreatorSnapshot(data) {
-      let creatorDoc = get(/databases/$(database)/documents/users/$(request.auth.uid));
+      let creatorDoc = get(/databases/$(database)/documents/users/$(authProfileId()));
       return creatorDoc != null && 'displayName' in creatorDoc.data && creatorDoc.data.displayName == data.get('createdByName', 'null');
     }
 
@@ -105,7 +148,7 @@ service cloud.firestore {
         )
         && data.reason is string
         && data.reason.trim().size() >= 3
-        && data.createdBy == request.auth.uid
+        && data.createdBy == authProfileId()
         && data.createdByName is string
         && hasValidCreatorSnapshot(data)
         && data.familyId == familyId
@@ -117,7 +160,7 @@ service cloud.firestore {
       return data.effectSnapshot is map
         && data.effectSnapshot.schemaVersion == 1
         && data.effectSnapshot.familyId == familyId
-        && data.effectSnapshot.actorId == request.auth.uid
+        && data.effectSnapshot.actorId == authProfileId()
         && data.effectSnapshot.xpAdjustment == 0;
     }
 
@@ -229,7 +272,7 @@ service cloud.firestore {
         && tx.data.type == 'financial_penalty'
         && tx.data.familyId == familyId
         && tx.data.childId == childId
-        && tx.data.createdBy == request.auth.uid
+        && tx.data.createdBy == authProfileId()
         && tx.data.amount == delta
         && tx.data.amount > 0
         && tx.data.amount is int
@@ -244,7 +287,7 @@ service cloud.firestore {
       let txId = data.get('lastFundTxId', 'null');
       let tx = getAfter(/databases/$(database)/documents/families/$(familyId)/fund_transactions/$(txId));
 
-      return request.auth.uid == childId
+      return authProfileId() == childId
         && 'lastFundTxId' in data
         && diff.hasOnly(['balance', 'lastFundTxId'])
         && tx != null
@@ -328,11 +371,11 @@ service cloud.firestore {
       return txIdCount == 1
         && delta != 0 && delta is int
         && (
-          (delta > 0 && request.auth.uid != childId)
+          (delta > 0 && authProfileId() != childId)
           || (delta < 0 && hasManual && manualTxExists)
-          || (delta < 0 && hasGoal && request.auth.uid == childId)
-          || (delta < 0 && hasFund && request.auth.uid == childId)
-          || (delta < 0 && hasTransfer && request.auth.uid == childId)
+          || (delta < 0 && hasGoal && authProfileId() == childId)
+          || (delta < 0 && hasFund && authProfileId() == childId)
+          || (delta < 0 && hasTransfer && authProfileId() == childId)
         );
     }
 
@@ -368,7 +411,7 @@ service cloud.firestore {
         && data.amount > 0
         && data.amount is int
         && data.eventId is string
-        && data.createdBy == request.auth.uid
+        && data.createdBy == authProfileId()
         && data.createdAt is timestamp
         && data.createdAt == request.time
         && existsAfter(eventPath);
@@ -392,7 +435,7 @@ service cloud.firestore {
         && data.amountPence == (0 - req.data.amountPence)
         && data.approvalTxId != null
         && data.createdAt == request.time
-        && data.parentRef == request.auth.uid;
+        && data.parentRef == authProfileId();
     }
 
     function isValidMoneyRequestOutLedger(familyId) {
@@ -413,7 +456,7 @@ service cloud.firestore {
         && data.amountPence == (0 - req.data.amountPence)
         && data.approvalTxId != null
         && data.createdAt == request.time
-        && data.parentRef == request.auth.uid;
+        && data.parentRef == authProfileId();
     }
 
     function isValidTransferInLedger(familyId) {
@@ -434,7 +477,7 @@ service cloud.firestore {
         && data.amountPence == req.data.amountPence
         && data.approvalTxId != null
         && data.createdAt == request.time
-        && data.parentRef == request.auth.uid;
+        && data.parentRef == authProfileId();
     }
 
     function isValidMoneyRequestInLedger(familyId) {
@@ -455,7 +498,7 @@ service cloud.firestore {
         && data.amountPence == req.data.amountPence
         && data.approvalTxId != null
         && data.createdAt == request.time
-        && data.parentRef == request.auth.uid;
+        && data.parentRef == authProfileId();
     }
 
     function isValidMoneyRequestPaymentLedger(familyId) {
@@ -469,7 +512,7 @@ service cloud.firestore {
         && reqAfter != null && reqAfter.data.status == 'approved' && reqAfter.data.paymentTransferId == data.approvalTxId
         && data.childId == req.data.requesterId && data.amountPence == req.data.amountPence
         && data.amount == data.amountPence && data.amountPence > 0 && data.amountPence is int
-        && data.parentRef == request.auth.uid && data.createdAt == request.time && data.timestamp == request.time;
+        && data.parentRef == authProfileId() && data.createdAt == request.time && data.timestamp == request.time;
     }
 
     function isValidPetBoxWalletLedger(familyId, txId) {
@@ -481,14 +524,14 @@ service cloud.firestore {
         && data.keys().hasOnly(['type', 'childId', 'amountPence', 'amount', 'note', 'sourceId', 'familyId', 'actorId', 'status', 'effectSnapshot', 'createdAt', 'timestamp'])
         && req != null && req.data.status == 'pending'
         && reqAfter != null && reqAfter.data.status == 'approved'
-        && reqAfter.data.approvalTxId == txId && reqAfter.data.reviewedBy == request.auth.uid
+        && reqAfter.data.approvalTxId == txId && reqAfter.data.reviewedBy == authProfileId()
         && data.type == 'petbox_donation' && data.childId == req.data.childId
         && data.amountPence == (0 - req.data.amountPence) && data.amount == data.amountPence
-        && data.familyId == familyId && data.actorId == request.auth.uid && data.status == 'completed'
+        && data.familyId == familyId && data.actorId == authProfileId() && data.status == 'completed'
         && data.createdAt == request.time && data.timestamp == request.time
         && hasCanonicalEffectSnapshot(data, familyId)
         && data.effectSnapshot.entityType == 'petbox_donation'
-        && data.effectSnapshot.actorId == request.auth.uid
+        && data.effectSnapshot.actorId == authProfileId()
         && data.effectSnapshot.childId == req.data.childId
         && data.effectSnapshot.fundId == req.data.fundId
         && data.effectSnapshot.sourceRequestId == requestId
@@ -503,7 +546,7 @@ service cloud.firestore {
     function isValidGoalWalletLedger(familyId, txId) {
       let data = request.resource.data;
       return data.keys().hasOnly(['type', 'childId', 'goalId', 'amount', 'familyId', 'sourceId', 'status', 'timestamp', 'createdAt'])
-        && data.childId == request.auth.uid
+        && data.childId == authProfileId()
         && data.familyId == familyId
         && data.amount is int && data.amount < 0
         && data.status == 'completed'
@@ -518,7 +561,7 @@ service cloud.firestore {
     function isValidGoalReturnWalletLedger(familyId, txId) {
       let data = request.resource.data;
       return data.keys().hasOnly(['type', 'childId', 'goalId', 'amount', 'familyId', 'sourceId', 'status', 'timestamp', 'createdAt'])
-        && data.childId != request.auth.uid
+        && data.childId != authProfileId()
         && data.familyId == familyId
         && data.amount is int && data.amount > 0
         && data.status == 'completed'
@@ -533,7 +576,7 @@ service cloud.firestore {
       let txId = data.get('lastRedemptionId', 'null');
       let tx = getAfter(/databases/$(database)/documents/families/$(oldData.get('familyId', 'null'))/redemptions/$(txId));
 
-      return request.auth.uid == uid
+      return authProfileId() == uid
         && 'lastRedemptionId' in data
         && diff.hasOnly(['rewardPoints', 'lastRedemptionId'])
         && tx != null
@@ -560,11 +603,11 @@ service cloud.firestore {
       return task != null && user != null
         && data.taskId == oldData.taskId && data.assigneeId == oldData.assigneeId
         && data.awardedPoints == task.data.pointsReward
-        && data.effectSnapshot.familyId == familyId && data.effectSnapshot.actorId == request.auth.uid
+        && data.effectSnapshot.familyId == familyId && data.effectSnapshot.actorId == authProfileId()
         && data.effectSnapshot.childId == oldData.assigneeId && data.effectSnapshot.pointsDelta == task.data.pointsReward
         && data.effectSnapshot.xpAdjustment == 0
         && user.data.lastTaskCompletionId == completionId
-        && feed != null && feed.data.actorId == request.auth.uid;
+        && feed != null && feed.data.actorId == authProfileId();
     }
 
     function isValidBehaviourPointMutation(uid) {
@@ -574,7 +617,7 @@ service cloud.firestore {
       let familyId = oldData.get('familyId', 'null');
       let event = getAfter(/databases/$(database)/documents/families/$(familyId)/behaviour_events/$(eventId));
       return isParent(familyId) && event != null && event.data.childId == uid
-        && event.data.createdBy == request.auth.uid && event.data.createdAt == request.time
+        && event.data.createdBy == authProfileId() && event.data.createdAt == request.time
         && !exists(/databases/$(database)/documents/families/$(familyId)/behaviour_events/$(eventId))
         && data.get('rewardPoints', 0) == oldData.get('rewardPoints', 0) + event.data.pointsDelta
         && (
@@ -589,8 +632,8 @@ service cloud.firestore {
     function isValidRedemptionCreate(familyId, redemptionId) {
       let data = request.resource.data;
       let reward = get(/databases/$(database)/documents/families/$(familyId)/rewards/$(data.get('rewardId', 'null')));
-      let oldUser = get(/databases/$(database)/documents/users/$(request.auth.uid));
-      let user = getAfter(/databases/$(database)/documents/users/$(request.auth.uid));
+      let oldUser = get(/databases/$(database)/documents/users/$(authProfileId()));
+      let user = getAfter(/databases/$(database)/documents/users/$(authProfileId()));
       return reward != null && oldUser != null && user != null
         && data.costPaid == reward.data.cost
         && oldUser.data.rewardPoints >= data.costPaid
@@ -705,7 +748,7 @@ service cloud.firestore {
         && data.diff(oldData).affectedKeys().hasOnly(['balance', 'lastFundTxId'])
         && tx != null && tx.data.type == 'expense' && tx.data.fundId == fundId
         && tx.data.familyId == familyId
-        && tx.data.sourceId == txId && tx.data.actorId == request.auth.uid
+        && tx.data.sourceId == txId && tx.data.actorId == authProfileId()
         && tx.data.amount is int && tx.data.amount > 0
         && data.balance == oldData.balance - tx.data.amount
         && tx.data.createdAt == request.time
@@ -720,16 +763,16 @@ service cloud.firestore {
       return isParent(familyId) && fund != null && fund.data.lastFundTxId == txId
         && data.createdAt == request.time
         && (
-          (data.type == 'expense' && data.sourceId == txId && data.actorId == request.auth.uid)
+          (data.type == 'expense' && data.sourceId == txId && data.actorId == authProfileId())
           || (data.type == 'contribution' && pet != null && pet.data.status == 'approved'
               && pet.data.fundTransactionId == txId && data.fromUserId == pet.data.childId && data.amount == pet.data.amountPence)
         );
     }
 
     function hasValidReversalActor(data, familyId) {
-      let actor = get(/databases/$(database)/documents/users/$(request.auth.uid));
+      let actor = get(/databases/$(database)/documents/users/$(authProfileId()));
       return isParent(familyId) && actor != null
-        && data.actorId == request.auth.uid
+        && data.actorId == authProfileId()
         && data.actorName == actor.data.displayName;
     }
 
@@ -788,7 +831,7 @@ service cloud.firestore {
         && data.originalEffectSnapshot.familyId == familyId && data.originalEffectSnapshot.schemaVersion == 1
         && data.originalEffectSnapshot.xpAdjustment == 0
         && sourceSnapshotMatches(familyId, data.sourceKind, data.sourceId, data.originalEffectSnapshot)
-        && isExactInverse(data.originalEffectSnapshot, data.inverseEffectSnapshot, familyId, request.auth.uid);
+        && isExactInverse(data.originalEffectSnapshot, data.inverseEffectSnapshot, familyId, authProfileId());
     }
 
     function isValidReversalEvent(familyId, reversalId) {
@@ -798,7 +841,7 @@ service cloud.firestore {
         && data.keys().hasOnly(['familyId', 'sourceKind', 'sourceId', 'reversalId', 'actorId', 'actorName', 'reason', 'effectSnapshot', 'xpAdjustment', 'xpReversed', 'createdAt'])
         && data.familyId == familyId && data.reversalId == reversalId
         && data.sourceKind == reversal.data.sourceKind && data.sourceId == reversal.data.sourceId
-        && data.actorId == request.auth.uid && data.actorName == reversal.data.actorName
+        && data.actorId == authProfileId() && data.actorName == reversal.data.actorName
         && data.reason == reversal.data.reason && data.effectSnapshot == reversal.data.inverseEffectSnapshot
         && data.xpAdjustment == 0 && data.xpReversed == false && data.createdAt == request.time;
     }
@@ -813,7 +856,7 @@ service cloud.firestore {
       let isPrimary = original.get('childId', '') == childId && 'walletDeltaPence' in original;
       let suffix = isPrimary ? '__wallet' : '__counterparty';
       let expected = isPrimary ? inverse.get('walletDeltaPence', 0) : inverse.get('counterpartyWalletDeltaPence', 0);
-      return reversal != null && reversal.data.actorId == request.auth.uid
+      return reversal != null && reversal.data.actorId == authProfileId()
         && data.diff(oldData).affectedKeys().hasOnly(['balance', 'lastReversalId'])
         && ((isPrimary) || (original.get('counterpartyChildId', '') == childId && 'counterpartyWalletDeltaPence' in original))
         && data.balance == oldData.balance + expected
@@ -831,7 +874,7 @@ service cloud.firestore {
       return reversal != null && data.keys().hasOnly(['type', 'familyId', 'sourceKind', 'sourceId', 'reversalId', 'actorId', 'actorName', 'childId', 'amountPence', 'effectSnapshot', 'createdAt'])
         && data.type == 'reversal' && data.familyId == familyId
         && data.sourceKind == reversal.data.sourceKind && data.sourceId == reversal.data.sourceId
-        && data.actorId == request.auth.uid && data.actorName == reversal.data.actorName
+        && data.actorId == authProfileId() && data.actorName == reversal.data.actorName
         && data.effectSnapshot == reversal.data.inverseEffectSnapshot && data.createdAt == request.time
         && (primary || counterparty);
     }
@@ -841,7 +884,7 @@ service cloud.firestore {
       let oldData = resource.data;
       let reversalId = data.get('lastReversalId', 'null');
       let reversal = getAfter(/databases/$(database)/documents/families/$(familyId)/reversals/$(reversalId));
-      return reversal != null && reversal.data.actorId == request.auth.uid
+      return reversal != null && reversal.data.actorId == authProfileId()
         && reversal.data.originalEffectSnapshot.get('fundId', '') == fundId
         && data.diff(oldData).affectedKeys().hasOnly(['balance', 'lastReversalId'])
         && data.balance == oldData.balance + reversal.data.inverseEffectSnapshot.get('fundDeltaPence', 0)
@@ -857,7 +900,7 @@ service cloud.firestore {
         && data.fundId == reversal.data.originalEffectSnapshot.get('fundId', '')
         && data.amount == reversal.data.inverseEffectSnapshot.get('fundDeltaPence', 0)
         && data.sourceKind == reversal.data.sourceKind && data.sourceId == reversal.data.sourceId
-        && data.actorId == request.auth.uid && data.actorName == reversal.data.actorName
+        && data.actorId == authProfileId() && data.actorName == reversal.data.actorName
         && data.effectSnapshot == reversal.data.inverseEffectSnapshot && data.createdAt == request.time;
     }
 
@@ -867,7 +910,7 @@ service cloud.firestore {
       let familyId = oldData.get('familyId', 'null');
       let reversalId = data.get('lastReversalId', 'null');
       let reversal = getAfter(/databases/$(database)/documents/families/$(familyId)/reversals/$(reversalId));
-      return reversal != null && reversal.data.actorId == request.auth.uid
+      return reversal != null && reversal.data.actorId == authProfileId()
         && reversal.data.originalEffectSnapshot.get('childId', '') == uid
         && 'pointsDelta' in reversal.data.originalEffectSnapshot
         && data.diff(oldData).affectedKeys().hasOnly(['rewardPoints', 'lastReversalId'])
@@ -877,7 +920,7 @@ service cloud.firestore {
 
     function isValidSelfSignup(uid) {
       let data = request.resource.data;
-      return request.auth.uid == uid
+      return authProfileId() == uid
         && data.uid == uid
         && data.role == 'parent'
         && !('familyId' in data);
@@ -897,7 +940,7 @@ service cloud.firestore {
       let familyId = data.get('familyId', 'null');
       let familyPath = /databases/$(database)/documents/families/$(familyId);
 
-      return request.auth.uid == uid
+      return authProfileId() == uid
         && !('familyId' in resource.data) // Must not have a family yet
         && resource.data.get('role', 'null') == 'parent'
         && data.get('uid', 'null') == uid
@@ -931,7 +974,7 @@ service cloud.firestore {
         && user.data.get('familyId', 'null') == familyId && user.data.get('role', 'null') == data.get('assignedRole', 'null')
         && user.data.get('displayName', 'null') == oldData.get('displayName', 'null')
         && (data.get('assignedRole', 'null') == 'parent' || (wallet != null && wallet.data.get('balance', -1) == 0))
-        && feed != null && feed.data.get('actorId', 'null') == request.auth.uid;
+        && feed != null && feed.data.get('actorId', 'null') == authProfileId();
     }
 
     function isValidTransferApproval(familyId, requestId, data, oldData) {
@@ -963,7 +1006,7 @@ service cloud.firestore {
         && txIn.data.transferRequestId == requestId
         && txOut.data.amountPence == (0 - oldData.amountPence)
         && txIn.data.amountPence == oldData.amountPence
-        && data.reviewedBy == request.auth.uid
+        && data.reviewedBy == authProfileId()
         && data.reviewedAt == request.time;
     }
 
@@ -982,7 +1025,7 @@ service cloud.firestore {
         && requesterWallet.data.balance == oldRequesterBalance + oldData.amountPence
         && txIn.data.moneyRequestId == requestId && txIn.data.approvalTxId == txId
         && txIn.data.amountPence == oldData.amountPence
-        && data.reviewedBy == request.auth.uid && data.reviewedAt == request.time
+        && data.reviewedBy == authProfileId() && data.reviewedAt == request.time
         && (sourceIsParent || (
           getAfter(/databases/$(database)/documents/families/$(familyId)/wallets/$(oldData.requestedFromId)) != null
           && getAfter(/databases/$(database)/documents/families/$(familyId)/wallets/$(oldData.requestedFromId)).data.lastTransferReqId == requestId
@@ -1010,7 +1053,7 @@ service cloud.firestore {
         && oldFund != null && fund.data.balance == oldFund.data.balance + oldData.amountPence
         && fundTx.data.fundId == oldData.fundId && fundTx.data.fromUserId == oldData.childId
         && fundTx.data.amount == oldData.amountPence && fundTx.data.type == 'contribution'
-        && data.reviewedBy == request.auth.uid && data.reviewedAt == request.time;
+        && data.reviewedBy == authProfileId() && data.reviewedAt == request.time;
     }
 
 
@@ -1086,13 +1129,13 @@ service cloud.firestore {
         && data.targetAmountPence is int && data.targetAmountPence > 0
         && data.currency is string
         && data.createdAt == request.time
-        && data.createdBy == request.auth.uid
+        && data.createdBy == authProfileId()
         && data.clientReqId is string && data.clientReqId.size() > 0
         && (
           (isParent(familyId) && data.kind in ['family', 'child'])
-          || (isChildInFamily(familyId, request.auth.uid)
+          || (isChildInFamily(familyId, authProfileId())
               && data.kind == 'child'
-              && data.childId == request.auth.uid)
+              && data.childId == authProfileId())
         )
         && (data.kind != 'child' || isChildInFamily(familyId, data.get('childId', 'null')))
         && data.matching is map
@@ -1122,17 +1165,17 @@ service cloud.firestore {
       return existsAfter(contribPath)
         && getAfter(contribPath).data.type == 'parent_contribution'
         && getAfter(contribPath).data.goalId == goalId
-        && getAfter(contribPath).data.ownerId == request.auth.uid
+        && getAfter(contribPath).data.ownerId == authProfileId()
         && getAfter(contribPath).data.amountPence == data.currentAmountPence
         && getAfter(contribPath).data.status == 'applied'
         && existsAfter(ledgerPath)
         && getAfter(ledgerPath).data.type == 'parent_contribution'
         && getAfter(ledgerPath).data.goalId == goalId
-        && getAfter(ledgerPath).data.ownerId == request.auth.uid
+        && getAfter(ledgerPath).data.ownerId == authProfileId()
         && getAfter(ledgerPath).data.amountPence == data.currentAmountPence
         && existsAfter(idemPath)
         && getAfter(idemPath).data.operationType == 'goal_create'
-        && getAfter(idemPath).data.actorId == request.auth.uid
+        && getAfter(idemPath).data.actorId == authProfileId()
         && getAfter(idemPath).data.goalId == goalId
         && getAfter(idemPath).data.amountPence == data.currentAmountPence
         && getAfter(idemPath).data.clientReqId == data.clientReqId;
@@ -1184,7 +1227,7 @@ service cloud.firestore {
         && data.currentAmountPence is int
         && data.currentAmountPence >= old.currentAmountPence
         && (data.status == old.status || (old.status == 'active' && data.status == 'reached'))
-        && request.auth.uid == old.get('childId', 'null')
+        && authProfileId() == old.get('childId', 'null')
         && data.get('familyId', old.get('familyId', 'null')) == old.get('familyId', 'null');
     }
 
@@ -1274,7 +1317,7 @@ service cloud.firestore {
     function isValidAutoMatchContributionCreate(familyId, goalId) {
       let data = request.resource.data;
       // Auto-match is written by the child who triggered the contribution
-      // (ownerId == actorId == request.auth.uid); shape + ownership prove validity,
+      // (ownerId == actorId == authProfileId()); shape + ownership prove validity,
       // so no isParent get() is needed here (keeps the transaction under 1000 exp).
       return data.type == 'auto_match'
         && data.ownerType == 'parent'
@@ -1284,7 +1327,7 @@ service cloud.firestore {
         && data.createdAt == request.time
         && data.amountPence is int && data.matchPence is int
         && 'sourceContributionId' in data
-        && data.ownerId == request.auth.uid;
+        && data.ownerId == authProfileId();
     }
 
     // Contribution create validators are SPLIT by owner so Firestore's || short-
@@ -1297,7 +1340,7 @@ service cloud.firestore {
       let data = request.resource.data;
       return data.type in ['child_contribution', 'child_withdrawal', 'completion_refund']
         && data.ownerType == 'child'
-        && data.ownerId == request.auth.uid
+        && data.ownerId == authProfileId()
         && data.keys().hasOnly(['contribId', 'goalId', 'type', 'ownerType', 'ownerId', 'amountPence', 'matchPence', 'sourceContributionId', 'walletTxId', 'status', 'createdBy', 'createdAt'])
         && data.goalId == goalId
         && data.status == 'applied'
@@ -1310,7 +1353,7 @@ service cloud.firestore {
       return isParent(familyId)
         && data.type in ['parent_contribution', 'manual_match']
         && data.ownerType == 'parent'
-        && data.ownerId == request.auth.uid
+        && data.ownerId == authProfileId()
         && data.keys().hasOnly(['contribId', 'goalId', 'type', 'ownerType', 'ownerId', 'amountPence', 'matchPence', 'sourceContributionId', 'proposedMatchAmountPence', 'sourceRequestId', 'status', 'createdBy', 'createdAt'])
         && data.goalId == goalId
         && data.status == 'applied'
@@ -1350,7 +1393,7 @@ service cloud.firestore {
       return isParent(familyId)
         && data.type == 'external_closure'
         && data.ownerType == 'parent'
-        && data.ownerId == request.auth.uid
+        && data.ownerId == authProfileId()
         && data.keys().hasOnly(['contribId', 'goalId', 'type', 'ownerType', 'ownerId', 'amountPence', 'matchPence', 'sourceContributionId', 'status', 'createdBy', 'createdAt'])
         && data.goalId == goalId
         && data.status == 'applied'
@@ -1391,7 +1434,7 @@ service cloud.firestore {
         && old.status == 'proposed'
         && data.status in ['approved', 'rejected']
         && diff.hasOnly(['status', 'reviewedBy', 'reviewedByName', 'reviewedAt'])
-        && data.reviewedBy == request.auth.uid
+        && data.reviewedBy == authProfileId()
         && data.reviewedAt == request.time;
     }
 
@@ -1405,8 +1448,8 @@ service cloud.firestore {
         && data.amountPence is int && data.amountPence > 0
         && data.createdAt == request.time
         && data.requestType in ['contribution', 'withdrawal']
-        && (data.requestType != 'withdrawal' || (data.childId == request.auth.uid && isChildInFamily(familyId, request.auth.uid)))
-        && (data.requestType != 'contribution' || (data.childId == request.auth.uid && isChildInFamily(familyId, request.auth.uid)));
+        && (data.requestType != 'withdrawal' || (data.childId == authProfileId() && isChildInFamily(familyId, authProfileId())))
+        && (data.requestType != 'contribution' || (data.childId == authProfileId() && isChildInFamily(familyId, authProfileId())));
     }
 
     function isValidGoalRequestUpdate(familyId) {
@@ -1420,7 +1463,7 @@ service cloud.firestore {
       return parentOnly
         && data.status in ['approved', 'rejected']
         && diff.hasOnly(['status', 'reviewedBy', 'reviewedByName', 'reviewedAt', 'rejectionReason', 'contribId', 'walletTxId'])
-        && data.reviewedBy == request.auth.uid
+        && data.reviewedBy == authProfileId()
         && data.reviewedAt == request.time
         && rejectedShape;
     }
@@ -1480,14 +1523,18 @@ service cloud.firestore {
 
     // USERS
     match /users/{uid} {
-      allow read: if isAuthenticated() && (request.auth.uid == uid || get(/databases/$(database)/documents/users/$(request.auth.uid)).data.familyId == resource.data.familyId);
+      allow read: if isAuthenticated() && (
+        authProfileId() == uid
+        || isManagedChildIdentity(uid)
+        || get(/databases/$(database)/documents/users/$(authProfileId())).data.familyId == resource.data.familyId
+      );
 
       allow update: if isAuthenticated() && (
         isValidReversalPointsUpdate(uid) ||
-        (request.auth.uid == uid
+        (authProfileId() == uid
           && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['language'])
           && isValidLanguage(request.resource.data.language)) ||
-        (request.auth.uid == uid && !request.resource.data.diff(resource.data).affectedKeys().hasAny([
+        (authProfileId() == uid && !request.resource.data.diff(resource.data).affectedKeys().hasAny([
           'role', 'familyId', 'rewardPoints', 'lifetimeXP', 'walletBalance', 'balance', 'lastFundTxId',
           'displayName', 'avatarUrl', 'avatarId', 'language',
           // Phase 1 child-login linking fields: server-only (Admin SDK). A client
@@ -1496,7 +1543,7 @@ service cloud.firestore {
         ])) ||
         // Owner/parent may self-edit only their own benign profile fields.
         // Children are not isParent, so they remain routed through the approval flow.
-        (isParent(resource.data.familyId) && request.auth.uid == uid
+        (isParent(resource.data.familyId) && authProfileId() == uid
           && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['displayName', 'avatarUrl', 'avatarId'])) ||
         (request.resource.data.diff(resource.data).affectedKeys().hasAny(['lastRedemptionId']) && isValidRedemptionDeduction(uid))
           || (request.resource.data.diff(resource.data).affectedKeys().hasAny(['lastTaskCompletionId']) && isValidTaskApprovalMutation(uid))
@@ -1527,15 +1574,15 @@ service cloud.firestore {
             || isValidFamilySetup(request.resource.data.setup));
 
       match /join_requests/{requestId} {
-        allow create: if isAuthenticated() && request.resource.data.uid == request.auth.uid;
+        allow create: if isAuthenticated() && request.resource.data.uid == authProfileId();
         allow update: if isOwner(familyId) && resource.data.status == 'pending'
           && request.resource.data.status in ['approved', 'rejected']
-          && request.resource.data.reviewedBy == request.auth.uid
+          && request.resource.data.reviewedBy == authProfileId()
           && request.resource.data.reviewedAt == request.time
           && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'assignedRole', 'rejectionReason', 'reviewedBy', 'reviewedByName', 'reviewedAt'])
           && ((request.resource.data.status == 'rejected' && request.resource.data.rejectionReason is string && request.resource.data.rejectionReason.trim().size() > 0)
               || hasValidJoinApproval(familyId, requestId, resource.data, request.resource.data));
-        allow read: if isFamilyMember(familyId) || (isAuthenticated() && resource.data.uid == request.auth.uid);
+        allow read: if isFamilyMember(familyId) || (isAuthenticated() && resource.data.uid == authProfileId());
         allow delete: if false;
       }
 
@@ -1549,7 +1596,7 @@ service cloud.firestore {
         allow create: if isFamilyMember(familyId);
         allow update: if (isParent(familyId) && resource.data.status == 'pending_approval'
           && request.resource.data.status in ['approved', 'rejected']
-          && request.resource.data.reviewedBy == request.auth.uid
+          && request.resource.data.reviewedBy == authProfileId()
           && request.resource.data.reviewedAt == request.time
           && ((request.resource.data.status == 'approved'
               && request.resource.data.approvedAt == request.time
@@ -1558,8 +1605,8 @@ service cloud.firestore {
               && request.resource.data.rejectedAt == request.time
               && request.resource.data.parentComment is string && request.resource.data.parentComment.trim().size() > 0
               && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'parentComment', 'rejectedAt', 'reviewedBy', 'reviewedByName', 'reviewedAt']))))
-          || (isAuthenticated() && resource.data.status == 'pending_approval' && (resource.data.assigneeId == request.auth.uid || isParent(familyId))
-              && request.resource.data.status == 'cancelled' && request.resource.data.cancelledBy == request.auth.uid
+          || (isAuthenticated() && resource.data.status == 'pending_approval' && (resource.data.assigneeId == authProfileId() || isParent(familyId))
+              && request.resource.data.status == 'cancelled' && request.resource.data.cancelledBy == authProfileId()
               && request.resource.data.cancelledAt == request.time
               && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'cancelledBy', 'cancelledAt']));
         allow delete: if false;
@@ -1577,14 +1624,14 @@ service cloud.firestore {
       }
 
       match /redemptions/{redemptionId} {
-        allow read: if isParent(familyId) || (isAuthenticated() && resource.data.userId == request.auth.uid);
+        allow read: if isParent(familyId) || (isAuthenticated() && resource.data.userId == authProfileId());
         allow create: if isFamilyMember(familyId)
           && request.resource.data.keys().hasAll(['rewardId', 'userId', 'costPaid', 'redeemedAt', 'createdAt', 'status', 'familyId', 'sourceId', 'actorId', 'effectSnapshot'])
           && request.resource.data.keys().hasOnly(['rewardId', 'userId', 'costPaid', 'redeemedAt', 'createdAt', 'status', 'familyId', 'sourceId', 'actorId', 'effectSnapshot'])
-          && request.resource.data.userId == request.auth.uid
+          && request.resource.data.userId == authProfileId()
           && request.resource.data.familyId == familyId && request.resource.data.sourceId == redemptionId
-          && request.resource.data.actorId == request.auth.uid && hasCanonicalEffectSnapshot(request.resource.data, familyId)
-          && request.resource.data.effectSnapshot.childId == request.auth.uid
+          && request.resource.data.actorId == authProfileId() && hasCanonicalEffectSnapshot(request.resource.data, familyId)
+          && request.resource.data.effectSnapshot.childId == authProfileId()
           && request.resource.data.effectSnapshot.rewardId == request.resource.data.rewardId
           && request.resource.data.effectSnapshot.pointsDelta == (0 - request.resource.data.costPaid)
           && request.resource.data.costPaid is int && request.resource.data.costPaid > 0
@@ -1595,7 +1642,7 @@ service cloud.firestore {
       }
 
       match /wallets/{childId} {
-        allow read: if isParent(familyId) || (isAuthenticated() && request.auth.uid == childId);
+        allow read: if isParent(familyId) || (isAuthenticated() && authProfileId() == childId);
         allow create: if isValidWalletCreate(familyId, childId);
         // 8-function chain (matches previously-deployed d7a75cf) preserves the
         // per-type wallet-balance authorization guarantees. The goal_return case
@@ -1623,7 +1670,7 @@ service cloud.firestore {
       }
 
       match /wallet_transactions/{txId} {
-        allow read: if isParent(familyId) || (isAuthenticated() && resource.data.childId == request.auth.uid);
+        allow read: if isParent(familyId) || (isAuthenticated() && resource.data.childId == authProfileId());
         // Goals ledger legs (goal_contribution / goal_return) are validated by lean
         // shape-only functions in a SEPARATE allow statement, isolated from the
         // heavy per-type non-Goals validator block below so each stays within
@@ -1645,9 +1692,9 @@ service cloud.firestore {
         // 1000-expression limit, denying every parent penalty log.
         allow create: if (request.resource.data.type == 'financial_penalty' && isValidFinancialPenalty(familyId));
         allow create: if (request.resource.data.type == 'reversal' && isValidReversalWalletLedger(familyId, txId)) || (isBehaviourManager(familyId) && (
-            (request.resource.data.type == 'deposit' && request.resource.data.amount > 0 && request.resource.data.amount is int && isChildInFamily(familyId, request.resource.data.childId) && request.resource.data.parentRef == request.auth.uid && request.resource.data.createdAt == request.time) ||
-            (request.resource.data.type == 'withdrawal' && request.resource.data.amount > 0 && request.resource.data.amount is int && isChildInFamily(familyId, request.resource.data.childId) && request.resource.data.parentRef == request.auth.uid && request.resource.data.createdAt == request.time) ||
-            (request.resource.data.type == 'transfer' && request.resource.data.amount > 0 && request.resource.data.amount is int && isChildInFamily(familyId, request.resource.data.childId) && isChildInFamily(familyId, request.resource.data.fromChildId) && request.resource.data.parentRef == request.auth.uid && request.resource.data.createdAt == request.time) ||
+            (request.resource.data.type == 'deposit' && request.resource.data.amount > 0 && request.resource.data.amount is int && isChildInFamily(familyId, request.resource.data.childId) && request.resource.data.parentRef == authProfileId() && request.resource.data.createdAt == request.time) ||
+            (request.resource.data.type == 'withdrawal' && request.resource.data.amount > 0 && request.resource.data.amount is int && isChildInFamily(familyId, request.resource.data.childId) && request.resource.data.parentRef == authProfileId() && request.resource.data.createdAt == request.time) ||
+            (request.resource.data.type == 'transfer' && request.resource.data.amount > 0 && request.resource.data.amount is int && isChildInFamily(familyId, request.resource.data.childId) && isChildInFamily(familyId, request.resource.data.fromChildId) && request.resource.data.parentRef == authProfileId() && request.resource.data.createdAt == request.time) ||
             (request.resource.data.type == 'transfer_out' && ('transferRequestId' in request.resource.data ? isValidTransferOutLedger(familyId) : isValidMoneyRequestOutLedger(familyId))) ||
             (request.resource.data.type == 'transfer_in' && ('transferRequestId' in request.resource.data ? isValidTransferInLedger(familyId) : isValidMoneyRequestInLedger(familyId))) ||
             (request.resource.data.type == 'request_payment' && isValidMoneyRequestPaymentLedger(familyId)) ||
@@ -1667,13 +1714,13 @@ service cloud.firestore {
           ? (isValidGoalCreate(familyId)
              && (request.resource.data.currentAmountPence == 0
                  || isValidSeededGoalCreate(familyId, goalId)))
-          : (isParent(familyId) || (isAuthenticated() && request.resource.data.childId == request.auth.uid));
+          : (isParent(familyId) || (isAuthenticated() && request.resource.data.childId == authProfileId()));
         allow update: if (isV1Goal(resource.data))
           ? (request.resource.data.status in ['completed_returned', 'cancelled']
               ? isValidGoalReturnUpdate(familyId, goalId)
               : (isValidGoalChildContribution(familyId, goalId)
                 || isValidGoalParentUpdate(familyId, goalId)))
-          : (isParent(familyId) || (isAuthenticated() && resource.data.childId == request.auth.uid));
+          : (isParent(familyId) || (isAuthenticated() && resource.data.childId == authProfileId()));
         // Strict delete guard: only a same-family parent/owner may delete a
         // CANCELLED, zero-balance goal. Active/reached/completed goals and goals
         // with remaining funds cannot be deleted. Children can never delete goals.
@@ -1684,8 +1731,8 @@ service cloud.firestore {
 
         match /contributions/{contribId} {
           allow read: if isFamilyMember(familyId);
-          // Ownership is proven inside the validators (data.ownerId == request.auth.uid
-          // for child legs; isParent(familyId) && data.ownerId == request.auth.uid for
+          // Ownership is proven inside the validators (data.ownerId == authProfileId()
+          // for child legs; isParent(familyId) && data.ownerId == authProfileId() for
           // parent legs), so the redundant isFamilyMember get() is omitted here to keep
           // the multi-write Goals transaction under the 1000-expression limit.
           allow create: if isValidChildContributionCreate(familyId, goalId)
@@ -1710,7 +1757,7 @@ service cloud.firestore {
         }
       }
       match /goal_requests/{requestId} {
-        allow read: if isParent(familyId) || (isAuthenticated() && resource.data.childId == request.auth.uid);
+        allow read: if isParent(familyId) || (isAuthenticated() && resource.data.childId == authProfileId());
         allow create: if isFamilyMember(familyId) && isValidGoalRequestCreate(familyId);
         allow update: if isValidGoalRequestUpdate(familyId);
         allow delete: if false;
@@ -1734,13 +1781,13 @@ service cloud.firestore {
         allow read: if isFamilyMember(familyId);
         allow create: if isFamilyMember(familyId)
           && request.resource.data.keys().hasOnly(['actorId', 'actorName', 'type', 'behaviourType', 'reason', 'pointsDelta', 'walletDelta', 'childId', 'text', 'visibleTo', 'createdAt', 'timestamp'])
-          && request.resource.data.actorId == request.auth.uid
+          && request.resource.data.actorId == authProfileId()
           && (
             !('visibleTo' in request.resource.data) ||
             // Crash-safe: build the allowed set without indexing past the end of the list.
             // visibleTo may contain 0, 1 or 2 entries; the actor and optional childId are
             // always permitted in addition to the entries the client supplied.
-            (request.resource.data.visibleTo is list && request.resource.data.visibleTo.hasOnly([request.resource.data.get('childId', ''), request.auth.uid].concat(request.resource.data.get('visibleTo', []))))
+            (request.resource.data.visibleTo is list && request.resource.data.visibleTo.hasOnly([request.resource.data.get('childId', ''), authProfileId()].concat(request.resource.data.get('visibleTo', []))))
           );
         allow update, delete: if isParent(familyId);
       }
@@ -1758,9 +1805,9 @@ service cloud.firestore {
         // Null value error. Existing notifications remain readable only by family
         // members listed in recipientIds.
         allow read: if resource == null
-          || (isFamilyMember(familyId) && request.auth.uid in resource.data.recipientIds);
+          || (isFamilyMember(familyId) && authProfileId() in resource.data.recipientIds);
         // Any authenticated family member may create a notification *as themselves*
-        // (actorId == request.auth.uid). Children legitimately originate notifications
+        // (actorId == authProfileId()). Children legitimately originate notifications
         // (e.g. task_submitted, profile_update_requested) inside the same transaction as
         // the business event. The actor must be the caller and a family member; all field,
         // recipient-list and createdAt constraints below remain enforced so a child cannot
@@ -1768,7 +1815,7 @@ service cloud.firestore {
         allow create: if isFamilyMember(familyId)
           && request.resource.data.keys().hasOnly(allowedKeys())
           && request.resource.data.familyId == familyId
-          && request.resource.data.actorId == request.auth.uid
+          && request.resource.data.actorId == authProfileId()
           && request.resource.data.recipientIds is list
           && request.resource.data.recipientIds.size() > 0
           && request.resource.data.recipientIds.size() <= 50
@@ -1794,13 +1841,13 @@ service cloud.firestore {
           // data" rather than throw a Null value error. Existing tokens remain
           // readable only by their owner. This mirrors the notifications read rule.
           allow read: if resource == null
-            || (request.auth.uid == userId
+            || (authProfileId() == userId
               && isFamilyMember(familyId)
-              && resource.data.userId == request.auth.uid);
-          allow create: if request.auth.uid == userId
+              && resource.data.userId == authProfileId());
+          allow create: if authProfileId() == userId
             && isFamilyMember(familyId)
             && request.resource.data.keys().hasOnly(allowedCreateKeys())
-            && request.resource.data.userId == request.auth.uid
+            && request.resource.data.userId == authProfileId()
             && request.resource.data.familyId == familyId
             && request.resource.data.token is string
             && request.resource.data.token.size() > 0
@@ -1810,9 +1857,9 @@ service cloud.firestore {
             && request.resource.data.createdAt == request.time
             && request.resource.data.updatedAt == request.time
             && request.resource.data.lastSeenAt == request.time;
-          allow update: if request.auth.uid == userId
+          allow update: if authProfileId() == userId
             && isFamilyMember(familyId)
-            && resource.data.userId == request.auth.uid
+            && resource.data.userId == authProfileId()
             && resource.data.familyId == familyId
             && request.resource.data.userId == resource.data.userId
             && request.resource.data.familyId == resource.data.familyId
@@ -1823,9 +1870,9 @@ service cloud.firestore {
             && request.resource.data.lastSeenAt == request.time
             // createdAt is immutable after create.
             && request.resource.data.createdAt == resource.data.createdAt;
-          allow delete: if request.auth.uid == userId
+          allow delete: if authProfileId() == userId
             && isFamilyMember(familyId)
-            && resource.data.userId == request.auth.uid;
+            && resource.data.userId == authProfileId();
         }
       }
 
@@ -1846,8 +1893,8 @@ service cloud.firestore {
         function notificationFor(nid) {
           return get(/databases/$(database)/documents/families/$(familyId)/notifications/$(nid));
         }
-        allow read: if isFamilyMember(familyId) && resource.data.userId == request.auth.uid;
-        allow create, update: if request.auth.uid == request.resource.data.userId
+        allow read: if isFamilyMember(familyId) && resource.data.userId == authProfileId();
+        allow create, update: if authProfileId() == request.resource.data.userId
           && request.resource.data.familyId == familyId
           && request.resource.data.keys().hasOnly(allowedReadKeys())
           // readAt is assigned server-side via serverTimestamp(); it is never a
@@ -1858,7 +1905,7 @@ service cloud.firestore {
           // every "mark all as read" batch with permission-denied.
           && request.resource.data.readAt is timestamp
           && notificationFor(request.resource.data.notificationId) != null
-          && notificationFor(request.resource.data.notificationId).data.recipientIds.hasAll([request.auth.uid]);
+          && notificationFor(request.resource.data.notificationId).data.recipientIds.hasAll([authProfileId()]);
         allow delete: if false;
       }
 
@@ -1898,11 +1945,11 @@ service cloud.firestore {
       }
 
       match /transfer_requests/{requestId} {
-        allow read: if isParent(familyId) || (isAuthenticated() && (resource.data.fromChildId == request.auth.uid || resource.data.toChildId == request.auth.uid));
-        allow create: if isChildInFamily(familyId, request.auth.uid)
+        allow read: if isParent(familyId) || (isAuthenticated() && (resource.data.fromChildId == authProfileId() || resource.data.toChildId == authProfileId()));
+        allow create: if isChildInFamily(familyId, authProfileId())
           && request.resource.data.keys().hasAll(['familyId', 'fromChildId', 'toChildId', 'amountPence', 'status', 'createdAt'])
           && request.resource.data.keys().hasOnly(['id', 'familyId', 'fromChildId', 'fromChildName', 'toChildId', 'toChildName', 'amountPence', 'message', 'status', 'createdAt'])
-          && request.auth.uid == request.resource.data.fromChildId
+          && authProfileId() == request.resource.data.fromChildId
           && request.resource.data.familyId == familyId
           && isChildInFamily(familyId, request.resource.data.get('toChildId', 'null'))
           && request.resource.data.get('fromChildId', '') != request.resource.data.get('toChildId', '')
@@ -1914,7 +1961,7 @@ service cloud.firestore {
         allow update: if (isParent(familyId)
           && resource.data.status == 'pending'
           && request.resource.data.status in ['approved', 'rejected']
-          && request.resource.data.reviewedBy == request.auth.uid
+          && request.resource.data.reviewedBy == authProfileId()
           && request.resource.data.reviewedAt == request.time
           && (
             (request.resource.data.status == 'rejected' && request.resource.data.rejectionReason is string && request.resource.data.rejectionReason.trim().size() > 0 && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'reviewedBy', 'reviewedAt', 'reviewedByName', 'rejectionReason']))
@@ -1925,58 +1972,58 @@ service cloud.firestore {
               && isValidTransferApproval(familyId, requestId, request.resource.data, resource.data)
             )
           ))
-          || (isAuthenticated() && resource.data.status == 'pending' && (resource.data.fromChildId == request.auth.uid || isParent(familyId))
-              && request.resource.data.status == 'cancelled' && request.resource.data.cancelledBy == request.auth.uid
+          || (isAuthenticated() && resource.data.status == 'pending' && (resource.data.fromChildId == authProfileId() || isParent(familyId))
+              && request.resource.data.status == 'cancelled' && request.resource.data.cancelledBy == authProfileId()
               && request.resource.data.cancelledAt == request.time
               && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'cancelledBy', 'cancelledAt']));
         allow delete: if false;
       }
 
       match /money_requests/{requestId} {
-        allow read: if isParent(familyId) || (isAuthenticated() && (resource.data.requesterId == request.auth.uid || resource.data.requestedFromId == request.auth.uid));
+        allow read: if isParent(familyId) || (isAuthenticated() && (resource.data.requesterId == authProfileId() || resource.data.requestedFromId == authProfileId()));
         allow create: if isFamilyMember(familyId)
           && request.resource.data.status in ['pending', 'pending_acceptance']
           && request.resource.data.createdAt == request.time;
         allow update: if (isParent(familyId) && resource.data.status in ['pending', 'pending_acceptance']
           && request.resource.data.status in ['approved', 'rejected']
-          && request.resource.data.reviewedBy == request.auth.uid
+          && request.resource.data.reviewedBy == authProfileId()
           && request.resource.data.reviewedAt == request.time
           && ((request.resource.data.status == 'rejected' && request.resource.data.rejectionReason is string && request.resource.data.rejectionReason.trim().size() > 0 && request.resource.data.rejectionReason.size() <= 1000
               && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'reviewedAt', 'reviewedBy', 'reviewedByName', 'rejectionReason']))
             || (request.resource.data.status == 'approved'
               && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'reviewedAt', 'reviewedBy', 'reviewedByName', 'paymentTransferId', 'effectSnapshot'])
               && isValidMoneyRequestApproval(familyId, requestId, request.resource.data, resource.data))))
-          || (isAuthenticated() && resource.data.status in ['pending', 'pending_acceptance'] && (resource.data.requesterId == request.auth.uid || isParent(familyId))
-              && request.resource.data.status == 'cancelled' && request.resource.data.cancelledBy == request.auth.uid
+          || (isAuthenticated() && resource.data.status in ['pending', 'pending_acceptance'] && (resource.data.requesterId == authProfileId() || isParent(familyId))
+              && request.resource.data.status == 'cancelled' && request.resource.data.cancelledBy == authProfileId()
               && request.resource.data.cancelledAt == request.time
               && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'cancelledBy', 'cancelledAt']))
-          || (isAuthenticated() && resource.data.status == 'pending_acceptance' && resource.data.requestedFromId == request.auth.uid
+          || (isAuthenticated() && resource.data.status == 'pending_acceptance' && resource.data.requestedFromId == authProfileId()
               && request.resource.data.status == 'pending'
               && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status']));
         allow delete: if false;
       }
 
       match /petbox_requests/{requestId} {
-        allow read: if isParent(familyId) || (isAuthenticated() && resource.data.childId == request.auth.uid);
-        allow create: if petBoxEnabled(familyId) && isChildInFamily(familyId, request.auth.uid)
+        allow read: if isParent(familyId) || (isAuthenticated() && resource.data.childId == authProfileId());
+        allow create: if petBoxEnabled(familyId) && isChildInFamily(familyId, authProfileId())
           && request.resource.data.keys().hasAll(['familyId', 'fundId', 'fundName', 'childId', 'childName', 'amountPence', 'status', 'createdAt'])
           && request.resource.data.keys().hasOnly(['familyId', 'fundId', 'fundName', 'childId', 'childName', 'amountPence', 'status', 'createdAt'])
           && request.resource.data.familyId == familyId
-          && request.resource.data.childId == request.auth.uid
+          && request.resource.data.childId == authProfileId()
           && request.resource.data.amountPence is int && request.resource.data.amountPence > 0
           && request.resource.data.status == 'pending'
           && request.resource.data.createdAt == request.time;
         allow update: if petBoxEnabled(familyId) && ((isParent(familyId) && resource.data.status == 'pending'
           && request.resource.data.status in ['approved', 'rejected']
-          && request.resource.data.reviewedBy == request.auth.uid
+          && request.resource.data.reviewedBy == authProfileId()
           && request.resource.data.reviewedAt == request.time
           && ((request.resource.data.status == 'rejected' && request.resource.data.rejectionReason is string && request.resource.data.rejectionReason.trim().size() > 0
               && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'reviewedAt', 'reviewedBy', 'rejectionReason']))
             || (request.resource.data.status == 'approved'
               && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'reviewedAt', 'reviewedBy', 'approvalTxId', 'fundTransactionId', 'effectSnapshot'])
               && isValidPetBoxApproval(familyId, request.resource.data, resource.data))))
-          || (isAuthenticated() && resource.data.status == 'pending' && (resource.data.childId == request.auth.uid || isParent(familyId))
-              && request.resource.data.status == 'cancelled' && request.resource.data.cancelledBy == request.auth.uid
+          || (isAuthenticated() && resource.data.status == 'pending' && (resource.data.childId == authProfileId() || isParent(familyId))
+              && request.resource.data.status == 'cancelled' && request.resource.data.cancelledBy == authProfileId()
               && request.resource.data.cancelledAt == request.time
               && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'cancelledBy', 'cancelledAt'])));
         allow delete: if false;
@@ -1993,28 +2040,28 @@ service cloud.firestore {
           // Coerce null to '' and only call exists() for a non-empty id, otherwise
           // exists() with a null document id throws and denies the entire create.
           return avatarId == null || avatarId == '' || isStarterAvatar(avatarId)
-            || (avatarId != null && exists(/databases/$(database)/documents/families/$(familyId)/users/$(request.auth.uid)/avatar_unlocks/$(avatarId)));
+            || (avatarId != null && exists(/databases/$(database)/documents/families/$(familyId)/users/$(authProfileId())/avatar_unlocks/$(avatarId)));
         }
-        allow read: if isParent(familyId) || (isAuthenticated() && resource.data.childId == request.auth.uid);
-        allow create: if isChildInFamily(familyId, request.auth.uid)
+        allow read: if isParent(familyId) || (isAuthenticated() && resource.data.childId == authProfileId());
+        allow create: if isChildInFamily(familyId, authProfileId())
           && request.resource.data.keys().hasAll(['familyId', 'childId', 'childName', 'requestedDisplayName', 'requestedAvatar', 'currentDisplayName', 'currentAvatar', 'status', 'createdAt', 'actorId'])
           && request.resource.data.keys().hasOnly(['familyId', 'childId', 'childName', 'requestedDisplayName', 'requestedAvatar', 'requestedAvatarId', 'currentDisplayName', 'currentAvatar', 'currentAvatarId', 'status', 'createdAt', 'actorId', 'id'])
           && request.resource.data.familyId == familyId
-          && request.resource.data.childId == request.auth.uid
+          && request.resource.data.childId == authProfileId()
           && request.resource.data.status == 'pending'
           && request.resource.data.createdAt == request.time
           && requestedAvatarIsAllowed();
         allow update: if (isParent(familyId) && resource.data.status == 'pending'
           && request.resource.data.status in ['approved', 'rejected']
-          && request.resource.data.reviewedBy == request.auth.uid
+          && request.resource.data.reviewedBy == authProfileId()
           && request.resource.data.reviewedAt == request.time
           && ((request.resource.data.status == 'rejected'
               && request.resource.data.rejectionReason is string
               && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'reviewedAt', 'reviewedBy', 'reviewedByName', 'rejectionReason']))
             || (request.resource.data.status == 'approved'
               && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'reviewedAt', 'reviewedBy', 'reviewedByName', 'effectSnapshot']))))
-          || (isAuthenticated() && resource.data.status == 'pending' && resource.data.childId == request.auth.uid
-              && request.resource.data.status == 'cancelled' && request.resource.data.cancelledBy == request.auth.uid
+          || (isAuthenticated() && resource.data.status == 'pending' && resource.data.childId == authProfileId()
+              && request.resource.data.status == 'cancelled' && request.resource.data.cancelledBy == authProfileId()
               && request.resource.data.cancelledAt == request.time
               && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'cancelledBy', 'cancelledAt']));
         allow delete: if false;
@@ -2029,8 +2076,8 @@ service cloud.firestore {
           function allowedKeys() {
             return ['avatarId', 'userId', 'familyId', 'unlockedAt', 'costPoints', 'source', 'actorId'];
           }
-          allow read: if isFamilyMember(familyId) && (request.auth.uid == userId || isParent(familyId));
-          allow create: if request.auth.uid == userId
+          allow read: if isFamilyMember(familyId) && (authProfileId() == userId || isParent(familyId));
+          allow create: if authProfileId() == userId
             && isChildInFamily(familyId, userId)
             && request.resource.data.keys().hasOnly(allowedKeys())
             && request.resource.data.avatarId == avatarId
@@ -2109,13 +2156,13 @@ service cloud.firestore {
 
       match /daily_progress/{progressId} {
         // Parent/owner can read all family progress; child can read only own progress
-        allow read: if isParent(familyId) || (isAuthenticated() && resource.data.childId == request.auth.uid);
+        allow read: if isParent(familyId) || (isAuthenticated() && resource.data.childId == authProfileId());
         allow write: if false;
       }
 
       match /gamification_summaries/{summaryId} {
         // Parent/owner can read all family summaries; child can read only own summary
-        allow read: if isParent(familyId) || (isAuthenticated() && summaryId == request.auth.uid);
+        allow read: if isParent(familyId) || (isAuthenticated() && summaryId == authProfileId());
         allow write: if false;
       }
 

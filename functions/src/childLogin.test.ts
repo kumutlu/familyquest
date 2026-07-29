@@ -132,6 +132,8 @@ function makeFakeAuth() {
     claims,
     deleted,
     revoked,
+    failRevocation: false,
+    failPasswordUpdate: false,
     createUser: async (opts: Record<string, unknown>) => {
       const uid = `auth-${(++counter).toString()}`;
       users.set(uid, { ...opts, uid });
@@ -154,11 +156,15 @@ function makeFakeAuth() {
       return { uid, disabled: false, email: undefined };
     },
     updateUser: async (uid: string, opts: Record<string, unknown>) => {
+      if (auth.failPasswordUpdate && typeof opts.password === 'string') {
+        throw new Error('simulated password update failure');
+      }
       const existing = users.get(uid) ?? { uid };
       users.set(uid, { ...existing, ...opts, uid });
       return { uid };
     },
     revokeRefreshTokens: async (uid: string) => {
+      if (auth.failRevocation) throw new Error('simulated revocation failure');
       revoked.push(uid);
       return { uid };
     },
@@ -834,7 +840,7 @@ describe('resetChildPassword', () => {
     expect(auth.revoked).toContain(authUid);
   });
 
-  it('persists requiresPasswordChange (explicit true and default)', async () => {
+  it('always persists requiresPasswordChange even if an obsolete caller sends false', async () => {
     await seedLoginViaCreate(db, auth, { childId: 'child1', username: 'Alex' });
     const ctx = makeCtx(db, auth);
     await resetChildPasswordImpl(ctx, 'owner1', {
@@ -843,15 +849,8 @@ describe('resetChildPassword', () => {
       requirePasswordChange: false,
       clientReqId: 'r1',
     });
-    expect(db.store.get('families/F1/childLogins/child1').requiresPasswordChange).toBe(false);
-    expect(db.store.get('users/child1').requiresPasswordChange).toBe(false);
-
-    await resetChildPasswordImpl(ctx, 'owner1', {
-      childId: 'child1',
-      newPassword: NEW_PW,
-      clientReqId: 'r2',
-    });
     expect(db.store.get('families/F1/childLogins/child1').requiresPasswordChange).toBe(true);
+    expect(db.store.get('users/child1').requiresPasswordChange).toBe(true);
   });
 
   it('is idempotent on retry with the same clientReqId', async () => {
@@ -868,6 +867,61 @@ describe('resetChildPassword', () => {
     expect(second).toEqual(first);
     const idem = db.store.get('families/F1/childLoginIdempotency/r1');
     expect(idem.status).toBe('completed');
+  });
+
+  it('uses only non-secret metadata for idempotency and rejects incompatible metadata', async () => {
+    await seedLoginViaCreate(db, auth, { childId: 'child1', username: 'Alex' });
+    const ctx = makeCtx(db, auth);
+    await resetChildPasswordImpl(ctx, 'owner1', {
+      childId: 'child1',
+      newPassword: NEW_PW,
+      clientReqId: 'r1',
+    });
+    const idem = db.store.get('families/F1/childLoginIdempotency/r1');
+    expect(idem.operation).toBe('resetChildPassword');
+    expect(idem.childId).toBe('child1');
+    expect(idem.requesterUid).toBe('owner1');
+    expect(JSON.stringify(idem)).not.toContain(NEW_PW);
+
+    await seedLoginViaCreate(db, auth, { childId: 'child2', username: 'Bea' });
+    await expect(
+      resetChildPasswordImpl(ctx, 'owner1', {
+        childId: 'child2',
+        newPassword: 'An0therStrong!',
+        clientReqId: 'r1',
+      }),
+    ).rejects.toMatchObject({ code: 'already-exists' });
+  });
+
+  it('keeps the child restricted when refresh-token revocation fails', async () => {
+    await seedLoginViaCreate(db, auth, { childId: 'child1', username: 'Alex' });
+    auth.failRevocation = true;
+    const ctx = makeCtx(db, auth);
+    await expect(
+      resetChildPasswordImpl(ctx, 'owner1', {
+        childId: 'child1',
+        newPassword: NEW_PW,
+        clientReqId: 'r1',
+      }),
+    ).rejects.toMatchObject({ code: 'internal', message: 'SESSION_REVOCATION_FAILED' });
+    expect(db.store.get('families/F1/childLogins/child1').requiresPasswordChange).toBe(true);
+    expect(db.store.get('users/child1').requiresPasswordChange).toBe(true);
+  });
+
+  it('records a restricted recovery state and revokes sessions when the Auth update fails', async () => {
+    const { authUid } = await seedLoginViaCreate(db, auth, { childId: 'child1', username: 'Alex' });
+    auth.failPasswordUpdate = true;
+    const ctx = makeCtx(db, auth);
+    await expect(
+      resetChildPasswordImpl(ctx, 'owner1', {
+        childId: 'child1',
+        newPassword: NEW_PW,
+        clientReqId: 'r1',
+      }),
+    ).rejects.toMatchObject({ code: 'internal', message: 'AUTH_UPDATE_FAILED' });
+    expect(auth.revoked).toContain(authUid);
+    expect(db.store.get('families/F1/childLogins/child1').recoveryState).toBe('auth_update_failed');
+    expect(db.store.get('users/child1').requiresPasswordChange).toBe(true);
   });
 });
 
@@ -1043,7 +1097,13 @@ describe('completeChildPasswordChange', () => {
   let auth: any;
 
   function childClaims(childId = 'child1', familyId = 'F1') {
-    return { role: 'child', managedChild: true, childId, familyId };
+    return {
+      role: 'child',
+      managedChild: true,
+      childId,
+      familyId,
+      auth_time: Math.floor(Date.now() / 1000),
+    };
   }
 
   beforeEach(() => {
@@ -1060,8 +1120,7 @@ describe('completeChildPasswordChange', () => {
     });
     const ctx = makeCtx(db, auth);
     await expect(
-      completeChildPasswordChangeImpl(ctx, 'child1', { role: 'parent', familyId: 'F1' }, {
-        currentPassword: GOOD_PW,
+      completeChildPasswordChangeImpl(ctx, 'auth-1', { role: 'parent', familyId: 'F1' }, {
         newPassword: NEW_PW,
         clientReqId: 'c1',
       }),
@@ -1076,28 +1135,26 @@ describe('completeChildPasswordChange', () => {
     });
     const ctx = makeCtx(db, auth);
     await expect(
-      completeChildPasswordChangeImpl(ctx, 'child1', childClaims(), {
-        currentPassword: GOOD_PW,
+      completeChildPasswordChangeImpl(ctx, 'auth-1', childClaims(), {
         newPassword: NEW_PW,
         clientReqId: 'c1',
       }),
     ).rejects.toMatchObject({ code: 'failed-precondition' });
   });
 
-  it('fails generically on a wrong current password', async () => {
+  it('rejects a caller whose Auth UID does not match the private linkage', async () => {
     await seedLoginViaCreate(db, auth, {
       childId: 'child1',
       username: 'Alex',
       requirePasswordChange: true,
     });
-    const ctx = makeCtx(db, auth, { verifyPassword: async () => false });
+    const ctx = makeCtx(db, auth);
     await expect(
-      completeChildPasswordChangeImpl(ctx, 'child1', childClaims(), {
-        currentPassword: 'wrong',
+      completeChildPasswordChangeImpl(ctx, 'wrong-auth-uid', childClaims(), {
         newPassword: NEW_PW,
         clientReqId: 'c1',
       }),
-    ).rejects.toMatchObject({ code: 'invalid-argument', message: 'INVALID_CREDENTIALS' });
+    ).rejects.toMatchObject({ code: 'permission-denied' });
   });
 
   it('applies the new password, clears the flag, and revokes sessions', async () => {
@@ -1107,8 +1164,7 @@ describe('completeChildPasswordChange', () => {
       requirePasswordChange: true,
     });
     const ctx = makeCtx(db, auth, { verifyPassword: async () => true });
-    const res = await completeChildPasswordChangeImpl(ctx, 'child1', childClaims(), {
-      currentPassword: GOOD_PW,
+    const res = await completeChildPasswordChangeImpl(ctx, authUid, childClaims(), {
       newPassword: NEW_PW,
       clientReqId: 'c1',
     });
@@ -1126,8 +1182,8 @@ describe('completeChildPasswordChange', () => {
       requirePasswordChange: true,
     });
     const ctx = makeCtx(db, auth, { verifyPassword: async () => true });
-    const res = await completeChildPasswordChangeImpl(ctx, 'child1', childClaims(), {
-      currentPassword: GOOD_PW,
+    const priv = db.store.get('families/F1/childLogins/child1');
+    const res = await completeChildPasswordChangeImpl(ctx, priv.authUid, childClaims(), {
       newPassword: NEW_PW,
       clientReqId: 'c1',
     });
@@ -1149,13 +1205,31 @@ describe('completeChildPasswordChange', () => {
     });
     const ctx = makeCtx(db, auth, { verifyPassword: async () => true });
     const input = {
-      currentPassword: GOOD_PW,
       newPassword: NEW_PW,
       clientReqId: 'c1',
     };
-    const first = await completeChildPasswordChangeImpl(ctx, 'child1', childClaims(), input);
-    const second = await completeChildPasswordChangeImpl(ctx, 'child1', childClaims(), input);
+    const authUid = db.store.get('families/F1/childLogins/child1').authUid;
+    const first = await completeChildPasswordChangeImpl(ctx, authUid, childClaims(), input);
+    const second = await completeChildPasswordChangeImpl(ctx, authUid, childClaims(), input);
     expect(second).toEqual(first);
+  });
+
+  it('does not clear the restriction if refresh-token revocation fails', async () => {
+    const { authUid } = await seedLoginViaCreate(db, auth, {
+      childId: 'child1',
+      username: 'Alex',
+      requirePasswordChange: true,
+    });
+    auth.failRevocation = true;
+    const ctx = makeCtx(db, auth);
+    await expect(
+      completeChildPasswordChangeImpl(ctx, authUid, childClaims(), {
+        newPassword: NEW_PW,
+        clientReqId: 'c1',
+      }),
+    ).rejects.toMatchObject({ code: 'internal', message: 'SESSION_REVOCATION_FAILED' });
+    expect(db.store.get('families/F1/childLogins/child1').requiresPasswordChange).toBe(true);
+    expect(db.store.get('users/child1').requiresPasswordChange).toBe(true);
   });
 });
 

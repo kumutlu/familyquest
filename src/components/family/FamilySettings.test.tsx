@@ -253,9 +253,11 @@ describe('FamilySettings — role-based visibility', () => {
     renderFamilySettings('owner');
     // Navigate to Members section to see the buttons
     await user.click(screen.getByRole('button', { name: 'Members' }));
-    const inviteAction = screen.getByRole('button', { name: 'Copy invite code for another adult' });
+    const inviteAction = screen.getByRole('button', { name: 'Add parent or adult' });
     expect(inviteAction).toBeEnabled();
     await user.click(inviteAction);
+    expect(screen.getByText('ABC123')).toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: 'Copy' }));
     expect(clipboardWriteText).toHaveBeenCalledWith('ABC123');
     expect(screen.getByRole('button', { name: '+ Add child' })).toBeInTheDocument();
   });
@@ -401,10 +403,11 @@ describe('FamilySettings — add parent flow', () => {
     renderFamilySettings('owner');
     await user.click(screen.getByRole('button', { name: 'Members' }));
 
-    expect(screen.getByText(/adding another parent isn't available yet/i)).toBeInTheDocument();
-    const copyInvite = screen.getByRole('button', { name: 'Copy invite code for another adult' });
+    expect(screen.getByText(/invite another adult with the existing family code/i)).toBeInTheDocument();
+    const copyInvite = screen.getByRole('button', { name: 'Add parent or adult' });
     expect(copyInvite).toBeEnabled();
     await user.click(copyInvite);
+    await user.click(screen.getByRole('button', { name: 'Copy' }));
 
     expect(clipboardWriteText).toHaveBeenCalledWith('ABC123');
     expect(await screen.findByText('Invite code copied to clipboard.')).toBeInTheDocument();
@@ -424,11 +427,11 @@ describe('FamilySettings — localization and accessibility', () => {
     });
 
     await user.click(screen.getByRole('button', { name: 'Üyeler' }));
-    expect(screen.getByText('Başka bir ebeveyn ekleme özelliği henüz kullanılamıyor. Aile davet kodları şu anda çocuk katılma isteği oluşturur.')).toBeInTheDocument();
+    expect(screen.getByText(/Mevcut aile koduyla başka bir yetişkini davet edin/)).toBeInTheDocument();
     expect(screen.getByText('1 istek onay bekliyor')).toBeInTheDocument();
-    expect(screen.getByText('Bu isteği onayladığınızda kişi aileye çocuk olarak eklenir.')).toBeInTheDocument();
+    expect(screen.getByText('Bu isteği çocuk veya ebeveyn/yetişkin olarak onaylamayı seçin.')).toBeInTheDocument();
     expect(screen.getByText(/İstek tarihi:/)).toHaveTextContent('02.01.2026');
-    expect(screen.getByRole('button', { name: 'Onayla' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Çocuk rolünü onayla' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Reddet' })).toBeInTheDocument();
 
     await user.click(screen.getByRole('button', { name: 'Bölgesel' }));
@@ -466,7 +469,7 @@ describe('FamilySettings — pending join requests', () => {
     expect(screen.getByText('Pending Approvals')).toBeInTheDocument();
     const childrenSection = screen.getByRole('region', { name: 'Children' });
     expect(within(childrenSection).getByText('Joining Child')).toBeInTheDocument();
-    expect(within(childrenSection).getByText('Approving this request adds the person as a child.')).toBeInTheDocument();
+    expect(within(childrenSection).getByText('Choose whether to approve this request as a child or a parent/adult.')).toBeInTheDocument();
   });
 
   it('25. Owner can approve join request', async () => {
@@ -477,7 +480,7 @@ describe('FamilySettings — pending join requests', () => {
       ],
     });
     await user.click(screen.getByRole('button', { name: 'Members' }));
-    await user.click(screen.getByRole('button', { name: 'Approve' }));
+    await user.click(screen.getByRole('button', { name: 'Confirm child' }));
     expect(await screen.findByText('Join request approved')).toBeInTheDocument();
     expect(mockApproveJoinRequest).toHaveBeenCalledWith('fam1', 'req1', 'child');
   });

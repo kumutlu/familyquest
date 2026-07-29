@@ -1,9 +1,26 @@
-import { describe, it, expect, vi } from 'vitest';
+import { beforeEach, describe, it, expect, vi } from 'vitest';
 import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { ChildLoginSection, type ChildLoginMember } from './ChildLoginSection';
 
+const lifecycle = vi.hoisted(() => ({
+  reset: vi.fn(),
+  disable: vi.fn(),
+  enable: vi.fn(),
+}));
+
+vi.mock('../../lib/childLoginApi', async importOriginal => {
+  const actual = await importOriginal<typeof import('../../lib/childLoginApi')>();
+  return {
+    ...actual,
+    resetChildPassword: lifecycle.reset,
+    disableChildLogin: lifecycle.disable,
+    enableChildLogin: lifecycle.enable,
+  };
+});
+
 describe('ChildLoginSection', () => {
+  beforeEach(() => vi.clearAllMocks());
   it('renders a Create Login action for a managed child without a login', () => {
     const member: ChildLoginMember = { id: 'c1', displayName: 'Milo', hasLogin: false };
     const onRequestCreate = vi.fn();
@@ -47,7 +64,7 @@ describe('ChildLoginSection', () => {
     expect(screen.getByText('Never')).toBeInTheDocument();
   });
 
-  it('shows disabled Reset/Disable actions with a Coming soon hint', () => {
+  it('exposes working Reset/Disable actions without a Coming soon placeholder', () => {
     const member: ChildLoginMember = {
       id: 'c1',
       displayName: 'Milo',
@@ -59,9 +76,9 @@ describe('ChildLoginSection', () => {
 
     const reset = screen.getByRole('button', { name: 'Reset Password' }) as HTMLButtonElement;
     const disable = screen.getByRole('button', { name: 'Disable Login' }) as HTMLButtonElement;
-    expect(reset).toBeDisabled();
-    expect(disable).toBeDisabled();
-    expect(screen.getByText('Coming soon')).toBeInTheDocument();
+    expect(reset).toBeEnabled();
+    expect(disable).toBeEnabled();
+    expect(screen.queryByText('Coming soon')).not.toBeInTheDocument();
   });
 
   it('shows the Enable Login action when the login is disabled', () => {
@@ -77,9 +94,42 @@ describe('ChildLoginSection', () => {
 
     expect(screen.getByText('Disabled')).toBeInTheDocument();
     const enable = screen.getByRole('button', { name: 'Enable Login' }) as HTMLButtonElement;
-    expect(enable).toBeDisabled();
+    expect(enable).toBeEnabled();
     // Disable button must not be present in the disabled state.
     expect(screen.queryByRole('button', { name: 'Disable Login' })).toBeNull();
+  });
+
+  it('resets with the parent-entered temporary password and explains the forced change', async () => {
+    lifecycle.reset.mockResolvedValue({ childId: 'c1', loginEnabled: true, requiresPasswordChange: true });
+    const user = userEvent.setup();
+    render(<ChildLoginSection
+      member={{ id: 'c1', displayName: 'Milo', hasLogin: true, username: 'milo', loginEnabled: true }}
+      onRequestCreate={() => {}}
+    />);
+    await user.click(screen.getByRole('button', { name: 'Reset Password' }));
+    expect(screen.getByText(/signed out on all devices/i)).toBeInTheDocument();
+    await user.type(screen.getByLabelText('Temporary password'), 'T3mpPass!');
+    await user.click(screen.getByRole('button', { name: 'Set temporary password' }));
+    expect(lifecycle.reset).toHaveBeenCalledWith('c1', 'T3mpPass!');
+    expect(await screen.findByText(/must create a new private password/i)).toBeInTheDocument();
+  });
+
+  it('calls the secure enable and disable lifecycle actions', async () => {
+    lifecycle.disable.mockResolvedValue({});
+    lifecycle.enable.mockResolvedValue({});
+    const user = userEvent.setup();
+    const { rerender } = render(<ChildLoginSection
+      member={{ id: 'c1', displayName: 'Milo', hasLogin: true, username: 'milo', loginEnabled: true }}
+      onRequestCreate={() => {}}
+    />);
+    await user.click(screen.getByRole('button', { name: 'Disable Login' }));
+    expect(lifecycle.disable).toHaveBeenCalledWith('c1');
+    rerender(<ChildLoginSection
+      member={{ id: 'c1', displayName: 'Milo', hasLogin: true, username: 'milo', loginEnabled: false }}
+      onRequestCreate={() => {}}
+    />);
+    await user.click(screen.getByRole('button', { name: 'Enable Login' }));
+    expect(lifecycle.enable).toHaveBeenCalledWith('c1');
   });
 
   it('never renders authUid, synthetic email, or internal ids', () => {

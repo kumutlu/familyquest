@@ -37,6 +37,7 @@ vi.mock('firebase/auth', () => ({
   getAuth: vi.fn(() => ({}) as any),
   GoogleAuthProvider: class {},
   initializeApp: vi.fn(),
+  signOut: vi.fn(),
 }));
 
 vi.mock('firebase/firestore', () => ({
@@ -182,6 +183,43 @@ afterEach(async () => {
 });
 
 describe('auth bootstrap regression', () => {
+  it('hydrates a managed child by trusted childId claim and gates the layout at password change', async () => {
+    firestoreState.profileSnapshot = {
+      exists: () => true,
+      id: 'child-1',
+      data: () => ({
+        role: 'child',
+        familyId: 'fam-1',
+        displayName: 'Alex',
+        isManaged: true,
+        authUid: 'auth-child-1',
+        requiresPasswordChange: true,
+      }),
+    };
+    const managedAuthUser = {
+      uid: 'auth-child-1',
+      getIdToken: vi.fn(async () => 'token'),
+      getIdTokenResult: vi.fn(async () => ({
+        claims: {
+          role: 'child',
+          managedChild: true,
+          childId: 'child-1',
+          familyId: 'fam-1',
+        },
+      })),
+    };
+    await act(async () => {
+      await authState.listener?.(managedAuthUser);
+    });
+
+    await waitFor(() => expect(useStore.getState().appReady).toBe(true));
+    expect(useStore.getState().currentUser.id).toBe('child-1');
+    expect(useStore.getState().familyData).toBeNull();
+    renderAppLayoutAt('/');
+    expect(screen.getByRole('heading', { name: 'Create your private password' })).toBeInTheDocument();
+    expect(screen.queryByText('FamilyQuest')).not.toBeInTheDocument();
+  });
+
   it('hydrates a saved Turkish preference before authenticated readiness', async () => {
     firestoreState.profileSnapshot = makeProfileSnapshot('fam-1', 'tr');
     fireSignedIn();

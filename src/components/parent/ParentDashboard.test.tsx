@@ -78,7 +78,7 @@ describe('ParentDashboard', () => {
     api.approveJoinRequest.mockImplementation(() => new Promise(() => {}));
     render(<MemoryRouter><ParentDashboard /></MemoryRouter>);
 
-    const buttons = screen.getAllByRole('button', { name: 'Approve as Child' });
+    const buttons = screen.getAllByRole('button', { name: 'Confirm child' });
     fireEvent.click(buttons[0]);
     fireEvent.click(buttons[1]);
 
@@ -87,6 +87,26 @@ describe('ParentDashboard', () => {
       screen.getAllByRole('button', { name: 'Approving…' }).every(button => button.hasAttribute('disabled')),
     ).toBe(true);
     expect(api.approveJoinRequest).toHaveBeenCalledTimes(2);
+  });
+
+  it('defaults approval to child and sends an explicitly selected parent role', async () => {
+    api.approveJoinRequest.mockResolvedValue(undefined);
+    vi.spyOn(window, 'confirm').mockReturnValue(true);
+    render(<MemoryRouter><ParentDashboard /></MemoryRouter>);
+
+    fireEvent.click(screen.getAllByRole('button', { name: 'Confirm child' })[0]);
+    await waitFor(() => expect(api.approveJoinRequest).toHaveBeenCalledWith(
+      'family-1', 'request-1', 'child',
+    ));
+
+    fireEvent.change(screen.getByLabelText('Approval role for Second Joiner'), {
+      target: { value: 'parent' },
+    });
+    expect(screen.getByRole('button', { name: 'Confirm parent/adult' })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Confirm parent/adult' }));
+    await waitFor(() => expect(api.approveJoinRequest).toHaveBeenCalledWith(
+      'family-1', 'request-2', 'parent',
+    ));
   });
 
   it('renders the dashboard sections (approvals + activity + quick actions)', () => {

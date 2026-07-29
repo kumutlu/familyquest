@@ -35,6 +35,13 @@ export interface CreateChildLoginResult {
   loginEnabled: boolean;
 }
 
+export interface ChildLoginLifecycleResult {
+  childId: string;
+  username?: string;
+  loginEnabled: boolean;
+  requiresPasswordChange?: boolean;
+}
+
 // --- Policy constants (kept in sync with the backend; backend is authoritative)
 // ---
 
@@ -109,6 +116,33 @@ export async function createChildLogin(params: {
   });
   return result.data;
 }
+
+async function invokeLifecycle<TInput extends object, TResult>(
+  name: string,
+  input: TInput,
+): Promise<TResult> {
+  const callable = httpsCallable<TInput & { clientReqId: string }, TResult>(functions, name);
+  const result = await callable({ ...input, clientReqId: generateClientReqId() });
+  return result.data;
+}
+
+export const resetChildPassword = (childId: string, newPassword: string) =>
+  invokeLifecycle<{ childId: string; newPassword: string }, ChildLoginLifecycleResult>(
+    'resetChildPassword',
+    { childId, newPassword },
+  );
+
+export const disableChildLogin = (childId: string) =>
+  invokeLifecycle<{ childId: string }, ChildLoginLifecycleResult>('disableChildLogin', { childId });
+
+export const enableChildLogin = (childId: string) =>
+  invokeLifecycle<{ childId: string }, ChildLoginLifecycleResult>('enableChildLogin', { childId });
+
+export const completeChildPasswordChange = (newPassword: string) =>
+  invokeLifecycle<{ newPassword: string }, { success: boolean }>(
+    'completeChildPasswordChange',
+    { newPassword },
+  );
 
 // --- Sign-in (Phase 3) ------------------------------------------------------
 
