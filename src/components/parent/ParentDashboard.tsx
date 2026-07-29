@@ -20,12 +20,27 @@ import { GoalSummaryCard } from '../dashboard/GoalSummaryCard';
 import { PetBoxSummaryCard } from '../dashboard/PetBoxSummaryCard';
 import { isPetBoxEnabled } from '../../lib/familyFeatures';
 import { FamilyBulletin } from '../bulletin/FamilyBulletin';
+import { FamilySetupPrompt } from '../family/FamilySetupPrompt';
+import { AddChildModal } from '../family/AddChildModal';
+import { shouldShowFamilySetupPrompt } from '../../lib/familySetup';
 
 const joinRequestProcessingKey = (request: { id: string; uid: string }) => `join:${request.id}:${request.uid}`;
 
 export function ParentDashboard() {
   const { t } = useTranslation('dashboard');
-  const { currentUser, familyMembers, familyData, joinRequests, loading, bootstrapError } = useStore();
+  const {
+    currentUser,
+    familyMembers,
+    familyData,
+    joinRequests,
+    loading,
+    bootstrapError,
+    appReady,
+    familyLoading,
+    bootstrapStatus,
+  } = useStore();
+  const [setupPromptHidden, setSetupPromptHidden] = useState(false);
+  const [isAddChildOpen, setIsAddChildOpen] = useState(false);
 
   const [joinProcessing, setJoinProcessing] = useState<Record<string, 'approve' | 'reject'>>({});
   const [joinError, setJoinError] = useState('');
@@ -90,6 +105,7 @@ export function ParentDashboard() {
       <FamilyBulletin />
 
       <QuickActions
+        onAddChild={() => setIsAddChildOpen(true)}
         petBoxEnabled={isPetBoxEnabled(familyData)}
         onNewTask={() => setIsTaskModalOpen(true)}
         onNewReward={() => setIsRewardModalOpen(true)}
@@ -174,6 +190,23 @@ export function ParentDashboard() {
 
       <ReversalHistoryPanel />
 
+      {!setupPromptHidden && shouldShowFamilySetupPrompt({
+        appReady,
+        familyLoading,
+        familyData,
+        familyMembers,
+        currentUser,
+        bootstrapStatus,
+      }) && (
+        <FamilySetupPrompt
+          familyId={currentUser.familyId}
+          ownerId={currentUser.uid || currentUser.id}
+          familyCode={familyData?.inviteCode || ''}
+          familyMembers={familyMembers}
+          onHide={() => setSetupPromptHidden(true)}
+        />
+      )}
+
       {/* Forms / modals (reused, not duplicated) */}
       <BehaviourFormModal
         isOpen={isEventModalOpen}
@@ -182,6 +215,12 @@ export function ParentDashboard() {
       />
       <TaskFormModal isOpen={isTaskModalOpen} onClose={() => setIsTaskModalOpen(false)} />
       <RewardFormModal isOpen={isRewardModalOpen} onClose={() => setIsRewardModalOpen(false)} />
+      {isAddChildOpen && (
+        <AddChildModal
+          familyId={currentUser.familyId}
+          onClose={() => setIsAddChildOpen(false)}
+        />
+      )}
     </div>
   );
 }

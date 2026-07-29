@@ -66,6 +66,7 @@
     "colourLabel": "Favourite colour"
   },
   "createLogin": {
+    "profileExistsRetry": "The child profile already exists. If login creation fails, try again here or manage login later.",
     "title": "Create Login for {{name}}",
     "username": "Username",
     "usernameHelp": "3–32 characters. Letters, numbers, spaces, and underscores only.",

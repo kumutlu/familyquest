@@ -4,17 +4,26 @@ import { Plus, Gift, Zap, Wallet, PawPrint, UserPlus } from 'lucide-react';
 import { QuickActionCard } from './QuickActionCard';
 
 export interface QuickActionsProps {
+  onAddChild: () => void;
   onNewTask: () => void;
   onNewReward: () => void;
   onLogBehaviour: () => void;
   petBoxEnabled?: boolean;
 }
 
-export function QuickActions({ onNewTask, onNewReward, onLogBehaviour, petBoxEnabled = true }: QuickActionsProps) {
+export function QuickActions({ onAddChild, onNewTask, onNewReward, onLogBehaviour, petBoxEnabled = true }: QuickActionsProps) {
   const { t } = useTranslation('dashboard');
   const navigate = useNavigate();
 
   const actions = [
+    {
+      key: 'child',
+      label: t('quickActions.addChild'),
+      helper: t('quickActions.addChildHelper'),
+      icon: <UserPlus size={20} />,
+      accent: 'bg-primary-50 text-primary-600',
+      onClick: onAddChild,
+    },
     {
       key: 'task',
       label: t('quickActions.newTask'),
@@ -70,7 +79,7 @@ export function QuickActions({ onNewTask, onNewReward, onLogBehaviour, petBoxEna
       <h2 id="quick-actions-heading" className="sr-only">
         {t('quickActions.heading')}
       </h2>
-      <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
+      <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-7">
         {actions.map(action => (
           <QuickActionCard
             key={action.key}

@@ -22,7 +22,7 @@ afterAll(() => i18n.removeResourceBundle('en', 'auth'));
 
 const renderPrompt = (members: any[] = []) => render(
   <MemoryRouter>
-    <FamilySetupPrompt familyId="family-1" ownerId="owner-1" familyMembers={members} onHide={vi.fn()} />
+    <FamilySetupPrompt familyId="family-1" ownerId="owner-1" familyCode="ABC123" familyMembers={members} onHide={vi.fn()} />
   </MemoryRouter>,
 );
 
@@ -37,6 +37,7 @@ describe('FamilySetupPrompt', () => {
         <FamilySetupPrompt
           familyId="family-1"
           ownerId="owner-1"
+          familyCode="ABC123"
           familyMembers={[{ id: 'child-1', role: 'child' }]}
           onHide={vi.fn()}
         />
@@ -61,7 +62,8 @@ describe('FamilySetupPrompt', () => {
   it('opens the existing invitation section without marking completion', async () => {
     const user = userEvent.setup();
     renderPrompt([{ id: 'child-1', role: 'child' }]);
-    await user.click(screen.getByRole('button', { name: 'Add a parent or adult' }));
+    await user.click(screen.getByRole('button', { name: 'Let them join' }));
+    expect(screen.getByText('ABC123')).toBeInTheDocument();
     expect(complete).not.toHaveBeenCalled();
   });
 

@@ -1,4 +1,3 @@
-import { useState } from 'react';
 import { Link, Outlet, useLocation, Navigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { cn } from '../../lib/utils';
@@ -6,22 +5,15 @@ import { useStore } from '../../store/useStore';
 import { getNavItems } from '../../config/navigation';
 import { ProfileDropdown } from './ProfileDropdown';
 import { NotificationCenter } from './NotificationCenter';
-import { shouldShowFamilySetupPrompt } from '../../lib/familySetup';
-import { FamilySetupPrompt } from '../family/FamilySetupPrompt';
 import { MandatoryChildPasswordChange } from '../auth/MandatoryChildPasswordChange';
 
 export function AppLayout() {
   const { t } = useTranslation('common');
-  const [setupPromptHidden, setSetupPromptHidden] = useState(false);
   const location = useLocation();
   const authStatus = useStore(state => state.authStatus);
   const authUser = useStore(state => state.authUser);
   const currentUser = useStore(state => state.currentUser);
   const appReady = useStore(state => state.appReady);
-  const familyMembers = useStore(state => state.familyMembers);
-  const familyData = useStore(state => state.familyData);
-  const familyLoading = useStore(state => state.familyLoading);
-  const bootstrapStatus = useStore(state => state.bootstrapStatus);
   const bootstrapError = useStore(state => state.bootstrapError);
   const retryBootstrap = useStore(state => state.retryBootstrap);
 
@@ -161,21 +153,6 @@ export function AppLayout() {
           })}
         </div>
       </nav>
-      {!setupPromptHidden && shouldShowFamilySetupPrompt({
-        appReady,
-        familyLoading,
-        familyData,
-        familyMembers,
-        currentUser,
-        bootstrapStatus,
-      }) && currentUser?.familyId && (currentUser?.uid || currentUser?.id) && (
-        <FamilySetupPrompt
-          familyId={currentUser.familyId}
-          ownerId={currentUser.uid || currentUser.id}
-          familyMembers={familyMembers}
-          onHide={() => setSetupPromptHidden(true)}
-        />
-      )}
     </div>
   );
 }

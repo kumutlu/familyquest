@@ -11,6 +11,8 @@
   },
   "quickActions": {
     "heading": "Hızlı İşlemler",
+    "addChild": "Çocuk ekle",
+    "addChildHelper": "Yönetilen bir çocuk profili oluştur",
     "newTask": "Yeni Görev",
     "newTaskHelper": "Bir iş veya hedef ata",
     "newReward": "Yeni Ödül",

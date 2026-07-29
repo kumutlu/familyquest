@@ -23,11 +23,17 @@ interface CreateChildLoginDialogProps {
   onClose: () => void;
   /** Called after a successful creation with the (raw) username entered. */
   onSuccess: (username: string) => void;
+  profileAlreadyCreated?: boolean;
 }
 
 const FORM_ID = 'create-child-login-form';
 
-export function CreateChildLoginDialog({ member, onClose, onSuccess }: CreateChildLoginDialogProps) {
+export function CreateChildLoginDialog({
+  member,
+  onClose,
+  onSuccess,
+  profileAlreadyCreated = false,
+}: CreateChildLoginDialogProps) {
   const { t } = useTranslation(['family', 'common', 'errors']);
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
@@ -121,6 +127,11 @@ export function CreateChildLoginDialog({ member, onClose, onSuccess }: CreateChi
         <p className="rounded-xl bg-primary-50 p-3 text-sm text-primary-900">
           The child signs in with your family code, their family-scoped username, and their password.
         </p>
+        {profileAlreadyCreated && (
+          <p className="rounded-xl bg-amber-50 p-3 text-sm text-amber-900">
+            {t('family:createLogin.profileExistsRetry')}
+          </p>
+        )}
         {/* Username */}
         <div>
           <label htmlFor="cl-username" className="block text-sm font-medium text-gray-700">

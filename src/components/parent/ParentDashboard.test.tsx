@@ -48,14 +48,15 @@ import { ParentDashboard } from './ParentDashboard';
 function baseState() {
   return {
     currentUser: { id: 'owner-1', familyId: 'family-1', role: 'owner' },
-    familyData: { currency: '£' },
+    familyData: { id: 'family-1', currency: '£', inviteCode: 'ABC123' },
     tasks: [], familyMembers: [], feed: [], rewards: [], childWallets: [],
     walletTransactions: [], loading: false,
+    appReady: true, familyLoading: false,
     joinRequests: [
       { id: 'request-1', uid: 'joiner-1', displayName: 'First Joiner', status: 'pending' },
       { id: 'request-2', uid: 'joiner-2', displayName: 'Second Joiner', status: 'pending' },
     ],
-    taskCompletions: [], bootstrapStatus: { wallets: 'ready' },
+    taskCompletions: [], bootstrapStatus: { family: 'ready', members: 'ready', wallets: 'ready' },
   } as any;
 }
 
@@ -116,10 +117,58 @@ describe('ParentDashboard', () => {
     expect(screen.getByRole('button', { name: 'New Task' })).toBeInTheDocument();
   });
 
+  it('shows the first-child prompt on Home only after authoritative empty membership loads', () => {
+    store.state = { ...baseState(), joinRequests: [] };
+    render(<MemoryRouter><ParentDashboard /></MemoryRouter>);
+    expect(screen.getByRole('dialog', { name: 'Set up your family' })).toBeInTheDocument();
+  });
+
+  it('hides the first-child prompt while members load or when member loading fails', () => {
+    for (const status of ['loading', 'error']) {
+      store.state = {
+        ...baseState(),
+        joinRequests: [],
+        bootstrapStatus: { family: 'ready', members: status, wallets: 'ready' },
+      };
+      const rendered = render(<MemoryRouter><ParentDashboard /></MemoryRouter>);
+      expect(screen.queryByRole('dialog', { name: 'Set up your family' })).not.toBeInTheDocument();
+      rendered.unmount();
+    }
+  });
+
+  it('closes the first-child prompt when a child arrives asynchronously', () => {
+    store.state = { ...baseState(), joinRequests: [] };
+    const rendered = render(<MemoryRouter><ParentDashboard /></MemoryRouter>);
+    expect(screen.getByRole('dialog', { name: 'Set up your family' })).toBeInTheDocument();
+
+    store.state = {
+      ...store.state,
+      familyMembers: [{ id: 'child-1', role: 'child', isManaged: true }],
+    };
+    rendered.rerender(<MemoryRouter><ParentDashboard /></MemoryRouter>);
+    expect(screen.queryByRole('dialog', { name: 'Set up your family' })).not.toBeInTheDocument();
+  });
+
   it('opens the existing task modal from the New Task quick action', () => {
     render(<MemoryRouter><ParentDashboard /></MemoryRouter>);
     fireEvent.click(screen.getByRole('button', { name: 'New Task' }));
     expect(screen.getByText('Task Form Modal')).toBeInTheDocument();
+  });
+
+  it('keeps Add a child available on Home after the setup prompt is no longer eligible', () => {
+    store.state = {
+      ...baseState(),
+      familyData: {
+        ...baseState().familyData,
+        setup: { welcomePromptCompleted: true },
+      },
+      familyMembers: [{ id: 'child-1', role: 'child', displayName: 'Existing Child' }],
+    };
+    render(<MemoryRouter><ParentDashboard /></MemoryRouter>);
+
+    expect(screen.queryByRole('dialog', { name: 'Set up your family' })).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Add a child' }));
+    expect(screen.getByRole('dialog', { name: 'Add your child' })).toBeInTheDocument();
   });
 
   it('opens the existing reward modal from the New Reward quick action', () => {

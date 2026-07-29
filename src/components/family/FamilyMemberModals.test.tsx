@@ -64,12 +64,12 @@ describe('AddChildModal', () => {
     const { trigger, unmount } = renderFromTrigger(
       <AddChildModal familyId="family-1" onClose={onClose} />,
     );
-    const dialog = screen.getByRole('dialog', { name: /welcome/i });
+    const dialog = screen.getByRole('dialog', { name: /childOnboarding\.createTitle/i });
     expect(dialog).toHaveAttribute('aria-modal', 'true');
     expect(dialog).toHaveFocus();
 
-    const last = screen.getByRole('button', { name: /skipForNow/i });
-    const first = screen.getByRole('button', { name: /addFirstChild/i });
+    const last = screen.getByRole('button', { name: /childOnboarding\.createChild/i });
+    const first = screen.getByRole('textbox', { name: /childOnboarding\.displayNameLabel/i });
     last.focus();
     fireEvent.keyDown(document, { key: 'Tab' });
     expect(first).toHaveFocus();
@@ -92,7 +92,7 @@ describe('AddChildModal', () => {
     const submit = wizard.querySelector<HTMLButtonElement>('button[type="submit"]');
     expect(submit).not.toBeNull();
     await user.click(submit!);
-    expect(await screen.findByText('Second Child')).toBeInTheDocument();
+    expect(await screen.findByText(/Second Child.*profile has been created/i)).toBeInTheDocument();
     wizard = screen.getByRole('dialog');
     const openLogin = within(wizard).getAllByRole('button')[0];
     await user.click(openLogin);

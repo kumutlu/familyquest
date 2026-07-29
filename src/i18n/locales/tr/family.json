@@ -66,6 +66,7 @@
     "colourLabel": "Favori renk"
   },
   "createLogin": {
+    "profileExistsRetry": "Çocuk profili zaten mevcut. Giriş oluşturulamazsa burada tekrar deneyebilir veya girişi daha sonra yönetebilirsiniz.",
     "title": "{{name}} için Giriş Oluştur",
     "username": "Kullanıcı adı",
     "usernameHelp": "3–32 karakter. Yalnızca harf, rakam, boşluk ve alt çizgi.",

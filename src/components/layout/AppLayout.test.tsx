@@ -39,10 +39,6 @@ vi.mock('./NotificationCenter', () => ({
   NotificationCenter: () => <div>NotificationCenter</div>,
 }));
 
-vi.mock('../../lib/childOnboarding', () => ({
-  shouldStartChildOnboarding: () => false,
-}));
-
 describe('AppLayout — mobile bottom navigation layout', () => {
   beforeEach(() => {
     vi.resetAllMocks();
@@ -102,5 +98,14 @@ describe('AppLayout — mobile bottom navigation layout', () => {
     expect(screen.getAllByText('Görevler')).toHaveLength(2);
     expect(screen.getAllByText('Ödüller')).toHaveLength(2);
     await act(async () => { await i18n.changeLanguage('en'); });
+  });
+
+  it('does not mount the first-child prompt globally outside Home', () => {
+    renderAppLayout({
+      currentUser: { id: 'u1', uid: 'u1', familyId: 'f1', role: 'owner' },
+      familyData: { id: 'f1' },
+      familyMembers: [],
+    });
+    expect(screen.queryByRole('dialog', { name: 'Set up your family' })).not.toBeInTheDocument();
   });
 });

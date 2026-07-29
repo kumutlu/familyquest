@@ -1,5 +1,4 @@
 import { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { Button } from '../ui/Button';
 import { Toast, type ToastData } from '../ui/Toast';
@@ -10,20 +9,33 @@ import { isChildRole } from '../../lib/roles';
 export function FamilySetupPrompt({
   familyId,
   ownerId,
+  familyCode,
   familyMembers,
   onHide,
 }: {
   familyId: string;
   ownerId: string;
+  familyCode: string;
   familyMembers: any[];
   onHide: () => void;
 }) {
   const { t } = useTranslation(['auth', 'common']);
-  const navigate = useNavigate();
   const [addingChild, setAddingChild] = useState(false);
+  const [showJoinCode, setShowJoinCode] = useState(false);
+  const [copyFailed, setCopyFailed] = useState(false);
   const [saving, setSaving] = useState(false);
   const [toast, setToast] = useState<ToastData | null>(null);
   const hasChild = familyMembers.some(member => isChildRole(member.role));
+
+  const copyFamilyCode = async () => {
+    try {
+      await navigator.clipboard.writeText(familyCode);
+      setCopyFailed(false);
+    } catch (error) {
+      console.error('Failed to copy family code', error);
+      setCopyFailed(true);
+    }
+  };
 
   const complete = async () => {
     setSaving(true);
@@ -61,13 +73,35 @@ export function FamilySetupPrompt({
             </Button>
             <Button
               variant="secondary"
-              onClick={() => {
-                onHide();
-                navigate('/settings?familySection=members');
-              }}
+              onClick={() => setShowJoinCode(true)}
             >
-              {t('auth:familySetup.addAdult')}
+              {t('auth:familySetup.letThemJoin')}
             </Button>
+            {showJoinCode && (
+              <div className="rounded-xl border border-primary-100 bg-primary-50 p-4 text-left">
+                <p className="text-sm text-primary-900">
+                  {t('auth:familySetup.joinExplanation')}
+                </p>
+                <p className="mt-2 text-center font-mono text-2xl font-bold tracking-widest text-primary-700">
+                  {familyCode || '—'}
+                </p>
+                <Button
+                  fullWidth
+                  size="sm"
+                  variant="secondary"
+                  className="mt-3"
+                  disabled={!familyCode}
+                  onClick={() => void copyFamilyCode()}
+                >
+                  {t('common:copy')}
+                </Button>
+                {copyFailed && (
+                  <p className="mt-2 text-sm text-red-600" role="alert">
+                    {t('auth:familySetup.copyFailed')}
+                  </p>
+                )}
+              </div>
+            )}
             <Button variant="ghost" disabled={saving} onClick={() => void complete()}>
               {saving ? t('common:saving') : t('auth:familySetup.skip')}
             </Button>

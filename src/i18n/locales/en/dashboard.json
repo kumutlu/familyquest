@@ -11,6 +11,8 @@
   },
   "quickActions": {
     "heading": "Quick Actions",
+    "addChild": "Add a child",
+    "addChildHelper": "Create a managed child profile",
     "newTask": "New Task",
     "newTaskHelper": "Assign a chore or goal",
     "newReward": "New Reward",
