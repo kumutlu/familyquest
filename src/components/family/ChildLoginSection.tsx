@@ -55,7 +55,7 @@ function formatLastLogin(value: unknown, neverLabel: string): string {
  * synthetic email, internal IDs, or server-only fields.
  */
 export function ChildLoginSection({ member, onRequestCreate }: ChildLoginSectionProps) {
-  const { t } = useTranslation('family');
+  const { t } = useTranslation(['family', 'common']);
   const [resetOpen, setResetOpen] = useState(false);
   const [temporaryPassword, setTemporaryPassword] = useState('');
   const [busy, setBusy] = useState(false);
@@ -288,7 +288,6 @@ export function ChildLoginSection({ member, onRequestCreate }: ChildLoginSection
                   disabled={deleteBusy}
                   onClick={closeDeleteDialog}
                 >
-                  {t('common:cancel')}
                 </Button>
                 <Button
                   type="button"
@@ -297,7 +296,6 @@ export function ChildLoginSection({ member, onRequestCreate }: ChildLoginSection
                   className="bg-red-500 hover:bg-red-600"
                   onClick={submitDelete}
                 >
-                  {deleteBusy ? t('common:deleting') : t('login.deleteChildConfirm')}
                 </Button>
               </div>
             </div>

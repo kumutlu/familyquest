@@ -177,10 +177,71 @@ export async function deleteChildImpl(
   const { childId, displayNameConfirmation, clientReqId } = input;
   const { db, auth } = ctx;
 
-  // --- Idempotency precheck (same clientReqId = same result) ----------
-  const idemRef = db.doc(
-    `${FAMILIES}/__pending__/${CHILD_LOGIN_IDEMPOTENCY}/${clientReqId}`,
-  );
+  // --- Fetch caller profile first (needed for familyId) -----------
+  const callerSnap = await db.doc(`${USERS}/${callerUid}`).get();
+  if (!callerSnap.exists) {
+    throw new HttpsError('permission-denied', 'CALLER_NOT_FOUND');
+  }
+  const caller = callerSnap.data() as Record<string, unknown>;
+  const callerFamilyId = caller.familyId as string | undefined;
+
+  // --- Fetch target child profile ---------------------------------
+  const childRef = db.doc(`${USERS}/${childId}`);
+  const childSnap = await childRef.get();
+  if (!childSnap.exists) {
+    // Idempotent: child already gone.
+    // Use the caller's familyId for the idempotency path if available.
+    const idemPath = callerFamilyId
+      ? `${FAMILIES}/${callerFamilyId}/${CHILD_LOGIN_IDEMPOTENCY}/${clientReqId}`
+      : `${CHILD_LOGIN_IDEMPOTENCY}/${clientReqId}`;
+    const idemRef = db.doc(idemPath);
+    const idemSnap = await idemRef.get();
+    if (idemSnap.exists) {
+      const idemData = idemSnap.data() as Record<string, unknown>;
+      if (idemData.status === 'completed') {
+        return idemData.result as DeleteChildResult;
+      }
+    }
+    // No prior record — treat as not-found idempotently.
+    await idemRef.set({
+      status: 'completed',
+      payloadHash: computePayloadHash(childId, displayNameConfirmation),
+      result: { childId, deleted: false },
+      completedAt: FieldValue.serverTimestamp(),
+    });
+    return { childId, deleted: false };
+  }
+  const child = childSnap.data() as Record<string, unknown>;
+
+  // --- Authorize caller -------------------------------------------
+  const familyId = child.familyId as string;
+  if (typeof familyId !== 'string') {
+    throw new HttpsError('not-found', 'CHILD_NOT_IN_FAMILY');
+  }
+  assertCallerIsParentOrOwner(caller, familyId);
+
+  // --- Authorize target -------------------------------------------
+  assertTargetIsManagedChild(child, familyId, callerUid);
+
+  // --- Caller must not be the target ------------------------------
+  if (callerUid === childId) {
+    throw new HttpsError('permission-denied', 'CANNOT_DELETE_SELF');
+  }
+
+  // --- Display name confirmation ----------------------------------
+  const currentDisplayName = child.displayName as string;
+  if (currentDisplayName !== displayNameConfirmation) {
+    throw new HttpsError(
+      'invalid-argument',
+      'DISPLAY_NAME_MISMATCH',
+    );
+  }
+
+  // --- Resolve Auth UID (may be absent for profile-only managed children)
+  const authUid = (child.authUid as string) || undefined;
+
+  // --- Idempotency precheck (same clientReqId = same result) ------
+  const idemRef = db.doc(`${FAMILIES}/${familyId}/${CHILD_LOGIN_IDEMPOTENCY}/${clientReqId}`);
   const idemSnap = await idemRef.get();
   if (idemSnap.exists) {
     const idemData = idemSnap.data() as Record<string, unknown>;
@@ -201,56 +262,7 @@ export async function deleteChildImpl(
     }
   }
 
-  // --- Fetch caller profile -------------------------------------------
-  const callerSnap = await db.doc(`${USERS}/${callerUid}`).get();
-  if (!callerSnap.exists) {
-    throw new HttpsError('permission-denied', 'CALLER_NOT_FOUND');
-  }
-  const caller = callerSnap.data() as Record<string, unknown>;
-
-  // --- Fetch target child profile -------------------------------------
-  const childRef = db.doc(`${USERS}/${childId}`);
-  const childSnap = await childRef.get();
-  if (!childSnap.exists) {
-    // Idempotent: child already gone
-    await idemRef.set({
-      status: 'completed',
-      payloadHash: computePayloadHash(childId, displayNameConfirmation),
-      result: { childId, deleted: false },
-      completedAt: FieldValue.serverTimestamp(),
-    });
-    return { childId, deleted: false };
-  }
-  const child = childSnap.data() as Record<string, unknown>;
-
-  // --- Authorize caller -----------------------------------------------
-  const familyId = child.familyId as string;
-  if (typeof familyId !== 'string') {
-    throw new HttpsError('not-found', 'CHILD_NOT_IN_FAMILY');
-  }
-  assertCallerIsParentOrOwner(caller, familyId);
-
-  // --- Authorize target -----------------------------------------------
-  assertTargetIsManagedChild(child, familyId, callerUid);
-
-  // --- Caller must not be the target ----------------------------------
-  if (callerUid === childId) {
-    throw new HttpsError('permission-denied', 'CANNOT_DELETE_SELF');
-  }
-
-  // --- Display name confirmation --------------------------------------
-  const currentDisplayName = child.displayName as string;
-  if (currentDisplayName !== displayNameConfirmation) {
-    throw new HttpsError(
-      'invalid-argument',
-      'DISPLAY_NAME_MISMATCH',
-    );
-  }
-
-  // --- Resolve Auth UID (may be absent for profile-only managed children)
-  const authUid = (child.authUid as string) || undefined;
-
-  // --- Idempotency marker ---------------------------------------------
+  // --- Idempotency marker -----------------------------------------
   if (!idemSnap.exists) {
     await idemRef.set({
       clientReqId,
@@ -264,7 +276,7 @@ export async function deleteChildImpl(
     });
   }
 
-  // --- Phase 1: Disable and revoke sessions on Auth user ---------------
+  // --- Phase 1: Disable and revoke sessions on Auth user ---------
   if (authUid) {
     try {
       await auth.updateUser(authUid, { disabled: true });
@@ -278,7 +290,7 @@ export async function deleteChildImpl(
     }
   }
 
-  // --- Phase 2: Delete Auth user --------------------------------------
+  // --- Phase 2: Delete Auth user ----------------------------------
   if (authUid) {
     try {
       await auth.deleteUser(authUid);
@@ -298,7 +310,7 @@ export async function deleteChildImpl(
     }
   }
 
-  // --- Phase 3: Firestore cleanup (transactional) ---------------------
+  // --- Phase 3: Firestore cleanup (transactional) -----------------
   const usernameIndexRef = db.doc(
     `${FAMILIES}/${familyId}/${CHILD_LOGIN_INDEX}/${normalizeUsernameForIndex(child.displayName as string)}`,
   );
@@ -386,7 +398,7 @@ export async function deleteChildImpl(
     throw err;
   }
 
-  // --- Phase 4: Clean up child-specific sub-collections ---------------
+  // --- Phase 4: Clean up child-specific sub-collections -----------
   // These are best-effort; the transaction already removed the core
   // records. Sub-collections are deleted in the background to avoid
   // transaction size limits.
