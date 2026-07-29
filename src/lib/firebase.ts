@@ -51,7 +51,11 @@ export const app = initializeApp(firebaseConfig);
 export const auth = getAuth(app);
 export const db = getFirestore(app);
 export const googleProvider = new GoogleAuthProvider();
-export const functions = getFunctions(app);
+// All callable functions are deployed with setGlobalOptions({ region:
+// 'europe-west1' }). The Functions client otherwise defaults to us-central1,
+// which turns every callable request into a 404 / functions/not-found.
+export const FIREBASE_FUNCTIONS_REGION = 'europe-west1';
+export const functions = getFunctions(app, FIREBASE_FUNCTIONS_REGION);
 
 if (import.meta.env.VITE_USE_FIREBASE_EMULATOR === 'true') {
   connectAuthEmulator(auth, 'http://127.0.0.1:9099', { disableWarnings: true });

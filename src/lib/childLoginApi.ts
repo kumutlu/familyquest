@@ -8,10 +8,8 @@
 // stable, friendly error mapping. No passwords are ever persisted, logged, or
 // cached by this module.
 //
-// NOTE: The Phase 1 callable does not yet accept `requirePasswordChange`. The
-// field is forwarded when present so the UI matches the product spec and stays
-// forward-compatible; the backend currently ignores it. We do NOT invent a new
-// callable or change the backend contract.
+// The callable accepts `requirePasswordChange` and remains authoritative for
+// validation, authorization, Auth provisioning, and Firestore linkage.
 // ---------------------------------------------------------------------------
 
 import { httpsCallable } from 'firebase/functions';
@@ -25,7 +23,7 @@ export interface CreateChildLoginInput {
   username: string;
   password: string;
   clientReqId: string;
-  /** Forwarded for forward-compatibility; ignored by the Phase 1 backend. */
+  /** Require the child to replace the initial password after first sign-in. */
   requirePasswordChange?: boolean;
 }
 
@@ -198,58 +196,93 @@ export function mapSignInChildError(_err: unknown): string {
  */
 export function mapChildLoginError(err: unknown): string {
   const e = err as { code?: string; message?: string } | null;
-  const code = e?.message ?? e?.code ?? '';
+  const firebaseCode = (e?.code ?? '').replace(/^functions\//, '');
+  const reason =
+    typeof e?.message === 'string' && /^[A-Z][A-Z0-9_]+$/.test(e.message)
+      ? e.message
+      : '';
+  const code = reason || firebaseCode;
   const range = { min: USERNAME_MIN_LENGTH, max: USERNAME_MAX_LENGTH };
   const pw = { min: PASSWORD_MIN_LENGTH };
+  const translated = (
+    key: string,
+    fallback: string,
+    values?: Record<string, string | number>,
+  ) => i18n.t(`errors:childLogin.${key}`, { ...values, defaultValue: fallback });
   switch (code) {
     case 'USERNAME_REQUIRED':
-      return i18n.t('errors:childLogin.usernameRequired');
+      return translated('usernameRequired', 'Please enter a username.');
     case 'USERNAME_LENGTH':
-      return i18n.t('errors:childLogin.usernameLength', range);
+      return translated(
+        'usernameLength',
+        `Username must be ${USERNAME_MIN_LENGTH}–${USERNAME_MAX_LENGTH} characters.`,
+        range,
+      );
     case 'USERNAME_CHARS':
-      return i18n.t('errors:childLogin.usernameChars');
+      return translated(
+        'usernameChars',
+        'Username can only use letters, numbers, spaces, and underscores.',
+      );
     case 'PASSWORD_REQUIRED':
-      return i18n.t('errors:childLogin.passwordRequired');
+      return translated('passwordRequired', 'Please enter a password.');
     case 'PASSWORD_TOO_SHORT':
-      return i18n.t('errors:childLogin.passwordTooShort', pw);
+      return translated(
+        'passwordTooShort',
+        `Password must be at least ${PASSWORD_MIN_LENGTH} characters.`,
+        pw,
+      );
     case 'PASSWORD_TOO_LONG':
-      return i18n.t('errors:childLogin.passwordTooLong');
+      return translated('passwordTooLong', 'Password is too long.');
     case 'PASSWORD_NEEDS_LETTER':
-      return i18n.t('errors:childLogin.passwordNeedsLetter');
+      return translated('passwordNeedsLetter', 'Password must include at least one letter.');
     case 'PASSWORD_NEEDS_DIGIT':
-      return i18n.t('errors:childLogin.passwordNeedsDigit');
+      return translated('passwordNeedsDigit', 'Password must include at least one number.');
     case 'PASSWORD_SAME_AS_USERNAME':
-      return i18n.t('errors:childLogin.passwordSameAsUsername');
+      return translated('passwordSameAsUsername', 'Password cannot match the username.');
     case 'USERNAME_TAKEN':
-      return i18n.t('errors:childLogin.usernameTaken');
+      return translated('usernameTaken', 'That username is already taken in this family.');
     case 'LOGIN_ALREADY_EXISTS':
-      return i18n.t('errors:childLogin.loginAlreadyExists');
+      return translated('loginAlreadyExists', 'This child already has a login.');
     case 'CHILD_NOT_FOUND':
-      return i18n.t('errors:childLogin.childNotFound');
+      return translated('childNotFound', 'Child not found.');
     case 'CHILD_NOT_MANAGED':
-      return i18n.t('errors:childLogin.childNotManaged');
+      return translated('childNotManaged', 'This child is not managed by the family.');
     case 'CHILD_NOT_IN_FAMILY':
-      return i18n.t('errors:childLogin.childNotInFamily');
+      return translated('childNotInFamily', 'This child is not in your family.');
     case 'NOT_AUTHORIZED':
     case 'permission-denied':
-      return i18n.t('errors:childLogin.notAuthorized');
+      return translated('notAuthorized', 'You do not have permission to do this.');
     case 'UNEXPECTED_FIELD':
-      return i18n.t('errors:childLogin.unexpectedField');
+      return translated('unexpectedField', 'Unexpected field sent to the server.');
     case 'CLIENT_REQ_ID_REPLAY_MISMATCH':
-      return i18n.t('errors:childLogin.requestReplay');
+      return translated(
+        'requestReplay',
+        'This request was already used with different details.',
+      );
     case 'AUTH_CREATE_FAILED':
     case 'CLAIMS_FAILED':
     case 'internal':
-      return i18n.t('errors:childLogin.createFailed');
-    case 'unauthenticated':
-      return i18n.t('errors:childLogin.unauthenticated');
     case 'not-found':
-      return i18n.t('errors:childLogin.childNotFound');
+      return translated('createFailed', 'We could not create the login. Please try again.');
+    case 'unauthenticated':
+      return translated('unauthenticated', 'You must be signed in to do this.');
     case 'failed-precondition':
-      return i18n.t('errors:childLogin.failedPrecondition');
+      return translated('failedPrecondition', 'This child is not managed by the family.');
     case 'already-exists':
-      return i18n.t('errors:childLogin.alreadyExists');
+      return translated('alreadyExists', 'A login already exists for this child.');
     default:
-      return i18n.t('errors:childLogin.default');
+      return translated('default', 'Could not create the login. Please try again.');
   }
+}
+
+/** Safe diagnostics only: never includes request input or password material. */
+export function childLoginErrorDiagnostic(err: unknown): {
+  code: string;
+  message: string;
+} {
+  const e = err as { code?: unknown; message?: unknown } | null;
+  return {
+    code: typeof e?.code === 'string' ? e.code : 'unknown',
+    message: typeof e?.message === 'string' ? e.message : 'Unknown callable error',
+  };
 }

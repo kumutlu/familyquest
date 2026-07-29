@@ -4,6 +4,7 @@ import { Modal } from '../ui/Modal';
 import { Button } from '../ui/Button';
 import {
   createChildLogin,
+  childLoginErrorDiagnostic,
   mapChildLoginError,
   normalizeUsernamePreview,
   validateUsernameClient,
@@ -27,7 +28,7 @@ interface CreateChildLoginDialogProps {
 const FORM_ID = 'create-child-login-form';
 
 export function CreateChildLoginDialog({ member, onClose, onSuccess }: CreateChildLoginDialogProps) {
-  const { t } = useTranslation(['family', 'common']);
+  const { t } = useTranslation(['family', 'common', 'errors']);
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [confirm, setConfirm] = useState('');
@@ -96,6 +97,8 @@ export function CreateChildLoginDialog({ member, onClose, onSuccess }: CreateChi
       // Allow a retry; do not keep the lock engaged on failure.
       submittingRef.current = false;
       setSubmitting(false);
+      // Log only the callable's safe code/message, never form input or secrets.
+      console.error('[child-login] create failed', childLoginErrorDiagnostic(err));
       setSubmitError(mapChildLoginError(err));
     }
   };

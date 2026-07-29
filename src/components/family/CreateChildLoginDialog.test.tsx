@@ -147,6 +147,34 @@ describe('CreateChildLoginDialog', () => {
     expect(onClose).not.toHaveBeenCalled();
   });
 
+  it('logs the real callable error while showing a friendly unexpected-error message', async () => {
+    const user = userEvent.setup();
+    const serverError = {
+      code: 'functions/internal',
+      message: 'AUTH_CREATE_FAILED',
+    };
+    const consoleError = vi.spyOn(console, 'error').mockImplementation(() => {});
+    mockedCreate.mockRejectedValue(serverError);
+    render(<CreateChildLoginDialog member={member} onClose={() => {}} onSuccess={() => {}} />);
+
+    await user.type(screen.getByLabelText('Username'), 'milo');
+    await user.type(screen.getByLabelText('Password'), 'Password1');
+    await user.type(screen.getByLabelText('Confirm Password'), 'Password1');
+    await user.click(screen.getByRole('button', { name: 'Create Login' }));
+
+    expect(
+      await screen.findByText('We could not create the login. Please try again.'),
+    ).toBeInTheDocument();
+    expect(consoleError).toHaveBeenCalledWith(
+      '[child-login] create failed',
+      expect.objectContaining({
+        code: 'functions/internal',
+        message: 'AUTH_CREATE_FAILED',
+      }),
+    );
+    consoleError.mockRestore();
+  });
+
   it('closes on cancel and clears passwords', async () => {
     const user = userEvent.setup();
     const onClose = vi.fn();
