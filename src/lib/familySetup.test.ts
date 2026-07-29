@@ -24,6 +24,32 @@ describe('family setup prompt gate', () => {
     expect(shouldShowFamilySetupPrompt(ready as any)).toBe(true);
   });
 
+  it('does not show when authoritative membership contains a managed child', () => {
+    expect(shouldShowFamilySetupPrompt({
+      ...ready,
+      familyMembers: [
+        ...ready.familyMembers,
+        { id: 'child-1', role: 'child', isManaged: true },
+      ],
+    } as any)).toBe(false);
+  });
+
+  it('closes eligibility when a child arrives after an initially empty authoritative snapshot', () => {
+    expect(shouldShowFamilySetupPrompt(ready as any)).toBe(true);
+    expect(shouldShowFamilySetupPrompt({
+      ...ready,
+      familyMembers: [...ready.familyMembers, { id: 'child-1', role: 'child' }],
+    } as any)).toBe(false);
+  });
+
+  it('does not treat a member subscription error as an empty family', () => {
+    expect(shouldShowFamilySetupPrompt({
+      ...ready,
+      bootstrapStatus: { family: 'ready', members: 'error' },
+      familyMembers: [],
+    } as any)).toBe(false);
+  });
+
   it('does not show after persisted completion or for non-owners', () => {
     expect(shouldShowFamilySetupPrompt({
       ...ready,

@@ -1,4 +1,4 @@
-import { isOwnerRole } from './roles';
+import { isChildRole, isOwnerRole } from './roles';
 
 export interface FamilySetupState {
   appReady: boolean;
@@ -16,5 +16,6 @@ export function shouldShowFamilySetupPrompt(state: FamilySetupState): boolean {
     && state.bootstrapStatus?.family === 'ready'
     && state.bootstrapStatus?.members === 'ready'
     && isOwnerRole(state.currentUser?.role)
+    && !state.familyMembers.some(member => isChildRole(member?.role))
     && state.familyData.setup?.welcomePromptCompleted !== true;
 }
