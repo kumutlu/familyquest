@@ -48,6 +48,7 @@ import {
 import { FAMILYQUEST_BUILD } from '../buildInfo';
 import { ProfileEditorModal } from '../components/profile/ProfileEditorModal';
 import { FamilySettings } from '../components/family/FamilySettings';
+import { DeleteAccountDialog } from '../components/settings/DeleteAccountDialog';
 
 interface SectionProps {
   id: string;
@@ -281,6 +282,7 @@ export function Settings() {
   const familyData = useStore(state => state.familyData);
 
   const [editorOpen, setEditorOpen] = useState(false);
+  const [deleteAccountOpen, setDeleteAccountOpen] = useState(false);
 
   // Sign-out status is surfaced at page level; family actions own their feedback.
   const [status, setStatus] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
@@ -596,7 +598,7 @@ export function Settings() {
               </div>
             )}
 
-            <div className="pt-2 border-t border-gray-50">
+            <div className="pt-2 border-t border-gray-50 space-y-4">
               <Button
                 variant="danger"
                 onClick={handleSignOut}
@@ -605,6 +607,21 @@ export function Settings() {
               >
                 <LogOut size={18} className="mr-2" aria-hidden="true" /> {t('signOut')}
               </Button>
+              {!currentUser?.isManaged && (
+                <div className="pt-2 border-t border-gray-50">
+                  <h3 className="text-sm font-semibold text-red-700">{t('deleteAccount.title')}</h3>
+                  <p className="text-sm text-gray-500 mt-1 mb-3">{t('deleteAccount.settingsDesc')}</p>
+                  <Button
+                    variant="outline"
+                    onClick={() => setDeleteAccountOpen(true)}
+                    aria-label={t('deleteAccount.openAria')}
+                    data-testid="open-delete-account"
+                    className="w-full sm:w-auto border-red-300 text-red-700 hover:bg-red-50"
+                  >
+                    <AlertTriangle size={18} className="mr-2" aria-hidden="true" /> {t('deleteAccount.action')}
+                  </Button>
+                </div>
+              )}
             </div>
           </CardContent>
         </Card>
@@ -630,6 +647,10 @@ export function Settings() {
 
       {editorOpen && currentUser && (
         <ProfileEditorModal user={currentUser} onClose={() => setEditorOpen(false)} />
+      )}
+
+      {deleteAccountOpen && (
+        <DeleteAccountDialog onClose={() => setDeleteAccountOpen(false)} />
       )}
     </div>
   );

@@ -42,6 +42,27 @@ vi.mock('../lib/api', async importOriginal => {
   };
 });
 
+// --- Mock the account/family deletion client APIs ---
+const deletionMocks = vi.hoisted(() => ({
+  requestAccountDeletion: vi.fn(async (_input: unknown) => ({ status: 'completed' as const })),
+  getReauthMethod: vi.fn(() => 'password' as 'password' | 'google' | null),
+  reauthenticateWithPassword: vi.fn(async (_password: string) => {}),
+  reauthenticateWithGoogle: vi.fn(async () => {}),
+  fetchFamilyDeletionStatus: vi.fn(async (_familyId: string) => ({ state: 'none' as const })),
+}));
+vi.mock('../lib/accountDeletionApi', () => ({
+  requestAccountDeletion: deletionMocks.requestAccountDeletion,
+  getReauthMethod: deletionMocks.getReauthMethod,
+  reauthenticateWithPassword: deletionMocks.reauthenticateWithPassword,
+  reauthenticateWithGoogle: deletionMocks.reauthenticateWithGoogle,
+}));
+vi.mock('../lib/familyDeletionApi', () => ({
+  fetchFamilyDeletionStatus: deletionMocks.fetchFamilyDeletionStatus,
+  requestFamilyDeletion: vi.fn(),
+  leaveFamily: vi.fn(),
+  generateClientReqId: () => 'test-client-req-00000001',
+}));
+
 // Mock the notification connection hook so the Settings UI can be exercised
 // without opening real Firestore listeners. The connection state is driven by
 // `notifState` so individual tests can assert each status label.
@@ -132,6 +153,133 @@ beforeEach(() => {
   updateDocMock.mockResolvedValue(undefined);
   pushMocks.loadPushState.mockImplementation(() => new Promise<PushState>(() => {}));
   notifState.connectionState = 'connected';
+  deletionMocks.requestAccountDeletion.mockResolvedValue({ status: 'completed' });
+  deletionMocks.getReauthMethod.mockReturnValue('password');
+  deletionMocks.reauthenticateWithPassword.mockResolvedValue(undefined);
+  deletionMocks.reauthenticateWithGoogle.mockResolvedValue(undefined);
+  deletionMocks.fetchFamilyDeletionStatus.mockResolvedValue({ state: 'none' });
+});
+
+describe('Settings — permanent account deletion', () => {
+  async function openDialog() {
+    const user = userEvent.setup();
+    await user.click(screen.getByTestId('open-delete-account'));
+    return user;
+  }
+
+  it('offers an in-app permanent deletion entry point that is distinct from Sign Out', () => {
+    renderSettings('parent');
+    const button = screen.getByTestId('open-delete-account');
+    expect(button).toHaveAccessibleName('Delete my account permanently');
+    expect(screen.getByLabelText('Sign out')).not.toBe(button);
+  });
+
+  it('hides the action from managed child accounts', () => {
+    seedStore('child');
+    act(() => {
+      useStore.setState({
+        currentUser: { ...useStore.getState().currentUser, isManaged: true },
+      });
+    });
+    render(
+      <MemoryRouter>
+        <Settings />
+      </MemoryRouter>,
+    );
+    expect(screen.queryByTestId('open-delete-account')).not.toBeInTheDocument();
+  });
+
+  it('requires two explicit confirmations before calling the server, then signs out', async () => {
+    renderSettings('parent');
+    const user = await openDialog();
+
+    // Stage 1: full scope explanation, nothing called yet.
+    expect(screen.getByTestId('delete-account-dialog')).toBeInTheDocument();
+    expect(screen.getByText('This action is irreversible and cannot be undone.')).toBeInTheDocument();
+    expect(screen.getByText('This is not the same as signing out.')).toBeInTheDocument();
+    expect(deletionMocks.requestAccountDeletion).not.toHaveBeenCalled();
+
+    await user.click(screen.getByRole('button', { name: 'Continue' }));
+    await user.click(screen.getByRole('button', { name: 'Yes, delete my account' }));
+
+    await waitFor(() => expect(deletionMocks.requestAccountDeletion).toHaveBeenCalledTimes(1));
+    expect(deletionMocks.requestAccountDeletion).toHaveBeenCalledWith({});
+    await waitFor(() => expect(apiMocks.signOut).toHaveBeenCalledTimes(1));
+  });
+
+  it('asks an owner to nominate a successor and resubmits with the chosen uid', async () => {
+    deletionMocks.requestAccountDeletion
+      .mockRejectedValueOnce(new Error('SUCCESSOR_REQUIRED'))
+      .mockResolvedValueOnce({ status: 'completed' });
+    renderSettings('owner');
+    const user = await openDialog();
+
+    await user.click(screen.getByRole('button', { name: 'Continue' }));
+    await user.click(screen.getByRole('button', { name: 'Yes, delete my account' }));
+
+    const select = await screen.findByLabelText('New family owner');
+    // Only non-managed parents are offered.
+    expect(within(select).queryByText('Kid One')).not.toBeInTheDocument();
+    await user.selectOptions(select, 'u3');
+    await user.click(screen.getByRole('button', { name: 'Transfer ownership and delete my account' }));
+
+    await waitFor(() => expect(deletionMocks.requestAccountDeletion).toHaveBeenLastCalledWith({ successorUid: 'u3' }));
+    await waitFor(() => expect(apiMocks.signOut).toHaveBeenCalled());
+  });
+
+  it('reauthenticates when the login is not recent and resumes the same request', async () => {
+    deletionMocks.requestAccountDeletion
+      .mockRejectedValueOnce(new Error('RECENT_LOGIN_REQUIRED'))
+      .mockResolvedValueOnce({ status: 'completed' });
+    renderSettings('parent');
+    const user = await openDialog();
+
+    await user.click(screen.getByRole('button', { name: 'Continue' }));
+    await user.click(screen.getByRole('button', { name: 'Yes, delete my account' }));
+
+    const password = await screen.findByLabelText('Password');
+    await user.type(password, 'hunter2hunter2');
+    await user.click(screen.getByRole('button', { name: 'Confirm identity' }));
+
+    await waitFor(() => expect(deletionMocks.reauthenticateWithPassword).toHaveBeenCalledWith('hunter2hunter2'));
+    await waitFor(() => expect(deletionMocks.requestAccountDeletion).toHaveBeenCalledTimes(2));
+    expect(deletionMocks.requestAccountDeletion).toHaveBeenLastCalledWith({});
+    await waitFor(() => expect(apiMocks.signOut).toHaveBeenCalled());
+  });
+
+  it('requires the exact family name when a sole owner triggers the family cascade', async () => {
+    deletionMocks.requestAccountDeletion
+      .mockRejectedValueOnce(new Error('FAMILY_DELETION_CONFIRMATION_REQUIRED'))
+      .mockResolvedValueOnce({ status: 'pending_family_deletion' });
+    renderSettings('owner');
+    const user = await openDialog();
+
+    await user.click(screen.getByRole('button', { name: 'Continue' }));
+    await user.click(screen.getByRole('button', { name: 'Yes, delete my account' }));
+
+    const input = await screen.findByLabelText('Family name');
+    expect(screen.getByText(/also permanently delete this family/i)).toBeInTheDocument();
+    await user.type(input, 'The Family');
+    await user.click(screen.getByRole('button', { name: 'Delete family and my account permanently' }));
+
+    await waitFor(() => expect(deletionMocks.requestAccountDeletion)
+      .toHaveBeenLastCalledWith({ familyNameConfirmation: 'The Family' }));
+    expect(await screen.findByTestId('delete-account-progress')).toBeInTheDocument();
+    expect(apiMocks.signOut).not.toHaveBeenCalled();
+  });
+
+  it('surfaces a friendly error when the server refuses without deleting anything', async () => {
+    deletionMocks.requestAccountDeletion.mockRejectedValueOnce(new Error('INTERNAL'));
+    renderSettings('parent');
+    const user = await openDialog();
+
+    await user.click(screen.getByRole('button', { name: 'Continue' }));
+    await user.click(screen.getByRole('button', { name: 'Yes, delete my account' }));
+
+    expect(await screen.findByRole('alert'))
+      .toHaveTextContent('We could not delete your account. Please try again.');
+    expect(apiMocks.signOut).not.toHaveBeenCalled();
+  });
 });
 
 describe('Settings — authoritative language preference', () => {
