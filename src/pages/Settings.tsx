@@ -49,6 +49,7 @@ import { FAMILYQUEST_BUILD } from '../buildInfo';
 import { ProfileEditorModal } from '../components/profile/ProfileEditorModal';
 import { FamilySettings } from '../components/family/FamilySettings';
 import { DeleteAccountDialog } from '../components/settings/DeleteAccountDialog';
+import { getLegalLinks } from '../config/legalLinks';
 
 interface SectionProps {
   id: string;
@@ -283,6 +284,7 @@ export function Settings() {
 
   const [editorOpen, setEditorOpen] = useState(false);
   const [deleteAccountOpen, setDeleteAccountOpen] = useState(false);
+  const legalLinks = getLegalLinks();
 
   // Sign-out status is surfaced at page level; family actions own their feedback.
   const [status, setStatus] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
@@ -641,6 +643,43 @@ export function Settings() {
             <Row label={t('buildTimestamp')} value={buildTimestamp} />
             <Row label={t('environment')} value={environment} />
             <Row label={t('firebaseProject')} value={projectId ?? '—'} />
+            {(legalLinks.privacyPolicy || legalLinks.terms || legalLinks.accountDeletion) && (
+              <nav aria-label={t('legalLinksAria')} className="pt-3 flex flex-col gap-2">
+                {legalLinks.privacyPolicy && (
+                  <a
+                    href={legalLinks.privacyPolicy}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    data-testid="legal-privacy-policy"
+                    className="text-sm text-primary-600 underline"
+                  >
+                    {t('privacyPolicy')}
+                  </a>
+                )}
+                {legalLinks.terms && (
+                  <a
+                    href={legalLinks.terms}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    data-testid="legal-terms"
+                    className="text-sm text-primary-600 underline"
+                  >
+                    {t('termsOfService')}
+                  </a>
+                )}
+                {legalLinks.accountDeletion && (
+                  <a
+                    href={legalLinks.accountDeletion}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    data-testid="legal-account-deletion"
+                    className="text-sm text-primary-600 underline"
+                  >
+                    {t('accountDeletionPolicy')}
+                  </a>
+                )}
+              </nav>
+            )}
           </CardContent>
         </Card>
       </Section>

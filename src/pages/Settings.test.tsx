@@ -586,6 +586,32 @@ describe('Settings — about / build info', () => {
     expect(within(section).getByText(FAMILYQUEST_BUILD.sha.slice(0, 7))).toBeInTheDocument();
     expect(within(section).getByText('familyquest-beta-402cb')).toBeInTheDocument();
   });
+
+  it('renders the configured privacy, terms and account-deletion links safely', () => {
+    vi.stubEnv('VITE_PRIVACY_POLICY_URL', 'https://queki.app/privacy');
+    vi.stubEnv('VITE_TERMS_URL', 'https://queki.app/terms');
+    vi.stubEnv('VITE_ACCOUNT_DELETION_URL', 'https://queki.app/delete-account');
+    renderSettings('owner');
+
+    const privacy = screen.getByTestId('legal-privacy-policy');
+    expect(privacy).toHaveAttribute('href', 'https://queki.app/privacy');
+    expect(privacy).toHaveAttribute('rel', 'noopener noreferrer');
+    expect(screen.getByTestId('legal-terms')).toHaveAttribute('href', 'https://queki.app/terms');
+    expect(screen.getByTestId('legal-account-deletion'))
+      .toHaveAttribute('href', 'https://queki.app/delete-account');
+    vi.unstubAllEnvs();
+  });
+
+  it('omits legal links entirely when they are not configured', () => {
+    vi.stubEnv('VITE_PRIVACY_POLICY_URL', '');
+    vi.stubEnv('VITE_TERMS_URL', '');
+    vi.stubEnv('VITE_ACCOUNT_DELETION_URL', '');
+    renderSettings('owner');
+    expect(screen.queryByTestId('legal-privacy-policy')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('legal-terms')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('legal-account-deletion')).not.toBeInTheDocument();
+    vi.unstubAllEnvs();
+  });
 });
 
 describe('Settings — layout & role helpers', () => {
