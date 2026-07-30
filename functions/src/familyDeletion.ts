@@ -691,6 +691,21 @@ async function runPhaseOnce(
     }
 
     case 'finalize': {
+      // Riding account deletions: owners whose account deletion triggered or
+      // joined this family deletion are purged now (Auth deleted last).
+      const acctSnap = await db.collection('accountDeletionJobs')
+        .where('familyId', '==', familyId).limit(BATCH_LIMIT).get();
+      for (const docSnap of acctSnap.docs) {
+        const uid = docSnap.id;
+        await db.doc(`users/${uid}`).delete();
+        try {
+          await ctx.auth.deleteUser(uid);
+        } catch (err: any) {
+          if (err?.code !== 'auth/user-not-found' && err?.errorInfo?.code !== 'auth/user-not-found') throw err;
+        }
+        await docSnap.ref.delete();
+      }
+
       // Receipt first (durable completion marker), family document last,
       // then the job itself is removed.
       await receiptRef(db, familyId).set({

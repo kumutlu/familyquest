@@ -158,6 +158,7 @@ export {
   processFamilyDeletion,
   recoverFamilyDeletionJobs,
 } from './familyDeletion';
+export { deleteAccount } from './accountDeletion';
 
 export {
   requestFamilyJoin,
