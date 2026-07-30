@@ -536,13 +536,16 @@ async function runPhaseOnce(
           : docSnap.id;
         if (authUid) {
           if (profile.isManaged === true) {
-            // Disable managed logins first so they cannot authenticate
-            // during the deletion window.
+            // Disable managed logins so they cannot authenticate during the
+            // deletion window. Their claims are intentionally left intact:
+            // delete_managed_identities verifies the full linkage agreement
+            // (including claims) before deleting the Auth user outright.
             await ctx.auth.updateUser(authUid, { disabled: true }).catch((err: any) => {
               if (err?.code !== 'auth/user-not-found' && err?.errorInfo?.code !== 'auth/user-not-found') throw err;
             });
+          } else {
+            await stripFamilyClaims(ctx, authUid);
           }
-          await stripFamilyClaims(ctx, authUid);
         }
       }
       // Idempotent: re-running only repeats safe operations.
