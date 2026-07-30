@@ -74,6 +74,8 @@ export function FamilySettings({ onSectionChange }: FamilySettingsProps) {
   const [petBoxEnabled, setPetBoxEnabled] = useState(isPetBoxEnabled(familyData));
   const [isSavingGamification, setIsSavingGamification] = useState(false);
   const [gamificationError, setGamificationError] = useState<string | null>(null);
+  const [isSavingPetBox, setIsSavingPetBox] = useState(false);
+  const [petBoxError, setPetBoxError] = useState<string | null>(null);
 
   const showToast = (message: string, type: 'success' | 'error' | 'info' = 'success') =>
     setToast({ id: Date.now(), message, type });
@@ -210,7 +212,6 @@ export function FamilySettings({ onSectionChange }: FamilySettingsProps) {
           schemaVersion: 1,
           dailyGoalPercentage,
         },
-        petBoxEnabled,
       });
       showToast(t('familySettings.gamificationSettingsSaved'));
     } catch (error: any) {
@@ -218,6 +219,26 @@ export function FamilySettings({ onSectionChange }: FamilySettingsProps) {
       setGamificationError(error.message || t('familySettings.gamificationSettingsUpdateError'));
     } finally {
       setIsSavingGamification(false);
+    }
+  };
+
+  const handleTogglePetBox = async () => {
+    if (!familyData?.id || isSavingPetBox) return;
+    const next = !petBoxEnabled;
+    setIsSavingPetBox(true);
+    setPetBoxError(null);
+    setPetBoxEnabled(next);
+    try {
+      await updateFamilySettings(familyData.id, { petBoxEnabled: next });
+      showToast(t('familySettings.petBoxSaved'));
+    } catch (error: any) {
+      console.error('Failed to update Pet Box setting:', error);
+      setPetBoxEnabled(!next);
+      const message = error?.message || t('familySettings.petBoxUpdateError');
+      setPetBoxError(message);
+      showToast(message, 'error');
+    } finally {
+      setIsSavingPetBox(false);
     }
   };
 
@@ -824,23 +845,6 @@ export function FamilySettings({ onSectionChange }: FamilySettingsProps) {
                  )}
                </div>
 
-               <div className="py-3">
-                 <label htmlFor="family-settings-pet-box" className="flex items-center justify-between gap-4">
-                   <span>
-                     <span className="block text-sm font-medium text-gray-900">{t('familySettings.enablePetBox')}</span>
-                     <span className="block text-sm text-gray-500">{t('familySettings.enablePetBoxDesc')}</span>
-                   </span>
-                   <input
-                     id="family-settings-pet-box"
-                     type="checkbox"
-                     checked={petBoxEnabled}
-                     onChange={event => setPetBoxEnabled(event.target.checked)}
-                     disabled={!owner || isSavingGamification}
-                     className="h-5 w-5 rounded border-gray-300 text-primary-600"
-                   />
-                 </label>
-               </div>
-
                {/* Save Gamification Settings */}
                {owner && (
                  <div className="pt-4">
@@ -863,6 +867,58 @@ export function FamilySettings({ onSectionChange }: FamilySettingsProps) {
                      )}
                    </Button>
                  </div>
+               )}
+             </CardContent>
+           </Card>
+
+           {/* Pet Box feature card */}
+           <Card>
+             <CardContent className="p-6">
+               <div className="flex items-start justify-between gap-4">
+                 <div>
+                   <h3 id="family-settings-pet-box-title" className="text-sm font-semibold text-gray-900">
+                     {t('familySettings.petBox')}
+                   </h3>
+                   <p id="family-settings-pet-box-desc" className="text-sm text-gray-500 mt-1">
+                     {t('familySettings.petBoxDesc')}
+                   </p>
+                 </div>
+                 {owner ? (
+                   <div className="flex items-center gap-2">
+                     {isSavingPetBox && (
+                       <Loader2 className="h-4 w-4 animate-spin text-primary-500" aria-hidden="true" />
+                     )}
+                     <button
+                       type="button"
+                       id="family-settings-pet-box"
+                       role="switch"
+                       aria-checked={petBoxEnabled}
+                       aria-label={t('familySettings.enablePetBox')}
+                       aria-describedby="family-settings-pet-box-desc"
+                       disabled={isSavingPetBox}
+                       onClick={handleTogglePetBox}
+                       className={`relative inline-flex h-6 w-11 shrink-0 items-center rounded-full transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-500 focus-visible:ring-offset-2 disabled:opacity-50 ${
+                         petBoxEnabled ? 'bg-primary-500' : 'bg-gray-300'
+                       }`}
+                     >
+                       <span
+                         aria-hidden="true"
+                         className={`inline-block h-5 w-5 transform rounded-full bg-white shadow transition-transform ${
+                           petBoxEnabled ? 'translate-x-5' : 'translate-x-1'
+                         }`}
+                       />
+                     </button>
+                   </div>
+                 ) : (
+                   <span className="text-sm font-medium text-gray-700">
+                     {petBoxEnabled
+                       ? t('familySettings.petBoxStatusEnabled')
+                       : t('familySettings.petBoxStatusDisabled')}
+                   </span>
+                 )}
+               </div>
+               {petBoxError && (
+                 <p className="text-sm text-red-600 mt-3" role="alert">{petBoxError}</p>
                )}
              </CardContent>
            </Card>

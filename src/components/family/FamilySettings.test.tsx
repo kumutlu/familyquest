@@ -203,18 +203,87 @@ describe('FamilySettings — basic rendering', () => {
     expect(screen.getByText('Coming soon')).toBeInTheDocument();
   });
 
-  it('lets only an owner persist the family Pet Box feature setting', async () => {
+});
+
+describe('FamilySettings — Pet Box setting', () => {
+  it('owner toggles the accessible switch and it persists immediately', async () => {
     const user = userEvent.setup();
     renderFamilySettings('owner');
     await user.click(screen.getByRole('button', { name: 'Gamification' }));
-    const toggle = screen.getByRole('checkbox', { name: /Enable Pet Box/i });
-    expect(toggle).toBeChecked();
+    const toggle = screen.getByRole('switch', { name: /Enable Pet Box/i });
+    expect(toggle).toHaveAttribute('aria-checked', 'true');
     await user.click(toggle);
-    await user.click(screen.getByRole('button', { name: 'Save' }));
     await waitFor(() => expect(mockUpdateFamilySettings).toHaveBeenCalledWith(
       'fam1',
-      expect.objectContaining({ petBoxEnabled: false }),
+      { petBoxEnabled: false },
     ));
+    expect(await screen.findByText('Pet Box setting saved')).toBeInTheDocument();
+    expect(screen.getByRole('switch', { name: /Enable Pet Box/i })).toHaveAttribute('aria-checked', 'false');
+  });
+
+  it('re-enabling Pet Box persists true and never deletes data', async () => {
+    const user = userEvent.setup();
+    renderFamilySettings('owner', { familyData: { petBoxEnabled: false } });
+    await user.click(screen.getByRole('button', { name: 'Gamification' }));
+    const toggle = screen.getByRole('switch', { name: /Enable Pet Box/i });
+    expect(toggle).toHaveAttribute('aria-checked', 'false');
+    await user.click(toggle);
+    await waitFor(() => expect(mockUpdateFamilySettings).toHaveBeenCalledWith(
+      'fam1',
+      { petBoxEnabled: true },
+    ));
+  });
+
+  it('disables the switch while the setting is saving', async () => {
+    const user = userEvent.setup();
+    let resolveSave!: () => void;
+    mockUpdateFamilySettings.mockImplementation(
+      () => new Promise<void>(resolve => { resolveSave = () => resolve(); }),
+    );
+    renderFamilySettings('owner');
+    await user.click(screen.getByRole('button', { name: 'Gamification' }));
+    const toggle = screen.getByRole('switch', { name: /Enable Pet Box/i });
+    await user.click(toggle);
+    expect(screen.getByRole('switch', { name: /Enable Pet Box/i })).toBeDisabled();
+    await act(async () => { resolveSave(); });
+    await waitFor(() => expect(screen.getByRole('switch', { name: /Enable Pet Box/i })).toBeEnabled());
+  });
+
+  it('shows an error and reverts when saving fails', async () => {
+    const user = userEvent.setup();
+    mockUpdateFamilySettings.mockRejectedValue(new Error('offline'));
+    renderFamilySettings('owner');
+    await user.click(screen.getByRole('button', { name: 'Gamification' }));
+    await user.click(screen.getByRole('switch', { name: /Enable Pet Box/i }));
+    expect((await screen.findAllByText('offline')).length).toBeGreaterThan(0);
+    expect(screen.getByRole('switch', { name: /Enable Pet Box/i })).toHaveAttribute('aria-checked', 'true');
+  });
+
+  it('a child cannot toggle the Pet Box setting', async () => {
+    const user = userEvent.setup();
+    renderFamilySettings('child');
+    await user.click(screen.getByRole('button', { name: 'Gamification' }));
+    expect(screen.queryByRole('switch', { name: /Enable Pet Box/i })).not.toBeInTheDocument();
+    // Read-only status is still visible to non-owners.
+    expect(screen.getByText('Pet Box')).toBeInTheDocument();
+  });
+
+  it('a non-owner parent cannot toggle the Pet Box setting', async () => {
+    const user = userEvent.setup();
+    renderFamilySettings('parent');
+    await user.click(screen.getByRole('button', { name: 'Gamification' }));
+    expect(screen.queryByRole('switch', { name: /Enable Pet Box/i })).not.toBeInTheDocument();
+  });
+
+  it('shows a loading state while family data is being fetched', () => {
+    seedStore('owner');
+    act(() => { useStore.setState({ familyLoading: true } as any); });
+    render(
+      <MemoryRouter>
+        <FamilySettings />
+      </MemoryRouter>,
+    );
+    expect(screen.getByTestId('loading-spinner')).toBeInTheDocument();
   });
 });
 

@@ -123,6 +123,12 @@
     "dailyGoalPercentageDesc": "Set the percentage of eligible daily tasks required to reach the Daily Goal (50-100%).",
     "enablePetBox": "Enable Pet Box",
     "enablePetBoxDesc": "Allow family members to use Pet Box contributions and expenses.",
+    "petBox": "Pet Box",
+    "petBoxDesc": "Allow children in this family to use the Pet Box feature.",
+    "petBoxSaved": "Pet Box setting saved",
+    "petBoxUpdateError": "Failed to update the Pet Box setting. Please try again.",
+    "petBoxStatusEnabled": "Enabled",
+    "petBoxStatusDisabled": "Disabled",
     "currency": "Currency",
     "currencies": {
       "gbp": "British Pound (£)",
