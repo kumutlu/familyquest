@@ -1,6 +1,8 @@
 {
   "appName": "FamilyQuest",
   "loading": "Loading…",
+  "settingUp": "Setting up your account…",
+  "connectionErrorTitle": "Connection problem",
   "save": "Save",
   "cancel": "Cancel",
   "saving": "Saving…",

@@ -80,7 +80,7 @@ describe('rendered bootstrap boundary', () => {
 
   it('14/15. hard refresh shows loading, never temporary zero summaries, then renders real data', async () => {
     renderApp();
-    expect(screen.getByText('Loading Dashboard...')).toBeInTheDocument();
+    expect(screen.getByText('Loading…')).toBeInTheDocument();
     expect(screen.queryByText('Children')).not.toBeInTheDocument();
     expect(screen.queryByText('Pending (0)')).not.toBeInTheDocument();
 
@@ -104,7 +104,7 @@ describe('rendered bootstrap boundary', () => {
   it('drives persisted auth, profile, and every parent resource before revealing dashboard values', async () => {
     useStore.getState().cleanup();
     renderApp();
-    expect(screen.getByText('Loading...')).toBeInTheDocument();
+    expect(screen.getByText('Loading…')).toBeInTheDocument();
 
     act(() => useStore.getState().initAuth());
     await act(async () => {
@@ -119,7 +119,7 @@ describe('rendered bootstrap boundary', () => {
       metadata: { fromCache: false },
     }));
 
-    expect(screen.getByText('Loading Dashboard...')).toBeInTheDocument();
+    expect(screen.getByText('Loading…')).toBeInTheDocument();
     expect(screen.queryByText('Children')).not.toBeInTheDocument();
     expect(screen.queryByText('Pending (0)')).not.toBeInTheDocument();
 
@@ -173,8 +173,8 @@ describe('rendered bootstrap boundary', () => {
   it('shows a bootstrap error before the authenticated missing-profile placeholder', () => {
     useStore.setState({ authStatus: 'authenticated', currentUser: null, bootstrapError: '[Profile] permission-denied', appReady: false });
     renderApp();
-    expect(screen.getByText('Connection Error')).toBeInTheDocument();
-    expect(screen.queryByText('Setting up...')).not.toBeInTheDocument();
+    expect(screen.getByText('Connection problem')).toBeInTheDocument();
+    expect(screen.queryByText('Setting up your account…')).not.toBeInTheDocument();
   });
 
   it('shows the whole-app connection error for a critical family listener failure', () => {
@@ -185,7 +185,7 @@ describe('rendered bootstrap boundary', () => {
     });
     renderApp();
 
-    expect(screen.getByText('Connection Error')).toBeInTheDocument();
+    expect(screen.getByText('Connection problem')).toBeInTheDocument();
     expect(screen.getByText(/\[Family\] permission-denied/)).toBeInTheDocument();
     expect(screen.queryByText('Recent Family Activity')).not.toBeInTheDocument();
   });
@@ -193,8 +193,8 @@ describe('rendered bootstrap boundary', () => {
   it('shows an auth observer error instead of unresolved auth loading', () => {
     useStore.setState({ authStatus: 'unauthenticated', authUser: undefined, currentUser: null, bootstrapError: '[Auth observer] network-request-failed', appReady: false });
     renderApp();
-    expect(screen.getByText('Connection Error')).toBeInTheDocument();
-    expect(screen.queryByText('Loading...')).not.toBeInTheDocument();
+    expect(screen.getByText('Connection problem')).toBeInTheDocument();
+    expect(screen.queryByText('Loading…')).not.toBeInTheDocument();
   });
 
   it('routes an authenticated resolved profile without familyId to onboarding', async () => {

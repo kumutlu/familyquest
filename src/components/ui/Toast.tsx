@@ -58,7 +58,7 @@ export function Toast({ toast, onDismiss, duration = 4000 }: ToastProps) {
           type="button"
           onClick={onDismiss}
           aria-label={t('dismissNotification')}
-          className="shrink-0 opacity-80 hover:opacity-100 transition-opacity"
+          className="shrink-0 rounded-md opacity-80 transition-opacity hover:opacity-100 cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-white/80"
         >
           <X size={16} />
         </button>

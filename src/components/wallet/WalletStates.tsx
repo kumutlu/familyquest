@@ -1,25 +1,9 @@
 import { AlertTriangle, Inbox, RefreshCw } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 
-interface EmptyStateProps {
-  title: string;
-  description?: string;
-  icon?: React.ReactNode;
-}
-
-export function EmptyState({ title, description, icon }: EmptyStateProps) {
-  return (
-    <div className="rounded-2xl bg-white border border-gray-100 p-8 text-center">
-      {icon && (
-        <div className="mx-auto mb-3 w-12 h-12 rounded-full bg-gray-50 text-gray-400 flex items-center justify-center">
-          {icon}
-        </div>
-      )}
-      <p className="font-semibold text-gray-900">{title}</p>
-      {description && <p className="text-sm text-gray-500 mt-1">{description}</p>}
-    </div>
-  );
-}
+// Wallet screens historically owned their own empty state. It now lives in the
+// design system so every surface shares one implementation.
+export { EmptyState } from '../ui/EmptyState';
 
 interface ErrorStateProps {
   message: string;

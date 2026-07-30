@@ -160,10 +160,10 @@ export function FundCard({ fund, fundTransactions, petboxRequests = [], isParent
               {visibleDonations.map((tx: any) => {
                 const donor = tx.fromUserId ? familyMembers.find((m: any) => m.id === tx.fromUserId) : null;
                 const donorName = donor?.displayName || tx.childName || t('someone');
-                
+
                 // Retrieve the petbox_request that generated this fund_transaction
                 let petboxRequest = tx.sourceId ? petboxRequestMap.get(tx.sourceId) : undefined;
-                
+
                 // If not directly linked, try legacy matching
                 if (!petboxRequest && !tx.sourceId && tx.fromUserId) {
                   const matchResult = findLegacyPetboxRequest(
@@ -177,14 +177,14 @@ export function FundCard({ fund, fundTransactions, petboxRequests = [], isParent
                     },
                     petboxRequests.filter(r => r.fundId === fund.id)
                   );
-                  
+
                   logLegacyMatchDiagnostics(matchResult, false);
-                  
+
                   if (matchResult.matched && matchResult.petboxRequestId) {
                     petboxRequest = petboxRequestMap.get(matchResult.petboxRequestId);
                   }
                 }
-                
+
                 return (
                   <div key={tx.id} className="flex justify-between items-center text-sm p-2 bg-reward-50 rounded-lg border border-reward-100">
                     <div className="flex items-center gap-2">

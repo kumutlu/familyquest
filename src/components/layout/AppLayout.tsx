@@ -6,6 +6,8 @@ import { getNavItems } from '../../config/navigation';
 import { ProfileDropdown } from './ProfileDropdown';
 import { NotificationCenter } from './NotificationCenter';
 import { MandatoryChildPasswordChange } from '../auth/MandatoryChildPasswordChange';
+import { PageLoader } from '../ui/PageLoader';
+import { Button } from '../ui/Button';
 
 export function AppLayout() {
   const { t } = useTranslation('common');
@@ -21,7 +23,7 @@ export function AppLayout() {
   // first auth state has not resolved. This prevents the temporary redirect to
   // /login that forced users to close & reopen the PWA.
   if (authStatus === 'initializing') {
-    return <div className="min-h-screen bg-gray-50 flex items-center justify-center">Loading...</div>;
+    return <PageLoader fullScreen />;
   }
 
   // A recoverable bootstrap/auth error takes precedence over the login
@@ -30,18 +32,18 @@ export function AppLayout() {
   if (bootstrapError) {
     return (
       <div className="min-h-screen bg-gray-50 flex flex-col items-center justify-center p-4">
-        <div className="bg-white p-6 rounded-2xl shadow-xl max-w-md w-full text-center border border-red-100">
-          <div className="w-12 h-12 bg-red-100 text-red-600 rounded-full flex items-center justify-center mx-auto mb-4">
-            <span className="text-2xl font-bold">!</span>
+        <div
+          role="alert"
+          className="bg-white p-6 rounded-2xl shadow-sm max-w-md w-full text-center border border-gray-100"
+        >
+          <div className="w-12 h-12 bg-danger-50 text-danger-500 rounded-full flex items-center justify-center mx-auto mb-4">
+            <span className="text-2xl font-bold" aria-hidden="true">!</span>
           </div>
-          <h2 className="text-xl font-bold text-gray-900 mb-2">Connection Error</h2>
+          <h2 className="text-xl font-bold text-gray-900 mb-2">{t('connectionErrorTitle')}</h2>
           <p className="text-gray-500 mb-6 text-sm">{bootstrapError}</p>
-          <button
-            onClick={retryBootstrap}
-            className="w-full bg-primary-600 hover:bg-primary-700 text-white font-bold py-3 rounded-xl transition-colors"
-          >
-            Retry Connection
-          </button>
+          <Button onClick={retryBootstrap} fullWidth>
+            {t('retry')}
+          </Button>
         </div>
       </div>
     );
@@ -54,7 +56,7 @@ export function AppLayout() {
 
   // Logged in but no user doc yet (takes a moment to sync)
   if (authUser && currentUser === null) {
-    return <div className="min-h-screen bg-gray-50 flex items-center justify-center">Setting up...</div>;
+    return <PageLoader fullScreen label={t('settingUp')} />;
   }
 
   // Logged in, user doc exists, but no familyId -> Onboarding (unless already there)
@@ -63,7 +65,7 @@ export function AppLayout() {
   }
 
   if (currentUser?.familyId && !appReady) {
-    return <div className="min-h-screen bg-gray-50 flex items-center justify-center animate-pulse">Loading Dashboard...</div>;
+    return <PageLoader fullScreen />;
   }
 
   if (

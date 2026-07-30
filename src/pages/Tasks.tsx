@@ -1,6 +1,8 @@
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Card, CardContent } from '../components/ui/Card';
+import { PageLoader } from '../components/ui/PageLoader';
+import { EmptyState } from '../components/ui/EmptyState';
 import { Badge } from '../components/ui/Badge';
 import { Button } from '../components/ui/Button';
 import { Plus, CheckCircle2 } from 'lucide-react';
@@ -29,7 +31,7 @@ export function Tasks() {
   // boundary crosses while the app stays open (no full reload needed).
   const now = useRecurrenceClock();
 
-  if (loading) return <div className="p-8 text-center text-gray-500 animate-pulse">{t('tasks:loading')}</div>;
+  if (loading) return <PageLoader label={t('tasks:loading')} />;
 
   // Filter out archived tasks first
   const activeTasks = tasks.filter(t => t.isActive !== false);
@@ -165,9 +167,10 @@ export function Tasks() {
 
       <div className="space-y-3">
         {filteredTasks.length === 0 ? (
-          <div className="bg-white rounded-2xl border border-gray-100 p-8 text-center text-gray-500">
-            {t('tasks:empty')}
-          </div>
+          <EmptyState
+            title={t('tasks:empty')}
+            icon={<CheckCircle2 size={22} aria-hidden="true" />}
+          />
         ) : (
           filteredTasks.map((task) => (
             <Card key={task.id} role="button" tabIndex={0}

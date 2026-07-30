@@ -1,6 +1,7 @@
 import { useState, useMemo, useRef, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Card, CardContent } from '../ui/Card';
+import { EmptyState } from '../ui/EmptyState';
 import { Badge } from '../ui/Badge';
 import { Avatar } from '../ui/Avatar';
 import { Button } from '../ui/Button';
@@ -399,9 +400,7 @@ export function ApprovalCenter() {
 
       {activeTab === 'pending' ? (
         pendingApprovals.length === 0 ? (
-          <div className="bg-white rounded-2xl border border-gray-100 p-8 text-center text-gray-500 shadow-sm">
-            {t('emptyPending')}
-          </div>
+          <EmptyState title={t('emptyPending')} className="shadow-sm" />
         ) : (
           <div className="space-y-3">
             {pendingApprovals.map(renderApprovalCard)}
@@ -409,9 +408,7 @@ export function ApprovalCenter() {
         )
       ) : (
         historyApprovals.length === 0 ? (
-          <div className="bg-white rounded-2xl border border-gray-100 p-8 text-center text-gray-500 shadow-sm">
-            {t('emptyHistory')}
-          </div>
+          <EmptyState title={t('emptyHistory')} className="shadow-sm" />
         ) : (
           <div className="space-y-3">
             {historyApprovals.map(renderApprovalCard)}

@@ -1,6 +1,7 @@
 import { useParams, Link } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { Card, CardContent } from '../components/ui/Card';
+import { PageLoader } from '../components/ui/PageLoader';
 import { Avatar } from '../components/ui/Avatar';
 import { Badge } from '../components/ui/Badge';
 import { ChevronLeft, Star, Flame, Trophy, TrendingUp, TrendingDown, Shield, Award, Zap } from 'lucide-react';
@@ -42,7 +43,7 @@ export function MemberProfile() {
   const { id } = useParams();
   const { familyMembers, loading, behaviourEvents, gamificationSummaries, dailyProgress } = useStore();
 
-  if (loading) return <div className="p-8 text-center text-gray-500 animate-pulse">{t('profile:loading')}</div>;
+  if (loading) return <PageLoader label={t('profile:loading')} />;
 
   const member = familyMembers.find(m => m.id === id);
   if (!member) return <div className="p-8 text-center text-gray-500">{t('profile:notFound')}</div>;
@@ -78,7 +79,7 @@ export function MemberProfile() {
             </div>
           )}
         </div>
-        
+
         <div>
           <h2 className="text-2xl font-extrabold text-gray-900">{member.displayName}</h2>
           <p className="text-primary-600 font-bold">{t('profile:rewardPoints', { count: member.rewardPoints || 0 })}</p>
@@ -131,9 +132,9 @@ export function MemberProfile() {
         <div className="grid grid-cols-2 gap-3">
           {ACHIEVEMENTS.map(badge => {
             const isUnlocked = badge.checkUnlocked(member);
-            
+
             // Map icon string to component
-            const IconComp = 
+            const IconComp =
               badge.iconName === 'Star' ? Star :
               badge.iconName === 'Flame' ? Flame :
               badge.iconName === 'Shield' ? Shield :

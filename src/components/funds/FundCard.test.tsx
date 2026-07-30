@@ -10,9 +10,9 @@ import { FundCard } from './FundCard';
 
 describe('FundCard', () => {
   const ts = (ms: number) => ({ toDate: () => new Date(ms), toMillis: () => ms });
-  
+
   const baseFund = { id: 'fund-1', name: 'Vet', type: 'pet', balance: 500 };
-  
+
   const generateExpenses = (count: number) => {
     return Array.from({ length: count }).map((_, i) => ({
       id: `expense-${i}`,
@@ -48,14 +48,14 @@ describe('FundCard', () => {
   it('shows only 5 most recent expenses, newest first, and a View all button if more exist', () => {
     const txs = generateExpenses(6);
     render(<FundCard fund={baseFund} fundTransactions={txs} isParent currencySymbol="£" />);
-    
+
     // Newest is expense-5 (highest ms)
     expect(screen.getByText('Cat5 — Desc5')).toBeInTheDocument();
     expect(screen.queryByText('Cat0 — Desc0')).not.toBeInTheDocument();
-    
+
     const viewAll = screen.getByRole('button', { name: 'View all expenses' });
     fireEvent.click(viewAll);
-    
+
     expect(screen.getByText('Cat0 — Desc0')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Show less' })).toBeInTheDocument();
   });

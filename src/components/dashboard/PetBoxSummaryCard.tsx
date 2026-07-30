@@ -17,7 +17,6 @@ import { isPetBoxEnabled } from '../../lib/familyFeatures';
 export function PetBoxSummaryCard() {
   const navigate = useNavigate();
   const { funds, familyData } = useStore();
-  if (!isPetBoxEnabled(familyData)) return null;
 
   const { fundCount, totalBalance, totalEmergencyGoal, pct } = useMemo(() => {
     const list = funds || [];
@@ -33,6 +32,8 @@ export function PetBoxSummaryCard() {
   }, [funds]);
 
   const goToPetBox = () => navigate('/pet-box');
+
+  if (!isPetBoxEnabled(familyData)) return null;
 
   const cardProps = {
     role: 'button' as const,

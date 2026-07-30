@@ -1,6 +1,7 @@
 import { useStore } from '../store/useStore';
 import { useTranslation } from 'react-i18next';
 import { Card, CardContent } from '../components/ui/Card';
+import { PageLoader } from '../components/ui/PageLoader';
 import { Avatar } from '../components/ui/Avatar';
 import { Badge } from '../components/ui/Badge';
 import { isChildRole, isParentRole } from '../lib/roles';
@@ -16,7 +17,7 @@ export function Wallets() {
   const currencyCode = resolveFamilyCurrencyCode(familyData);
   const [selectedChildId, setSelectedChildId] = useState<string | null>(null);
 
-  if (loading) return <div className="p-8 text-center text-gray-500 animate-pulse">{t('allowance.loading')}</div>;
+  if (loading) return <PageLoader label={t('allowance.loading')} />;
 
   if (!isParentRole(currentUser?.role)) {
     return <Navigate to="/" replace />;
@@ -102,7 +103,7 @@ export function Wallets() {
                         </div>
                       </div>
                     </div>
-                    
+
                     <button
                       onClick={() => setSelectedChildId(child.id)}
                       className="bg-primary-50 hover:bg-primary-100 text-primary-700 font-bold py-2 px-4 rounded-xl transition-colors text-sm"
@@ -110,7 +111,7 @@ export function Wallets() {
                       {t('allowance.manageWallet')}
                     </button>
                   </div>
-                  
+
                   <div className="bg-gray-50 p-4">
                     <h5 className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-3">{t('allowance.recentActivity')}</h5>
                     {recentTxs.length === 0 ? (
@@ -141,9 +142,9 @@ export function Wallets() {
       )}
 
       {selectedChildId && (
-        <AddMoneyModal 
-          child={children.find(c => c.id === selectedChildId)} 
-          onClose={() => setSelectedChildId(null)} 
+        <AddMoneyModal
+          child={children.find(c => c.id === selectedChildId)}
+          onClose={() => setSelectedChildId(null)}
           currencyCode={currencyCode}
         />
       )}

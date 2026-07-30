@@ -15,8 +15,10 @@ export function Button({
   children,
   ...props
 }: ButtonProps) {
-  const baseStyles = "inline-flex items-center justify-center font-semibold transition-all duration-200 active:scale-95 disabled:opacity-50 disabled:pointer-events-none disabled:cursor-not-allowed rounded-xl";
-  
+  // `focus-visible` (not `focus`) keeps the ring out of the way for pointer
+  // users while guaranteeing a visible keyboard focus indicator everywhere.
+  const baseStyles = "inline-flex items-center justify-center font-semibold transition-all duration-200 cursor-pointer active:scale-95 disabled:opacity-50 disabled:pointer-events-none disabled:cursor-not-allowed rounded-xl focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-500 focus-visible:ring-offset-2";
+
   const variants = {
     primary: "bg-primary-500 text-white hover:bg-primary-600 shadow-sm hover:shadow",
     secondary: "bg-gray-100 text-gray-900 hover:bg-gray-200",

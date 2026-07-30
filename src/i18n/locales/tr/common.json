@@ -1,6 +1,8 @@
 {
   "appName": "FamilyQuest",
   "loading": "Yükleniyor…",
+  "settingUp": "Hesabınız hazırlanıyor…",
+  "connectionErrorTitle": "Bağlantı sorunu",
   "save": "Kaydet",
   "cancel": "İptal",
   "saving": "Kaydediliyor…",
