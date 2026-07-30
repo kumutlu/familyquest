@@ -44,7 +44,11 @@ vi.mock('../lib/api', async importOriginal => {
 
 // --- Mock the account/family deletion client APIs ---
 const deletionMocks = vi.hoisted(() => ({
-  requestAccountDeletion: vi.fn(async (_input: unknown) => ({ status: 'completed' as const })),
+  requestAccountDeletion: vi.fn(
+    async (_input: unknown): Promise<{ status: 'completed' | 'pending_family_deletion' }> => (
+      { status: 'completed' }
+    ),
+  ),
   getReauthMethod: vi.fn(() => 'password' as 'password' | 'google' | null),
   reauthenticateWithPassword: vi.fn(async (_password: string) => {}),
   reauthenticateWithGoogle: vi.fn(async () => {}),

@@ -14,8 +14,8 @@ const mockRegenerateInviteCode = vi.fn();
 const mockApproveJoinRequest = vi.fn();
 const mockRejectJoinRequest = vi.fn();
 
-const mockSignOut = vi.fn(async () => {});
-const mockLeaveFamily = vi.fn(async () => ({ left: true }));
+const mockSignOut = vi.fn(async (..._args: any[]) => {});
+const mockLeaveFamily = vi.fn(async (..._args: any[]) => ({ left: true }));
 const mockRequestFamilyDeletion = vi.fn();
 const mockFetchFamilyDeletionStatus = vi.fn();
 
