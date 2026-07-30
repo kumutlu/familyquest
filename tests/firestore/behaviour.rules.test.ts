@@ -129,12 +129,12 @@ describe('behaviour event rules', () => {
     }));
   });
 
-  test('owner child edits allow displayName/avatarUrl but reject UI-only profile fields', async () => {
+  test('owner child edits allow displayName/avatarUrl/avatarId but reject UI-only profile fields', async () => {
     const owner = user(OWNER_ID);
     await assertSucceeds(updateDoc(doc(owner, 'users', CHILD_ID), {
       displayName: 'Updated Child', avatarUrl: 'https://example.test/starter-cat',
     }));
-    await assertFails(updateDoc(doc(owner, 'users', CHILD_ID), { avatarId: 'starter-cat' }));
+    await assertSucceeds(updateDoc(doc(owner, 'users', CHILD_ID), { avatarId: 'starter-cat' }));
     await assertFails(updateDoc(doc(owner, 'users', CHILD_ID), { colour: '#ef4444' }));
   });
 
