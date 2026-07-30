@@ -1,5 +1,6 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import i18n from '../i18n/config';
 
 const api = vi.hoisted(() => ({
   createReward: vi.fn(),
@@ -22,11 +23,22 @@ const baseReward = {
   inventory: null,
 };
 
+const baseRedemption = {
+  id: 'rd1',
+  rewardId: 'r1',
+  userId: 'child-1',
+  costPaid: 50,
+  redeemedAt: { toDate: () => new Date('2026-07-30T12:31:00Z') },
+  createdAt: { toDate: () => new Date('2026-07-30T12:31:00Z') },
+  status: 'completed',
+};
+
 function makeStore(overrides: any = {}) {
   return {
     currentUser: { id: 'u1', familyId: 'fam', role: 'owner', rewardPoints: 100 },
     rewards: [baseReward],
     redemptions: [],
+    familyMembers: [],
     loading: false,
     ...overrides,
   };
@@ -101,5 +113,80 @@ describe('Rewards page — edit and delete (soft archive)', () => {
     await waitFor(() => expect(api.updateReward).toHaveBeenCalledTimes(1));
     const [, , payload] = api.updateReward.mock.calls[0];
     expect(payload).toMatchObject({ isActive: false });
+  });
+});
+
+describe('Rewards page — redemption history', () => {
+  beforeEach(async () => {
+    vi.clearAllMocks();
+    api.redeemReward.mockResolvedValue(undefined);
+    await i18n.loadNamespaces(['reversals']);
+    await i18n.changeLanguage('en');
+  });
+
+  it('shows redemption history with child avatar, name, reward, points, and date for multiple children', () => {
+    useStoreMock.mockReturnValue(makeStore({
+      currentUser: { id: 'u1', familyId: 'fam', role: 'parent', rewardPoints: 100 },
+      familyMembers: [
+        { id: 'child-1', displayName: 'Alisya', avatarUrl: 'https://example.com/alisya.png', role: 'child' },
+        { id: 'child-2', displayName: 'Ben', avatarUrl: 'https://example.com/ben.png', role: 'child' },
+      ],
+      redemptions: [
+        { ...baseRedemption, userId: 'child-1' },
+        { ...baseRedemption, id: 'rd2', userId: 'child-2', rewardId: 'r1', costPaid: 30 },
+      ],
+    }));
+    render(<Rewards />);
+    expect(screen.getByText('Redemption history')).toBeInTheDocument();
+    expect(screen.getByText('Alisya')).toBeInTheDocument();
+    expect(screen.getByText('Ben')).toBeInTheDocument();
+    expect(screen.getByText('Extra Screen Time')).toBeInTheDocument();
+    expect(screen.getByText('50 points redeemed')).toBeInTheDocument();
+    expect(screen.getByText('30 points redeemed')).toBeInTheDocument();
+    expect(screen.getAllByText(/Today/)).toHaveLength(2);
+  });
+
+  it('shows "Unknown family member" fallback when child profile no longer exists', () => {
+    useStoreMock.mockReturnValue(makeStore({
+      currentUser: { id: 'u1', familyId: 'fam', role: 'parent', rewardPoints: 100 },
+      familyMembers: [],
+      redemptions: [{ ...baseRedemption, userId: 'deleted-child' }],
+    }));
+    render(<Rewards />);
+    expect(screen.getByText('Unknown family member')).toBeInTheDocument();
+    expect(screen.getByText('Extra Screen Time')).toBeInTheDocument();
+  });
+
+  it('shows refund button for parent view when redemption is not yet reversed', () => {
+    useStoreMock.mockReturnValue(makeStore({
+      currentUser: { id: 'u1', familyId: 'fam', role: 'parent', rewardPoints: 100 },
+      familyMembers: [{ id: 'child-1', displayName: 'Alisya', role: 'child' }],
+      redemptions: [baseRedemption],
+    }));
+    render(<Rewards />);
+    expect(screen.getByText('Alisya')).toBeInTheDocument();
+    expect(screen.getByText('Extra Screen Time')).toBeInTheDocument();
+    expect(screen.getByText('50 points redeemed')).toBeInTheDocument();
+  });
+
+  it('shows reversed badge when redemption has been refunded', () => {
+    useStoreMock.mockReturnValue(makeStore({
+      currentUser: { id: 'u1', familyId: 'fam', role: 'parent', rewardPoints: 100 },
+      familyMembers: [{ id: 'child-1', displayName: 'Alisya', role: 'child' }],
+      redemptions: [{ ...baseRedemption, status: 'reversed' }],
+      reversals: [{ sourceKind: 'reward_redemption', sourceId: 'rd1', reason: 'Duplicate', actorName: 'Parent', completedAt: { toDate: () => new Date('2026-07-30T13:00:00Z') } }],
+    }));
+    render(<Rewards />);
+    expect(screen.getByText('Reversed')).toBeInTheDocument();
+  });
+
+  it('child view does not show redemption history', () => {
+    useStoreMock.mockReturnValue(makeStore({
+      currentUser: { id: 'u1', familyId: 'fam', role: 'child', rewardPoints: 100 },
+      familyMembers: [{ id: 'child-1', displayName: 'Alisya', role: 'child' }],
+      redemptions: [baseRedemption],
+    }));
+    render(<Rewards />);
+    expect(screen.queryByText('Redemption history')).not.toBeInTheDocument();
   });
 });

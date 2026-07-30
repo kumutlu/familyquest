@@ -51,7 +51,7 @@ export function HistoryActionControl({ sourceKind, source }: { sourceKind: Rever
           <p>{t('byActor', { actor: action.reversal.actorName, date: auditDate(action.reversal.occurredAt) })}</p>
         </div>
       ) : action.action ? (
-        <Button size="sm" variant={action.action === 'cancel' ? 'danger' : 'secondary'} onClick={() => {
+        <Button size="sm" variant={action.action === 'cancel' ? 'danger' : 'ghost'} onClick={() => {
           if (action.action === 'cancel') {
             cancel(action);
           } else {

@@ -1,6 +1,8 @@
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Card, CardContent } from '../components/ui/Card';
+import { PageLoader } from '../components/ui/PageLoader';
+import { EmptyState } from '../components/ui/EmptyState';
 import { Badge } from '../components/ui/Badge';
 import { Button } from '../components/ui/Button';
 import { Gift, Gamepad2, Pizza, Ticket, Plus, Edit, Trash2 } from 'lucide-react';
@@ -8,23 +10,33 @@ import { useStore } from '../store/useStore';
 import { redeemReward, createReward, updateReward } from '../lib/api';
 import { cn } from '../lib/utils';
 import { isParentRole } from '../lib/roles';
-import { formatNumber } from '../i18n/format';
+import { formatNumber, formatRelativeTime } from '../i18n/format';
+import { Avatar } from '../components/ui/Avatar';
 import { HistoryActionControl } from '../components/reversals/HistoryActionControl';
 
 export function Rewards() {
   const { t } = useTranslation(['rewards', 'errors']);
-  const { currentUser, rewards, redemptions, loading } = useStore();
+  const { currentUser, rewards, redemptions, loading, familyMembers } = useStore();
   const [selectedReward, setSelectedReward] = useState<any>(null);
   const isParent = currentUser?.role === 'parent' || currentUser?.role === 'owner';
-  
+
+  const formatRedemptionDateTime = (timestamp: any) => {
+    const date = timestamp?.toDate ? timestamp.toDate() : timestamp instanceof Date ? timestamp : new Date(timestamp || 0);
+    const now = new Date();
+    const isToday = date.toDateString() === now.toDateString();
+    const timeStr = date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    if (isToday) return `Today • ${timeStr}`;
+    return `${formatRelativeTime(date)} • ${timeStr}`;
+  };
+
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [formData, setFormData] = useState<any>({ title: '', cost: 50, icon: 'Gift', inventory: '' });
-  
+
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [successMsg, setSuccessMsg] = useState<string | null>(null);
 
-  if (loading || !currentUser) return <div className="p-8 text-center text-gray-500 animate-pulse">{t('rewards:loading')}</div>;
+  if (loading || !currentUser) return <PageLoader label={t('rewards:loading')} />;
 
   const activeRewards = rewards.filter(r => r.isActive !== false);
 
@@ -43,7 +55,7 @@ export function Rewards() {
     setError(null);
     try {
       await redeemReward(currentUser.familyId, currentUser.id, selectedReward.id);
-      
+
       // Also decrement inventory if applicable
       if (selectedReward.inventory !== undefined && selectedReward.inventory !== null && selectedReward.inventory !== '') {
         await updateReward(currentUser.familyId, selectedReward.id, {
@@ -147,16 +159,18 @@ export function Rewards() {
 
       <div className="grid grid-cols-2 gap-4 pb-24">
         {activeRewards.length === 0 ? (
-          <div className="col-span-2 bg-white rounded-2xl border border-gray-100 p-8 text-center text-gray-500">
-            {t('rewards:empty')}
-          </div>
+          <EmptyState
+            className="col-span-2"
+            title={t('rewards:empty')}
+            icon={<Gift size={22} aria-hidden="true" />}
+          />
         ) : (
           activeRewards.map((reward) => {
             const outOfStock = reward.inventory !== undefined && reward.inventory !== null && reward.inventory <= 0;
             return (
-              <Card 
-                key={reward.id} 
-                className={cn("cursor-pointer transition-transform hover:scale-[1.02] active:scale-[0.98]", outOfStock && "opacity-50 grayscale")} 
+              <Card
+                key={reward.id}
+                className={cn("cursor-pointer transition-transform hover:scale-[1.02] active:scale-[0.98]", outOfStock && "opacity-50 grayscale")}
                 onClick={() => setSelectedReward(reward)}
               >
                 <CardContent className="p-4 flex flex-col items-center text-center">
@@ -181,14 +195,31 @@ export function Rewards() {
           <div className="space-y-2">
             {redemptions.map(redemption => {
               const reward = rewards.find(item => item.id === redemption.rewardId);
+              const child = familyMembers.find((m: any) => m.id === redemption.userId);
+              const childName = child?.displayName || t('rewards:redemptionHistoryUnknownMember');
+              const childAvatar = child?.avatarUrl;
+              const dateTimeStr = formatRedemptionDateTime(redemption.redeemedAt || redemption.createdAt);
               return (
                 <Card key={redemption.id}>
-                  <CardContent className="flex items-center justify-between gap-4 p-4">
-                    <div>
-                      <p className="font-semibold text-gray-900">{reward?.title || 'Reward'}</p>
-                      <p className="text-sm text-gray-500">{t('rewards:redeemedPoints', { value: formatNumber(redemption.costPaid) })}</p>
+                  <CardContent className="p-4">
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2 mb-1">
+                          <Avatar src={childAvatar} fallback={childName[0] || '?'} size="sm" />
+                          <p className="font-semibold text-gray-900 text-sm truncate">{childName}</p>
+                        </div>
+                        <p className="text-sm text-gray-600">
+                          {t('rewards:redemptionHistoryRedeemed', { name: childName, reward: reward?.title || 'Reward' })}
+                        </p>
+                        <p className="text-xs text-gray-500 mt-0.5">
+                          {t('rewards:redeemedPoints', { value: formatNumber(redemption.costPaid) })}
+                        </p>
+                        <p className="text-xs text-gray-400 mt-0.5">{dateTimeStr}</p>
+                      </div>
+                      <div className="shrink-0">
+                        <HistoryActionControl sourceKind="reward_redemption" source={redemption} />
+                      </div>
                     </div>
-                    <HistoryActionControl sourceKind="reward_redemption" source={redemption} />
                   </CardContent>
                 </Card>
               );
@@ -205,13 +236,13 @@ export function Rewards() {
               <h3 className="text-xl font-bold text-gray-900">{t('rewards:details.title')}</h3>
               <button onClick={() => { setSelectedReward(null); setError(null); }} aria-label={t('rewards:details.closeAria')} className="p-2 -mr-2 bg-gray-100 hover:bg-gray-200 rounded-full text-gray-500 transition-colors">✕</button>
             </div>
-            
+
             <div className="p-6">
               <div className="flex flex-col items-center text-center space-y-4">
                 <div className="w-24 h-24 bg-reward-50 rounded-3xl flex items-center justify-center">
                   {getIcon(selectedReward.icon)}
                 </div>
-                
+
                 <div>
                   <h4 className="text-2xl font-bold text-gray-900">{selectedReward.title}</h4>
                   <p className="text-reward-600 font-bold text-lg mt-1">{t('rewards:details.points', { value: formatNumber(selectedReward.cost) })}</p>
@@ -274,7 +305,7 @@ export function Rewards() {
                   <input type="number" placeholder={t('rewards:form.inventoryPlaceholder')} min="0" value={formData.inventory} onChange={e => setFormData({...formData, inventory: e.target.value})} className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md" />
                   <p className="text-xs text-gray-500 mt-1">{t('rewards:form.inventoryHelp')}</p>
                 </div>
-                
+
                 {error && <p className="text-red-500 text-sm">{error}</p>}
                 <div className="pt-4">
                   <Button type="submit" fullWidth disabled={isSubmitting} className="bg-reward-500 hover:bg-reward-600">

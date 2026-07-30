@@ -9,6 +9,8 @@
   "createSuccess": "Reward created successfully!",
   "empty": "No rewards available yet.",
   "redemptionHistory": "Redemption history",
+  "redemptionHistoryRedeemed": "{{name}} redeemed \"{{reward}}\"",
+  "redemptionHistoryUnknownMember": "Unknown family member",
   "redeemedPoints": "{{value}} points redeemed",
   "redemption": "Reward redeemed",
   "details": {

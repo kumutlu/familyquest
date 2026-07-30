@@ -9,6 +9,8 @@
   "createSuccess": "Ödül başarıyla oluşturuldu!",
   "empty": "Henüz uygun ödül yok.",
   "redemptionHistory": "Kullanım geçmişi",
+  "redemptionHistoryRedeemed": "{{name}} \"{{reward}}\" ödülünü kullandı",
+  "redemptionHistoryUnknownMember": "Bilinilen aile üyesi",
   "redeemedPoints": "{{value}} puan kullanıldı",
   "redemption": "Ödül kullanıldı",
   "details": {
