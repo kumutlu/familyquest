@@ -1,6 +1,10 @@
 {
   "members": "Members",
   "addMember": "Add member",
+  "addChild": "Add child",
+  "childAdded": "Child added successfully",
+  "inviteMember": "Invite Member",
+  "inviteCopied": "Invite code copied to clipboard.",
   "loading": "Loading Family…",
   "loginCreated": "Login created for {{name}}.",
   "title": "Family Hub",
@@ -60,6 +64,7 @@
     "deleteChildExplanation": "This will permanently remove this child from your family. This action cannot be undone.",
     "deleteChildWarning": "All data for this child will be permanently deleted, including login, profile, tasks, and gamification progress.",
     "deleteChildNameLabel": "Type the child's full name to confirm:",
+    "deleteChildHint": "Type '{{name}}' to continue.",
     "deleteChildConfirm": "Delete child",
     "deleteNameMismatch": "The name does not match. Please type the child's full name exactly as shown.",
     "deleteSuccess": "Child has been deleted."

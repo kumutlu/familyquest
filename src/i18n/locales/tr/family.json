@@ -1,6 +1,10 @@
 {
   "members": "Üyeler",
   "addMember": "Üye ekle",
+  "addChild": "Çocuk ekle",
+  "childAdded": "Çocuk başarıyla eklendi",
+  "inviteMember": "Üye Davet Et",
+  "inviteCopied": "Davet kodu panoya kopyalandı.",
   "loading": "Aile yükleniyor…",
   "loginCreated": "{{name}} için giriş oluşturuldu.",
   "title": "Aile Merkezi",
@@ -60,6 +64,7 @@
     "deleteChildExplanation": "Bu işlem bu çocuğu aileden kalıcı olarak kaldıracaktır. Bu işlem geri alınamaz.",
     "deleteChildWarning": "Bu çocuğun tüm verileri kalıcı olarak silinecektir, giriş, profil, görevler ve gamification ilerlemesi dahil.",
     "deleteChildNameLabel": "Onaylamak için çocuğun tam adını yazın:",
+    "deleteChildHint": "Devam etmek için '{{name}}' yazın.",
     "deleteChildConfirm": "Çocuku sil",
     "deleteNameMismatch": "Ad eşleşmiyor. Lütfen çocuğun tam adını tam olarak yazın.",
     "deleteSuccess": "Çocuk silindi."

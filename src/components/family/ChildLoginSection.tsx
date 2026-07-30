@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
+import { Loader2 } from 'lucide-react';
 import { Button } from '../ui/Button';
 import { formatDate } from '../../i18n/format';
 import {
@@ -112,8 +113,10 @@ export function ChildLoginSection({ member, onRequestCreate }: ChildLoginSection
     setDeleteFeedback('');
   };
 
+  const nameConfirmed = deleteNameInput.trim() === member.displayName;
+
   const submitDelete = async () => {
-    if (deleteNameInput.trim() !== member.displayName) {
+    if (!nameConfirmed) {
       setDeleteFeedback(t('login.deleteNameMismatch'));
       return;
     }
@@ -273,29 +276,46 @@ export function ChildLoginSection({ member, onRequestCreate }: ChildLoginSection
                   value={deleteNameInput}
                   onChange={e => setDeleteNameInput(e.target.value)}
                   placeholder={member.displayName}
+                  aria-describedby="delete-child-hint"
                   className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-red-500 focus:border-transparent outline-none transition-all"
                   autoFocus
                 />
+                {!nameConfirmed && (
+                  <p id="delete-child-hint" className="text-xs text-gray-500 mt-1.5">
+                    {t('login.deleteChildHint', { name: member.displayName })}
+                  </p>
+                )}
               </div>
               {deleteFeedback && (
                 <p className="text-sm text-red-600" role="alert">{deleteFeedback}</p>
               )}
-              <div className="flex gap-3 pt-2">
+              <div className="flex flex-col-reverse sm:flex-row gap-3 pt-2">
                 <Button
                   type="button"
                   variant="outline"
                   fullWidth
                   disabled={deleteBusy}
                   onClick={closeDeleteDialog}
+                  className="min-w-0 whitespace-nowrap"
                 >
+                  {t('common:cancel')}
                 </Button>
                 <Button
                   type="button"
+                  variant="danger"
                   fullWidth
-                  disabled={deleteBusy || deleteNameInput.trim() !== member.displayName}
-                  className="bg-red-500 hover:bg-red-600"
+                  disabled={deleteBusy || !nameConfirmed}
                   onClick={submitDelete}
+                  className="min-w-0 whitespace-nowrap"
                 >
+                  {deleteBusy ? (
+                    <span className="inline-flex items-center gap-2">
+                      <Loader2 size={16} className="animate-spin" aria-hidden="true" />
+                      {t('common:deleting')}
+                    </span>
+                  ) : (
+                    t('login.deleteChildConfirm')
+                  )}
                 </Button>
               </div>
             </div>

@@ -7,6 +7,7 @@ const lifecycle = vi.hoisted(() => ({
   reset: vi.fn(),
   disable: vi.fn(),
   enable: vi.fn(),
+  deleteChild: vi.fn(),
 }));
 
 vi.mock('../../lib/childLoginApi', async importOriginal => {
@@ -16,6 +17,7 @@ vi.mock('../../lib/childLoginApi', async importOriginal => {
     resetChildPassword: lifecycle.reset,
     disableChildLogin: lifecycle.disable,
     enableChildLogin: lifecycle.enable,
+    deleteChild: lifecycle.deleteChild,
   };
 });
 
@@ -142,5 +144,72 @@ describe('ChildLoginSection', () => {
     };
     const { container } = render(<ChildLoginSection member={member} onRequestCreate={() => {}} />);
     expect(container.textContent).not.toMatch(/authUid|@managed\.familyquest\.app|synthetic/i);
+  });
+
+  describe('Delete Child dialog', () => {
+    const member: ChildLoginMember = {
+      id: 'c1',
+      displayName: 'Alisya',
+      hasLogin: true,
+      username: 'alisya',
+      loginEnabled: true,
+      isManaged: true,
+    };
+
+    const openDialog = async (user: ReturnType<typeof userEvent.setup>) => {
+      await user.click(screen.getByRole('button', { name: 'Delete child' }));
+      return screen.getByRole('dialog');
+    };
+
+    it('shows visible Cancel and Delete labels with a validation hint, delete disabled initially', async () => {
+      const user = userEvent.setup();
+      render(<ChildLoginSection member={member} onRequestCreate={() => {}} />);
+      const dialog = await openDialog(user);
+
+      const cancel = screen.getByRole('button', { name: 'Cancel' });
+      expect(cancel).toBeEnabled();
+      expect(cancel.textContent).toContain('Cancel');
+
+      // Confirm button lives inside the dialog and carries the destructive label.
+      const buttons = screen.getAllByRole('button', { name: 'Delete child' });
+      const confirm = buttons.find(b => dialog.contains(b) && b !== cancel) as HTMLButtonElement;
+      expect(confirm).toBeDefined();
+      expect(confirm.textContent).toContain('Delete child');
+      expect(confirm).toBeDisabled();
+
+      // Validation hint shown before the name matches.
+      expect(screen.getByText("Type 'Alisya' to continue.")).toBeInTheDocument();
+    });
+
+    it('trims whitespace, enables delete on exact name, and calls deleteChild', async () => {
+      lifecycle.deleteChild.mockResolvedValue({});
+      const user = userEvent.setup();
+      render(<ChildLoginSection member={member} onRequestCreate={() => {}} />);
+      const dialog = await openDialog(user);
+
+      const input = screen.getByLabelText(/full name to confirm/i);
+      await user.type(input, '  Alisya  ');
+
+      // Hint disappears once the trimmed name matches.
+      expect(screen.queryByText("Type 'Alisya' to continue.")).not.toBeInTheDocument();
+
+      const confirm = screen
+        .getAllByRole('button', { name: 'Delete child' })
+        .find(b => dialog.contains(b)) as HTMLButtonElement;
+      expect(confirm).toBeEnabled();
+
+      await user.click(confirm);
+      expect(lifecycle.deleteChild).toHaveBeenCalledWith('c1', 'Alisya');
+    });
+
+    it('closes the dialog via Cancel without deleting', async () => {
+      const user = userEvent.setup();
+      render(<ChildLoginSection member={member} onRequestCreate={() => {}} />);
+      await openDialog(user);
+
+      await user.click(screen.getByRole('button', { name: 'Cancel' }));
+      expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+      expect(lifecycle.deleteChild).not.toHaveBeenCalled();
+    });
   });
 });

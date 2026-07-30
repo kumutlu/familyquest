@@ -1,15 +1,16 @@
 import { Link } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { Avatar } from '../components/ui/Avatar';
+import { PageLoader } from '../components/ui/PageLoader';
 import { Card, CardContent } from '../components/ui/Card';
 import { Badge } from '../components/ui/Badge';
-import { Crown, ChevronRight, Trophy, History, Target, Plus } from 'lucide-react';
+import { Crown, ChevronRight, Trophy, History, Target, Plus, UserPlus } from 'lucide-react';
 import { useStore } from '../store/useStore';
 import { useState } from 'react';
 import { Button } from '../components/ui/Button';
 import { Progress } from '../components/ui/Progress';
 import { createChallenge, claimChallenge } from '../lib/api';
-import { isChildRole, isParentRole, getRoleLabel } from '../lib/roles';
+import { isChildRole, isParentRole, isOwnerRole, getRoleLabel } from '../lib/roles';
 import { formatNumber } from '../i18n/format';
 import { localWeekKey } from '../lib/taskRecurrence';
 import { useRecurrenceClock } from '../lib/useRecurrenceClock';
@@ -17,10 +18,11 @@ import { EditMemberModal } from '../components/family/EditMemberModal';
 import { ChildLoginSection, type ChildLoginMember } from '../components/family/ChildLoginSection';
 import { CreateChildLoginDialog } from '../components/family/CreateChildLoginDialog';
 import { Toast, type ToastData } from '../components/ui/Toast';
+import { AddChildModal } from '../components/family/AddChildModal';
 
 export function Family() {
   const { t } = useTranslation('family');
-  const { currentUser, familyMembers, loading, tasks, taskCompletions, behaviourEvents, challenges } = useStore();
+  const { currentUser, familyMembers, loading, tasks, taskCompletions, challenges } = useStore();
   const [activeTab, setActiveTab] = useState<'current' | 'history'>('current');
   
   const [editingMember, setEditingMember] = useState<any>(null);
@@ -35,11 +37,13 @@ export function Family() {
   const [challengeData, setChallengeData] = useState({ title: 'Weekend Warriors', targetXP: 500, rewardPoints: 100 });
   const [isSubmitting, setIsSubmitting] = useState(false);
 
+  const [isAddChildOpen, setIsAddChildOpen] = useState(false);
+
   // Open-session clock: rolls the weekly scoreboard over on Monday while the
   // app stays open (no full reload needed).
   const now = useRecurrenceClock();
 
-  if (loading) return <div className="p-8 text-center text-gray-500 animate-pulse">{t('loading')}</div>;
+  if (loading) return <PageLoader label={t('loading')} />;
 
   // Calculate "Weekly XP" for each member — the current local Mon–Sun week.
   // Uses the SAME Monday-based week key as recurring weekly tasks, so the
@@ -61,16 +65,6 @@ export function Family() {
     memberTasks.forEach(c => {
       const task = tasks.find(t => t.id === c.taskId);
       if (task) weeklyXP += (task.pointsReward || 0);
-    });
-
-    // Add behaviour event points earned this week
-    const memberEvents = behaviourEvents.filter(e =>
-      e.userId === member.id &&
-      e.timestamp &&
-      localWeekKey(e.timestamp.toDate()) === currentWeekKey
-    );
-    memberEvents.forEach(e => {
-      weeklyXP += (e.pointsDelta || 0);
     });
 
     return { ...member, weeklyXP };
@@ -119,16 +113,41 @@ export function Family() {
 
   return (
     <div className="space-y-6 animate-in fade-in duration-300">
-      <header className="flex justify-between items-center">
-        <div>
+      <header className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <div className="min-w-0">
           <h1 className="text-2xl font-bold text-gray-900 tracking-tight">{t('title')}</h1>
           <p className="text-gray-500 mt-1">{t('subtitle')}</p>
         </div>
-        {isParentRole(currentUser?.role) && !activeChallenge && (
-          <Button onClick={() => setIsChallengeModalOpen(true)} size="sm" className="bg-primary-500 rounded-full h-10 w-10 p-0 shadow-lg flex items-center justify-center">
-            <Plus size={20} />
-          </Button>
-        )}
+        <div className="flex flex-wrap items-center gap-2">
+          {isParentRole(currentUser?.role) && !activeChallenge && (
+            <Button
+              onClick={() => setIsChallengeModalOpen(true)}
+              size="sm"
+              aria-label={t('newChallenge.title')}
+              className="bg-primary-500 rounded-full h-9 w-9 p-0 shadow-md flex items-center justify-center shrink-0"
+            >
+              <Plus size={18} />
+            </Button>
+          )}
+          {isOwnerRole(currentUser?.role) && (
+            <>
+              <Button variant="outline" size="sm" onClick={() => setIsAddChildOpen(true)} className="border-primary-300 text-primary-700 hover:bg-primary-50 whitespace-nowrap">
+                <UserPlus size={16} className="mr-1 shrink-0" />
+                {t('addChild')}
+              </Button>
+              <Button variant="secondary" size="sm" onClick={() => {
+                const inviteCode = document.querySelector('[data-invite-code]') as HTMLElement;
+                if (inviteCode) {
+                  navigator.clipboard.writeText(inviteCode.textContent || '');
+                  showToast(t('inviteCopied'));
+                }
+              }} className="bg-primary-50 text-primary-700 border-primary-300 hover:bg-primary-100 whitespace-nowrap">
+                <UserPlus size={16} className="mr-1 shrink-0" />
+                {t('inviteMember')}
+              </Button>
+            </>
+          )}
+        </div>
       </header>
 
       {/* Active Family Challenge */}
@@ -330,6 +349,17 @@ export function Family() {
             const name = createLoginFor?.displayName ?? 'child';
             setCreateLoginFor(null);
             showToast(t('loginCreated', { name }));
+          }}
+        />
+      )}
+
+      {/* Add Child Modal */}
+      {isAddChildOpen && (
+        <AddChildModal
+          familyId={currentUser.familyId}
+          onClose={() => setIsAddChildOpen(false)}
+          onChildAdded={() => {
+            showToast(t('childAdded'));
           }}
         />
       )}
