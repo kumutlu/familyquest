@@ -31,16 +31,18 @@ vi.mock('react-i18next', () => ({
 }));
 
 describe('GamificationSummaryCard', () => {
-  it('renders unavailable state when summary is null', () => {
+  it('renders skeleton placeholder when summary is null', () => {
     render(<GamificationSummaryCard summary={null} />);
-    expect(screen.getByTestId('gamification-summary')).toBeInTheDocument();
-    expect(screen.getByText('Loading…')).toBeInTheDocument();
+    expect(screen.getByTestId('gamification-summary-skeleton')).toBeInTheDocument();
+    // Must never look like a real production card
+    expect(screen.queryByText(/Level 1/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/Updating/)).not.toBeInTheDocument();
   });
 
-  it('renders unavailable state when summary is undefined', () => {
+  it('renders skeleton placeholder when summary is undefined', () => {
     render(<GamificationSummaryCard summary={undefined as any} />);
-    expect(screen.getByTestId('gamification-summary')).toBeInTheDocument();
-    expect(screen.getByText('Loading…')).toBeInTheDocument();
+    expect(screen.getByTestId('gamification-summary-skeleton')).toBeInTheDocument();
+    expect(screen.queryByText(/Level 1/)).not.toBeInTheDocument();
   });
 
   it('renders unavailable state when isAvailable is false', () => {
@@ -58,7 +60,9 @@ describe('GamificationSummaryCard', () => {
       isAvailable: false,
     };
     render(<GamificationSummaryCard summary={summary} />);
-    expect(screen.getByText('Loading…')).toBeInTheDocument();
+    expect(screen.getByTestId('gamification-summary-skeleton')).toBeInTheDocument();
+    expect(screen.queryByText(/Level 1/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/Updating/)).not.toBeInTheDocument();
   });
 
   it('renders available summary with level and XP progress', () => {

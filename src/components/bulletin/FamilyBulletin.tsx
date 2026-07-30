@@ -119,8 +119,8 @@ export function FamilyBulletin() {
                 {!readIds.has(item.id) && (
                   <Button
                     size="sm"
-                    variant="ghost"
-                    className="w-full sm:w-auto"
+                    variant="primary"
+                    className="min-h-[44px] w-full sm:w-auto"
                     onClick={() => markAnnouncementRead(familyId, item.id, currentUser.id)}
                   >
                     {t('markRead')}
@@ -138,12 +138,23 @@ export function FamilyBulletin() {
                 </Button>
               )}
               {canManage && (
-                <div className="mt-3 flex flex-col gap-2 sm:flex-row sm:gap-2">
-                  <Button size="sm" variant="ghost" onClick={() => setEditing(item)} className="w-full sm:w-auto">{t('edit')}</Button>
-                  {item.status === 'active' && (
-                    <Button size="sm" variant="ghost" onClick={() => archiveAnnouncement(familyId, item.id)} className="w-full sm:w-auto">{t('archive')}</Button>
-                  )}
-                  <Button size="sm" variant="ghost" onClick={() => window.confirm(t('deleteConfirm')) && deleteAnnouncement(familyId, item.id)} className="w-full sm:w-auto">
+                <div className="mt-2 space-y-1.5 sm:flex sm:items-center sm:gap-2 sm:space-y-0">
+                  {/* Edit + Archive share one row on mobile */}
+                  <div className="grid grid-cols-2 gap-1.5 sm:contents">
+                    <Button size="sm" variant="outline" onClick={() => setEditing(item)} className="min-h-[44px] w-full sm:w-auto">{t('edit')}</Button>
+                    {item.status === 'active' ? (
+                      <Button size="sm" variant="outline" onClick={() => archiveAnnouncement(familyId, item.id)} className="min-h-[44px] w-full sm:w-auto">{t('archive')}</Button>
+                    ) : (
+                      <span aria-hidden="true" className="sm:hidden" />
+                    )}
+                  </div>
+                  {/* Delete stays separate as a destructive action */}
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    onClick={() => window.confirm(t('deleteConfirm')) && deleteAnnouncement(familyId, item.id)}
+                    className="min-h-[44px] w-full text-danger-500 hover:bg-red-50 hover:text-danger-600 sm:w-auto"
+                  >
                     {t('delete')}
                   </Button>
                 </div>

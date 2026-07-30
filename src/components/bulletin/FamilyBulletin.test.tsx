@@ -119,7 +119,7 @@ describe('FamilyBulletin — responsive layout', () => {
     expect(markReadBtn.className).toContain('w-full');
   });
 
-  it('action buttons (edit, archive, delete) stack vertically on mobile', () => {
+  it('places edit + archive on one row and delete on its own row (mobile)', () => {
     state.currentUser = { id: 'parent1', familyId: 'f1', role: 'owner' } as any;
     state.items = [
       { id: 'a1', familyId: 'f1', title: 'Test', message: 'Body', type: 'general', audienceType: 'family', audienceUserIds: [], priority: 'normal', pinned: false, status: 'active', createdBy: 'p1', createdAt: 1, updatedAt: 1 },
@@ -127,8 +127,24 @@ describe('FamilyBulletin — responsive layout', () => {
     const { container } = render(<MemoryRouter><FamilyBulletin /></MemoryRouter>);
     const actionGroup = container.querySelector('article > div:last-child');
     expect(actionGroup).not.toBeNull();
-    expect(actionGroup?.className).toContain('flex-col');
-    expect(actionGroup?.className).toContain('sm:flex-row');
+    // Edit + Archive share a two-column row on mobile
+    const pairRow = actionGroup?.querySelector('div');
+    expect(pairRow?.className).toContain('grid-cols-2');
+    // Delete sits outside the pair row as a separate destructive action
+    const deleteBtn = screen.getByRole('button', { name: 'Delete' });
+    expect(pairRow?.contains(deleteBtn)).toBe(false);
+    expect(deleteBtn.className).toContain('text-danger-500');
+  });
+
+  it('action buttons keep >=44px touch targets on mobile', () => {
+    state.currentUser = { id: 'parent1', familyId: 'f1', role: 'owner' } as any;
+    state.items = [
+      { id: 'a1', familyId: 'f1', title: 'Test', message: 'Body', type: 'general', audienceType: 'family', audienceUserIds: [], priority: 'normal', pinned: false, status: 'active', createdBy: 'p1', createdAt: 1, updatedAt: 1 },
+    ];
+    render(<MemoryRouter><FamilyBulletin /></MemoryRouter>);
+    for (const name of ['Mark as read', 'Edit', 'Archive', 'Delete']) {
+      expect(screen.getByRole('button', { name }).className).toContain('min-h-[44px]');
+    }
   });
 
   it('action buttons are full-width on mobile', () => {

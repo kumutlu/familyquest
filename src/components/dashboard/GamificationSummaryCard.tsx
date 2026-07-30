@@ -33,20 +33,33 @@ export interface GamificationSummaryCardProps {
 export function GamificationSummaryCard({ summary }: GamificationSummaryCardProps) {
   const { t } = useTranslation('dashboard');
 
-  // Handle unavailable or rebuilding summary
+  // Handle unavailable or rebuilding summary.
+  // Render a neutral skeleton placeholder — never a card that could be
+  // mistaken for real data (e.g. "Level 1 / Loading… / Updating…").
   if (!summary || !summary.isAvailable) {
     return (
-      <Card data-testid="gamification-summary" className="border-none bg-primary-500 text-white">
+      <Card
+        data-testid="gamification-summary-skeleton"
+        role="status"
+        aria-busy="true"
+        aria-label={t('gamification.loading')}
+        className="animate-pulse border-none bg-gray-100"
+      >
         <CardHeader className="border-none pb-2">
-          <CardTitle className="flex justify-between text-sm font-medium uppercase tracking-wider text-white opacity-90">
-            {t('gamification.level', { level: 1 })}
-            <span>{t('gamification.loading')}</span>
-          </CardTitle>
+          <div className="flex justify-between">
+            <div className="h-4 w-24 rounded bg-gray-200" />
+            <div className="h-4 w-10 rounded bg-gray-200" />
+          </div>
         </CardHeader>
         <CardContent>
-          <p className="mt-3 text-right text-xs font-medium text-primary-200">
-            {t('gamification.updating')}
-          </p>
+          <div className="h-2 w-full rounded-full bg-gray-200" />
+          <div className="mt-3 ml-auto h-3 w-28 rounded bg-gray-200" />
+          <div className="mt-2 ml-auto h-3 w-32 rounded bg-gray-200" />
+          <div className="mt-4 grid grid-cols-2 gap-3">
+            <div className="mx-auto h-8 w-20 rounded bg-gray-200" />
+            <div className="mx-auto h-8 w-20 rounded bg-gray-200" />
+          </div>
+          <span className="sr-only">{t('gamification.loading')}</span>
         </CardContent>
       </Card>
     );
