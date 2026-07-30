@@ -78,6 +78,24 @@ function requireActorId(): string {
   return uid;
 }
 
+// Managed children sign in with a synthetic Auth UID while their Firestore
+// document ID is carried on the token as the `childId` custom claim.
+// Ownership comparisons must use the Firestore document ID, not the Auth UID.
+async function getEffectiveActorId(): Promise<string> {
+  const user = auth.currentUser;
+  if (!user?.uid) throw new Error('Authentication required');
+  try {
+    const tokenResult = await user.getIdTokenResult?.();
+    const claims = (tokenResult?.claims ?? {}) as Record<string, unknown>;
+    if (claims.managedChild === true && typeof claims.childId === 'string' && claims.childId) {
+      return claims.childId;
+    }
+  } catch {
+    // Fall back to the Auth UID when claims cannot be resolved.
+  }
+  return user.uid;
+}
+
 export const signUp = async (email: string, pass: string, name: string) => {
   const cred = await createUserWithEmailAndPassword(auth, email, pass);
   // Create user doc without familyId first
@@ -500,8 +518,8 @@ export const createTask = async (familyId: string, taskData: any) => {
 };
 
 export const completeTask = async (familyId: string, taskId: string, userId: string, requiresApproval: boolean, now: Date = new Date()) => {
-  const actorId = auth.currentUser?.uid;
-  if (!actorId) throw new Error('Not authenticated');
+  if (!auth.currentUser?.uid) throw new Error('Not authenticated');
+  const actorId = await getEffectiveActorId();
   if (actorId !== userId) throw new Error('Cannot complete a task for another user');
   const approverIds = await getApproverIds(familyId);
   const taskRef = doc(db, `families/${familyId}/tasks`, taskId);
@@ -961,8 +979,8 @@ export const claimChallenge = async (familyId: string, challengeId: string, rewa
 // ---------------------------
 
 export const redeemReward = async (familyId: string, userId: string, rewardId: string) => {
-  const actorId = auth.currentUser?.uid;
-  if (!actorId) throw new Error('Not authenticated');
+  if (!auth.currentUser?.uid) throw new Error('Not authenticated');
+  const actorId = await getEffectiveActorId();
   if (actorId !== userId) throw new Error('Cannot redeem a reward for another user');
   const rewardRef = doc(db, `families/${familyId}/rewards`, rewardId);
   const userRef = doc(db, 'users', userId);
@@ -1582,7 +1600,7 @@ export const contributeToGoal = async (
   amountPence: number,
   opts: ContributeToGoalOptions,
 ) => {
-  const actorId = requireActorId();
+  const actorId = await getEffectiveActorId();
   if (actorId !== childId) throw new Error('A child can only contribute from their own wallet');
   if (!Number.isInteger(amountPence) || amountPence <= 0) {
     throw new Error('Amount must be a positive integer number of pence');
@@ -1828,7 +1846,7 @@ export const requestGoalWithdrawal = async (
   amountPence: number,
   clientReqId: string,
 ) => {
-  const actorId = requireActorId();
+  const actorId = await getEffectiveActorId();
   if (actorId !== childId) throw new Error('A child can only request their own withdrawal');
   if (!Number.isInteger(amountPence) || amountPence <= 0) {
     throw new Error('Amount must be a positive integer number of pence');
@@ -2651,8 +2669,8 @@ export const contributeToFund = async (
   userName: string
 ) => {
   await assertPetBoxEnabled(familyId);
-  const actorId = auth.currentUser?.uid;
-  if (!actorId) throw new Error('Not authenticated');
+  if (!auth.currentUser?.uid) throw new Error('Not authenticated');
+  const actorId = await getEffectiveActorId();
   if (actorId !== userId) throw new Error('Cannot create a contribution for another user');
   const reqRef = doc(collection(db, `families/${familyId}/petbox_requests`));
   const feedRef = doc(collection(db, `families/${familyId}/feed`));

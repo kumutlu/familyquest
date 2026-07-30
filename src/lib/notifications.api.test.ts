@@ -92,7 +92,7 @@ describe('notification creation on business events', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     firestore.reset();
-    firestore.getDoc.mockResolvedValue(snapshot({ title: 'Clean bedroom', pointsReward: 20 }));
+    firestore.getDoc.mockResolvedValue(snapshot({ title: 'Clean bedroom', pointsReward: 20, assigneeId: 'child-1' }));
   });
 
   it('child task submission notifies parent/owner approvers', async () => {
@@ -100,7 +100,7 @@ describe('notification creation on business events', () => {
     firestore.getDocs.mockResolvedValue(approvers);
     const tx = transactionWith({
       'users/child-1': { familyId: 'fam1', role: 'child', displayName: 'Muhammed', rewardPoints: 0, lifetimeXP: 0, lastActiveDate: null },
-      'families/fam1/tasks/task-1': { title: 'Clean bedroom', pointsReward: 20 },
+      'families/fam1/tasks/task-1': { title: 'Clean bedroom', pointsReward: 20, assigneeId: 'child-1' },
     });
     await completeTask('fam1', 'task-1', 'child-1', true);
     const n = notifByType(notifSets(tx), 'task_submitted');
@@ -116,7 +116,7 @@ describe('notification creation on business events', () => {
     authState.currentUser = { uid: 'owner-1' };
     const tx = transactionWith({
       'families/fam1/task_completions/c1': { status: 'pending_approval', taskId: 'task-1', assigneeId: 'child-1' },
-      'families/fam1/tasks/task-1': { title: 'Clean bedroom', pointsReward: 20 },
+      'families/fam1/tasks/task-1': { title: 'Clean bedroom', pointsReward: 20, assigneeId: 'child-1' },
       'users/child-1': { familyId: 'fam1', role: 'child', rewardPoints: 5, lifetimeXP: 0 },
       'users/owner-1': { familyId: 'fam1', role: 'owner', displayName: 'Kemal' },
     });
@@ -134,7 +134,7 @@ describe('notification creation on business events', () => {
     authState.currentUser = { uid: 'owner-1' };
     const tx = transactionWith({
       'families/fam1/task_completions/c1': { status: 'pending_approval', taskId: 'task-1', assigneeId: 'child-1' },
-      'families/fam1/tasks/task-1': { title: 'Clean bedroom' },
+      'families/fam1/tasks/task-1': { title: 'Clean bedroom', assigneeId: 'child-1' },
       'users/owner-1': { familyId: 'fam1', role: 'owner', displayName: 'Kemal' },
     });
     await rejectTaskCompletion('fam1', 'c1', 'Please redo');
@@ -349,7 +349,7 @@ describe('recipient failure behaviour', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     firestore.reset();
-    firestore.getDoc.mockResolvedValue(snapshot({ title: 'Clean bedroom', pointsReward: 20 }));
+    firestore.getDoc.mockResolvedValue(snapshot({ title: 'Clean bedroom', pointsReward: 20, assigneeId: 'child-1' }));
   });
 
   it('completeTask still creates the completion when approvers cannot be resolved', async () => {
@@ -357,7 +357,7 @@ describe('recipient failure behaviour', () => {
     firestore.getDocs.mockResolvedValue({ docs: [] }); // resolution fails -> no approvers
     const tx = transactionWith({
       'users/child-1': { familyId: 'fam1', role: 'child', displayName: 'Muhammed', rewardPoints: 0, lifetimeXP: 0, lastActiveDate: null },
-      'families/fam1/tasks/task-1': { title: 'Clean bedroom', pointsReward: 20 },
+      'families/fam1/tasks/task-1': { title: 'Clean bedroom', pointsReward: 20, assigneeId: 'child-1' },
     });
     await completeTask('fam1', 'task-1', 'child-1', true);
     // No task_submitted notification was queued (non-fatal).
@@ -367,11 +367,21 @@ describe('recipient failure behaviour', () => {
     expect(completionSets.length).toBeGreaterThan(0);
   });
 
+  it('completeTask throws when task is assigned to another child', async () => {
+    authState.currentUser = { uid: 'child-2' };
+    firestore.getDocs.mockResolvedValue(approvers);
+    transactionWith({
+      'users/child-2': { familyId: 'fam1', role: 'child', displayName: 'Osman', rewardPoints: 0, lifetimeXP: 0, lastActiveDate: null },
+      'families/fam1/tasks/task-1': { title: 'Clean bedroom', pointsReward: 20, assigneeId: 'child-1' },
+    });
+    await expect(completeTask('fam1', 'task-1', 'child-2', true)).rejects.toThrow('Task is not assigned to this user');
+  });
+
   it('excludes the actor from notification recipients (task approval)', async () => {
     authState.currentUser = { uid: 'owner-1' };
     const tx = transactionWith({
       'families/fam1/task_completions/c1': { status: 'pending_approval', taskId: 'task-1', assigneeId: 'child-1' },
-      'families/fam1/tasks/task-1': { title: 'Clean bedroom', pointsReward: 20 },
+      'families/fam1/tasks/task-1': { title: 'Clean bedroom', pointsReward: 20, assigneeId: 'child-1' },
       'users/child-1': { familyId: 'fam1', role: 'child', rewardPoints: 5, lifetimeXP: 0 },
       'users/owner-1': { familyId: 'fam1', role: 'owner', displayName: 'Kemal' },
     });
