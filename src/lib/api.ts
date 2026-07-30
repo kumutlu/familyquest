@@ -3086,7 +3086,10 @@ export const approveProfileUpdateRequest = async (familyId: string, requestId: s
 
     const reviewerRef = doc(db, 'users', currentUserUid);
     const reviewerDoc = await transaction.get(reviewerRef);
-    const reviewerName = reviewerDoc.exists() ? (reviewerDoc.data().displayName || 'Parent') : 'Parent';
+    if (!reviewerDoc.exists() || reviewerDoc.data().familyId !== familyId || !['parent', 'owner'].includes(reviewerDoc.data().role)) {
+      throw new Error('Unauthorized');
+    }
+    const reviewerName = reviewerDoc.data().displayName || 'Parent';
 
     // Resolve the notification dedupe read up-front (reads-before-writes).
     const notifPlan = await loadNotificationRecipientsInTransaction(transaction, familyId, {
@@ -3158,7 +3161,10 @@ export const rejectProfileUpdateRequest = async (familyId: string, requestId: st
 
     const reviewerRef = doc(db, 'users', currentUserUid);
     const reviewerDoc = await transaction.get(reviewerRef);
-    const reviewerName = reviewerDoc.exists() ? (reviewerDoc.data().displayName || 'Parent') : 'Parent';
+    if (!reviewerDoc.exists() || reviewerDoc.data().familyId !== familyId || !['parent', 'owner'].includes(reviewerDoc.data().role)) {
+      throw new Error('Unauthorized');
+    }
+    const reviewerName = reviewerDoc.data().displayName || 'Parent';
 
     // Resolve the notification dedupe read up-front (reads-before-writes).
     const notifPlan = await loadNotificationRecipientsInTransaction(transaction, familyId, {
@@ -3819,7 +3825,7 @@ export const mapApprovalError = (err: unknown): MappedApprovalError => {
   return { message: "We couldn’t reject this request. Please try again.", code, raw: err };
 };
 
-export type PendingApprovalKind = 'task' | 'transfer' | 'money_request' | 'petbox' | 'goal';
+export type PendingApprovalKind = 'task' | 'transfer' | 'money_request' | 'petbox' | 'goal' | 'profile_update';
 
 const pendingApprovalContract: Record<PendingApprovalKind, { collectionName: string; pendingStatuses: string[]; actorField: string }> = {
   task: { collectionName: 'task_completions', pendingStatuses: ['pending_approval'], actorField: 'assigneeId' },
@@ -3827,6 +3833,7 @@ const pendingApprovalContract: Record<PendingApprovalKind, { collectionName: str
   money_request: { collectionName: 'money_requests', pendingStatuses: ['pending', 'pending_acceptance'], actorField: 'requesterId' },
   petbox: { collectionName: 'petbox_requests', pendingStatuses: ['pending'], actorField: 'childId' },
   goal: { collectionName: 'goal_requests', pendingStatuses: ['pending'], actorField: 'childId' },
+  profile_update: { collectionName: 'profile_update_requests', pendingStatuses: ['pending'], actorField: 'childId' },
 };
 
 /** Cancel an uneffected request. This transition deliberately performs no balance write. */

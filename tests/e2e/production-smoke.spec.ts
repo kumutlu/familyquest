@@ -20,7 +20,7 @@ import { loginAs } from './utils/auth-production';
 const PARENT = 'test-parent@familyquest.test';
 const CHILD = 'test-child@familyquest.test';
 const PASS = 'Test1234';
-// Fixed title. The cleanup script (scripts/cleanup-smoke-goals.ts) clears
+// Fixed title. The cleanup script (scripts/cleanup-smoke.ts) clears
 // the goal-create idempotency doc before each run, so a re-run with the
 // same title performs a real write (no idempotent-replay short-circuit).
 const GOAL_TITLE = 'Smoke Goal 1';
@@ -84,5 +84,86 @@ test.describe('Goals production smoke (live project)', () => {
     await goal.click();
     await expect(page.locator('text=Contribution Breakdown').first()).toBeVisible({ timeout: 5000 });
     await page.screenshot({ path: 'test-results/prod-goal-detail.png', fullPage: true });
+  });
+});
+
+const UNRELATED = 'test-unrelated@familyquest.test';
+
+test.describe('Task Approval Production Smoke (Stage 2 Gamification)', () => {
+  test('T1 Child can complete a task, but cannot approve it', async ({ page }) => {
+    test.setTimeout(60000);
+    await loginAs(page, CHILD, PASS);
+    await page.goto('/tasks');
+    await expect(page.locator('text=Tasks').first()).toBeVisible({ timeout: 10000 });
+
+    const task = page.locator('text="Clean Room (Smoke)"').first();
+    await expect(task).toBeVisible({ timeout: 10000 });
+    await task.click();
+
+    // Mark as done
+    const markDoneBtn = page.getByRole('button', { name: 'Mark as Done' });
+    if (await markDoneBtn.isVisible()) {
+      await markDoneBtn.click();
+    }
+
+    // Ensure child sees it's waiting, but NO approve button exists for child
+    await expect(page.locator('text="Waiting for Approval"').first()).toBeVisible({ timeout: 10000 });
+    await expect(page.getByRole('button', { name: 'Approve' })).toHaveCount(0);
+  });
+
+  test('T2 Unrelated family parent cannot see or approve the task', async ({ page }) => {
+    test.setTimeout(60000);
+    await loginAs(page, UNRELATED, PASS);
+    await page.goto('/');
+
+    // Dashboard should load, but no Approval Center items should appear
+    await expect(page.locator('text="Dashboard"').first()).toBeVisible({ timeout: 10000 });
+
+    // Ensure no pending task completions are shown
+    await expect(page.locator('text="Task Completion"')).toHaveCount(0);
+    await expect(page.locator('text="Clean Room (Smoke)"')).toHaveCount(0);
+  });
+
+  test('T3 Parent can reject a pending task', async ({ page }) => {
+    test.setTimeout(60000);
+    await loginAs(page, PARENT, PASS);
+    await page.goto('/');
+
+    // Find the task completion in Approval Center
+    const rejectBtn = page.getByRole('button', { name: 'Reject' }).first();
+    await expect(page.locator('text="Task Completion"').first()).toBeVisible({ timeout: 10000 });
+    await expect(rejectBtn).toBeVisible();
+
+    await rejectBtn.click();
+    // It should disappear
+    await expect(page.locator('text="Task Completion"')).not.toBeVisible({ timeout: 10000 });
+  });
+
+  test('T4 Parent can approve a pending task', async ({ page }) => {
+    test.setTimeout(90000); // 90s because we have to complete it again
+    // 1. Child marks it done again
+    await loginAs(page, CHILD, PASS);
+    await page.goto('/tasks');
+    const task = page.locator('text="Clean Room (Smoke)"').first();
+    await expect(task).toBeVisible({ timeout: 10000 });
+    await task.click();
+    const markDoneBtn = page.getByRole('button', { name: 'Mark as Done' });
+    if (await markDoneBtn.isVisible()) {
+      await markDoneBtn.click();
+    }
+    await expect(page.locator('text="Waiting for Approval"').first()).toBeVisible({ timeout: 10000 });
+
+    // 2. Parent approves it
+    await loginAs(page, PARENT, PASS);
+    await page.goto('/');
+    const approveBtn = page.getByRole('button', { name: 'Approve' }).first();
+    await expect(page.locator('text="Task Completion"').first()).toBeVisible({ timeout: 10000 });
+    await expect(approveBtn).toBeVisible();
+
+    // This button click uses the current client payload (no deprecated fields)
+    await approveBtn.click();
+
+    // Task completion should disappear (successfully processed)
+    await expect(page.locator('text="Task Completion"')).not.toBeVisible({ timeout: 10000 });
   });
 });

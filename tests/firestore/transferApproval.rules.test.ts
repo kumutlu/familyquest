@@ -201,4 +201,52 @@ describe('Transfer approval (runTransaction) - regression for feed visibleTo bug
       });
     }));
   });
+
+  // Feed document schema validation tests
+  // Note: The original rules only use hasOnly() which ensures no extra fields,
+  // but does NOT require specific fields. Missing fields are allowed.
+  it('valid feed document succeeds', async () => {
+    const db = testEnv.authenticatedContext('parent1').firestore();
+    await assertSucceeds(runTransaction(db, async (t: any) => {
+      const feedRef = doc(collection(db, 'families/family1/feed'));
+      t.set(feedRef, {
+        actorId: 'parent1', actorName: 'Parent', type: 'custom',
+        text: 'valid feed', createdAt: serverTimestamp(), timestamp: serverTimestamp()
+      });
+    }));
+  });
+
+  it('missing actorName succeeds (hasOnly does not require fields)', async () => {
+    const db = testEnv.authenticatedContext('parent1').firestore();
+    await assertSucceeds(runTransaction(db, async (t: any) => {
+      const feedRef = doc(collection(db, 'families/family1/feed'));
+      t.set(feedRef, {
+        actorId: 'parent1', type: 'custom',
+        text: 'missing actorName', createdAt: serverTimestamp(), timestamp: serverTimestamp()
+      });
+    }));
+  });
+
+  it('missing createdAt succeeds (hasOnly does not require fields)', async () => {
+    const db = testEnv.authenticatedContext('parent1').firestore();
+    await assertSucceeds(runTransaction(db, async (t: any) => {
+      const feedRef = doc(collection(db, 'families/family1/feed'));
+      t.set(feedRef, {
+        actorId: 'parent1', actorName: 'Parent', type: 'custom',
+        text: 'missing createdAt', timestamp: serverTimestamp()
+      });
+    }));
+  });
+
+  it('extra field fails (hasOnly rejects unknown fields)', async () => {
+    const db = testEnv.authenticatedContext('parent1').firestore();
+    await assertFails(runTransaction(db, async (t: any) => {
+      const feedRef = doc(collection(db, 'families/family1/feed'));
+      t.set(feedRef, {
+        actorId: 'parent1', actorName: 'Parent', type: 'custom',
+        text: 'extra field', createdAt: serverTimestamp(), timestamp: serverTimestamp(),
+        extraField: 'should fail'
+      });
+    }));
+  });
 });

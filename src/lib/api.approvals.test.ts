@@ -21,7 +21,7 @@ vi.mock('firebase/auth', () => ({
 }))
 vi.mock('./firebase', () => ({ db: { name: 'db' }, auth: authState, googleProvider: {} }))
 
-import { approveJoinRequest, approveMoneyRequest, approveTaskCompletion, approveTransferRequest, cancelPendingApproval, rejectMoneyRequest, rejectTaskCompletion, mapApprovalError } from './api'
+import { approveJoinRequest, approveMoneyRequest, approveProfileUpdateRequest, approveTaskCompletion, approveTransferRequest, cancelPendingApproval, rejectMoneyRequest, rejectProfileUpdateRequest, rejectTaskCompletion, mapApprovalError } from './api'
 
 function snapshot(data?: Record<string, any>) { return { exists: () => data !== undefined, data: () => data } }
 function transactionWith(docs: Record<string, Record<string, any> | undefined>, enforceReadBeforeWrite = false) {
@@ -258,6 +258,52 @@ describe('approval API transaction contracts', () => {
       await expect(rejectMoneyRequest('family-1', 'money-1', 'No')).rejects.toThrow('Request is not pending approval')
       expect(tx.update).not.toHaveBeenCalled()
     })
+  })
+})
+
+describe('profile_update request authorization', () => {
+  beforeEach(() => { vi.clearAllMocks(); firestore.reset(); authState.currentUser = { uid: 'owner-1' } })
+
+  it('rejects approval when the reviewer is not a parent or owner', async () => {
+    const tx = transactionWith({
+      'families/family-1/profile_update_requests/pu-1': { childId: 'child-1', status: 'pending', childName: 'Kid' },
+      'users/child-1': { familyId: 'family-1', role: 'child' },
+      'users/owner-1': { familyId: 'family-1', role: 'child', displayName: 'Kid' },
+    })
+    await expect(approveProfileUpdateRequest('family-1', 'pu-1')).rejects.toThrow('Unauthorized')
+    expect(tx.update).not.toHaveBeenCalled()
+  })
+
+  it('rejects rejection when the reviewer is not a parent or owner', async () => {
+    const tx = transactionWith({
+      'families/family-1/profile_update_requests/pu-1': { childId: 'child-1', status: 'pending', childName: 'Kid' },
+      'users/child-1': { familyId: 'family-1', role: 'child' },
+      'users/owner-1': { familyId: 'family-1', role: 'child', displayName: 'Kid' },
+    })
+    await expect(rejectProfileUpdateRequest('family-1', 'pu-1')).rejects.toThrow('Unauthorized')
+    expect(tx.update).not.toHaveBeenCalled()
+  })
+
+  it('allows approval when the reviewer is a parent', async () => {
+    const tx = transactionWith({
+      'families/family-1/profile_update_requests/pu-1': { childId: 'child-1', status: 'pending', childName: 'Kid' },
+      'users/child-1': { familyId: 'family-1', role: 'child' },
+      'users/parent-1': { familyId: 'family-1', role: 'parent', displayName: 'Parent' },
+    })
+    authState.currentUser = { uid: 'parent-1' }
+    await approveProfileUpdateRequest('family-1', 'pu-1')
+    expect(tx.update).toHaveBeenCalled()
+  })
+
+  it('allows rejection when the reviewer is a parent', async () => {
+    const tx = transactionWith({
+      'families/family-1/profile_update_requests/pu-1': { childId: 'child-1', status: 'pending', childName: 'Kid' },
+      'users/child-1': { familyId: 'family-1', role: 'child' },
+      'users/parent-1': { familyId: 'family-1', role: 'parent', displayName: 'Parent' },
+    })
+    authState.currentUser = { uid: 'parent-1' }
+    await rejectProfileUpdateRequest('family-1', 'pu-1')
+    expect(tx.update).toHaveBeenCalled()
   })
 })
 

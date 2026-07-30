@@ -113,7 +113,7 @@ function expectReadsBeforeWrites(tx: { _ops: string[] }) {
 
 const childUser = { familyId: 'family-1', role: 'child', displayName: 'Muhammed', rewardPoints: 500 }
 const ownerUser = { familyId: 'family-1', role: 'owner', displayName: 'Kemal' }
-const task = { title: 'Tidy room', pointsReward: 10 }
+const task = { title: 'Tidy room', pointsReward: 10, assigneeId: 'child-1' }
 const wallet = { balance: 1000 }
 
 describe('transaction operation ordering (reads-before-writes)', () => {

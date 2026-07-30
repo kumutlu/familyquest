@@ -1590,7 +1590,7 @@ service cloud.firestore {
           || (request.resource.data.diff(resource.data).affectedKeys().hasAny(['lastBehaviourEventId']) && isValidBehaviourPointMutation(uid)) ||
         (!('familyId' in resource.data) && 'familyId' in request.resource.data ? isValidOwnerBootstrap(uid) || isValidJoinProfileUpdate(uid) : false) ||
         ('familyId' in resource.data && isOwner(resource.data.familyId) && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['role']) && resource.data.get('role', 'null') != 'child' && request.resource.data.role != 'child') ||
-        ('familyId' in resource.data && isParent(resource.data.familyId) && resource.data.get('role', 'null') == 'child' && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['displayName', 'avatarUrl']))
+        ('familyId' in resource.data && isParent(resource.data.familyId) && resource.data.get('role', 'null') == 'child' && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['displayName', 'avatarUrl', 'avatarId']))
       );
 
       allow create: if isAuthenticated() && (

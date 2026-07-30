@@ -336,14 +336,33 @@ describe('OWNER/PARENT self-edit save (Edit Profile modal) — root-cause fix', 
     await assertFails(updateDoc(doc(db, 'users', ownerId), { rewardPoints: 99999 }));
     await assertFails(updateDoc(doc(db, 'users', ownerId), { balance: 12345 }));
   });
+it('a child cannot self-edit profile (approval flow preserved)', async () => {
+  const db = testEnv.authenticatedContext(childId).firestore();
+  await assertFails(updateDoc(doc(db, 'users', childId), { displayName: 'Hacked', avatarUrl: 'https://evil' }));
+});
 
-  it('a child cannot self-edit profile (approval flow preserved)', async () => {
-    const db = testEnv.authenticatedContext(childId).firestore();
-    await assertFails(updateDoc(doc(db, 'users', childId), { displayName: 'Hacked', avatarUrl: 'https://evil' }));
-  });
+it('a child cannot edit ANOTHER member profile', async () => {
+  const db = testEnv.authenticatedContext(childId).firestore();
+  await assertFails(updateDoc(doc(db, 'users', siblingId), { displayName: 'Hijacked' }));
+});
 
-  it('a child cannot edit ANOTHER member’s profile', async () => {
-    const db = testEnv.authenticatedContext(childId).firestore();
-    await assertFails(updateDoc(doc(db, 'users', siblingId), { displayName: 'Hijacked' }));
+it('parent can approve profile update with avatarId change on child user doc', async () => {
+  // Regression test: when a parent approves a profile_update_request that
+  // includes a requestedAvatarId, the approveProfileUpdateRequest
+  // transaction writes avatarId to users/{childId}. The Firestore rule
+  // for users/{userId} must allow parent-updates of avatarId on child
+  // profiles (displayName + avatarUrl + avatarId).
+  const db = testEnv.authenticatedContext(childId).firestore();
+  await setDoc(doc(db, `families/${familyId}/profile_update_requests`, 'req1'), {
+    ...baseRequest(childId, 'rare-neon'),
+    requestedAvatarId: 'rare-neon',
+    requestedAvatar: 'https://api.dicebear.com/7.x/avataaars/svg?seed=rare-neon',
   });
+  const pdb = testEnv.authenticatedContext(parentId).firestore();
+  await assertSucceeds(updateDoc(doc(pdb, 'users', childId), {
+    displayName: 'Alin Updated',
+    avatarId: 'rare-neon',
+    avatarUrl: 'https://api.dicebear.com/7.x/avataaars/svg?seed=rare-neon',
+  }));
+});
 });
