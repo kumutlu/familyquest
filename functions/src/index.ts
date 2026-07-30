@@ -151,6 +151,13 @@ export {
 // Managed child deletion (Phase 4B).
 // Trusted callable; see childDeletion.ts.
 export { deleteChild } from './childDeletion';
+export {
+  deleteFamily,
+  getFamilyDeletionStatus,
+  leaveFamily,
+  processFamilyDeletion,
+  recoverFamilyDeletionJobs,
+} from './familyDeletion';
 
 export {
   requestFamilyJoin,
