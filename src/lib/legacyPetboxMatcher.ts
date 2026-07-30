@@ -1,6 +1,6 @@
 /**
  * Safe matching strategy for legacy pet box donations without sourceId links.
- * 
+ *
  * Rules:
  * 1. Never match only by amount.
  * 2. Require enough fields to identify exactly one request.
@@ -41,7 +41,7 @@ function toDate(value: any): Date {
 
 /**
  * Try to find exactly one approved petbox_request matching the fund_transaction.
- * 
+ *
  * Matching criteria (all must match):
  * - familyId
  * - fundId
@@ -49,7 +49,7 @@ function toDate(value: any): Date {
  * - amountPence === amount (in pence)
  * - status === 'approved'
  * - createdAt within 5 minutes (handles async processing delay)
- * 
+ *
  * Returns matched petbox_request only if exactly one match found.
  */
 export function findLegacyPetboxRequest(
@@ -57,31 +57,31 @@ export function findLegacyPetboxRequest(
   petboxRequests: any[]
 ): LegacyMatchResult {
   const fundTxCreatedAt = toDate(input.createdAt);
-  
+
   // Filter candidates: must match familyId, fundId, childId, amount, status, recent timestamp
   const candidates = petboxRequests.filter(req => {
     // 1. Must match familyId exactly
     if (req.familyId !== input.familyId) return false;
-    
+
     // 2. Must match fundId exactly
     if (req.fundId !== input.fundId) return false;
-    
+
     // 3. Must match childId exactly
     if (req.childId !== input.fromUserId) return false;
-    
+
     // 4. Must match amount exactly (convert to pence if needed)
     const reqAmount = typeof req.amountPence === 'number' ? req.amountPence : req.amount;
     if (reqAmount !== input.amount) return false;
-    
+
     // 5. Must be approved
     if (req.status !== 'approved') return false;
-    
+
     // 6. Timestamps should be close (fund_transaction created after petbox_request approval)
     // Allow up to 5 minutes difference to account for async processing
     const reqCreatedAt = toDate(req.createdAt);
     const timeDiff = fundTxCreatedAt.getTime() - reqCreatedAt.getTime();
     if (timeDiff < 0 || timeDiff > 5 * 60 * 1000) return false;
-    
+
     return true;
   });
 
@@ -132,7 +132,7 @@ export function findLegacyPetboxRequest(
  */
 export function logLegacyMatchDiagnostics(result: LegacyMatchResult, verbose = false): void {
   const prefix = `[LegacyPetboxMatcher] TX ${result.diagnostics.fundTxId}`;
-  
+
   if (result.matched) {
     console.log(`${prefix} ✓ MATCHED petbox_request ${result.petboxRequestId}`);
     if (verbose) {

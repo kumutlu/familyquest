@@ -539,8 +539,10 @@ class AdminGamificationRepository {
                 transaction.update(checkpointRef, { dirty: true });
             transaction.create(familyRef.collection('feed').doc(feedId(logicalKey)), {
                 actorId: typeof completion.reviewedBy === 'string' ? completion.reviewedBy : childId,
+                actorName: typeof completion.reviewedByName === 'string' ? completion.reviewedByName : 'Parent',
                 type: 'custom', text: `Task approved: ${taskDocument.data().title ?? taskId} (+${effect.rewardPointsAward} pts)`,
                 visibleTo: [childId], timestamp: timestamp(args.processingAt), entityType: 'task_completion', entityId: args.completionId,
+                createdAt: timestamp(args.processingAt),
             });
             transaction.create(familyRef.collection('notifications').doc(notificationId(logicalKey)), {
                 familyId: args.familyId, type: 'task_approved', actorId: typeof completion.reviewedBy === 'string' ? completion.reviewedBy : childId,

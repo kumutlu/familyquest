@@ -6,6 +6,7 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc -b && vite build",
+    "typecheck": "tsc --noEmit",
     "lint": "oxlint",
     "preview": "vite preview",
     "test": "vitest run --dir src && vitest run --dir functions/src && vitest run --dir tests --exclude 'e2e/**' --exclude 'firestore/**' --exclude 'functions/gamification.integration.test.ts'",
@@ -15,6 +16,7 @@
     "test:migration:gamification": "firebase emulators:exec --only firestore 'vitest run scripts/migrate-legacy-xp.test.ts'",
     "test:functions:gamification": "firebase emulators:exec --only firestore 'vitest run tests/functions/gamification.integration.test.ts'",
     "test:e2e": "firebase emulators:exec --only firestore,auth 'playwright test'",
+    "test:smoke": "playwright test --config playwright.prod.config.ts",
     "data:export": "tsx scripts/export-family-data.ts",
     "data:reset:dry-run": "tsx scripts/reset-family-data.ts --dry-run",
     "data:reset": "tsx scripts/reset-family-data.ts --execute"
