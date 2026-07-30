@@ -11,8 +11,6 @@
   },
   "quickActions": {
     "heading": "Hızlı İşlemler",
-    "addChild": "Çocuk ekle",
-    "addChildHelper": "Yönetilen bir çocuk profili oluştur",
     "newTask": "Yeni Görev",
     "newTaskHelper": "Bir iş veya hedef ata",
     "newReward": "Yeni Ödül",
@@ -20,11 +18,7 @@
     "logBehaviour": "Davranış Ekle",
     "logBehaviourHelper": "İyi veya pek iyi olmayanı kaydet",
     "manageWallet": "Cüzdanı Yönet",
-    "manageWalletHelper": "Para ekle veya çek",
-    "petBox": "Evcil Kutusu",
-    "petBoxHelper": "Aile tasarruf kutusu",
-    "inviteMember": "Üye Davet Et",
-    "inviteMemberHelper": "Katılım kodunu paylaş"
+    "manageWalletHelper": "Para ekle veya çek"
   },
   "childrenOverview": {
     "heading": "Çocuklara Genel Bakış"

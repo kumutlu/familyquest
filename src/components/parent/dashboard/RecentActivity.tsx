@@ -1,6 +1,7 @@
 import { useTranslation } from 'react-i18next';
 import { useStore } from '../../../store/useStore';
 import { Card } from '../../ui/Card';
+import { EmptyState } from '../../ui/EmptyState';
 import { Zap, ArrowRightLeft, Gift, Coins, PawPrint, CheckCircle2, Activity, ChevronRight } from 'lucide-react';
 import type { ReactNode } from 'react';
 import { useRequestDetail } from '../../requests/RequestDetailContext';
@@ -59,9 +60,11 @@ export function RecentActivity() {
       </h2>
 
       {events.length === 0 ? (
-        <div className="rounded-2xl border border-gray-100 bg-white p-8 text-center text-gray-500 shadow-sm">
-          {t('recentActivity.empty')}
-        </div>
+        <EmptyState
+          title={t('recentActivity.empty')}
+          icon={<Activity size={22} aria-hidden="true" />}
+          className="shadow-sm"
+        />
       ) : (
         <Card className="p-1">
           {events.map(item => {

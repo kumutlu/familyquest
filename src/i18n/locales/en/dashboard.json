@@ -11,8 +11,6 @@
   },
   "quickActions": {
     "heading": "Quick Actions",
-    "addChild": "Add a child",
-    "addChildHelper": "Create a managed child profile",
     "newTask": "New Task",
     "newTaskHelper": "Assign a chore or goal",
     "newReward": "New Reward",
@@ -20,11 +18,7 @@
     "logBehaviour": "Log Behaviour",
     "logBehaviourHelper": "Record good or not-so-good",
     "manageWallet": "Manage Wallet",
-    "manageWalletHelper": "Add or withdraw money",
-    "petBox": "Pet Box",
-    "petBoxHelper": "Family savings pot",
-    "inviteMember": "Invite Member",
-    "inviteMemberHelper": "Share the join code"
+    "manageWalletHelper": "Add or withdraw money"
   },
   "childrenOverview": {
     "heading": "Children Overview"

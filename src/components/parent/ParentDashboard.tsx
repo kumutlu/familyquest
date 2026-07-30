@@ -1,6 +1,7 @@
 import { useTranslation } from 'react-i18next';
 import { useStore } from '../../store/useStore';
 import { Card, CardContent } from '../ui/Card';
+import { PageLoader } from '../ui/PageLoader';
 import { Avatar } from '../ui/Avatar';
 import { Button } from '../ui/Button';
 import { approveJoinRequest, rejectJoinRequest } from '../../lib/api';
@@ -17,6 +18,7 @@ import { ChildrenOverview } from './dashboard/ChildrenOverview';
 import { RecentActivity } from './dashboard/RecentActivity';
 import { WalletSummaryCard } from '../dashboard/WalletSummaryCard';
 import { GoalSummaryCard } from '../dashboard/GoalSummaryCard';
+import { RewardsSummaryCard } from '../dashboard/RewardsSummaryCard';
 import { PetBoxSummaryCard } from '../dashboard/PetBoxSummaryCard';
 import { isPetBoxEnabled } from '../../lib/familyFeatures';
 import { FamilyBulletin } from '../bulletin/FamilyBulletin';
@@ -28,6 +30,7 @@ const joinRequestProcessingKey = (request: { id: string; uid: string }) => `join
 
 export function ParentDashboard() {
   const { t } = useTranslation('dashboard');
+  const { t: tAuth } = useTranslation('auth');
   const {
     currentUser,
     familyMembers,
@@ -40,19 +43,19 @@ export function ParentDashboard() {
     bootstrapStatus,
   } = useStore();
   const [setupPromptHidden, setSetupPromptHidden] = useState(false);
-  const [isAddChildOpen, setIsAddChildOpen] = useState(false);
 
   const [joinProcessing, setJoinProcessing] = useState<Record<string, 'approve' | 'reject'>>({});
   const [joinError, setJoinError] = useState('');
   const [approvalRoles, setApprovalRoles] = useState<Record<string, 'child' | 'parent'>>({});
   const joinInFlight = useRef(new Set<string>());
 
+  const [isAddChildOpen, setIsAddChildOpen] = useState(false);
   const [isTaskModalOpen, setIsTaskModalOpen] = useState(false);
   const [isRewardModalOpen, setIsRewardModalOpen] = useState(false);
   const [isEventModalOpen, setIsEventModalOpen] = useState(false);
 
   if (loading || !currentUser) {
-    return <div className="p-8 text-center text-gray-500 animate-pulse">{t('loading')}</div>;
+    return <PageLoader label={t('loading')} />;
   }
 
   if (bootstrapError) {
@@ -98,15 +101,14 @@ export function ParentDashboard() {
     }
   };
 
+  const petBoxEnabled = isPetBoxEnabled(familyData);
+  const summaryCols = petBoxEnabled ? 'lg:grid-cols-4' : 'lg:grid-cols-3';
+
   return (
     <div className="space-y-8 animate-in fade-in duration-300 pb-8">
       <DashboardHeader />
 
-      <FamilyBulletin />
-
       <QuickActions
-        onAddChild={() => setIsAddChildOpen(true)}
-        petBoxEnabled={isPetBoxEnabled(familyData)}
         onNewTask={() => setIsTaskModalOpen(true)}
         onNewReward={() => setIsRewardModalOpen(true)}
         onLogBehaviour={() => setIsEventModalOpen(true)}
@@ -114,13 +116,16 @@ export function ParentDashboard() {
 
       <PendingApprovalsSection />
 
+      <FamilyBulletin />
+
       {/* Compact family summaries (Phase 3): reuse Phase 2 summary cards.
           These render the parent/owner aggregate views and link to the
           management screens. Children never see this surface. */}
-      <section className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+      <section className={`grid grid-cols-1 gap-4 sm:grid-cols-2 ${summaryCols}`}>
         <WalletSummaryCard />
         <GoalSummaryCard />
-        {isPetBoxEnabled(familyData) && <PetBoxSummaryCard />}
+        <RewardsSummaryCard />
+        {petBoxEnabled && <PetBoxSummaryCard />}
       </section>
 
       {/* Join Requests (owner only) */}
@@ -187,6 +192,12 @@ export function ParentDashboard() {
         </section>
       )}
 
+      <div className="flex justify-end">
+        <Button size="sm" onClick={() => setIsAddChildOpen(true)}>
+          {tAuth('familySetup.addChild')}
+        </Button>
+      </div>
+
       <ChildrenOverview />
 
       <RecentActivity />
@@ -210,6 +221,13 @@ export function ParentDashboard() {
         />
       )}
 
+      {isAddChildOpen && (
+        <AddChildModal
+          familyId={currentUser.familyId}
+          onClose={() => setIsAddChildOpen(false)}
+        />
+      )}
+
       {/* Forms / modals (reused, not duplicated) */}
       <BehaviourFormModal
         isOpen={isEventModalOpen}
@@ -218,12 +236,6 @@ export function ParentDashboard() {
       />
       <TaskFormModal isOpen={isTaskModalOpen} onClose={() => setIsTaskModalOpen(false)} />
       <RewardFormModal isOpen={isRewardModalOpen} onClose={() => setIsRewardModalOpen(false)} />
-      {isAddChildOpen && (
-        <AddChildModal
-          familyId={currentUser.familyId}
-          onClose={() => setIsAddChildOpen(false)}
-        />
-      )}
     </div>
   );
 }

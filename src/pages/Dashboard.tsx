@@ -1,5 +1,7 @@
 import { Flame, Star, MessageCircle, Inbox } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
+import { PageLoader } from '../components/ui/PageLoader';
+import { EmptyState } from '../components/ui/EmptyState';
 import { useStore } from '../store/useStore';
 import { isParentRole } from '../lib/roles';
 import { ParentDashboard } from '../components/parent/ParentDashboard';
@@ -38,7 +40,7 @@ export function Dashboard() {
   } = useStore();
   const { openRequest } = useRequestDetail();
 
-  if (loading || !currentUser) return <div className="p-8 text-center text-gray-500 animate-pulse">{t('loading')}</div>;
+  if (loading || !currentUser) return <PageLoader label={t('loading')} />;
 
   if (isParentRole(currentUser.role)) {
     return <ParentDashboard />;
@@ -152,9 +154,10 @@ export function Dashboard() {
           {t('recentActivity.dashboardHeading')}
         </h2>
         {feed.length === 0 ? (
-          <div className="rounded-2xl border border-gray-100 bg-white p-8 text-center text-gray-500">
-            {t('recentActivity.empty')}
-          </div>
+          <EmptyState
+            title={t('recentActivity.empty')}
+            icon={<MessageCircle size={22} aria-hidden="true" />}
+          />
         ) : (
           <div className="rounded-2xl border border-gray-100 bg-white p-1">
             {feed.slice(0, 8).map((item, idx) => {

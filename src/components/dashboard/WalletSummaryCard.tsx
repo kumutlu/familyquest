@@ -43,7 +43,8 @@ export function WalletSummaryCard() {
   };
 
   if (isParent) {
-    const wallets = childWallets || [];
+    const childMemberIds = new Set(familyMembers.filter(m => m.role === 'child').map(m => m.id));
+    const wallets = (childWallets || []).filter((w: any) => childMemberIds.has(w.id));
     const totalBalance = wallets.reduce((sum: number, w: any) => sum + (w.balance || 0), 0);
     const linkedCount = wallets.length;
     const memberCount = familyMembers.filter(m => m.role === 'child').length;

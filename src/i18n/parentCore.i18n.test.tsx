@@ -34,6 +34,7 @@ const api = vi.hoisted(() => ({
 vi.mock('../lib/api', () => api);
 
 vi.mock('../lib/roles', () => ({
+  isOwnerRole: (role: string) => role === 'owner',
   isParentRole: (role: string) => role === 'parent' || role === 'owner',
   isChildRole: (role: string) => role === 'child',
   getRoleLabel: (role: string) => role,

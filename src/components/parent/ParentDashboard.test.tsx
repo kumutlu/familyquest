@@ -42,6 +42,14 @@ vi.mock('../forms/RewardFormModal', () => ({
 vi.mock('../forms/BehaviourFormModal', () => ({
   BehaviourFormModal: ({ isOpen }: any) => (isOpen ? <div>Behaviour Form Modal</div> : null),
 }));
+vi.mock('../dashboard/RewardsSummaryCard', () => ({
+  RewardsSummaryCard: () => (
+    <div data-testid="rewards-summary">
+      <button type="button" aria-label="Manage rewards">Manage rewards</button>
+      Rewards Summary
+    </div>
+  ),
+}));
 
 import { ParentDashboard } from './ParentDashboard';
 
@@ -123,11 +131,12 @@ describe('ParentDashboard', () => {
     )).toBeInTheDocument();
   });
 
-  it('renders the dashboard sections (approvals + activity + quick actions)', () => {
+  it('renders dashboard sections in the correct order: Quick Actions → Approval Center → Family Bulletin → Summary → Children → Activity', () => {
     render(<MemoryRouter><ParentDashboard /></MemoryRouter>);
+    expect(screen.getByRole('button', { name: 'New Task' })).toBeInTheDocument();
     expect(screen.getByText('Approval Center Section')).toBeInTheDocument();
     expect(screen.getByText('Recent Family Activity')).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'New Task' })).toBeInTheDocument();
+    expect(screen.getByTestId('rewards-summary')).toBeInTheDocument();
   });
 
   it('shows the first-child prompt on Home only after authoritative empty membership loads', () => {
@@ -220,8 +229,8 @@ describe('ParentDashboard summary cards (Phase 3)', () => {
     store.state = {
       ...baseState(),
       childWallets: [
-        { id: 'w-1', balance: 500 },
-        { id: 'w-2', balance: 250 },
+        { id: 'c-1', balance: 500 },
+        { id: 'c-2', balance: 250 },
       ],
       familyMembers: [
         { id: 'c-1', role: 'child' },
@@ -237,11 +246,36 @@ describe('ParentDashboard summary cards (Phase 3)', () => {
     };
   });
 
-  it('renders the wallet, goals, and pet box summary cards', () => {
+  it('renders the wallet, goals, rewards, and pet box summary cards when Pet Box is enabled', () => {
     render(<MemoryRouter><ParentDashboard /></MemoryRouter>);
     expect(screen.getByTestId('wallet-summary')).toBeInTheDocument();
     expect(screen.getByTestId('goal-summary')).toBeInTheDocument();
+    expect(screen.getByTestId('rewards-summary')).toBeInTheDocument();
     expect(screen.getByTestId('petbox-summary')).toBeInTheDocument();
+  });
+
+  it('renders wallet, goals, and rewards summary cards when Pet Box is disabled', () => {
+    store.state = {
+      ...baseState(),
+      familyData: { petBoxEnabled: false },
+      childWallets: [
+        { id: 'c-1', balance: 500 },
+        { id: 'c-2', balance: 250 },
+      ],
+      familyMembers: [
+        { id: 'c-1', role: 'child' },
+        { id: 'c-2', role: 'child' },
+      ],
+      savingsGoals: [
+        { goalId: 'g-1', title: 'Bike', status: 'active', currentAmountPence: 500, targetAmountPence: 1000 },
+      ],
+      funds: [],
+    };
+    render(<MemoryRouter><ParentDashboard /></MemoryRouter>);
+    expect(screen.getByTestId('wallet-summary')).toBeInTheDocument();
+    expect(screen.getByTestId('goal-summary')).toBeInTheDocument();
+    expect(screen.getByTestId('rewards-summary')).toBeInTheDocument();
+    expect(screen.queryByTestId('petbox-summary')).not.toBeInTheDocument();
   });
 
   it('shows the parent/owner family wallet aggregate and links to /wallets', () => {
@@ -266,5 +300,17 @@ describe('ParentDashboard summary cards (Phase 3)', () => {
     expect(screen.getByText('1')).toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: /Open Pet Box/i }));
     expect(h.navigate).toHaveBeenCalledWith('/pet-box');
+  });
+
+  it('shows the rewards summary card', () => {
+    store.state = {
+      ...baseState(),
+      rewards: [
+        { id: 'r-1', title: 'Gold Star' },
+        { id: 'r-2', title: 'Badge' },
+      ],
+    };
+    render(<MemoryRouter><ParentDashboard /></MemoryRouter>);
+    expect(screen.getByTestId('rewards-summary')).toBeInTheDocument();
   });
 });

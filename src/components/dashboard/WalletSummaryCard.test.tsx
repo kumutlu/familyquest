@@ -58,8 +58,8 @@ describe('WalletSummaryCard', () => {
   it('parent sees aggregate of children wallets and links to /wallets', () => {
     baseStore.currentUser = { id: 'p-1', familyId: 'f-1', role: 'parent', displayName: 'Parent' };
     baseStore.childWallets = [
-      { id: 'w-1', balance: 500 },
-      { id: 'w-2', balance: 250 },
+      { id: 'c-1', balance: 500 },
+      { id: 'c-2', balance: 250 },
     ];
     baseStore.familyMembers = [
       { id: 'c-1', role: 'child' },
@@ -75,7 +75,7 @@ describe('WalletSummaryCard', () => {
 
   it('owner is treated as parent (links to /wallets)', () => {
     baseStore.currentUser = { id: 'o-1', familyId: 'f-1', role: 'owner', displayName: 'Owner' };
-    baseStore.childWallets = [{ id: 'w-1', balance: 0 }];
+    baseStore.childWallets = [{ id: 'c-1', balance: 0 }];
     baseStore.familyMembers = [];
     render(<MemoryRouter><WalletSummaryCard /></MemoryRouter>);
     expect(screen.getByText('Family Wallets')).toBeInTheDocument();
@@ -83,4 +83,20 @@ describe('WalletSummaryCard', () => {
     fireEvent.click(card);
     expect(h.navigate).toHaveBeenCalledWith('/wallets');
   });
+
+  it('only counts wallets belonging to active child members (not legacy/synthetic records)', () => {
+    baseStore.currentUser = { id: 'p-1', familyId: 'f-1', role: 'parent', displayName: 'Parent' }
+    baseStore.childWallets = [
+      { id: 'c-1', balance: 500 },
+      { id: 'c-2', balance: 250 },
+      { id: 'legacy-wallet', balance: 100 },
+    ]
+    baseStore.familyMembers = [
+      { id: 'c-1', role: 'child' },
+      { id: 'c-2', role: 'child' },
+    ]
+    render(<MemoryRouter><WalletSummaryCard /></MemoryRouter>)
+    expect(screen.getByText('2 of 2 child wallets linked')).toBeInTheDocument()
+    expect(screen.getByText('£7.50')).toBeInTheDocument()
+  })
 });
