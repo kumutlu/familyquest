@@ -50,18 +50,35 @@ service cloud.firestore {
         && resource.data.get('isManaged', false) == true;
     }
 
+    // A family that is being deleted is frozen: every normal client read and
+    // write across family paths must be denied. Legacy families without a
+    // lifecycleState field remain fully accessible.
+    function familyNotDeleting(familyId) {
+      return !exists(/databases/$(database)/documents/families/$(familyId))
+        || get(/databases/$(database)/documents/families/$(familyId)).data.get('lifecycleState', 'active') != 'deleting';
+    }
+
     function isOwner(familyId) {
       let userDoc = get(/databases/$(database)/documents/users/$(authProfileId()));
       return userDoc != null
+        && familyNotDeleting(familyId)
         && userDoc.data.get('familyId', 'null') == familyId
         && userDoc.data.get('role', 'null') == 'owner';
     }
 
-    function isParent(familyId) {
+    // Raw parent check with NO deletion-freeze test. Reserved for the heavy
+    // wallet-ledger validator chains that sit close to Firestore's 1000-
+    // expression budget; those chains apply familyNotDeleting() ONCE at the
+    // allow-statement level instead of once per validator.
+    function isParentRaw(familyId) {
       let userDoc = get(/databases/$(database)/documents/users/$(authProfileId()));
       return userDoc != null
         && userDoc.data.get('familyId', 'null') == familyId
         && (userDoc.data.get('role', 'null') == 'parent' || userDoc.data.get('role', 'null') == 'owner');
+    }
+
+    function isParent(familyId) {
+      return isParentRaw(familyId) && familyNotDeleting(familyId);
     }
 
     function isChildInFamily(familyId, childId) {
@@ -75,11 +92,14 @@ service cloud.firestore {
       let userDoc = get(/databases/$(database)/documents/users/$(authProfileId()));
       return userDoc != null
         && !requiresManagedChildPasswordChange()
+        && familyNotDeleting(familyId)
         && userDoc.data.get('familyId', 'null') == familyId;
     }
 
+    // Raw (no freeze) by design: every allow statement that uses this gate
+    // also applies familyNotDeleting() once at statement level.
     function isBehaviourManager(familyId) {
-      return isParent(familyId);
+      return isParentRaw(familyId);
     }
 
     function petBoxEnabled(familyId) {
@@ -212,7 +232,7 @@ service cloud.firestore {
       let txId = data.get('lastManualTxId', 'null');
       let tx = getAfter(/databases/$(database)/documents/families/$(familyId)/wallet_transactions/$(txId));
 
-      return isParent(familyId)
+      return isParentRaw(familyId)
         && 'lastManualTxId' in data
         && diff.hasOnly(['balance', 'lastManualTxId'])
         && tx != null
@@ -231,7 +251,7 @@ service cloud.firestore {
       let txId = data.get('lastManualTxId', 'null');
       let tx = getAfter(/databases/$(database)/documents/families/$(familyId)/wallet_transactions/$(txId));
 
-      return isParent(familyId)
+      return isParentRaw(familyId)
         && 'lastManualTxId' in data
         && diff.hasOnly(['balance', 'lastManualTxId'])
         && tx != null
@@ -250,7 +270,7 @@ service cloud.firestore {
       let txId = data.get('lastManualTxId', 'null');
       let tx = getAfter(/databases/$(database)/documents/families/$(familyId)/wallet_transactions/$(txId));
 
-      return isParent(familyId)
+      return isParentRaw(familyId)
         && 'lastManualTxId' in data
         && diff.hasOnly(['balance', 'lastManualTxId'])
         && tx != null
@@ -269,7 +289,7 @@ service cloud.firestore {
       let txId = data.get('lastManualTxId', 'null');
       let tx = getAfter(/databases/$(database)/documents/families/$(familyId)/wallet_transactions/$(txId));
 
-      return isParent(familyId)
+      return isParentRaw(familyId)
         && 'lastManualTxId' in data
         && diff.hasOnly(['balance', 'lastManualTxId'])
         && tx != null
@@ -303,7 +323,7 @@ service cloud.firestore {
       let txPath = /databases/$(database)/documents/families/$(familyId)/wallet_transactions/$(txId);
       let tx = getAfter(txPath);
       let delta = oldData.balance - data.balance;
-      return isParent(familyId)
+      return isParentRaw(familyId)
         && 'lastPenaltyTxId' in data
         && diff.hasOnly(['balance', 'lastPenaltyTxId'])
         && data.balance is int
@@ -349,7 +369,7 @@ service cloud.firestore {
       let requestId = tx == null ? 'null' : tx.data.get('sourceId', 'null');
       let req = getAfter(/databases/$(database)/documents/families/$(familyId)/petbox_requests/$(requestId));
 
-      return isParent(familyId)
+      return isParentRaw(familyId)
         && 'lastTransferTxId' in data
         && diff.hasOnly(['balance', 'lastTransferTxId', 'lastTransferReqId'])
         && tx != null
@@ -1601,12 +1621,28 @@ service cloud.firestore {
       allow delete: if false;
     }
 
+    // SERVER-ONLY FAMILY/ACCOUNT DELETION COLLECTIONS
+    // Deletion jobs and receipts are owned exclusively by Cloud Functions.
+    // Clients must never read or write them.
+    match /familyDeletionJobs/{jobId} {
+      allow read, write: if false;
+    }
+    match /familyDeletionReceipts/{receiptId} {
+      allow read, write: if false;
+    }
+    match /accountDeletionJobs/{jobId} {
+      allow read, write: if false;
+    }
+
     // FAMILIES
     match /families/{familyId} {
       allow read: if isFamilyMember(familyId);
       allow create: if isAuthenticated();
       allow update: if isOwner(familyId)
         && !request.resource.data.diff(resource.data).affectedKeys().hasAny(['inviteCode'])
+        && !request.resource.data.diff(resource.data).affectedKeys().hasAny([
+          'lifecycleState', 'deletionJobId', 'deletionRequestedAt', 'deletionRequestedBy'
+        ])
         && (!('gamificationConfig' in request.resource.data)
             || isValidGamificationConfig(request.resource.data.gamificationConfig))
         && (!('petBoxEnabled' in request.resource.data)
@@ -1717,7 +1753,7 @@ service cloud.firestore {
 
       match /behaviour_events/{eventId} {
         allow read: if isFamilyMember(familyId);
-        allow create: if isBehaviourManager(familyId) && isValidBehaviourEvent(familyId);
+        allow create: if familyNotDeleting(familyId) && isBehaviourManager(familyId) && isValidBehaviourEvent(familyId);
         allow update, delete: if false;
       }
 
@@ -1757,19 +1793,20 @@ service cloud.firestore {
         // and keeps the parent penalty log under Firestore's 1000-expression
         // budget. The client must supply lastPenaltyTxId (fixed in api.ts
         // addBehaviourEvent).
-        allow update: if isValidDepositCredit(familyId, childId)
+        allow update: if familyNotDeleting(familyId) && (
+          isValidDepositCredit(familyId, childId)
           || isValidReversalWalletUpdate(familyId, childId)
           || isValidWithdrawalDeduction(familyId, childId)
           || isValidParentTransferDeduction(familyId, childId)
           || isValidParentTransferCredit(familyId, childId)
           || isValidPetBoxDonationDeduction(familyId, childId)
-          || (isParent(familyId) && isValidLedgerSync(familyId, childId))
-          || (isParent(familyId) && 'lastGoalTxId' in request.resource.data
+          || (isParentRaw(familyId) && isValidLedgerSync(familyId, childId))
+          || (isParentRaw(familyId) && 'lastGoalTxId' in request.resource.data
               && request.resource.data.balance is int
-              && request.resource.data.keys().hasOnly(['balance', 'lastGoalTxId']));
+              && request.resource.data.keys().hasOnly(['balance', 'lastGoalTxId'])));
         // Isolated, read-free penalty deduction (lean) so the parent penalty
         // log transaction stays within the 1000-expression budget.
-        allow update: if isValidBehaviourPenaltyDeduction(familyId, childId);
+        allow update: if familyNotDeleting(familyId) && isValidBehaviourPenaltyDeduction(familyId, childId);
       }
 
       match /wallet_transactions/{txId} {
@@ -1780,8 +1817,9 @@ service cloud.firestore {
         // Firestore's 1000-expression budget. The goal_return transaction also
         // updates the child wallet with lastGoalTxId (validated by isValidWalletUpdate
         // on the wallets doc), so keeping this statement lean is essential.
-        allow create: if (request.resource.data.type == 'goal_contribution' && isValidGoalWalletLedger(familyId, txId))
-          || (request.resource.data.type == 'goal_return' && isValidGoalReturnWalletLedger(familyId, txId));
+        allow create: if familyNotDeleting(familyId)
+          && ((request.resource.data.type == 'goal_contribution' && isValidGoalWalletLedger(familyId, txId))
+          || (request.resource.data.type == 'goal_return' && isValidGoalReturnWalletLedger(familyId, txId)));
         // Reversal + non-Goals writes require a behaviour manager (parent/owner) and
         // are validated per-type by the existing isValid*Ledger functions, preserving
         // the authorization and ledger-shape guarantees of the previously-deployed rules.
@@ -1793,8 +1831,8 @@ service cloud.firestore {
         // behaviour event and reads it many times, and OR'ing it inside this heavy
         // isBehaviourManager chain pushed the per-request evaluation over Firestore's
         // 1000-expression limit, denying every parent penalty log.
-        allow create: if (request.resource.data.type == 'financial_penalty' && isValidFinancialPenalty(familyId));
-        allow create: if (request.resource.data.type == 'reversal' && isValidReversalWalletLedger(familyId, txId)) || (isBehaviourManager(familyId) && (
+        allow create: if familyNotDeleting(familyId) && (request.resource.data.type == 'financial_penalty' && isValidFinancialPenalty(familyId));
+        allow create: if familyNotDeleting(familyId) && ((request.resource.data.type == 'reversal' && isValidReversalWalletLedger(familyId, txId)) || (isBehaviourManager(familyId) && (
             (request.resource.data.type == 'deposit' && request.resource.data.amount > 0 && request.resource.data.amount is int && isChildInFamily(familyId, request.resource.data.childId) && request.resource.data.parentRef == authProfileId() && request.resource.data.createdAt == request.time) ||
             (request.resource.data.type == 'withdrawal' && request.resource.data.amount > 0 && request.resource.data.amount is int && isChildInFamily(familyId, request.resource.data.childId) && request.resource.data.parentRef == authProfileId() && request.resource.data.createdAt == request.time) ||
             (request.resource.data.type == 'transfer' && request.resource.data.amount > 0 && request.resource.data.amount is int && isChildInFamily(familyId, request.resource.data.childId) && isChildInFamily(familyId, request.resource.data.fromChildId) && request.resource.data.parentRef == authProfileId() && request.resource.data.createdAt == request.time) ||
@@ -1802,7 +1840,7 @@ service cloud.firestore {
             (request.resource.data.type == 'transfer_in' && ('transferRequestId' in request.resource.data ? isValidTransferInLedger(familyId) : isValidMoneyRequestInLedger(familyId))) ||
             (request.resource.data.type == 'request_payment' && isValidMoneyRequestPaymentLedger(familyId)) ||
             (request.resource.data.type == 'petbox_donation' && isValidPetBoxWalletLedger(familyId, txId))
-          ));
+          )));
         allow update, delete: if false;
       }
 
