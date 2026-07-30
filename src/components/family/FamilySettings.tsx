@@ -18,6 +18,9 @@ import { ChildLoginSection, type ChildLoginMember } from './ChildLoginSection';
 import { CreateChildLoginDialog } from './CreateChildLoginDialog';
 import { getTimezoneOptions } from '../../lib/timezones';
 import { isPetBoxEnabled } from '../../lib/familyFeatures';
+import { DeleteFamilyDialog } from './DeleteFamilyDialog';
+import { leaveFamily } from '../../lib/familyDeletionApi';
+import { signOut } from '../../lib/api';
 
 interface FamilySettingsProps {
   onSectionChange?: (section: string) => void;
@@ -76,6 +79,11 @@ export function FamilySettings({ onSectionChange }: FamilySettingsProps) {
   const [gamificationError, setGamificationError] = useState<string | null>(null);
   const [isSavingPetBox, setIsSavingPetBox] = useState(false);
   const [petBoxError, setPetBoxError] = useState<string | null>(null);
+
+  // Danger Zone state
+  const [showDeleteFamilyDialog, setShowDeleteFamilyDialog] = useState(false);
+  const [isLeavingFamily, setIsLeavingFamily] = useState(false);
+  const [leaveError, setLeaveError] = useState<string | null>(null);
 
   const showToast = (message: string, type: 'success' | 'error' | 'info' = 'success') =>
     setToast({ id: Date.now(), message, type });
@@ -935,30 +943,76 @@ export function FamilySettings({ onSectionChange }: FamilySettingsProps) {
             title={t('familySettings.dangerZone')}
             description={t('familySettings.dangerZoneDesc')}
           >
-            <Card className="border-amber-200 bg-amber-50">
-              <CardContent className="p-6">
-                <div className="text-center space-y-4">
-                  <AlertTriangle className="h-12 w-12 text-amber-500 mx-auto" />
-                  <div>
-                    <h3 className="text-lg font-semibold text-amber-900 mb-2">
-                      {t('familySettings.dangerZoneTitle')}
+            <Card className="border-red-200 bg-red-50">
+              <CardContent className="p-6 space-y-6">
+                {owner ? (
+                  <div className="space-y-3">
+                    <h3 className="text-base font-semibold text-red-900">
+                      {t('familySettings.deleteFamilyTitle')}
                     </h3>
-                    <p className="text-sm text-amber-700 mb-4">
-                      {t('familySettings.dangerZoneDescription')}
+                    <p className="text-sm text-red-700">
+                      {t('familySettings.deleteFamilyDangerDesc')}
                     </p>
+                    <Button
+                      className="bg-red-600 hover:bg-red-700 text-white"
+                      onClick={() => setShowDeleteFamilyDialog(true)}
+                      data-testid="danger-delete-family"
+                    >
+                      {t('familySettings.deleteFamily')}
+                    </Button>
                   </div>
-                  <div className="space-y-2 text-sm text-amber-600">
-                    <p>{t('familySettings.deleteFamily')}</p>
-                    <p>{t('familySettings.leaveFamily')}</p>
+                ) : !currentUser?.isManaged ? (
+                  <div className="space-y-3">
+                    <h3 className="text-base font-semibold text-red-900">
+                      {t('familySettings.leaveFamilyTitle')}
+                    </h3>
+                    <p className="text-sm text-red-700">
+                      {t('familySettings.leaveFamilyDesc')}
+                    </p>
+                    {leaveError && (
+                      <p role="alert" className="text-sm text-red-600">{leaveError}</p>
+                    )}
+                    <Button
+                      className="bg-red-600 hover:bg-red-700 text-white"
+                      disabled={isLeavingFamily}
+                      data-testid="danger-leave-family"
+                      onClick={async () => {
+                        if (!familyData?.id || isLeavingFamily) return;
+                        if (!window.confirm(t('familySettings.leaveFamilyConfirm'))) return;
+                        setIsLeavingFamily(true);
+                        setLeaveError(null);
+                        try {
+                          await leaveFamily(familyData.id);
+                          await signOut();
+                        } catch (error: any) {
+                          console.error('Failed to leave family:', error);
+                          setLeaveError(t('familySettings.leaveFamilyError'));
+                          setIsLeavingFamily(false);
+                        }
+                      }}
+                    >
+                      {isLeavingFamily && <Loader2 className="mr-2 h-4 w-4 animate-spin" aria-hidden="true" />}
+                      {t('familySettings.leaveFamily')}
+                    </Button>
                   </div>
-                  <Button variant="outline" disabled className="text-amber-700 border-amber-300">
-                    {t('familySettings.comingSoon')}
-                  </Button>
-                </div>
+                ) : (
+                  <p className="text-sm text-red-700">
+                    {t('familySettings.dangerZoneManagedChild')}
+                  </p>
+                )}
               </CardContent>
             </Card>
           </Section>
         </div>
+      )}
+
+      {/* Delete Family dialog */}
+      {showDeleteFamilyDialog && familyData?.id && (
+        <DeleteFamilyDialog
+          familyId={familyData.id}
+          familyName={familyData.name || ''}
+          onClose={() => setShowDeleteFamilyDialog(false)}
+        />
       )}
 
       {/* Toast / snackbar */}

@@ -14,13 +14,25 @@ const mockRegenerateInviteCode = vi.fn();
 const mockApproveJoinRequest = vi.fn();
 const mockRejectJoinRequest = vi.fn();
 
+const mockSignOut = vi.fn(async () => {});
+const mockLeaveFamily = vi.fn(async () => ({ left: true }));
+const mockRequestFamilyDeletion = vi.fn();
+const mockFetchFamilyDeletionStatus = vi.fn();
+
 vi.mock('../../lib/api', () => ({
   updateFamilySettings: (...args: any[]) => mockUpdateFamilySettings(...args),
   approveJoinRequest: (...args: any[]) => mockApproveJoinRequest(...args),
   rejectJoinRequest: (...args: any[]) => mockRejectJoinRequest(...args),
+  signOut: (...args: any[]) => mockSignOut(...args),
 }));
 vi.mock('../../lib/familyMembershipApi', () => ({
   regenerateFamilyCode: (...args: any[]) => mockRegenerateInviteCode(...args),
+}));
+vi.mock('../../lib/familyDeletionApi', () => ({
+  leaveFamily: (...args: any[]) => mockLeaveFamily(...args),
+  requestFamilyDeletion: (...args: any[]) => mockRequestFamilyDeletion(...args),
+  fetchFamilyDeletionStatus: (...args: any[]) => mockFetchFamilyDeletionStatus(...args),
+  generateClientReqId: () => 'test-client-req-00000001',
 }));
 
 // Mock the clipboard API
@@ -193,16 +205,125 @@ describe('FamilySettings — basic rendering', () => {
     expect(screen.getByText('Monday')).toBeInTheDocument();
   });
 
-  it('7. Danger Zone shows placeholder with coming soon', async () => {
+  it('7. Danger Zone offers the owner a real Delete family action', async () => {
     const user = userEvent.setup();
     renderFamilySettings('owner');
-    // Navigate to Danger Zone section
     await user.click(screen.getByRole('button', { name: 'Danger Zone' }));
-    // Use getAllByText since "Danger Zone" appears multiple times
     expect(screen.getAllByText('Danger Zone').length).toBeGreaterThan(0);
-    expect(screen.getByText('Coming soon')).toBeInTheDocument();
+    expect(screen.queryByText('Coming soon')).not.toBeInTheDocument();
+    expect(screen.getByTestId('danger-delete-family')).toBeInTheDocument();
+    expect(screen.queryByTestId('danger-leave-family')).not.toBeInTheDocument();
   });
 
+});
+
+describe('FamilySettings — Danger Zone', () => {
+  it('owner opens the two-stage Delete Family dialog with the full scope explanation', async () => {
+    const user = userEvent.setup();
+    renderFamilySettings('owner');
+    await user.click(screen.getByRole('button', { name: 'Danger Zone' }));
+    await user.click(screen.getByTestId('danger-delete-family'));
+
+    const dialog = await screen.findByTestId('delete-family-dialog');
+    expect(dialog).toHaveAttribute('aria-modal', 'true');
+    expect(within(dialog).getByText(/permanently remove/i)).toBeInTheDocument();
+    expect(within(dialog).getByText(/managed child logins/i)).toBeInTheDocument();
+    // No deletion call before the deliberate confirmation stage.
+    expect(mockRequestFamilyDeletion).not.toHaveBeenCalled();
+  });
+
+  it('requires the exact family name and prevents duplicate submissions', async () => {
+    mockRequestFamilyDeletion.mockResolvedValue({ familyId: 'fam1', state: 'queued', phase: 'inventory_members' });
+    mockFetchFamilyDeletionStatus.mockResolvedValue({ familyId: 'fam1', state: 'running' });
+    const user = userEvent.setup();
+    renderFamilySettings('owner');
+    await user.click(screen.getByRole('button', { name: 'Danger Zone' }));
+    await user.click(screen.getByTestId('danger-delete-family'));
+    await user.click(screen.getByRole('button', { name: 'Continue' }));
+
+    const confirmButton = screen.getByRole('button', { name: 'Delete family permanently' });
+    expect(confirmButton).toBeDisabled(); // empty confirmation
+
+    await user.type(screen.getByLabelText('Family name confirmation'), 'The Family');
+    await user.click(confirmButton);
+
+    await waitFor(() => expect(mockRequestFamilyDeletion).toHaveBeenCalledTimes(1));
+    expect(mockRequestFamilyDeletion).toHaveBeenCalledWith({
+      familyId: 'fam1',
+      familyNameConfirmation: 'The Family',
+      clientReqId: 'test-client-req-00000001',
+    });
+    // Progress state replaces the form: no second submission is possible.
+    expect(await screen.findByTestId('delete-family-progress')).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Delete family permanently' })).not.toBeInTheDocument();
+  });
+
+  it('shows an actionable error when the server rejects the name', async () => {
+    mockRequestFamilyDeletion.mockRejectedValue(
+      Object.assign(new Error('NAME_MISMATCH'), { code: 'functions/failed-precondition' }),
+    );
+    const user = userEvent.setup();
+    renderFamilySettings('owner');
+    await user.click(screen.getByRole('button', { name: 'Danger Zone' }));
+    await user.click(screen.getByTestId('danger-delete-family'));
+    await user.click(screen.getByRole('button', { name: 'Continue' }));
+    await user.type(screen.getByLabelText('Family name confirmation'), 'the family');
+    await user.click(screen.getByRole('button', { name: 'Delete family permanently' }));
+
+    expect(await screen.findByRole('alert')).toHaveTextContent(/does not match/i);
+    expect(mockSignOut).not.toHaveBeenCalled();
+  });
+
+  it('signs out immediately when the server reports the deletion already completed', async () => {
+    mockRequestFamilyDeletion.mockResolvedValue({ familyId: 'fam1', state: 'completed', phase: 'finalize' });
+    const user = userEvent.setup();
+    renderFamilySettings('owner');
+    await user.click(screen.getByRole('button', { name: 'Danger Zone' }));
+    await user.click(screen.getByTestId('danger-delete-family'));
+    await user.click(screen.getByRole('button', { name: 'Continue' }));
+    await user.type(screen.getByLabelText('Family name confirmation'), 'The Family');
+    await user.click(screen.getByRole('button', { name: 'Delete family permanently' }));
+
+    await waitFor(() => expect(mockSignOut).toHaveBeenCalledTimes(1));
+  });
+
+  it('a non-owner parent sees Leave family, not Delete family', async () => {
+    const user = userEvent.setup();
+    renderFamilySettings('parent');
+    await user.click(screen.getByRole('button', { name: 'Danger Zone' }));
+    expect(screen.queryByTestId('danger-delete-family')).not.toBeInTheDocument();
+    expect(screen.getByTestId('danger-leave-family')).toBeInTheDocument();
+  });
+
+  it('leaving the family calls the callable then signs out', async () => {
+    vi.spyOn(window, 'confirm').mockReturnValue(true);
+    const user = userEvent.setup();
+    renderFamilySettings('parent');
+    await user.click(screen.getByRole('button', { name: 'Danger Zone' }));
+    await user.click(screen.getByTestId('danger-leave-family'));
+
+    await waitFor(() => expect(mockLeaveFamily).toHaveBeenCalledWith('fam1'));
+    await waitFor(() => expect(mockSignOut).toHaveBeenCalledTimes(1));
+  });
+
+  it('a managed child sees neither destructive action', async () => {
+    const user = userEvent.setup();
+    seedStore('child');
+    act(() => {
+      useStore.setState({
+        currentUser: { ...useStore.getState().currentUser, isManaged: true } as any,
+      });
+    });
+    render(
+      <MemoryRouter>
+        <FamilySettings />
+      </MemoryRouter>,
+    );
+    await user.click(screen.getByRole('button', { name: 'Danger Zone' }));
+    expect(screen.queryByTestId('danger-delete-family')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('danger-leave-family')).not.toBeInTheDocument();
+    expect(screen.getByText(/ask a parent/i)).toBeInTheDocument();
+  });
 });
 
 describe('FamilySettings — Pet Box setting', () => {
@@ -351,7 +472,7 @@ describe('FamilySettings — section navigation', () => {
     await user.click(screen.getByRole('button', { name: 'Regional' }));
     expect(screen.getByText('British Pound (£)')).toBeInTheDocument(); // Regional section
     await user.click(screen.getByRole('button', { name: 'Danger Zone' }));
-    expect(screen.getByText('Coming soon')).toBeInTheDocument(); // Danger Zone section
+    expect(screen.getByTestId('danger-delete-family')).toBeInTheDocument(); // Danger Zone section
   });
 });
 
