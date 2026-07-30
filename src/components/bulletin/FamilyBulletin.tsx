@@ -23,6 +23,7 @@ import {
   type FamilyAnnouncement,
 } from '../../lib/familyBulletin';
 import { Button } from '../ui/Button';
+import { EmptyState } from '../ui/EmptyState';
 
 const tone = {
   normal: 'border-primary-100 bg-primary-50',
@@ -76,36 +77,39 @@ export function FamilyBulletin() {
 
   return (
     <section aria-labelledby="family-bulletin-heading" className="space-y-3">
-      <div className="flex items-center justify-between">
-        <h2 id="family-bulletin-heading" className="flex items-center gap-2 text-lg font-bold text-gray-900">
-          <BellRing size={20} className="text-primary-500" />
-          {t('title')}
+      {/* Header */}
+      <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+        <div className="flex items-center gap-2">
+          <h2 id="family-bulletin-heading" className="flex items-center gap-2 text-lg font-bold text-gray-900">
+            <BellRing size={20} className="text-primary-500" />
+            {t('title')}
+          </h2>
           {active.some(item => !readIds.has(item.id)) && (
             <span className="rounded-full bg-red-500 px-2 py-0.5 text-xs text-white">{t('unread')}</span>
           )}
-        </h2>
-        {canManage && <div className="flex gap-2">
-          <Button size="sm" variant="ghost" onClick={() => setShowHistory(value => !value)}>
-            {showHistory ? t('active') : t('history')}
-          </Button>
-          <Button size="sm" onClick={() => setCreating(true)}>
-            <Plus size={16} className="mr-1" /> {t('create')}
-          </Button>
-        </div>}
+        </div>
+        {canManage && (
+          <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:gap-2">
+            <Button size="sm" variant="ghost" onClick={() => setShowHistory(value => !value)}>
+              {showHistory ? t('active') : t('history')}
+            </Button>
+            <Button size="sm" onClick={() => setCreating(true)} className="w-full sm:w-auto">
+              <Plus size={16} className="mr-1" /> {t('create')}
+            </Button>
+          </div>
+        )}
       </div>
 
       {error && <p role="alert" className="text-sm text-red-600">{error}</p>}
       {visibleItems.length === 0 ? (
-        <div className="rounded-2xl border border-gray-100 bg-white p-4 text-sm text-gray-500">
-          {t('empty')}
-        </div>
+        <EmptyState title={t('empty')} />
       ) : (
         <div className="space-y-3">
           {shown.map(item => (
             <article key={item.id} className={`rounded-2xl border p-4 ${tone[item.priority]}`}>
-              <div className="flex items-start justify-between gap-3">
-                <div>
-                  <p className="flex items-center gap-2 font-bold text-gray-900">
+              <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between sm:gap-3">
+                <div className="min-w-0">
+                  <p className="flex flex-wrap items-center gap-2 font-bold text-gray-900">
                     {item.pinned && <Pin size={15} aria-label={t('pinned')} />}
                     {item.priority === 'urgent' && <AlertTriangle size={16} className="text-red-600" />}
                     {item.title}
@@ -116,6 +120,7 @@ export function FamilyBulletin() {
                   <Button
                     size="sm"
                     variant="ghost"
+                    className="w-full sm:w-auto"
                     onClick={() => markAnnouncementRead(familyId, item.id, currentUser.id)}
                   >
                     {t('markRead')}
@@ -126,25 +131,27 @@ export function FamilyBulletin() {
                 <Button
                   size="sm"
                   variant="outline"
-                  className="mt-3"
+                  className="mt-3 w-full sm:w-auto"
                   onClick={() => navigate(item.linkedTaskId ? '/tasks' : '/rewards')}
                 >
                   {item.linkedTaskId ? t('viewTask') : t('viewReward')}
                 </Button>
               )}
-              {canManage && <div className="mt-3 flex gap-2">
-                <Button size="sm" variant="ghost" onClick={() => setEditing(item)}>{t('edit')}</Button>
-                {item.status === 'active' && (
-                  <Button size="sm" variant="ghost" onClick={() => archiveAnnouncement(familyId, item.id)}>{t('archive')}</Button>
-                )}
-                <Button size="sm" variant="ghost" onClick={() => window.confirm(t('deleteConfirm')) && deleteAnnouncement(familyId, item.id)}>
-                  {t('delete')}
-                </Button>
-              </div>}
+              {canManage && (
+                <div className="mt-3 flex flex-col gap-2 sm:flex-row sm:gap-2">
+                  <Button size="sm" variant="ghost" onClick={() => setEditing(item)} className="w-full sm:w-auto">{t('edit')}</Button>
+                  {item.status === 'active' && (
+                    <Button size="sm" variant="ghost" onClick={() => archiveAnnouncement(familyId, item.id)} className="w-full sm:w-auto">{t('archive')}</Button>
+                  )}
+                  <Button size="sm" variant="ghost" onClick={() => window.confirm(t('deleteConfirm')) && deleteAnnouncement(familyId, item.id)} className="w-full sm:w-auto">
+                    {t('delete')}
+                  </Button>
+                </div>
+              )}
             </article>
           ))}
           {!showHistory && active.length > 1 && (
-            <Button variant="ghost" size="sm" onClick={() => setExpanded(value => !value)}>
+            <Button variant="ghost" size="sm" onClick={() => setExpanded(value => !value)} className="w-full">
               <ChevronDown size={16} className="mr-1" />
               {expanded ? t('showLess') : t('showMore', { count: active.length - 1 })}
             </Button>

@@ -79,3 +79,109 @@ describe('FamilyBulletin', () => {
     expect(screen.queryByRole('button', { name: 'Create announcement' })).not.toBeInTheDocument();
   });
 });
+
+describe('FamilyBulletin — responsive layout', () => {
+  it('header uses flex-col on mobile and flex-row on desktop', () => {
+    state.items = [];
+    const { container } = render(<MemoryRouter><FamilyBulletin /></MemoryRouter>);
+    const header = container.querySelector('section > div:first-child');
+    expect(header).not.toBeNull();
+    expect(header?.className).toContain('flex-col');
+    expect(header?.className).toContain('sm:flex-row');
+  });
+
+  it('history and create buttons stack vertically on mobile and align horizontally on desktop', () => {
+    state.currentUser = { id: 'parent1', familyId: 'f1', role: 'owner' } as any;
+    state.items = [];
+    const { container } = render(<MemoryRouter><FamilyBulletin /></MemoryRouter>);
+    const buttonGroup = container.querySelector('section > div > div:last-child');
+    expect(buttonGroup).not.toBeNull();
+    expect(buttonGroup?.className).toContain('flex-col');
+    expect(buttonGroup?.className).toContain('sm:flex-row');
+  });
+
+  it('create announcement button has full-width class on mobile', () => {
+    state.currentUser = { id: 'parent1', familyId: 'f1', role: 'owner' } as any;
+    state.items = [];
+    render(<MemoryRouter><FamilyBulletin /></MemoryRouter>);
+    const createBtn = screen.getByRole('button', { name: 'Create announcement' });
+    expect(createBtn).toBeInTheDocument();
+    expect(createBtn.className).toContain('w-full');
+  });
+
+  it('mark as read button is full-width on mobile', () => {
+    state.items = [
+      { id: 'a1', familyId: 'f1', title: 'Test', message: 'Body', type: 'general', audienceType: 'family', audienceUserIds: [], priority: 'normal', pinned: false, status: 'active', createdBy: 'p1', createdAt: 1, updatedAt: 1 },
+    ];
+    render(<MemoryRouter><FamilyBulletin /></MemoryRouter>);
+    const markReadBtn = screen.getByRole('button', { name: 'Mark as read' });
+    expect(markReadBtn).not.toBeNull();
+    expect(markReadBtn.className).toContain('w-full');
+  });
+
+  it('action buttons (edit, archive, delete) stack vertically on mobile', () => {
+    state.currentUser = { id: 'parent1', familyId: 'f1', role: 'owner' } as any;
+    state.items = [
+      { id: 'a1', familyId: 'f1', title: 'Test', message: 'Body', type: 'general', audienceType: 'family', audienceUserIds: [], priority: 'normal', pinned: false, status: 'active', createdBy: 'p1', createdAt: 1, updatedAt: 1 },
+    ];
+    const { container } = render(<MemoryRouter><FamilyBulletin /></MemoryRouter>);
+    const actionGroup = container.querySelector('article > div:last-child');
+    expect(actionGroup).not.toBeNull();
+    expect(actionGroup?.className).toContain('flex-col');
+    expect(actionGroup?.className).toContain('sm:flex-row');
+  });
+
+  it('action buttons are full-width on mobile', () => {
+    state.currentUser = { id: 'parent1', familyId: 'f1', role: 'owner' } as any;
+    state.items = [
+      { id: 'a1', familyId: 'f1', title: 'Test', message: 'Body', type: 'general', audienceType: 'family', audienceUserIds: [], priority: 'normal', pinned: false, status: 'active', createdBy: 'p1', createdAt: 1, updatedAt: 1 },
+    ];
+    const { container } = render(<MemoryRouter><FamilyBulletin /></MemoryRouter>);
+    const actionButtons = container.querySelectorAll('article button');
+    actionButtons.forEach(btn => {
+      expect(btn.className).toContain('w-full');
+    });
+  });
+
+  it('show more/less button is full-width on mobile', () => {
+    state.items = [
+      { id: 'a1', familyId: 'f1', title: 'First', message: 'Body', type: 'general', audienceType: 'family', audienceUserIds: [], priority: 'normal', pinned: false, status: 'active', createdBy: 'p1', createdAt: 1, updatedAt: 1 },
+      { id: 'a2', familyId: 'f1', title: 'Second', message: 'Body', type: 'general', audienceType: 'family', audienceUserIds: [], priority: 'normal', pinned: false, status: 'active', createdBy: 'p1', createdAt: 2, updatedAt: 2 },
+    ];
+    render(<MemoryRouter><FamilyBulletin /></MemoryRouter>);
+    const showMoreBtn = screen.getByRole('button', { name: /Show 1 more/ });
+    expect(showMoreBtn).not.toBeNull();
+    expect(showMoreBtn.className).toContain('w-full');
+  });
+
+  it('linked task/reward button is full-width on mobile', () => {
+    state.items = [
+      { id: 'a1', familyId: 'f1', title: 'Task link', message: 'Body', type: 'general', audienceType: 'family', audienceUserIds: [], priority: 'normal', pinned: false, status: 'active', linkedTaskId: 'task1', createdBy: 'p1', createdAt: 1, updatedAt: 1 },
+    ];
+    render(<MemoryRouter><FamilyBulletin /></MemoryRouter>);
+    const linkBtn = screen.getByRole('button', { name: 'View task' });
+    expect(linkBtn).not.toBeNull();
+    expect(linkBtn.className).toContain('w-full');
+  });
+
+  it('header title and badge remain on the same row on both mobile and desktop', () => {
+    state.items = [];
+    const { container } = render(<MemoryRouter><FamilyBulletin /></MemoryRouter>);
+    const headingGroup = container.querySelector('h2');
+    expect(headingGroup).not.toBeNull();
+    expect(headingGroup?.className).toContain('flex');
+    expect(headingGroup?.className).toContain('items-center');
+  });
+
+  it('card content stacks vertically on mobile (title, body, actions)', () => {
+    state.items = [
+      { id: 'a1', familyId: 'f1', title: 'Test', message: 'Body text', type: 'general', audienceType: 'family', audienceUserIds: [], priority: 'normal', pinned: false, status: 'active', createdBy: 'p1', createdAt: 1, updatedAt: 1 },
+    ];
+    const { container } = render(<MemoryRouter><FamilyBulletin /></MemoryRouter>);
+    const article = container.querySelector('article');
+    expect(article).not.toBeNull();
+    const contentDiv = article?.querySelector('div:first-child');
+    expect(contentDiv?.className).toContain('flex-col');
+    expect(contentDiv?.className).toContain('sm:flex-row');
+  });
+});
