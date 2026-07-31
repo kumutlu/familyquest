@@ -33,6 +33,7 @@ export function DeleteFamilyDialog({ familyId, familyName, onClose }: DeleteFami
   const [confirmation, setConfirmation] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [waitingForRetry, setWaitingForRetry] = useState(false);
   const clientReqIdRef = useRef<string>(generateClientReqId());
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
@@ -59,7 +60,10 @@ export function DeleteFamilyDialog({ familyId, familyName, onClose }: DeleteFami
         } else if (status.state === 'failed') {
           if (pollRef.current) clearInterval(pollRef.current);
           setStage('failed');
+          setWaitingForRetry(false);
           setError(t('familySettings.deleteFamilyFailed'));
+        } else {
+          setWaitingForRetry(status.state === 'retry_wait');
         }
       } catch (err: any) {
         // A not-found/permission error after the freeze means the account
@@ -71,6 +75,31 @@ export function DeleteFamilyDialog({ familyId, familyName, onClose }: DeleteFami
       }
     }, POLL_INTERVAL_MS);
   };
+
+  // Resume an in-flight deletion after a remount or a full page reload: the
+  // job is durable and server-authoritative, so the owner must not be asked to
+  // confirm the family name a second time.
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const status = await fetchFamilyDeletionStatus(familyId);
+        if (cancelled) return;
+        if (status.state === 'queued' || status.state === 'running' || status.state === 'retry_wait') {
+          setWaitingForRetry(status.state === 'retry_wait');
+          setStage('deleting');
+          startPolling();
+        } else if (status.state === 'failed') {
+          setStage('failed');
+          setError(t('familySettings.deleteFamilyFailed'));
+        }
+      } catch {
+        /* no resumable job visible; the normal two-stage flow applies */
+      }
+    })();
+    return () => { cancelled = true; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [familyId]);
 
   const handleSubmit = async () => {
     if (submitting) return;
@@ -186,7 +215,9 @@ export function DeleteFamilyDialog({ familyId, familyName, onClose }: DeleteFami
           <div className="space-y-3 text-center" data-testid="delete-family-progress">
             <Loader2 className="mx-auto h-8 w-8 animate-spin text-red-600" aria-hidden="true" />
             <p className="text-sm text-gray-700" role="status">
-              {t('familySettings.deleteFamilyInProgress')}
+              {waitingForRetry
+                ? t('familySettings.deleteFamilyRetryWait')
+                : t('familySettings.deleteFamilyInProgress')}
             </p>
             <p className="text-xs text-gray-500">{t('familySettings.deleteFamilyInProgressHint')}</p>
           </div>

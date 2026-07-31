@@ -46,6 +46,10 @@ beforeEach(async () => {
   }
   // Reset all mock functions
   mockUpdateFamilySettings.mockReset();
+  // The delete dialog probes for a resumable job on mount; by default there
+  // is none, so the normal two-stage confirmation flow applies.
+  mockFetchFamilyDeletionStatus.mockReset();
+  mockFetchFamilyDeletionStatus.mockResolvedValue({ familyId: 'fam1', state: 'none' });
   mockRegenerateInviteCode.mockReset();
   mockApproveJoinRequest.mockReset();
   mockRejectJoinRequest.mockReset();
@@ -234,7 +238,11 @@ describe('FamilySettings — Danger Zone', () => {
 
   it('requires the exact family name and prevents duplicate submissions', async () => {
     mockRequestFamilyDeletion.mockResolvedValue({ familyId: 'fam1', state: 'queued', phase: 'inventory_members' });
-    mockFetchFamilyDeletionStatus.mockResolvedValue({ familyId: 'fam1', state: 'running' });
+    // First call is the mount-time resume probe (no job yet); later calls are
+    // the progress poll after the request has been accepted.
+    mockFetchFamilyDeletionStatus
+      .mockResolvedValueOnce({ familyId: 'fam1', state: 'none' })
+      .mockResolvedValue({ familyId: 'fam1', state: 'running' });
     const user = userEvent.setup();
     renderFamilySettings('owner');
     await user.click(screen.getByRole('button', { name: 'Danger Zone' }));

@@ -210,6 +210,7 @@
     "deleteFamilyConfirmAction": "Delete family permanently",
     "deleteFamilyRetry": "Retry deletion",
     "deleteFamilyInProgress": "Deleting the family… This may take a few minutes.",
+    "deleteFamilyRetryWait": "Deletion hit a temporary problem and will retry automatically in a moment.",
     "deleteFamilyInProgressHint": "You will be signed out automatically when deletion completes.",
     "deleteFamilyNameMismatch": "The name does not match. Type the family name exactly, including capitalisation.",
     "deleteFamilyNotAuthorized": "Only the family owner can delete the family.",
