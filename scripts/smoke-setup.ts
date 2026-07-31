@@ -15,9 +15,25 @@ import { applicationDefault, getApps, initializeApp, type FirebaseApp } from 'fi
 import { getAuth, type Auth } from 'firebase-admin/auth'
 import { getFirestore, type Firestore } from 'firebase-admin/firestore'
 
-const PARENT_EMAIL = 'test-parent@familyquest.test'
-const CHILD_EMAIL = 'test-child@familyquest.test'
-const TEST_PASSWORD = 'Test1234'
+// Disposable QA fixture identities. Emails/UIDs are clearly QA-only and safe
+// to keep in source; the PASSWORD is a secret and MUST come from the
+// environment (never committed). See docs/production-smoke.md.
+function requireEnv(name: string): string {
+  const value = process.env[name]
+  if (!value || value.trim() === '') {
+    throw new Error(
+      `[smoke-setup] Missing required env var ${name}. Supply a strong ` +
+      `temporary password via environment / local secret storage. ` +
+      `Never hard-code or commit fixture credentials.`,
+    )
+  }
+  return value
+}
+
+const PARENT_EMAIL = process.env.QUEKI_SMOKE_PARENT_EMAIL || 'test-parent@familyquest.test'
+const CHILD_EMAIL = process.env.QUEKI_SMOKE_CHILD_EMAIL || 'test-child@familyquest.test'
+const PARENT_PASSWORD = requireEnv('QUEKI_SMOKE_PARENT_PASSWORD')
+const CHILD_PASSWORD = process.env.QUEKI_SMOKE_CHILD_PASSWORD || PARENT_PASSWORD
 const FAMILY_ID = 'smoke-test-family'
 const PARENT_UID = 'smoke-test-parent'
 const CHILD_UID = 'smoke-test-child'
@@ -39,21 +55,21 @@ async function main() {
 
   console.log(`[smoke-setup] project=${projectId} family=${FAMILY_ID}`)
 
-  async function ensureUser(uid: string, email: string, displayName: string) {
+  async function ensureUser(uid: string, email: string, password: string, displayName: string) {
     try {
-      await auth.createUser({ uid, email, password: TEST_PASSWORD, displayName })
+      await auth.createUser({ uid, email, password, displayName })
       console.log(`[smoke-setup] created auth user ${uid} <${email}>`)
     } catch (err: any) {
       if (err?.code === 'auth/uid-already-exists' || err?.errorInfo?.code === 'auth/uid-already-exists') {
-        await auth.updateUser(uid, { email, password: TEST_PASSWORD, displayName })
+        await auth.updateUser(uid, { email, password, displayName })
         console.log(`[smoke-setup] reused auth user ${uid} <${email}>`)
       } else {
         throw err
       }
     }
   }
-  await ensureUser(PARENT_UID, PARENT_EMAIL, 'Smoke Parent')
-  await ensureUser(CHILD_UID, CHILD_EMAIL, 'Smoke Child')
+  await ensureUser(PARENT_UID, PARENT_EMAIL, PARENT_PASSWORD, 'Smoke Parent')
+  await ensureUser(CHILD_UID, CHILD_EMAIL, CHILD_PASSWORD, 'Smoke Child')
 
   const familyRef = db.collection('families').doc(FAMILY_ID)
   await familyRef.set({ name: 'Smoke Test Family', smokeTest: true, createdAt: new Date() })
@@ -83,8 +99,8 @@ async function main() {
   })
 
   console.log('[smoke-setup] DONE')
-  console.log(`  parent: ${PARENT_EMAIL} / ${TEST_PASSWORD} (uid=${PARENT_UID})`)
-  console.log(`  child:  ${CHILD_EMAIL} / ${TEST_PASSWORD} (uid=${CHILD_UID})`)
+  console.log(`  parent: ${PARENT_EMAIL} / <redacted> (uid=${PARENT_UID})`)
+  console.log(`  child:  ${CHILD_EMAIL} / <redacted> (uid=${CHILD_UID})`)
   console.log(`  family: ${FAMILY_ID}`)
 }
 

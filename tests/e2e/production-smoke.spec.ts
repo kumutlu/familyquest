@@ -1,11 +1,14 @@
 // Phase 5 — Production smoke test for the Goals release (live project).
 // Validates the Goals scenarios from the deployment plan against the
-// LIVE familyquest-beta-402cb project using real test accounts:
-//   parent: test-parent@familyquest.test / Test1234
-//   child:  test-child@familyquest.test  / Test1234
-//   family: smoke-test-family (tagged smokeTest:true)
+// LIVE deployment (https://queki.app → familyquest-beta-402cb project) using
+// DISPOSABLE QA fixture accounts. Credentials are read from environment
+// variables and are NEVER committed to source:
+//   QUEKI_SMOKE_PARENT_EMAIL    / QUEKI_SMOKE_PARENT_PASSWORD
+//   QUEKI_SMOKE_CHILD_EMAIL     / QUEKI_SMOKE_CHILD_PASSWORD
+//   QUEKI_SMOKE_UNRELATED_EMAIL / QUEKI_SMOKE_UNRELATED_PASSWORD (optional)
+//   family: disposable QA fixture family (tagged smokeTest:true)
 // Uses only trivial amounts (no meaningful real money). All created
-// documents live under family `smoke-test-family` and are deleted by
+// documents live under the disposable fixture family and are deleted by
 // scripts/cleanup-smoke.ts afterward.
 //
 // NOTE: This Playwright spec deliberately avoids the firebase-admin SDK
@@ -13,13 +16,26 @@
 // Goal-creation persistence is verified separately via
 // `npx tsx scripts/verify-smoke-data.ts` after the run.
 //
-// Run: npx playwright test --config playwright.prod.config.ts production-smoke.spec.ts
+// Run: npm run test:smoke   (see docs/production-smoke.md)
 import { test, expect } from '@playwright/test';
 import { loginAs } from './utils/auth-production';
 
-const PARENT = 'test-parent@familyquest.test';
-const CHILD = 'test-child@familyquest.test';
-const PASS = 'Test1234';
+function requireEnv(name: string): string {
+  const value = process.env[name];
+  if (!value || value.trim() === '') {
+    throw new Error(
+      `[production-smoke] Missing required environment variable ${name}. ` +
+      `Provide disposable QA credentials via env vars / local secret storage ` +
+      `(see docs/production-smoke.md). Never hard-code or commit credentials.`,
+    );
+  }
+  return value;
+}
+
+const PARENT = requireEnv('QUEKI_SMOKE_PARENT_EMAIL');
+const CHILD = requireEnv('QUEKI_SMOKE_CHILD_EMAIL');
+const PASS = requireEnv('QUEKI_SMOKE_PARENT_PASSWORD');
+const CHILD_PASS = process.env.QUEKI_SMOKE_CHILD_PASSWORD || PASS;
 // Fixed title. The cleanup script (scripts/cleanup-smoke.ts) clears
 // the goal-create idempotency doc before each run, so a re-run with the
 // same title performs a real write (no idempotent-replay short-circuit).
@@ -63,7 +79,7 @@ test.describe('Goals production smoke (live project)', () => {
 
   test('S2 child opens Contribute modal on a goal', async ({ page }) => {
     test.setTimeout(60000);
-    await loginAs(page, CHILD, PASS);
+    await loginAs(page, CHILD, CHILD_PASS);
     await page.goto('/goals');
     await expect(page.locator('text=Goals').first()).toBeVisible({ timeout: 10000 });
     const goal = page.locator(`text=${GOAL_TITLE}`).first();
@@ -87,12 +103,13 @@ test.describe('Goals production smoke (live project)', () => {
   });
 });
 
-const UNRELATED = 'test-unrelated@familyquest.test';
+const UNRELATED = process.env.QUEKI_SMOKE_UNRELATED_EMAIL || '';
+const UNRELATED_PASS = process.env.QUEKI_SMOKE_UNRELATED_PASSWORD || PASS;
 
 test.describe('Task Approval Production Smoke (Stage 2 Gamification)', () => {
   test('T1 Child can complete a task, but cannot approve it', async ({ page }) => {
     test.setTimeout(60000);
-    await loginAs(page, CHILD, PASS);
+    await loginAs(page, CHILD, CHILD_PASS);
     await page.goto('/tasks');
     await expect(page.locator('text=Tasks').first()).toBeVisible({ timeout: 10000 });
 
@@ -113,7 +130,8 @@ test.describe('Task Approval Production Smoke (Stage 2 Gamification)', () => {
 
   test('T2 Unrelated family parent cannot see or approve the task', async ({ page }) => {
     test.setTimeout(60000);
-    await loginAs(page, UNRELATED, PASS);
+    test.skip(!UNRELATED, 'QUEKI_SMOKE_UNRELATED_EMAIL not set; isolation check skipped');
+    await loginAs(page, UNRELATED, UNRELATED_PASS);
     await page.goto('/');
 
     // Dashboard should load, but no Approval Center items should appear
@@ -142,7 +160,7 @@ test.describe('Task Approval Production Smoke (Stage 2 Gamification)', () => {
   test('T4 Parent can approve a pending task', async ({ page }) => {
     test.setTimeout(90000); // 90s because we have to complete it again
     // 1. Child marks it done again
-    await loginAs(page, CHILD, PASS);
+    await loginAs(page, CHILD, CHILD_PASS);
     await page.goto('/tasks');
     const task = page.locator('text="Clean Room (Smoke)"').first();
     await expect(task).toBeVisible({ timeout: 10000 });
