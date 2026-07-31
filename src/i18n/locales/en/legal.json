@@ -1,0 +1,230 @@
+{
+  "languageLabel": "Language",
+  "backToApp": "Back to Queki",
+  "lastUpdated": "Last updated: 31 July 2026",
+  "contactHeading": "Contact",
+  "contactBody": "Questions about this document can be sent to support@queki.app.",
+  "nav": {
+    "privacy": "Privacy Policy",
+    "terms": "Terms of Service",
+    "accountDeletion": "Account Deletion"
+  },
+  "privacy": {
+    "title": "Privacy Policy",
+    "metaDescription": "How Queki collects, uses and stores family, task, reward and wallet data, and how you can delete your account.",
+    "intro": "Queki is a family task and reward application. This policy describes only what the application actually does with your data.",
+    "sections": [
+      {
+        "heading": "Information we collect",
+        "body": [
+          "Account information: the email address and display name used to create a parent account, and the profile language and avatar selection stored with it.",
+          "Family information: the family name, family code, member list, member roles (owner, parent, child) and family settings such as currency.",
+          "Managed child accounts: a username, a display name, an avatar selection and a password set by the parent. Managed child accounts do not require an email address.",
+          "Activity data: tasks and their completion state, rewards and redemptions, wallet balances and transactions, savings goals and contributions, behaviour log entries, bulletin posts and Pet Box records.",
+          "Device data: a push notification token, only if you explicitly grant notification permission."
+        ]
+      },
+      {
+        "heading": "Authentication data",
+        "body": [
+          "Parent accounts sign in with email and password or with Google Sign-In, both handled by Firebase Authentication.",
+          "Managed child accounts sign in with a family code, a username and a password. The sign-in is validated by a Cloud Function which issues a Firebase custom token; the child password is never exposed to other family members.",
+          "We do not receive or store your Google account password. From Google Sign-In we receive the email address, display name and profile photo URL associated with the Google account."
+        ]
+      },
+      {
+        "heading": "Family data and managed child accounts",
+        "body": [
+          "All data is scoped to a single family document. Family members can only read and write data belonging to their own family; this is enforced by Firestore security rules.",
+          "A parent or owner creates and administers managed child accounts. Parents can view and manage the tasks, rewards, wallet, goals and behaviour records of the children in their family."
+        ]
+      },
+      {
+        "heading": "Tasks, rewards, wallet, behaviour logs, bulletin and Pet Box",
+        "body": [
+          "Tasks record a title, description, assignee, due date, point value and completion or approval history.",
+          "Rewards record a title, cost, availability and redemption history, including which member redeemed a reward and when.",
+          "Wallet records store balances, transactions, money requests, transfers and savings goal contributions. Queki does not process real payments; wallet values are numbers managed by the family.",
+          "Behaviour logs store parent-recorded behaviour events and any associated point adjustments.",
+          "The bulletin stores family announcements and messages posted inside the family.",
+          "Pet Box stores the pet-related records and contributions created inside the family."
+        ]
+      },
+      {
+        "heading": "Third-party processors",
+        "body": [
+          "Google Firebase (Google LLC / Google Ireland Limited) provides all backend infrastructure used by Queki: Firebase Authentication, Cloud Firestore, Cloud Functions, Firebase Hosting and Firebase Cloud Messaging.",
+          "Google Sign-In is used as an optional authentication provider for parent accounts.",
+          "Queki uses no other third-party processors."
+        ]
+      },
+      {
+        "heading": "Analytics",
+        "body": [
+          "Queki does not run any product analytics or advertising SDK in the application. No behavioural profiling or ad tracking takes place.",
+          "Firebase infrastructure produces standard operational logs (for example, request and error logs) which are used only to keep the service running."
+        ]
+      },
+      {
+        "heading": "Notifications",
+        "body": [
+          "Push notifications are delivered with Firebase Cloud Messaging and are optional. A device token is stored only after you grant browser notification permission, and is used only to send notifications about your own family's activity.",
+          "You can revoke notification permission in your browser at any time; the stored token then stops being used."
+        ]
+      },
+      {
+        "heading": "Storage and retention",
+        "body": [
+          "Data is stored in Google Cloud Firestore within the Firebase project operated for Queki.",
+          "Data is retained while the account and family exist. Deleting an account or a family removes the associated data as described below.",
+          "Avatars are chosen from a built-in catalogue or referenced by URL; Queki does not host uploaded photo files."
+        ]
+      },
+      {
+        "heading": "Account deletion and family deletion",
+        "body": [
+          "You can delete your own account at any time from Settings → Danger Zone → Delete Account. Deletion is performed by a Cloud Function and removes your authentication record and your member data.",
+          "A family owner can delete the whole family. This removes the family document and its subcollections, including tasks, rewards, redemptions, wallet records, goals, behaviour logs, bulletin posts and Pet Box records, and removes the managed child accounts belonging to that family.",
+          "Deletion requires a recent sign-in. If your session is old, you will be asked to sign in again before the deletion can proceed.",
+          "Full details are documented on the Account Deletion page."
+        ]
+      },
+      {
+        "heading": "Children's data",
+        "body": [
+          "Managed child accounts are created and controlled by a parent or owner. A parent is responsible for the information they enter about a child and can delete a child account at any time from the family screen."
+        ]
+      }
+    ]
+  },
+  "terms": {
+    "title": "Terms of Service",
+    "metaDescription": "The terms that apply when you use Queki, a family task, reward and allowance tracking application.",
+    "intro": "These terms apply to your use of Queki. By creating an account or using the application you accept them.",
+    "sections": [
+      {
+        "heading": "Service description",
+        "body": [
+          "Queki is a family organisation application. It lets a family create tasks, award points, define rewards, track an in-app wallet and savings goals, record behaviour, share bulletin posts and manage Pet Box records."
+        ]
+      },
+      {
+        "heading": "Intended users",
+        "body": [
+          "Queki is intended for adults who create a family and for the family members they invite or create.",
+          "Only an adult may register a parent or owner account. Managed child accounts must be created by a parent or owner."
+        ]
+      },
+      {
+        "heading": "Parent responsibility",
+        "body": [
+          "The parent or owner is responsible for the content entered into their family, for supervising the children in the family and for the accuracy of any information recorded about them.",
+          "The parent or owner is responsible for the credentials issued to managed child accounts and for sharing them appropriately."
+        ]
+      },
+      {
+        "heading": "Managed child accounts",
+        "body": [
+          "Managed child accounts sign in with a family code, a username and a password chosen by the parent. They have restricted permissions and cannot administer the family.",
+          "A parent or owner may modify or delete a managed child account at any time."
+        ]
+      },
+      {
+        "heading": "Rewards disclaimer",
+        "body": [
+          "Rewards, points and redemptions exist only inside the application. They have no monetary value, are not redeemable outside the family and are not provided, guaranteed or fulfilled by Queki.",
+          "Whether a redeemed reward is honoured in real life is entirely a matter between family members."
+        ]
+      },
+      {
+        "heading": "Wallet disclaimer",
+        "body": [
+          "The wallet is a record-keeping feature. Queki is not a bank, payment institution or money transmitter, does not hold funds and does not process real payments or transfers.",
+          "Balances, transactions, allowances, money requests and savings goals are numbers recorded by the family for their own tracking purposes."
+        ]
+      },
+      {
+        "heading": "Prohibited behaviour",
+        "body": [
+          "Do not use Queki for anything unlawful, do not attempt to access data belonging to another family, do not attempt to bypass the security rules or authentication, and do not post abusive, harassing or illegal content in the bulletin or in any other field."
+        ]
+      },
+      {
+        "heading": "Suspension and deletion",
+        "body": [
+          "We may suspend or remove access to an account that is used in breach of these terms or in a way that threatens the security or availability of the service.",
+          "You may delete your own account, and an owner may delete the whole family, at any time from Settings → Danger Zone."
+        ]
+      },
+      {
+        "heading": "Service availability",
+        "body": [
+          "Queki is provided on an \"as available\" basis. Features may change, and access may be interrupted for maintenance or because of an outage in the underlying Firebase infrastructure.",
+          "No uptime guarantee is offered."
+        ]
+      },
+      {
+        "heading": "Limitations",
+        "body": [
+          "Queki records the information your family enters. It does not verify that tasks were completed, that rewards were delivered or that any monetary amount recorded in the wallet corresponds to real money.",
+          "To the extent permitted by law, Queki is not liable for disputes between family members, for data entered incorrectly, or for loss resulting from an interruption of the underlying infrastructure."
+        ]
+      }
+    ]
+  },
+  "accountDeletion": {
+    "title": "Account Deletion",
+    "metaDescription": "How to delete your Queki account or your whole family from Settings → Danger Zone, and what happens to your data.",
+    "intro": "You can delete your Queki data yourself from inside the application. You do not need to contact us to delete an account.",
+    "sections": [
+      {
+        "heading": "Where to find it",
+        "body": [
+          "Open the application and go to Settings → Danger Zone → Delete Account.",
+          "The Danger Zone also offers Sign Out, which only ends the current session and deletes nothing."
+        ]
+      },
+      {
+        "heading": "Delete Account",
+        "body": [
+          "Delete Account removes your own account: your Firebase Authentication record and your member profile inside the family.",
+          "The action is confirmed in a dialog before it runs and cannot be undone."
+        ]
+      },
+      {
+        "heading": "Delete Family",
+        "body": [
+          "Delete Family is available to the family owner. It deletes the family document and everything stored under it: tasks, rewards, redemptions, wallet records and transactions, savings goals, behaviour logs, bulletin posts and Pet Box records.",
+          "Managed child accounts belonging to that family are deleted with it."
+        ]
+      },
+      {
+        "heading": "Sign Out",
+        "body": [
+          "Sign Out ends your session on this device only. Your account, your family and all data remain unchanged."
+        ]
+      },
+      {
+        "heading": "What happens for each role",
+        "body": [
+          "Owner: deleting your account requires the family to be handled first. An owner who is the last remaining parent deletes the family together with the account; otherwise ownership must be transferred or the family deleted.",
+          "Non-owner parent or member: deleting your account removes you from the family and deletes your member profile. The family and the data created by other members continue to exist.",
+          "Managed child: a child account is deleted by a parent or owner from the family screen. Deleting a child removes the child's sign-in credentials and member profile."
+        ]
+      },
+      {
+        "heading": "Recent authentication requirement",
+        "body": [
+          "For security, Firebase only allows account deletion for a recently authenticated session. If you signed in a while ago, you will be asked to sign in again before the deletion can complete.",
+          "Sign out, sign back in and repeat the deletion from Settings → Danger Zone → Delete Account."
+        ]
+      },
+      {
+        "heading": "Exceptional situations",
+        "body": [
+          "Normal deletion never requires an email to support. Only if you cannot sign in at all — for example you have lost access to the email address of the account — write to support@queki.app so we can help."
+        ]
+      }
+    ]
+  }
+}

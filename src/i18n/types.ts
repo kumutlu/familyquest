@@ -17,6 +17,7 @@ import type enFunds from './locales/en/funds.json';
 import type enRequests from './locales/en/requests.json';
 import type enReversals from './locales/en/reversals.json';
 import type enBulletin from './locales/en/bulletin.json';
+import type enLegal from './locales/en/legal.json';
 
 /**
  * Strongly-typed resource shape, keyed by NAMESPACE (not language). `en` is the
@@ -44,6 +45,7 @@ interface Resources {
   requests: typeof enRequests;
   reversals: typeof enReversals;
   bulletin: typeof enBulletin;
+  legal: typeof enLegal;
 }
 
 declare module 'i18next' {

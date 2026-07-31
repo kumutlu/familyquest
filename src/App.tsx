@@ -11,6 +11,9 @@ import { Settings } from './pages/Settings';
 import { Login } from './pages/Login';
 import { Signup } from './pages/Signup';
 import { Onboarding } from './pages/Onboarding';
+import { PrivacyPolicy } from './pages/legal/PrivacyPolicy';
+import { TermsOfService } from './pages/legal/TermsOfService';
+import { AccountDeletion } from './pages/legal/AccountDeletion';
 import { FundsDashboard } from './pages/FundsDashboard';
 import { Goals } from './pages/Goals';
 import { GoalDetail } from './pages/GoalDetail';
@@ -53,6 +56,12 @@ function App() {
         <Routes>
           <Route path="/login" element={<Login />} />
           <Route path="/signup" element={<Signup />} />
+
+          {/* Public legal surfaces — intentionally outside <AppLayout> so they
+              render without authentication and without app navigation. */}
+          <Route path="/privacy" element={<PrivacyPolicy />} />
+          <Route path="/terms" element={<TermsOfService />} />
+          <Route path="/account-deletion" element={<AccountDeletion />} />
 
           <Route path="/" element={<AppLayout />}>
             <Route index element={<Dashboard />} />

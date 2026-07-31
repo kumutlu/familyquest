@@ -1,0 +1,230 @@
+{
+  "languageLabel": "Dil",
+  "backToApp": "Queki'ye dön",
+  "lastUpdated": "Son güncelleme: 31 Temmuz 2026",
+  "contactHeading": "İletişim",
+  "contactBody": "Bu belgeyle ilgili sorularınızı support@queki.app adresine gönderebilirsiniz.",
+  "nav": {
+    "privacy": "Gizlilik Politikası",
+    "terms": "Kullanım Koşulları",
+    "accountDeletion": "Hesap Silme"
+  },
+  "privacy": {
+    "title": "Gizlilik Politikası",
+    "metaDescription": "Queki'nin aile, görev, ödül ve cüzdan verilerini nasıl topladığı, kullandığı ve sakladığı; hesabınızı nasıl silebileceğiniz.",
+    "intro": "Queki bir aile görev ve ödül uygulamasıdır. Bu politika yalnızca uygulamanın verilerinizle gerçekte ne yaptığını açıklar.",
+    "sections": [
+      {
+        "heading": "Topladığımız bilgiler",
+        "body": [
+          "Hesap bilgileri: ebeveyn hesabı oluşturmak için kullanılan e-posta adresi ve görünen ad ile bunlarla saklanan profil dili ve avatar seçimi.",
+          "Aile bilgileri: aile adı, aile kodu, üye listesi, üye rolleri (sahip, ebeveyn, çocuk) ve para birimi gibi aile ayarları.",
+          "Yönetilen çocuk hesapları: ebeveyn tarafından belirlenen kullanıcı adı, görünen ad, avatar seçimi ve parola. Yönetilen çocuk hesapları için e-posta adresi gerekmez.",
+          "Etkinlik verileri: görevler ve tamamlanma durumları, ödüller ve kullanımları, cüzdan bakiyeleri ve işlemleri, birikim hedefleri ve katkılar, davranış kayıtları, pano gönderileri ve Pet Box kayıtları.",
+          "Cihaz verileri: yalnızca bildirim iznini açıkça vermeniz hâlinde saklanan bir anlık bildirim jetonu."
+        ]
+      },
+      {
+        "heading": "Kimlik doğrulama verileri",
+        "body": [
+          "Ebeveyn hesapları e-posta ve parola ya da Google ile oturum açma kullanır; her ikisi de Firebase Authentication tarafından yürütülür.",
+          "Yönetilen çocuk hesapları aile kodu, kullanıcı adı ve parola ile oturum açar. Oturum açma bir Cloud Function tarafından doğrulanır ve Firebase özel jetonu üretilir; çocuğun parolası diğer aile üyelerine gösterilmez.",
+          "Google hesap parolanızı almayız ve saklamayız. Google ile oturum açmadan yalnızca e-posta adresi, görünen ad ve profil fotoğrafı bağlantısı alınır."
+        ]
+      },
+      {
+        "heading": "Aile verileri ve yönetilen çocuk hesapları",
+        "body": [
+          "Tüm veriler tek bir aile belgesine bağlıdır. Aile üyeleri yalnızca kendi ailelerine ait verileri okuyup yazabilir; bu kural Firestore güvenlik kurallarıyla uygulanır.",
+          "Yönetilen çocuk hesaplarını ebeveyn veya sahip oluşturur ve yönetir. Ebeveynler ailedeki çocukların görevlerini, ödüllerini, cüzdanını, hedeflerini ve davranış kayıtlarını görüntüleyip yönetebilir."
+        ]
+      },
+      {
+        "heading": "Görevler, ödüller, cüzdan, davranış kayıtları, pano ve Pet Box",
+        "body": [
+          "Görevler; başlık, açıklama, atanan kişi, son tarih, puan değeri ile tamamlanma veya onay geçmişini içerir.",
+          "Ödüller; başlık, maliyet, kullanılabilirlik ve hangi üyenin ne zaman ödül kullandığını içeren kullanım geçmişini içerir.",
+          "Cüzdan kayıtları bakiyeleri, işlemleri, para taleplerini, transferleri ve birikim hedefi katkılarını saklar. Queki gerçek ödeme işlemez; cüzdan değerleri ailenin yönettiği sayılardır.",
+          "Davranış kayıtları ebeveynin girdiği davranış olaylarını ve ilgili puan düzeltmelerini saklar.",
+          "Pano, aile içinde paylaşılan duyuru ve mesajları saklar.",
+          "Pet Box, aile içinde oluşturulan evcil hayvan kayıtlarını ve katkılarını saklar."
+        ]
+      },
+      {
+        "heading": "Üçüncü taraf hizmet sağlayıcılar",
+        "body": [
+          "Google Firebase (Google LLC / Google Ireland Limited), Queki'nin kullandığı tüm altyapıyı sağlar: Firebase Authentication, Cloud Firestore, Cloud Functions, Firebase Hosting ve Firebase Cloud Messaging.",
+          "Google ile oturum açma, ebeveyn hesapları için isteğe bağlı bir kimlik doğrulama yöntemidir.",
+          "Queki başka hiçbir üçüncü taraf hizmet sağlayıcı kullanmaz."
+        ]
+      },
+      {
+        "heading": "Analitik",
+        "body": [
+          "Queki uygulamada herhangi bir ürün analitiği veya reklam SDK'sı çalıştırmaz. Davranışsal profilleme veya reklam takibi yapılmaz.",
+          "Firebase altyapısı, yalnızca hizmetin çalışır durumda tutulması için kullanılan standart işletim günlükleri üretir."
+        ]
+      },
+      {
+        "heading": "Bildirimler",
+        "body": [
+          "Anlık bildirimler Firebase Cloud Messaging ile gönderilir ve isteğe bağlıdır. Cihaz jetonu yalnızca tarayıcı bildirim izni verdikten sonra saklanır ve yalnızca kendi ailenizin etkinlikleriyle ilgili bildirimler için kullanılır.",
+          "Bildirim iznini tarayıcınızdan istediğiniz zaman geri alabilirsiniz; saklanan jeton bu durumda kullanılmaz."
+        ]
+      },
+      {
+        "heading": "Saklama ve saklama süresi",
+        "body": [
+          "Veriler, Queki için işletilen Firebase projesindeki Google Cloud Firestore'da saklanır.",
+          "Veriler hesap ve aile var olduğu sürece saklanır. Hesap veya aile silindiğinde ilgili veriler aşağıda açıklandığı şekilde kaldırılır.",
+          "Avatarlar yerleşik katalogdan seçilir veya bir bağlantı ile gösterilir; Queki yüklenen fotoğraf dosyalarını barındırmaz."
+        ]
+      },
+      {
+        "heading": "Hesap silme ve aile silme",
+        "body": [
+          "Hesabınızı istediğiniz zaman Ayarlar → Tehlikeli Bölge → Hesabı Sil adımlarıyla silebilirsiniz. Silme işlemi bir Cloud Function tarafından yapılır; kimlik doğrulama kaydınızı ve üye verilerinizi kaldırır.",
+          "Aile sahibi tüm aileyi silebilir. Bu işlem aile belgesini ve alt koleksiyonlarını (görevler, ödüller, ödül kullanımları, cüzdan kayıtları, hedefler, davranış kayıtları, pano gönderileri ve Pet Box kayıtları) siler ve o aileye ait yönetilen çocuk hesaplarını kaldırır.",
+          "Silme işlemi yakın zamanda yapılmış bir oturum açma gerektirir. Oturumunuz eskiyse silme öncesinde yeniden oturum açmanız istenir.",
+          "Ayrıntılar Hesap Silme sayfasında açıklanmıştır."
+        ]
+      },
+      {
+        "heading": "Çocuklara ait veriler",
+        "body": [
+          "Yönetilen çocuk hesapları ebeveyn veya sahip tarafından oluşturulur ve denetlenir. Ebeveyn, çocuk hakkında girdiği bilgilerden sorumludur ve çocuk hesabını aile ekranından istediği zaman silebilir."
+        ]
+      }
+    ]
+  },
+  "terms": {
+    "title": "Kullanım Koşulları",
+    "metaDescription": "Aile görev, ödül ve harçlık takibi uygulaması Queki'yi kullanırken geçerli olan koşullar.",
+    "intro": "Bu koşullar Queki kullanımınız için geçerlidir. Hesap oluşturarak veya uygulamayı kullanarak bunları kabul edersiniz.",
+    "sections": [
+      {
+        "heading": "Hizmet tanımı",
+        "body": [
+          "Queki bir aile organizasyon uygulamasıdır. Ailenin görev oluşturmasına, puan vermesine, ödül tanımlamasına, uygulama içi cüzdan ve birikim hedeflerini takip etmesine, davranış kaydetmesine, pano gönderisi paylaşmasına ve Pet Box kayıtlarını yönetmesine olanak tanır."
+        ]
+      },
+      {
+        "heading": "Hedeflenen kullanıcılar",
+        "body": [
+          "Queki, aile oluşturan yetişkinler ile onların davet ettiği veya oluşturduğu aile üyeleri için tasarlanmıştır.",
+          "Ebeveyn veya sahip hesabını yalnızca bir yetişkin oluşturabilir. Yönetilen çocuk hesapları ebeveyn veya sahip tarafından oluşturulmalıdır."
+        ]
+      },
+      {
+        "heading": "Ebeveyn sorumluluğu",
+        "body": [
+          "Ebeveyn veya sahip; ailesine girilen içerikten, ailedeki çocukların gözetiminden ve onlar hakkında kaydedilen bilgilerin doğruluğundan sorumludur.",
+          "Ebeveyn veya sahip, yönetilen çocuk hesaplarına verilen giriş bilgilerinden ve bunların uygun şekilde paylaşılmasından sorumludur."
+        ]
+      },
+      {
+        "heading": "Yönetilen çocuk hesapları",
+        "body": [
+          "Yönetilen çocuk hesapları aile kodu, kullanıcı adı ve ebeveynin belirlediği parola ile oturum açar. Yetkileri kısıtlıdır ve aileyi yönetemezler.",
+          "Ebeveyn veya sahip, yönetilen bir çocuk hesabını istediği zaman değiştirebilir veya silebilir."
+        ]
+      },
+      {
+        "heading": "Ödüllerle ilgili sorumluluk reddi",
+        "body": [
+          "Ödüller, puanlar ve ödül kullanımları yalnızca uygulama içinde geçerlidir. Parasal değerleri yoktur, aile dışında kullanılamaz ve Queki tarafından sağlanmaz, garanti edilmez veya yerine getirilmez.",
+          "Kullanılan bir ödülün gerçek hayatta yerine getirilip getirilmeyeceği tamamen aile üyeleri arasındaki bir konudur."
+        ]
+      },
+      {
+        "heading": "Cüzdanla ilgili sorumluluk reddi",
+        "body": [
+          "Cüzdan bir kayıt tutma özelliğidir. Queki bir banka, ödeme kuruluşu veya para transfer hizmeti değildir; para tutmaz ve gerçek ödeme veya transfer işlemez.",
+          "Bakiyeler, işlemler, harçlıklar, para talepleri ve birikim hedefleri, ailenin kendi takibi için kaydettiği sayılardır."
+        ]
+      },
+      {
+        "heading": "Yasak davranışlar",
+        "body": [
+          "Queki'yi hukuka aykırı bir amaçla kullanmayın, başka bir aileye ait verilere erişmeye çalışmayın, güvenlik kurallarını veya kimlik doğrulamayı aşmaya çalışmayın ve panoda ya da başka bir alanda taciz edici, saldırgan veya yasa dışı içerik paylaşmayın."
+        ]
+      },
+      {
+        "heading": "Askıya alma ve silme",
+        "body": [
+          "Bu koşulları ihlal edecek şekilde veya hizmetin güvenliğini ya da erişilebilirliğini tehdit edecek biçimde kullanılan hesapların erişimini askıya alabilir veya kaldırabiliriz.",
+          "Kendi hesabınızı, sahip iseniz tüm ailenizi, istediğiniz zaman Ayarlar → Tehlikeli Bölge üzerinden silebilirsiniz."
+        ]
+      },
+      {
+        "heading": "Hizmetin sürekliliği",
+        "body": [
+          "Queki \"mevcut hâliyle\" sunulur. Özellikler değişebilir; bakım veya Firebase altyapısındaki bir kesinti nedeniyle erişim kesintiye uğrayabilir.",
+          "Herhangi bir kesintisiz çalışma garantisi verilmez."
+        ]
+      },
+      {
+        "heading": "Sınırlamalar",
+        "body": [
+          "Queki yalnızca ailenizin girdiği bilgileri kaydeder. Görevlerin gerçekten tamamlandığını, ödüllerin verildiğini veya cüzdandaki tutarların gerçek paraya karşılık geldiğini doğrulamaz.",
+          "Yasaların izin verdiği ölçüde Queki; aile üyeleri arasındaki anlaşmazlıklardan, hatalı girilen verilerden veya altyapı kesintisinden doğan zararlardan sorumlu değildir."
+        ]
+      }
+    ]
+  },
+  "accountDeletion": {
+    "title": "Hesap Silme",
+    "metaDescription": "Queki hesabınızı veya tüm ailenizi Ayarlar → Tehlikeli Bölge üzerinden nasıl silersiniz ve verilerinize ne olur.",
+    "intro": "Queki verilerinizi uygulama içinden kendiniz silebilirsiniz. Hesap silmek için bizimle iletişime geçmeniz gerekmez.",
+    "sections": [
+      {
+        "heading": "Nerede bulunur",
+        "body": [
+          "Uygulamayı açın ve Ayarlar → Tehlikeli Bölge → Hesabı Sil adımlarını izleyin.",
+          "Tehlikeli Bölge ayrıca Çıkış Yap seçeneği sunar; bu yalnızca mevcut oturumu sonlandırır ve hiçbir veriyi silmez."
+        ]
+      },
+      {
+        "heading": "Hesabı Sil",
+        "body": [
+          "Hesabı Sil kendi hesabınızı kaldırır: Firebase Authentication kaydınızı ve ailedeki üye profilinizi.",
+          "İşlem çalışmadan önce bir iletişim kutusunda onaylanır ve geri alınamaz."
+        ]
+      },
+      {
+        "heading": "Aileyi Sil",
+        "body": [
+          "Aileyi Sil işlemi aile sahibine açıktır. Aile belgesini ve altındaki her şeyi siler: görevler, ödüller, ödül kullanımları, cüzdan kayıtları ve işlemleri, birikim hedefleri, davranış kayıtları, pano gönderileri ve Pet Box kayıtları.",
+          "O aileye ait yönetilen çocuk hesapları da birlikte silinir."
+        ]
+      },
+      {
+        "heading": "Çıkış Yap",
+        "body": [
+          "Çıkış Yap yalnızca bu cihazdaki oturumunuzu sonlandırır. Hesabınız, aileniz ve tüm veriler değişmeden kalır."
+        ]
+      },
+      {
+        "heading": "Rollere göre ne olur",
+        "body": [
+          "Sahip: hesabınızı silmek için önce ailenin durumu çözülmelidir. Ailedeki son ebeveyn sizseniz hesapla birlikte aile de silinir; aksi hâlde sahipliğin devredilmesi veya ailenin silinmesi gerekir.",
+          "Sahip olmayan ebeveyn veya üye: hesabınızı silmek sizi aileden çıkarır ve üye profilinizi siler. Aile ve diğer üyelerin oluşturduğu veriler kalmaya devam eder.",
+          "Yönetilen çocuk: çocuk hesabı, ebeveyn veya sahip tarafından aile ekranından silinir. Silme işlemi çocuğun giriş bilgilerini ve üye profilini kaldırır."
+        ]
+      },
+      {
+        "heading": "Yakın zamanda oturum açma gereği",
+        "body": [
+          "Güvenlik nedeniyle Firebase, hesap silme işlemine yalnızca yakın zamanda kimlik doğrulaması yapılmış oturumlarda izin verir. Bir süre önce oturum açtıysanız silme tamamlanmadan önce yeniden oturum açmanız istenir.",
+          "Çıkış yapın, tekrar giriş yapın ve Ayarlar → Tehlikeli Bölge → Hesabı Sil adımlarını yineleyin."
+        ]
+      },
+      {
+        "heading": "İstisnai durumlar",
+        "body": [
+          "Normal silme işlemi için destek ekibine e-posta göndermeniz hiçbir zaman gerekmez. Yalnızca hiçbir şekilde oturum açamıyorsanız — örneğin hesabın e-posta adresine erişiminizi kaybettiyseniz — support@queki.app adresine yazın, yardımcı olalım."
+        ]
+      }
+    ]
+  }
+}
