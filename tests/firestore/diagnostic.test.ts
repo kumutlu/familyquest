@@ -23,6 +23,8 @@ beforeEach(async () => {
 
   await testEnv.withSecurityRulesDisabled(async (context: any) => {
     const db = context.firestore();
+    // Rules only grant access to an existing, active family document.
+    await setDoc(doc(db, 'families', familyId), { name: 'Family', currencyCode: 'GBP' });
     
     // Create production-shaped user documents
     await setDoc(doc(db, 'users', parentId), {

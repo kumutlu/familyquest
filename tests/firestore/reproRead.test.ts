@@ -20,6 +20,8 @@ beforeEach(async () => {
   await testEnv.clearFirestore();
   await testEnv.withSecurityRulesDisabled(async (ctx: any) => {
     const db = ctx.firestore();
+    // Rules only grant access to an existing, active family document.
+    await setDoc(doc(db, 'families', familyId), { name: 'Family', currencyCode: 'GBP' });
     await setDoc(doc(db, 'users', parentId), { familyId, role: 'parent', displayName: 'Parent' });
     await setDoc(doc(db, 'users', childId), { familyId, role: 'child', displayName: 'Child', avatarId: null });
     await setDoc(doc(db, `families/${familyId}/profile_update_requests`, 'req1'), {

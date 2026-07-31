@@ -50,25 +50,28 @@ service cloud.firestore {
         && resource.data.get('isManaged', false) == true;
     }
 
-    // A family that is being deleted is frozen: every normal client read and
-    // write across family paths must be denied. Legacy families without a
-    // lifecycleState field remain fully accessible.
-    function familyNotDeleting(familyId) {
-      return !exists(/databases/$(database)/documents/families/$(familyId))
-        || get(/databases/$(database)/documents/families/$(familyId)).data.get('lifecycleState', 'active') != 'deleting';
+    // A family is active only when its document still exists and it is not
+    // being deleted. A family that is being deleted is frozen: every normal
+    // client read and write across family paths must be denied. A family
+    // document that no longer exists (deletion finished, or never created)
+    // grants nothing either, so residual client state cannot resurrect access.
+    // Legacy families without a lifecycleState field remain fully accessible.
+    function familyIsActive(familyId) {
+      return exists(/databases/$(database)/documents/families/$(familyId))
+        && get(/databases/$(database)/documents/families/$(familyId)).data.get('lifecycleState', 'active') != 'deleting';
     }
 
     function isOwner(familyId) {
       let userDoc = get(/databases/$(database)/documents/users/$(authProfileId()));
       return userDoc != null
-        && familyNotDeleting(familyId)
+        && familyIsActive(familyId)
         && userDoc.data.get('familyId', 'null') == familyId
         && userDoc.data.get('role', 'null') == 'owner';
     }
 
     // Raw parent check with NO deletion-freeze test. Reserved for the heavy
     // wallet-ledger validator chains that sit close to Firestore's 1000-
-    // expression budget; those chains apply familyNotDeleting() ONCE at the
+    // expression budget; those chains apply familyIsActive() ONCE at the
     // allow-statement level instead of once per validator.
     function isParentRaw(familyId) {
       let userDoc = get(/databases/$(database)/documents/users/$(authProfileId()));
@@ -78,9 +81,13 @@ service cloud.firestore {
     }
 
     function isParent(familyId) {
-      return isParentRaw(familyId) && familyNotDeleting(familyId);
+      return isParentRaw(familyId) && familyIsActive(familyId);
     }
 
+    // Raw (no freeze) by design, exactly like isParentRaw(): this gate sits
+    // inside the heavy wallet-ledger validator chains, which are close to
+    // Firestore's 1000-expression budget. Every allow statement using it also
+    // applies familyIsActive() once at statement level.
     function isChildInFamily(familyId, childId) {
       let childDoc = get(/databases/$(database)/documents/users/$(childId));
       return childDoc != null
@@ -92,12 +99,12 @@ service cloud.firestore {
       let userDoc = get(/databases/$(database)/documents/users/$(authProfileId()));
       return userDoc != null
         && !requiresManagedChildPasswordChange()
-        && familyNotDeleting(familyId)
+        && familyIsActive(familyId)
         && userDoc.data.get('familyId', 'null') == familyId;
     }
 
     // Raw (no freeze) by design: every allow statement that uses this gate
-    // also applies familyNotDeleting() once at statement level.
+    // also applies familyIsActive() once at statement level.
     function isBehaviourManager(familyId) {
       return isParentRaw(familyId);
     }
@@ -1583,10 +1590,14 @@ service cloud.firestore {
 
     // USERS
     match /users/{uid} {
+      // Cross-member profile reads follow the family lifecycle freeze: while a
+      // family is deleting (or its document is gone) only self reads and the
+      // managed-child identity lookup remain.
       allow read: if isAuthenticated() && (
         authProfileId() == uid
         || isManagedChildIdentity(uid)
-        || get(/databases/$(database)/documents/users/$(authProfileId())).data.familyId == resource.data.familyId
+        || (familyIsActive(resource.data.get('familyId', 'null'))
+          && get(/databases/$(database)/documents/users/$(authProfileId())).data.familyId == resource.data.familyId)
       );
 
       allow update: if isAuthenticated() && (
@@ -1753,7 +1764,7 @@ service cloud.firestore {
 
       match /behaviour_events/{eventId} {
         allow read: if isFamilyMember(familyId);
-        allow create: if familyNotDeleting(familyId) && isBehaviourManager(familyId) && isValidBehaviourEvent(familyId);
+        allow create: if familyIsActive(familyId) && isBehaviourManager(familyId) && isValidBehaviourEvent(familyId);
         allow update, delete: if false;
       }
 
@@ -1793,7 +1804,7 @@ service cloud.firestore {
         // and keeps the parent penalty log under Firestore's 1000-expression
         // budget. The client must supply lastPenaltyTxId (fixed in api.ts
         // addBehaviourEvent).
-        allow update: if familyNotDeleting(familyId) && (
+        allow update: if familyIsActive(familyId) && (
           isValidDepositCredit(familyId, childId)
           || isValidReversalWalletUpdate(familyId, childId)
           || isValidWithdrawalDeduction(familyId, childId)
@@ -1806,7 +1817,7 @@ service cloud.firestore {
               && request.resource.data.keys().hasOnly(['balance', 'lastGoalTxId'])));
         // Isolated, read-free penalty deduction (lean) so the parent penalty
         // log transaction stays within the 1000-expression budget.
-        allow update: if familyNotDeleting(familyId) && isValidBehaviourPenaltyDeduction(familyId, childId);
+        allow update: if familyIsActive(familyId) && isValidBehaviourPenaltyDeduction(familyId, childId);
       }
 
       match /wallet_transactions/{txId} {
@@ -1817,7 +1828,7 @@ service cloud.firestore {
         // Firestore's 1000-expression budget. The goal_return transaction also
         // updates the child wallet with lastGoalTxId (validated by isValidWalletUpdate
         // on the wallets doc), so keeping this statement lean is essential.
-        allow create: if familyNotDeleting(familyId)
+        allow create: if familyIsActive(familyId)
           && ((request.resource.data.type == 'goal_contribution' && isValidGoalWalletLedger(familyId, txId))
           || (request.resource.data.type == 'goal_return' && isValidGoalReturnWalletLedger(familyId, txId)));
         // Reversal + non-Goals writes require a behaviour manager (parent/owner) and
@@ -1831,8 +1842,8 @@ service cloud.firestore {
         // behaviour event and reads it many times, and OR'ing it inside this heavy
         // isBehaviourManager chain pushed the per-request evaluation over Firestore's
         // 1000-expression limit, denying every parent penalty log.
-        allow create: if familyNotDeleting(familyId) && (request.resource.data.type == 'financial_penalty' && isValidFinancialPenalty(familyId));
-        allow create: if familyNotDeleting(familyId) && ((request.resource.data.type == 'reversal' && isValidReversalWalletLedger(familyId, txId)) || (isBehaviourManager(familyId) && (
+        allow create: if familyIsActive(familyId) && (request.resource.data.type == 'financial_penalty' && isValidFinancialPenalty(familyId));
+        allow create: if familyIsActive(familyId) && ((request.resource.data.type == 'reversal' && isValidReversalWalletLedger(familyId, txId)) || (isBehaviourManager(familyId) && (
             (request.resource.data.type == 'deposit' && request.resource.data.amount > 0 && request.resource.data.amount is int && isChildInFamily(familyId, request.resource.data.childId) && request.resource.data.parentRef == authProfileId() && request.resource.data.createdAt == request.time) ||
             (request.resource.data.type == 'withdrawal' && request.resource.data.amount > 0 && request.resource.data.amount is int && isChildInFamily(familyId, request.resource.data.childId) && request.resource.data.parentRef == authProfileId() && request.resource.data.createdAt == request.time) ||
             (request.resource.data.type == 'transfer' && request.resource.data.amount > 0 && request.resource.data.amount is int && isChildInFamily(familyId, request.resource.data.childId) && isChildInFamily(familyId, request.resource.data.fromChildId) && request.resource.data.parentRef == authProfileId() && request.resource.data.createdAt == request.time) ||
@@ -2035,7 +2046,8 @@ service cloud.firestore {
           return get(/databases/$(database)/documents/families/$(familyId)/notifications/$(nid));
         }
         allow read: if isFamilyMember(familyId) && resource.data.userId == authProfileId();
-        allow create, update: if authProfileId() == request.resource.data.userId
+        allow create, update: if familyIsActive(familyId)
+          && authProfileId() == request.resource.data.userId
           && request.resource.data.familyId == familyId
           && request.resource.data.keys().hasOnly(allowedReadKeys())
           // readAt is assigned server-side via serverTimestamp(); it is never a

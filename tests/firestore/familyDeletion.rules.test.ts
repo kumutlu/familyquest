@@ -9,6 +9,7 @@ import { collection, doc, getDoc, getDocs, setDoc, updateDoc } from 'firebase/fi
 import { readFileSync } from 'node:fs';
 
 const FAMILY_ID = 'deletion-family';
+const GHOST_FAMILY_ID = 'no-such-family';
 let testEnv: RulesTestEnvironment;
 
 beforeAll(async () => {
@@ -36,7 +37,17 @@ beforeEach(async () => {
     await setDoc(doc(db, 'users/owner'), { familyId: FAMILY_ID, role: 'owner' });
     await setDoc(doc(db, 'users/parent'), { familyId: FAMILY_ID, role: 'parent' });
     await setDoc(doc(db, 'users/child'), { familyId: FAMILY_ID, role: 'child' });
+    await setDoc(doc(db, 'users/child2'), { familyId: FAMILY_ID, role: 'child' });
+    // A member of a family document that no longer exists (post-deletion or
+    // never created).
+    await setDoc(doc(db, 'users/ghost-parent'), { familyId: GHOST_FAMILY_ID, role: 'parent' });
+    // A pending join requester: authenticated but not yet a member.
+    await setDoc(doc(db, 'users/requester'), { displayName: 'Requester' });
     await setDoc(doc(db, `families/${FAMILY_ID}/tasks/task-1`), { title: 'Task', familyId: FAMILY_ID });
+    await setDoc(doc(db, `families/${FAMILY_ID}/notifications/n-1`), {
+      familyId: FAMILY_ID, type: 'general', actorId: 'parent', recipientIds: ['child'],
+      title: 'Hi', body: 'There', createdAt: new Date(),
+    });
   });
 });
 
@@ -104,6 +115,43 @@ describe('family lifecycle freeze', () => {
     await expect(assertFails(updateDoc(doc(dbFor('owner'), `families/${FAMILY_ID}`), {
       lifecycleState: 'active',
     }))).resolves.toBeDefined();
+  });
+
+  // R1 — paths that previously omitted the freeze.
+
+  it('denies cross-member profile reads while deleting', async () => {
+    // Regression: same-family profile reads work while the family is active.
+    await expect(assertSucceeds(getDoc(doc(dbFor('parent'), 'users/child')))).resolves.toBeDefined();
+    await markDeleting();
+    await expect(assertFails(getDoc(doc(dbFor('parent'), 'users/child')))).resolves.toBeDefined();
+  });
+
+  it('denies notification read-state writes while deleting', async () => {
+    await markDeleting();
+    await expect(assertFails(setDoc(doc(dbFor('child'), `families/${FAMILY_ID}/notification_reads/nr-1`), {
+      familyId: FAMILY_ID, userId: 'child', notificationId: 'n-1', readAt: new Date(),
+    }))).resolves.toBeDefined();
+  });
+
+  it('denies child-scoped creates that depend on isChildInFamily while deleting', async () => {
+    await markDeleting();
+    await expect(assertFails(setDoc(doc(dbFor('child'), `families/${FAMILY_ID}/money_requests/mr-1`), {
+      familyId: FAMILY_ID, fromChildId: 'child', toChildId: 'child2',
+      amountPence: 100, status: 'pending', createdAt: new Date(),
+    }))).resolves.toBeDefined();
+  });
+
+  it('denies access under a family document that does not exist', async () => {
+    await expect(assertFails(getDoc(doc(dbFor('ghost-parent'), `families/${GHOST_FAMILY_ID}`)))).resolves.toBeDefined();
+    await expect(assertFails(setDoc(doc(dbFor('ghost-parent'), `families/${GHOST_FAMILY_ID}/tasks/task-x`), {
+      title: 'Orphan task', familyId: GHOST_FAMILY_ID,
+    }))).resolves.toBeDefined();
+  });
+
+  it('denies a pending join requester any access to a deleting family', async () => {
+    await markDeleting();
+    await expect(assertFails(getDoc(doc(dbFor('requester'), `families/${FAMILY_ID}`)))).resolves.toBeDefined();
+    await expect(assertFails(getDoc(doc(dbFor('requester'), `families/${FAMILY_ID}/tasks/task-1`)))).resolves.toBeDefined();
   });
 });
 

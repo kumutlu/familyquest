@@ -24,6 +24,9 @@ beforeEach(async () => {
 
   await testEnv.withSecurityRulesDisabled(async (context: any) => {
     const db = context.firestore();
+    // The family document must exist: rules only grant access to an existing,
+    // active family (see familyIsActive in firestore.rules).
+    await setDoc(doc(db, 'families', familyId), { name: 'Family', currencyCode: 'GBP' });
 
     // Parent
     await setDoc(doc(db, 'users', parentId), {

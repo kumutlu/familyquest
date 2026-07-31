@@ -50,6 +50,8 @@ async function seedParent() {
   parentUid = cred.user.uid;
   await testEnv.withSecurityRulesDisabled(async (ctx) => {
     const fdb = ctx.firestore();
+    // Rules only grant access to an existing, active family document.
+    await fdb.collection('families').doc(FAMILY).set({ name: 'Family', currencyCode: 'GBP' });
     await fdb.collection('users').doc(parentUid).set({ familyId: FAMILY, role: 'parent', displayName: 'Parent' });
   });
 }
@@ -99,6 +101,9 @@ beforeEach(async () => {
   // clearFirestore() wipes the seeded parent user doc too; re-create it so
   // assertParent() can read the role. The auth account itself persists.
   await testEnv.withSecurityRulesDisabled(async (ctx) => {
+    // The family document is required too: rules only grant access to an
+    // existing, active family.
+    await ctx.firestore().collection('families').doc(FAMILY).set({ name: 'Family', currencyCode: 'GBP' });
     await ctx.firestore().collection('users').doc(parentUid).set({ familyId: FAMILY, role: 'parent', displayName: 'Parent' });
   });
   await signInWithEmailAndPassword(auth, PARENT_EMAIL, PARENT_PW);
