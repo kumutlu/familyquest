@@ -1,0 +1,102 @@
+{
+  "nav": {
+    "helpCenter": "Help Center"
+  },
+  "home": {
+    "title": "Queki Help Center",
+    "subtitle": "Everything you need to set up your family, run the week, and keep the money side fair — in short, practical articles.",
+    "gettingStarted": "Getting started",
+    "gettingStartedHint": "New here? Read these five in order and your family will be up and running.",
+    "popular": "Popular articles",
+    "categories": "Browse by category",
+    "recentUpdates": "Recently updated"
+  },
+  "search": {
+    "label": "Search the Help Center",
+    "title": "Search",
+    "placeholder": "Search help articles…",
+    "clear": "Clear search",
+    "seeAll": "See all results for “{{query}}”",
+    "noResults": "No results for “{{query}}”",
+    "noResultsHint": "Try a shorter word, or browse the categories below.",
+    "resultCount_one": "{{count}} result for “{{query}}”",
+    "resultCount_other": "{{count}} results for “{{query}}”"
+  },
+  "readingTime_one": "{{count}} min read",
+  "readingTime_other": "{{count}} min read",
+  "articleCount_one": "{{count}} article",
+  "articleCount_other": "{{count}} articles",
+  "audience": {
+    "parent": "Parents",
+    "child": "Children",
+    "everyone": "Everyone"
+  },
+  "callouts": {
+    "tip": "Tip",
+    "info": "Good to know",
+    "warning": "Careful",
+    "comingSoon": "Coming soon"
+  },
+  "breadcrumbs": {
+    "label": "Breadcrumb",
+    "home": "Help Center"
+  },
+  "related": {
+    "heading": "Related features"
+  },
+  "article": {
+    "backToApp": "Back to the page you came from",
+    "updatedOn": "Updated {{date}}",
+    "untranslated": "This article has not been translated into your language yet, so you are reading the English version.",
+    "notFound": {
+      "title": "We couldn’t find that article",
+      "body": "It may have been renamed or removed. Try searching from the Help Center home.",
+      "cta": "Go to the Help Center"
+    }
+  },
+  "category": {
+    "notFound": "We couldn’t find that category"
+  },
+  "categories": {
+    "basics": {
+      "label": "Start here",
+      "description": "What Queki is and how to get your family set up."
+    },
+    "roles": {
+      "label": "Guides by role",
+      "description": "Separate walkthroughs for parents and children."
+    },
+    "daily": {
+      "label": "Everyday use",
+      "description": "The dashboard, tasks, behaviours, and rewards."
+    },
+    "money": {
+      "label": "Money",
+      "description": "Wallets, transfers, allowance, goals, and the Pet Box."
+    },
+    "family": {
+      "label": "Family & approvals",
+      "description": "The bulletin, approvals, and managing members."
+    },
+    "account": {
+      "label": "Account & notifications",
+      "description": "Security, sign-in, privacy, and alerts."
+    },
+    "support": {
+      "label": "Support",
+      "description": "Answers to common questions and fixes for problems."
+    }
+  },
+  "contextual": {
+    "openHelp": "Open help for this page"
+  },
+  "sections": {
+    "what": "What it is",
+    "why": "Why it exists",
+    "who": "Who can use it",
+    "how": "How it works",
+    "steps": "Step by step",
+    "tips": "Tips",
+    "mistakes": "Common mistakes"
+  }
+}

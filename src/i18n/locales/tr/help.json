@@ -1,0 +1,102 @@
+{
+  "nav": {
+    "helpCenter": "Yardım Merkezi"
+  },
+  "home": {
+    "title": "Queki Yardım Merkezi",
+    "subtitle": "Ailenizi kurmak, haftayı yönetmek ve para tarafını adil tutmak için ihtiyacınız olan her şey — kısa ve pratik makalelerde.",
+    "gettingStarted": "Başlarken",
+    "gettingStartedHint": "Yeni misiniz? Bu beş makaleyi sırayla okuyun, aileniz kullanmaya hazır olsun.",
+    "popular": "Popüler makaleler",
+    "categories": "Kategorilere göz atın",
+    "recentUpdates": "Son güncellenenler"
+  },
+  "search": {
+    "label": "Yardım Merkezi'nde ara",
+    "title": "Arama",
+    "placeholder": "Yardım makalelerinde ara…",
+    "clear": "Aramayı temizle",
+    "seeAll": "“{{query}}” için tüm sonuçları gör",
+    "noResults": "“{{query}}” için sonuç bulunamadı",
+    "noResultsHint": "Daha kısa bir kelime deneyin veya aşağıdaki kategorilere göz atın.",
+    "resultCount_one": "“{{query}}” için {{count}} sonuç",
+    "resultCount_other": "“{{query}}” için {{count}} sonuç"
+  },
+  "readingTime_one": "{{count}} dk okuma",
+  "readingTime_other": "{{count}} dk okuma",
+  "articleCount_one": "{{count}} makale",
+  "articleCount_other": "{{count}} makale",
+  "audience": {
+    "parent": "Ebeveynler",
+    "child": "Çocuklar",
+    "everyone": "Herkes"
+  },
+  "callouts": {
+    "tip": "İpucu",
+    "info": "Bilmekte fayda var",
+    "warning": "Dikkat",
+    "comingSoon": "Yakında"
+  },
+  "breadcrumbs": {
+    "label": "Gezinti yolu",
+    "home": "Yardım Merkezi"
+  },
+  "related": {
+    "heading": "İlgili özellikler"
+  },
+  "article": {
+    "backToApp": "Geldiğiniz sayfaya dönün",
+    "updatedOn": "Güncelleme: {{date}}",
+    "untranslated": "Bu makale henüz dilinize çevrilmedi, bu yüzden İngilizce sürümünü okuyorsunuz.",
+    "notFound": {
+      "title": "Bu makaleyi bulamadık",
+      "body": "Adı değişmiş veya kaldırılmış olabilir. Yardım Merkezi ana sayfasından aramayı deneyin.",
+      "cta": "Yardım Merkezi'ne git"
+    }
+  },
+  "category": {
+    "notFound": "Bu kategoriyi bulamadık"
+  },
+  "categories": {
+    "basics": {
+      "label": "Buradan başlayın",
+      "description": "Queki nedir ve ailenizi nasıl kurarsınız."
+    },
+    "roles": {
+      "label": "Rollere göre rehberler",
+      "description": "Ebeveynler ve çocuklar için ayrı adım adım rehberler."
+    },
+    "daily": {
+      "label": "Günlük kullanım",
+      "description": "Panel, görevler, davranışlar ve ödüller."
+    },
+    "money": {
+      "label": "Para",
+      "description": "Cüzdanlar, transferler, harçlık, hedefler ve Pet Box."
+    },
+    "family": {
+      "label": "Aile ve onaylar",
+      "description": "Aile panosu, onaylar ve üye yönetimi."
+    },
+    "account": {
+      "label": "Hesap ve bildirimler",
+      "description": "Güvenlik, giriş, gizlilik ve bildirimler."
+    },
+    "support": {
+      "label": "Destek",
+      "description": "Sık sorulan soruların yanıtları ve sorun çözümleri."
+    }
+  },
+  "contextual": {
+    "openHelp": "Bu sayfa için yardımı aç"
+  },
+  "sections": {
+    "what": "Nedir",
+    "why": "Neden var",
+    "who": "Kimler kullanabilir",
+    "how": "Nasıl çalışır",
+    "steps": "Adım adım",
+    "tips": "İpuçları",
+    "mistakes": "Sık yapılan hatalar"
+  }
+}
