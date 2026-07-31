@@ -141,3 +141,96 @@ describe('family settings ownership', () => {
     ))).resolves.toBeDefined();
   });
 });
+
+describe('regional settings on a family that already completed welcome setup', () => {
+  const seedCompletedSetup = async () => {
+    await testEnv.withSecurityRulesDisabled(async context => {
+      await setDoc(doc(context.firestore(), `families/${FAMILY_ID}`), {
+        name: 'Original family',
+        inviteCode: 'OLD123',
+        currencyCode: 'GBP',
+        timezone: 'Europe/London',
+        weekStartsOn: 1,
+        setup: {
+          welcomePromptCompleted: true,
+          completedAt: new Date('2026-01-01T00:00:00Z'),
+          completedBy: 'owner',
+        },
+      });
+    });
+  };
+
+  beforeEach(seedCompletedSetup);
+
+  it('allows the owner to change the currency', async () => {
+    await expect(assertSucceeds(updateDoc(familyRef('owner'), {
+      currencyCode: 'TRY',
+    }))).resolves.toBeUndefined();
+  });
+
+  it('allows the owner to change the timezone', async () => {
+    await expect(assertSucceeds(updateDoc(familyRef('owner'), {
+      timezone: 'Europe/Istanbul',
+    }))).resolves.toBeUndefined();
+  });
+
+  it('allows the owner to change the week start', async () => {
+    await expect(assertSucceeds(updateDoc(familyRef('owner'), {
+      weekStartsOn: 0,
+    }))).resolves.toBeUndefined();
+  });
+
+  it.each(['parent', 'child'] as const)('denies %s regional updates', async role => {
+    await expect(assertFails(updateDoc(familyRef(role), {
+      currencyCode: 'TRY',
+      timezone: 'Europe/Istanbul',
+      weekStartsOn: 0,
+    }))).resolves.toBeDefined();
+  });
+
+  it('denies an owner of another family', async () => {
+    await testEnv.withSecurityRulesDisabled(async context => {
+      await setDoc(doc(context.firestore(), 'users/outsider'), {
+        familyId: 'other-family',
+        role: 'owner',
+      });
+    });
+    const outsiderRef = doc(
+      testEnv.authenticatedContext('outsider').firestore(),
+      `families/${FAMILY_ID}`,
+    );
+    await expect(assertFails(updateDoc(outsiderRef, {
+      currencyCode: 'TRY',
+    }))).resolves.toBeDefined();
+  });
+
+  it('still rejects illegal writes alongside regional changes', async () => {
+    await expect(assertFails(updateDoc(familyRef('owner'), {
+      currencyCode: 'TRY',
+      inviteCode: 'FORGED',
+    }))).resolves.toBeDefined();
+
+    await expect(assertFails(updateDoc(familyRef('owner'), {
+      currencyCode: 'TRY',
+      lifecycleState: 'deleting',
+    }))).resolves.toBeDefined();
+
+    // Actually mutating the setup audit block still has to satisfy
+    // isValidFamilySetup(): a backdated completedAt is rejected.
+    await expect(assertFails(updateDoc(familyRef('owner'), {
+      setup: {
+        welcomePromptCompleted: true,
+        completedAt: new Date('2026-02-02T00:00:00Z'),
+        completedBy: 'owner',
+      },
+    }))).resolves.toBeDefined();
+
+    await expect(assertFails(updateDoc(familyRef('owner'), {
+      setup: {
+        welcomePromptCompleted: true,
+        completedAt: serverTimestamp(),
+        completedBy: 'parent',
+      },
+    }))).resolves.toBeDefined();
+  });
+});

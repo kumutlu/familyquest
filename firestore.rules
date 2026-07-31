@@ -1669,7 +1669,11 @@ service cloud.firestore {
             || isValidGamificationConfig(request.resource.data.gamificationConfig))
         && (!('petBoxEnabled' in request.resource.data)
             || request.resource.data.petBoxEnabled is bool)
-        && (!('setup' in request.resource.data)
+        // The setup audit block is validated only when this write actually
+        // changes it. It pins completedAt == request.time, so re-validating an
+        // untouched, previously-approved setup map would reject every later
+        // owner update (regional settings, name, Pet Box, ...).
+        && (!request.resource.data.diff(resource.data).affectedKeys().hasAny(['setup'])
             || isValidFamilySetup(request.resource.data.setup));
 
       match /join_requests/{requestId} {
