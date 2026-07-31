@@ -1,5 +1,5 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import i18n from '../i18n/config';
 
 const api = vi.hoisted(() => ({
@@ -22,6 +22,17 @@ const baseReward = {
   isActive: true,
   inventory: null,
 };
+
+/**
+ * The redemption fixtures below are pinned to a fixed instant, and
+ * `Rewards.formatRedemptionDateTime` compares them against `new Date()` to
+ * decide whether to render "Today". Without freezing the clock the suite only
+ * passes on the single real-world day that matches the fixture, which is what
+ * broke here. Freeze the system time to the fixture date instead of weakening
+ * the assertion — the product behaviour ("Today • HH:MM" for same-day
+ * redemptions) is intentional and stays untouched.
+ */
+const FIXTURE_NOW = new Date('2026-07-30T12:31:00Z');
 
 const baseRedemption = {
   id: 'rd1',
@@ -119,9 +130,15 @@ describe('Rewards page — edit and delete (soft archive)', () => {
 describe('Rewards page — redemption history', () => {
   beforeEach(async () => {
     vi.clearAllMocks();
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    vi.setSystemTime(FIXTURE_NOW);
     api.redeemReward.mockResolvedValue(undefined);
     await i18n.loadNamespaces(['reversals']);
     await i18n.changeLanguage('en');
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
   });
 
   it('shows redemption history with child avatar, name, reward, points, and date for multiple children', () => {
