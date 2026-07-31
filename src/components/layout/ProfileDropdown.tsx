@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
-import { User, Settings, Shield, LogOut } from 'lucide-react';
+import { User, Settings, Shield, LogOut, HelpCircle } from 'lucide-react';
 import { Avatar } from '../ui/Avatar';
 import { useStore } from '../../store/useStore';
 import { getRoleLabel, isOwnerRole } from '../../lib/roles';
@@ -16,7 +16,7 @@ const menuItemClass =
  * Only the rendered menu items differ between roles; the component itself is shared.
  */
 export function ProfileDropdown() {
-  const { t } = useTranslation(['settings', 'common']);
+  const { t } = useTranslation(['settings', 'common', 'help']);
   const currentUser = useStore(state => state.currentUser);
   const [isOpen, setIsOpen] = useState(false);
   const [editorOpen, setEditorOpen] = useState(false);
@@ -142,6 +142,17 @@ export function ProfileDropdown() {
               <User size={18} className="text-gray-400" />
               <span>{t('editProfile')}</span>
             </button>
+
+            <Link
+              to="/help"
+              role="menuitem"
+              tabIndex={0}
+              onClick={close}
+              className={menuItemClass}
+            >
+              <HelpCircle size={18} className="text-gray-400" />
+              <span>{t('help:nav.helpCenter')}</span>
+            </Link>
 
             <Link
               to="/settings"

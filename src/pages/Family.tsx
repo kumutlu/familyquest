@@ -1,5 +1,6 @@
 import { Link } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
+import { HelpButton } from '../help/components/HelpButton';
 import { Avatar } from '../components/ui/Avatar';
 import { PageLoader } from '../components/ui/PageLoader';
 import { Card, CardContent } from '../components/ui/Card';
@@ -115,7 +116,10 @@ export function Family() {
     <div className="space-y-6 animate-in fade-in duration-300">
       <header className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div className="min-w-0">
-          <h1 className="text-2xl font-bold text-gray-900 tracking-tight">{t('title')}</h1>
+          <div className="flex items-center gap-1">
+            <h1 className="text-2xl font-bold text-gray-900 tracking-tight">{t('title')}</h1>
+            <HelpButton />
+          </div>
           <p className="text-gray-500 mt-1">{t('subtitle')}</p>
         </div>
         <div className="flex flex-wrap items-center gap-2">

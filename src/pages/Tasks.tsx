@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
+import { HelpButton } from '../help/components/HelpButton';
 import { Card, CardContent } from '../components/ui/Card';
 import { PageLoader } from '../components/ui/PageLoader';
 import { EmptyState } from '../components/ui/EmptyState';
@@ -140,7 +141,10 @@ export function Tasks() {
     <div className="space-y-6 animate-in fade-in duration-300">
       <header className="flex justify-between items-center">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900 tracking-tight">{t('tasks:title')}</h1>
+          <div className="flex items-center gap-1">
+            <h1 className="text-2xl font-bold text-gray-900 tracking-tight">{t('tasks:title')}</h1>
+            <HelpButton />
+          </div>
           <p className="text-gray-500 mt-1">{t('tasks:subtitle')}</p>
         </div>
         {isParentRole(currentUser?.role) && (

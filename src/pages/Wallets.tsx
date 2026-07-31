@@ -1,5 +1,6 @@
 import { useStore } from '../store/useStore';
 import { useTranslation } from 'react-i18next';
+import { HelpButton } from '../help/components/HelpButton';
 import { Card, CardContent } from '../components/ui/Card';
 import { PageLoader } from '../components/ui/PageLoader';
 import { Avatar } from '../components/ui/Avatar';
@@ -65,7 +66,10 @@ export function Wallets() {
   return (
     <div className="space-y-6 animate-in fade-in duration-300 pb-8">
       <header>
-        <h1 className="text-2xl font-bold text-gray-900 tracking-tight">{t('allowance.title')}</h1>
+        <div className="flex items-center gap-1">
+          <h1 className="text-2xl font-bold text-gray-900 tracking-tight">{t('allowance.title')}</h1>
+          <HelpButton />
+        </div>
         <p className="text-gray-500 mt-1">{t('allowance.subtitle')}</p>
       </header>
 

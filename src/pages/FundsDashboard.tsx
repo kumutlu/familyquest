@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
+import { HelpButton } from '../help/components/HelpButton';
 import { useStore } from '../store/useStore';
 import { FundCard } from '../components/funds/FundCard';
 import { PetLeaderboard } from '../components/funds/PetLeaderboard';
@@ -47,7 +48,10 @@ export function FundsDashboard() {
     <div className="space-y-6">
       <div className="flex justify-between items-center bg-white p-6 rounded-2xl shadow-sm border border-gray-100">
         <div>
-          <h1 className="text-2xl font-extrabold tracking-tight text-gray-900">{t('title')}</h1>
+          <div className="flex items-center gap-1">
+            <h1 className="text-2xl font-extrabold tracking-tight text-gray-900">{t('title')}</h1>
+            <HelpButton />
+          </div>
           <p className="text-sm text-gray-500 font-medium mt-1">{t('subtitle')}</p>
         </div>
         {isParent ? (

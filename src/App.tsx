@@ -19,6 +19,10 @@ import { Goals } from './pages/Goals';
 import { GoalDetail } from './pages/GoalDetail';
 import { Notifications } from './pages/Notifications';
 import { TransactionHistoryScreen } from './components/history/TransactionHistoryScreen';
+import { HelpHome } from './help/pages/HelpHome';
+import { HelpArticlePage } from './help/pages/HelpArticlePage';
+import { HelpCategoryPage } from './help/pages/HelpCategoryPage';
+import { HelpSearchResults } from './help/pages/HelpSearchResults';
 import { useStore } from './store/useStore';
 import { initForegroundMessaging } from './lib/pushNotifications';
 import { RequestDetailProvider } from './components/requests/RequestDetailContext';
@@ -78,6 +82,13 @@ function App() {
             <Route path="notifications" element={<Notifications />} />
             <Route path="history" element={<TransactionHistoryScreen />} />
             <Route path="settings" element={<Settings />} />
+
+            {/* Help Center. `search` and `category/:id` are declared before the
+                catch-all `:articleId` so they are never swallowed by it. */}
+            <Route path="help" element={<HelpHome />} />
+            <Route path="help/search" element={<HelpSearchResults />} />
+            <Route path="help/category/:categoryId" element={<HelpCategoryPage />} />
+            <Route path="help/:articleId" element={<HelpArticlePage />} />
           </Route>
         </Routes>
       </RequestDetailProvider>

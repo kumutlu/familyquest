@@ -1,5 +1,6 @@
 import { useCallback, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
+import { HelpButton } from '../help/components/HelpButton';
 import { useNavigate } from 'react-router-dom';
 import {
   CheckCircle,
@@ -140,7 +141,10 @@ export function Notifications() {
   return (
     <div className="max-w-2xl mx-auto">
       <div className="flex items-center justify-between gap-2 px-1 py-3">
-        <h1 className="text-xl font-extrabold text-gray-900">{t('title')}</h1>
+        <div className="flex items-center gap-1">
+          <h1 className="text-xl font-extrabold text-gray-900">{t('title')}</h1>
+          <HelpButton />
+        </div>
         <button
           type="button"
           onClick={handleMarkAll}

@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
+import { HelpButton } from '../help/components/HelpButton';
 import { Link } from 'react-router-dom';
 import { ChevronRight, History } from 'lucide-react';
 import { useStore } from '../store/useStore';
@@ -126,7 +127,10 @@ export function Wallet() {
         />
       ) : (
         <header>
-          <h1 className="text-2xl font-bold text-gray-900 tracking-tight">{t('page.title')}</h1>
+          <div className="flex items-center gap-1">
+            <h1 className="text-2xl font-bold text-gray-900 tracking-tight">{t('page.title')}</h1>
+            <HelpButton />
+          </div>
           <p className="text-gray-500 mt-1">{t('page.subtitle')}</p>
         </header>
       )}

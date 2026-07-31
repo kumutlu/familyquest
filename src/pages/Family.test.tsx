@@ -78,14 +78,14 @@ describe('Family page', () => {
       currentUser: { id: 'k', role: 'owner', familyId: 'f1' },
       familyMembers: []
     });
-    expect(screen.getAllByRole('button').length).toBe(5);
+    expect(screen.getAllByRole('button').length).toBe(6);
     unmount();
 
     const { unmount: unmountParent } = renderFamily({
       currentUser: { id: 'b', role: 'parent', familyId: 'f1' },
       familyMembers: []
     });
-    expect(screen.getAllByRole('button').length).toBe(3);
+    expect(screen.getAllByRole('button').length).toBe(4);
     unmountParent();
 
     renderFamily({
@@ -93,7 +93,7 @@ describe('Family page', () => {
       familyMembers: []
     });
     const buttons = screen.queryAllByRole('button');
-    expect(buttons.length).toBe(2);
+    expect(buttons.length).toBe(3);
   });
 
   it('lifetime XP and wallet balances are never reset', () => {

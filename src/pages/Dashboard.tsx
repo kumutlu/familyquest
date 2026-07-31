@@ -1,5 +1,6 @@
 import { Flame, Star, MessageCircle, Inbox } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
+import { HelpButton } from '../help/components/HelpButton';
 import { PageLoader } from '../components/ui/PageLoader';
 import { EmptyState } from '../components/ui/EmptyState';
 import { useStore } from '../store/useStore';
@@ -98,7 +99,10 @@ export function Dashboard() {
   return (
     <div className="space-y-8 animate-in fade-in duration-300">
       <header>
-        <h1 className="text-2xl font-bold text-gray-900 tracking-tight">Good Morning, {currentUser.displayName}! ☀️</h1>
+        <div className="flex items-center gap-1">
+          <h1 className="text-2xl font-bold text-gray-900 tracking-tight">Good Morning, {currentUser.displayName}! ☀️</h1>
+          <HelpButton />
+        </div>
         <p className="mt-1 text-gray-500">You're doing great this week.</p>
       </header>
 
