@@ -133,8 +133,13 @@ function makeFakeDb() {
     doc: (id?: string) => makeRef(`${collPath}/${id || Math.random().toString(36).slice(2)}`),
   });
 
+  // Every committed transaction records its write operations so tests can
+  // assert atomic grouping (e.g. receipt + family delete in one transaction).
+  const txLog: Array<Array<string>> = [];
+
   const db: any = {
     store,
+    txLog,
     doc: makeRef,
     collection: (path: string) => makeQuery(path, []),
     runTransaction: async (cb: (tx: any) => Promise<any>) => {
@@ -146,6 +151,7 @@ function makeFakeDb() {
         delete: (ref: any) => { writes.push(['delete', ref, {}]); },
       };
       const result = await cb(tx);
+      txLog.push(writes.map(([op, ref]) => `${op} ${ref.path}`));
       for (const [op, ref, data] of writes) {
         if (op === 'set') store.set(ref.path, { ...data });
         else if (op === 'update') store.set(ref.path, applyUpdate(store.get(ref.path) ?? {}, data));
@@ -501,6 +507,68 @@ describe('processFamilyDeletionImpl — errors', () => {
     expect(result.done).toBe(true);
     expect(auth.deleted.filter((u: string) => u === 'auth-child-1').length).toBe(1);
     expect(db.store.has(`families/${FAMILY_ID}`)).toBe(false);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Finalize atomicity (R4)
+// ---------------------------------------------------------------------------
+
+/** Seed a job that is already positioned at the finalize phase. */
+function seedFinalizeOnly() {
+  db.store.clear();
+  db.store.set(`families/${FAMILY_ID}`, { name: 'Worker Family', lifecycleState: 'deleting' });
+  db.store.set(`familyDeletionJobs/${FAMILY_ID}`, makeJob({ phase: 'finalize' }));
+}
+
+describe('finalize — transactional completion', () => {
+  it('writes the receipt and deletes the family document in a single transaction', async () => {
+    seedFinalizeOnly();
+    const result = await processFamilyDeletionImpl(ctx, FAMILY_ID);
+    expect(result.state).toBe('completed');
+    const atomic = db.txLog.find((writes: string[]) =>
+      writes.includes(`set familyDeletionReceipts/${FAMILY_ID}`)
+      && writes.includes(`delete families/${FAMILY_ID}`));
+    expect(atomic, 'receipt and family delete must commit together').toBeDefined();
+    // The job document is removed by a separate best-effort write.
+    expect(db.store.has(`familyDeletionJobs/${FAMILY_ID}`)).toBe(false);
+    expect(atomic).not.toContain(`delete familyDeletionJobs/${FAMILY_ID}`);
+  });
+
+  it('treats an existing receipt as success without rewriting it', async () => {
+    seedFinalizeOnly();
+    db.store.delete(`families/${FAMILY_ID}`);
+    db.store.set(`familyDeletionReceipts/${FAMILY_ID}`, {
+      schemaVersion: 1, familyId: FAMILY_ID, requestedBy: 'owner-uid',
+      startedAt: 'earlier', completedAt: 'earlier', outcome: 'completed',
+      expiresAt: { __timestampMs: 1 },
+    });
+    const result = await processFamilyDeletionImpl(ctx, FAMILY_ID);
+    expect(result.state).toBe('completed');
+    expect(db.store.get(`familyDeletionReceipts/${FAMILY_ID}`).completedAt).toBe('earlier');
+    expect(db.store.has(`familyDeletionJobs/${FAMILY_ID}`)).toBe(false);
+  });
+
+  it('hard-fails with INVARIANT_VIOLATION when family and receipt are both missing', async () => {
+    seedFinalizeOnly();
+    db.store.delete(`families/${FAMILY_ID}`);
+    await processFamilyDeletionImpl(ctx, FAMILY_ID);
+    const job = db.store.get(`familyDeletionJobs/${FAMILY_ID}`);
+    expect(job.state).toBe('failed');
+    expect(job.lastErrorCode).toBe('INVARIANT_VIOLATION');
+    expect(job.nextAttemptAt).toBeNull();
+    expect(db.store.has(`familyDeletionReceipts/${FAMILY_ID}`)).toBe(false);
+  });
+
+  it('retains the accountDeletionJobs purge required by the account-deletion contract (D8)', async () => {
+    seedFinalizeOnly();
+    db.store.set('users/rider-uid', { familyId: FAMILY_ID, role: 'owner' });
+    db.store.set('accountDeletionJobs/rider-uid', { familyId: FAMILY_ID });
+    auth.users.set('rider-uid', { customClaims: {} });
+    await processFamilyDeletionImpl(ctx, FAMILY_ID);
+    expect(db.store.has('users/rider-uid')).toBe(false);
+    expect(db.store.has('accountDeletionJobs/rider-uid')).toBe(false);
+    expect(auth.deleted).toContain('rider-uid');
   });
 });
 

@@ -286,15 +286,14 @@ export async function deleteFamilyImpl(
 
       if (job.state === 'failed') {
         // Explicit retry with a new clientReqId returns the job to queued and
-        // clears only sanitized error fields.
+        // clears ONLY the sanitized error fields (D9). Attempt counters are
+        // durable abuse-control state and are deliberately preserved.
         t.update(jobRef(db, familyId), {
           state: 'queued',
           clientReqId: input.clientReqId,
           lastErrorCode: null,
           lastErrorAt: null,
           nextAttemptAt: null,
-          attemptCount: 0,
-          phaseAttemptCount: 0,
           updatedAt: FieldValue.serverTimestamp(),
         });
         return { familyId, state: 'queued' as DeletionState, phase: job.phase };
@@ -399,6 +398,11 @@ export async function getFamilyDeletionStatusImpl(
 
 class LinkageError extends Error {
   code: SanitizedErrorCode = 'IDENTITY_LINKAGE_ERROR';
+}
+
+/** Contradictory terminal state: neither the family nor its receipt exists. */
+class InvariantViolation extends Error {
+  code: SanitizedErrorCode = 'INVARIANT_VIOLATION';
 }
 
 async function verifyManagedChild(
@@ -528,14 +532,16 @@ export async function processFamilyDeletionImpl(
   } catch (err: any) {
     const code: SanitizedErrorCode = err instanceof LinkageError
       ? 'IDENTITY_LINKAGE_ERROR'
-      : 'TRANSIENT';
+      : err instanceof InvariantViolation
+        ? 'INVARIANT_VIOLATION'
+        : 'TRANSIENT';
     await db.runTransaction(async (t: any) => {
       const snap = await t.get(jobRef(db, familyId));
       if (!snap.exists) return;
       const job = snap.data() as FamilyDeletionJob;
       if (job.leaseOwner !== ctx.invocationId) return;
       const exhausted = (job.attemptCount ?? 0) >= MAX_AUTOMATIC_ATTEMPTS;
-      const failedHard = code === 'IDENTITY_LINKAGE_ERROR' || exhausted;
+      const failedHard = code !== 'TRANSIENT' || exhausted;
       const backoffMs = Math.min(60 * 60 * 1000, 30_000 * 2 ** Math.min(10, job.attemptCount ?? 0))
         + Math.floor(Math.random() * 5_000);
       t.update(jobRef(db, familyId), {
@@ -743,6 +749,11 @@ async function runPhaseOnce(
     case 'finalize': {
       // Riding account deletions: owners whose account deletion triggered or
       // joined this family deletion are purged now (Auth deleted last).
+      //
+      // D8 (cross-spec compatibility): this purge is REQUIRED by the account
+      // deletion contract in docs/account-and-family-deletion.md even though
+      // the family-deletion specification narrative does not mention it.
+      // Removing it would strand accountDeletionJobs records; keep it.
       const acctSnap = await db.collection('accountDeletionJobs')
         .where('familyId', '==', familyId).limit(BATCH_LIMIT).get();
       for (const docSnap of acctSnap.docs) {
@@ -756,21 +767,42 @@ async function runPhaseOnce(
         await docSnap.ref.delete();
       }
 
-      // Receipt first (durable completion marker), family document last,
-      // then the job itself is removed.
+      // Completion is atomic: the durable receipt and the removal of the
+      // family document commit together, after re-reading both inside the
+      // transaction.
       //
       // Receipt schema (spec): schemaVersion, familyId, requestedBy, startedAt,
       // completedAt, outcome, expiresAt. No progress counts are retained and
       // expiresAt is a Timestamp so the Firestore TTL policy can act on it.
-      await receiptRef(db, familyId).set(buildReceipt(ctx, familyId, job));
-      await familyRef(db, familyId).delete();
-      await jobRef(db, familyId).update({
-        state: 'completed',
-        leaseOwner: null,
-        leaseExpiresAt: null,
-        updatedAt: FieldValue.serverTimestamp(),
+      const outcome: 'written' | 'already' | 'invariant' = await db.runTransaction(async (t: any) => {
+        const [familySnap, receiptSnap] = await Promise.all([
+          t.get(familyRef(db, familyId)),
+          t.get(receiptRef(db, familyId)),
+        ]);
+        if (receiptSnap.exists) {
+          // Resumed finalize: the receipt already proves success. Never
+          // rewrite it; only remove a family document left behind.
+          if (familySnap.exists) t.delete(familyRef(db, familyId));
+          return 'already';
+        }
+        // Family gone with no receipt: a contradictory state that must never
+        // be finalized silently.
+        if (!familySnap.exists) return 'invariant';
+        t.set(receiptRef(db, familyId), buildReceipt(ctx, familyId, job));
+        t.delete(familyRef(db, familyId));
+        return 'written';
       });
-      await jobRef(db, familyId).delete();
+      if (outcome === 'invariant') {
+        throw new InvariantViolation('family and receipt both missing at finalize');
+      }
+
+      // The job document is disposable bookkeeping: deleting it is a separate,
+      // best-effort write outside the completion transaction.
+      try {
+        await jobRef(db, familyId).delete();
+      } catch {
+        /* recovery scheduler sees a completed family with a receipt */
+      }
       return 'completed';
     }
   }

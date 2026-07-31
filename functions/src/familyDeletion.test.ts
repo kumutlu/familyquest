@@ -275,7 +275,9 @@ describe('deleteFamilyImpl', () => {
       state: 'failed',
       phase: 'delete_managed_identities',
       lastErrorCode: 'TRANSIENT',
+      lastErrorAt: { __serverTimestamp: true },
       attemptCount: 8,
+      phaseAttemptCount: 3,
     }));
     db.store.get(`families/${FAMILY_ID}`).lifecycleState = 'deleting';
 
@@ -285,8 +287,13 @@ describe('deleteFamilyImpl', () => {
 
     const job = db.store.get(`familyDeletionJobs/${FAMILY_ID}`);
     expect(job.state).toBe('queued');
+    // D9: only the sanitized error fields are cleared; attempt counters are
+    // durable abuse-control state and must survive an explicit retry.
     expect(job.lastErrorCode).toBeNull();
-    expect(job.attemptCount).toBe(0);
+    expect(job.lastErrorAt).toBeNull();
+    expect(job.nextAttemptAt).toBeNull();
+    expect(job.attemptCount).toBe(8);
+    expect(job.phaseAttemptCount).toBe(3);
     expect(ctx.enqueued).toEqual([FAMILY_ID]);
   });
 
