@@ -1,5 +1,7 @@
+import { useState } from 'react';
 import { Link, Outlet, useLocation, Navigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
+import { AppWindow } from 'lucide-react';
 import { cn } from '../../lib/utils';
 import { useStore } from '../../store/useStore';
 import { getNavItems } from '../../config/navigation';
@@ -12,6 +14,9 @@ import { signOut } from '../../lib/api';
 
 export function AppLayout() {
   const { t } = useTranslation('common');
+  // Header brand mark. Falls back to a neutral generic app icon if the logo
+  // asset fails to load — never a letter glyph.
+  const [logoFailed, setLogoFailed] = useState(false);
   const location = useLocation();
   const authStatus = useStore(state => state.authStatus);
   const authUser = useStore(state => state.authUser);
@@ -71,9 +76,21 @@ export function AppLayout() {
         <div className="max-w-5xl mx-auto px-4 h-16 flex items-center justify-between">
           <div className="flex items-center space-x-2">
             <Link to="/" className="flex items-center space-x-2 hover:opacity-80 transition-opacity">
-              <div className="w-8 h-8 bg-primary-500 rounded-xl flex items-center justify-center text-white font-bold">
-                F
-              </div>
+              {logoFailed ? (
+                <span
+                  aria-hidden="true"
+                  className="flex h-8 w-8 items-center justify-center rounded-xl bg-gray-100 text-gray-400"
+                >
+                  <AppWindow size={18} />
+                </span>
+              ) : (
+                <img
+                  src="/favicon.svg"
+                  alt="Queki"
+                  className="h-8 w-8 rounded-xl"
+                  onError={() => setLogoFailed(true)}
+                />
+              )}
               <span className="text-xl font-extrabold tracking-tight text-gray-900">Queki</span>
             </Link>
 
