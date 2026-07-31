@@ -152,12 +152,22 @@ export async function rejectChildJoinRequest(
 
 // --- Error mapping ------------------------------------------------------------
 
+/** The closed set of child-friendly error keys this module can produce. */
+export type ChildJoinErrorKey =
+  | 'auth:childJoin.errors.invalidRequest'
+  | 'auth:childJoin.errors.usernameTaken'
+  | 'auth:childJoin.errors.duplicateRequest'
+  | 'auth:childJoin.errors.rateLimited'
+  | 'auth:childJoin.errors.network'
+  | 'auth:childJoin.errors.notFound'
+  | 'auth:childJoin.errors.generic';
+
 /**
  * Maps a backend error to a child-friendly i18n key under `auth:childJoin.errors`.
  * Every family-resolution failure collapses to the same generic key so the UI
  * cannot be used to probe whether a Family Code or username exists.
  */
-export function mapChildJoinErrorKey(error: unknown): string {
+export function mapChildJoinErrorKey(error: unknown): ChildJoinErrorKey {
   const raw = error as { code?: unknown; message?: unknown } | undefined;
   const code = typeof raw?.code === 'string' ? raw.code : '';
   const message = typeof raw?.message === 'string' ? raw.message : '';

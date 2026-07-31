@@ -23,7 +23,7 @@ const joinApiMocks = vi.hoisted(() => ({
   cancelChildJoinRequest: vi.fn(),
   mapChildJoinErrorKey: vi.fn(() => 'auth:childJoin.errors.generic'),
   storeJoinRequestHandle: vi.fn(),
-  readJoinRequestHandle: vi.fn(() => null),
+  readJoinRequestHandle: vi.fn((): { requestId: string; requestSecret: string; username: string } | null => null),
   clearJoinRequestHandle: vi.fn(),
 }));
 vi.mock('../lib/childJoinApi', () => joinApiMocks);
