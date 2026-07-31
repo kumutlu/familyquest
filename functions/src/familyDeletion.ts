@@ -126,6 +126,11 @@ export interface FamilyDeletionJob {
   updatedAt: unknown;
   lastErrorCode: string | null;
   lastErrorAt: unknown | null;
+  // Identity bookkeeping used by verify_orphans (R6) to re-verify Auth state
+  // after the Firestore profiles have gone. Server-only, uid values only.
+  managedAuthUids?: string[];
+  selfRegisteredUids?: string[];
+  verifyRetried?: boolean;
   progress: {
     processedMembers: number;
     deletedManagedIdentities: number;
@@ -454,6 +459,16 @@ async function verifyManagedChild(
   return { authUid: publicAuthUid };
 }
 
+/** Returns the Auth user, or null when it no longer exists. */
+async function getAuthUserOrNull(ctx: FamilyDeletionContext, authUid: string): Promise<any | null> {
+  try {
+    return await ctx.auth.getUser(authUid);
+  } catch (err: any) {
+    if (err?.code === 'auth/user-not-found' || err?.errorInfo?.code === 'auth/user-not-found') return null;
+    throw err;
+  }
+}
+
 async function stripFamilyClaims(ctx: FamilyDeletionContext, authUid: string): Promise<void> {
   let authUser: any;
   try {
@@ -642,6 +657,13 @@ async function runPhaseOnce(
           }
         }
       }
+      // Re-strip claims for profiles already cleared in an earlier pass: the
+      // orphan scan (R6) can send the job back here after the user documents
+      // no longer carry familyId.
+      for (const uid of job.selfRegisteredUids ?? []) {
+        await renewLease(ctx, familyId);
+        await stripFamilyClaims(ctx, uid);
+      }
       // Idempotent: re-running only repeats safe operations.
       await setPhase(ctx, familyId, { phase: 'delete_managed_identities', phaseAttemptCount: 0 });
       return 'continue';
@@ -658,6 +680,7 @@ async function runPhaseOnce(
         return 'continue';
       }
       let deleted = 0;
+      const managedAuthUids = [...(job.managedAuthUids ?? [])];
       for (const docSnap of snap.docs) {
         await renewLease(ctx, familyId);
         const profile = docSnap.data() as Record<string, any>;
@@ -668,11 +691,13 @@ async function runPhaseOnce(
           } catch (err: any) {
             if (err?.code !== 'auth/user-not-found' && err?.errorInfo?.code !== 'auth/user-not-found') throw err;
           }
+          if (!managedAuthUids.includes(authUid)) managedAuthUids.push(authUid);
         }
         await docSnap.ref.delete();
         deleted += 1;
       }
       await setPhase(ctx, familyId, {
+        managedAuthUids,
         'progress.deletedManagedIdentities': (job.progress.deletedManagedIdentities ?? 0) + deleted,
       });
       return 'continue';
@@ -685,14 +710,17 @@ async function runPhaseOnce(
         return 'continue';
       }
       let cleared = 0;
+      const selfRegisteredUids = [...(job.selfRegisteredUids ?? [])];
       for (const docSnap of snap.docs) {
         await renewLease(ctx, familyId);
         // Every remaining member is self-registered: preserve the profile,
         // clear every family relationship and gamification value.
         await docSnap.ref.update(familyScopedProfileClearUpdate());
+        if (!selfRegisteredUids.includes(docSnap.id)) selfRegisteredUids.push(docSnap.id);
         cleared += 1;
       }
       await setPhase(ctx, familyId, {
+        selfRegisteredUids,
         'progress.clearedSelfRegisteredProfiles': (job.progress.clearedSelfRegisteredProfiles ?? 0) + cleared,
       });
       return 'continue';
@@ -775,6 +803,42 @@ async function runPhaseOnce(
         await setPhase(ctx, familyId, { phase: 'delete_family_subcollections', phaseAttemptCount: 0 });
         return 'continue';
       }
+
+      // Auth linkage re-verification (R6). Firestore residue is not enough:
+      // the identity side must be proven clean before the family document is
+      // allowed to disappear.
+      for (const authUid of job.managedAuthUids ?? []) {
+        await renewLease(ctx, familyId);
+        const user = await getAuthUserOrNull(ctx, authUid);
+        if (user) {
+          // Profile deleted but the managed Auth identity survives: a
+          // contradictory state that must never be finalized.
+          throw new LinkageError('managed auth identity survived profile deletion');
+        }
+      }
+
+      const stale: string[] = [];
+      for (const uid of job.selfRegisteredUids ?? []) {
+        await renewLease(ctx, familyId);
+        const user = await getAuthUserOrNull(ctx, uid);
+        if (!user) continue;
+        const claims = (user.customClaims ?? {}) as Record<string, unknown>;
+        if (claims.familyId === familyId || claims.childId != null || claims.managedChild === true) {
+          stale.push(uid);
+        }
+      }
+      if (stale.length > 0) {
+        if (job.verifyRetried === true) {
+          throw new LinkageError('family claims persist after re-verification');
+        }
+        await setPhase(ctx, familyId, {
+          phase: 'revoke_member_access',
+          phaseAttemptCount: 0,
+          verifyRetried: true,
+        });
+        return 'continue';
+      }
+
       await setPhase(ctx, familyId, { phase: 'finalize', phaseAttemptCount: 0 });
       return 'continue';
     }

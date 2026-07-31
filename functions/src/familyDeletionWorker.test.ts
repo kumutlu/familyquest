@@ -526,6 +526,50 @@ describe('processFamilyDeletionImpl — errors', () => {
 });
 
 // ---------------------------------------------------------------------------
+// Orphan Auth / identity re-verification (R6)
+// ---------------------------------------------------------------------------
+
+describe('verify_orphans — Auth linkage re-verification', () => {
+  it('hard-fails when a managed child Auth user survives its deleted profile', async () => {
+    // Auth deletion silently does nothing: the Auth user outlives the profile.
+    auth.deleteUser = async (_uid: string) => undefined;
+
+    await processFamilyDeletionImpl(ctx, FAMILY_ID);
+
+    const job = db.store.get(`familyDeletionJobs/${FAMILY_ID}`);
+    expect(job.state).toBe('failed');
+    expect(job.lastErrorCode).toBe('IDENTITY_LINKAGE_ERROR');
+    expect(db.store.has(`families/${FAMILY_ID}`)).toBe(true);
+    expect(db.store.has(`familyDeletionReceipts/${FAMILY_ID}`)).toBe(false);
+  });
+
+  it('returns to claim revocation when family claims persist, then completes', async () => {
+    let ignoreOnce = true;
+    const original = auth.setCustomUserClaims.bind(auth);
+    auth.setCustomUserClaims = async (uid: string, claims: Record<string, unknown>) => {
+      if (uid === 'owner-uid' && ignoreOnce) { ignoreOnce = false; return; }
+      return original(uid, claims);
+    };
+
+    const result = await processFamilyDeletionImpl(ctx, FAMILY_ID);
+    expect(result.state).toBe('completed');
+    expect(auth.users.get('owner-uid').customClaims).toEqual({});
+    expect(db.store.has(`familyDeletionReceipts/${FAMILY_ID}`)).toBe(true);
+  });
+
+  it('hard-fails when family claims still persist after re-verification', async () => {
+    auth.setCustomUserClaims = async (_uid: string, _claims: Record<string, unknown>) => undefined;
+
+    await processFamilyDeletionImpl(ctx, FAMILY_ID);
+
+    const job = db.store.get(`familyDeletionJobs/${FAMILY_ID}`);
+    expect(job.state).toBe('failed');
+    expect(job.lastErrorCode).toBe('IDENTITY_LINKAGE_ERROR');
+    expect(db.store.has(`familyDeletionReceipts/${FAMILY_ID}`)).toBe(false);
+  });
+});
+
+// ---------------------------------------------------------------------------
 // In-phase lease renewal (R5)
 // ---------------------------------------------------------------------------
 
