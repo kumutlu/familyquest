@@ -311,3 +311,38 @@ describe('Login — i18n (English + Turkish + switching)', () => {
     expect(screen.getByRole('tab', { name: 'Ebeveyn' })).toBeInTheDocument();
   });
 });
+
+describe('Login — Queki brand logo', () => {
+  it('renders the official Queki logo image', () => {
+    renderLogin();
+    const logo = screen.getByAltText('Queki');
+    expect(logo).toBeInTheDocument();
+    expect(logo).toHaveAttribute('src', '/favicon.svg');
+  });
+
+  it('does not render a legacy "F" placeholder', () => {
+    const { container } = renderLogin();
+    const letterF = Array.from(container.querySelectorAll('div, span'))
+      .filter(el => el.children.length === 0 && el.textContent?.trim() === 'F');
+    expect(letterF).toHaveLength(0);
+  });
+
+  it('falls back to a neutral icon (never a letter) when the logo fails to load', () => {
+    renderLogin();
+    const logo = screen.getByAltText('Queki');
+    act(() => {
+      logo.dispatchEvent(new Event('error'));
+    });
+    expect(screen.queryByAltText('Queki')).not.toBeInTheDocument();
+    const letterF = Array.from(document.querySelectorAll('div, span'))
+      .filter(el => el.children.length === 0 && el.textContent?.trim() === 'F');
+    expect(letterF).toHaveLength(0);
+  });
+
+  it('keeps parent/child authentication tabs unchanged', () => {
+    renderLogin();
+    expect(screen.getByRole('tab', { name: 'Parent' })).toHaveAttribute('aria-selected', 'true');
+    expect(screen.getByRole('tab', { name: 'Child' })).toBeInTheDocument();
+    expect(screen.getByLabelText(/email address/i)).toBeInTheDocument();
+  });
+});

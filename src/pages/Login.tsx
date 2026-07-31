@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
+import { AppWindow } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { Button } from '../components/ui/Button';
 import { signIn, signInWithGoogle } from '../lib/api';
@@ -13,6 +14,7 @@ type LoginTab = 'parent' | 'child';
 export function Login() {
   const { t } = useTranslation(['auth', 'common']);
   const [tab, setTab] = useState<LoginTab>('parent');
+  const [logoFailed, setLogoFailed] = useState(false);
 
   // Parent credentials
   const [email, setEmail] = useState('');
@@ -132,7 +134,21 @@ export function Login() {
   return (
     <div className="min-h-screen bg-gray-50 flex flex-col justify-center py-12 sm:px-6 lg:px-8">
       <div className="sm:mx-auto sm:w-full sm:max-w-md text-center">
-        <div className="mx-auto w-12 h-12 bg-primary-500 rounded-xl flex items-center justify-center text-white font-bold text-2xl">F</div>
+        {logoFailed ? (
+          <span
+            aria-hidden="true"
+            className="mx-auto w-12 h-12 bg-gray-100 rounded-xl flex items-center justify-center text-gray-400"
+          >
+            <AppWindow size={28} />
+          </span>
+        ) : (
+          <img
+            src="/favicon.svg"
+            alt="Queki"
+            className="mx-auto w-12 h-12 rounded-xl"
+            onError={() => setLogoFailed(true)}
+          />
+        )}
         <h2 className="mt-6 text-3xl font-extrabold text-gray-900">{t('auth:signInTitle', { appName: t('common:appName') })}</h2>
       </div>
 
