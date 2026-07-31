@@ -6,8 +6,9 @@ import { getNavItems } from '../../config/navigation';
 import { ProfileDropdown } from './ProfileDropdown';
 import { NotificationCenter } from './NotificationCenter';
 import { MandatoryChildPasswordChange } from '../auth/MandatoryChildPasswordChange';
-import { PageLoader } from '../ui/PageLoader';
-import { Button } from '../ui/Button';
+import { StartupScreen } from './StartupScreen';
+import { deriveStartupPhase } from './startupState';
+import { signOut } from '../../lib/api';
 
 export function AppLayout() {
   const { t } = useTranslation('common');
@@ -19,33 +20,25 @@ export function AppLayout() {
   const bootstrapError = useStore(state => state.bootstrapError);
   const retryBootstrap = useStore(state => state.retryBootstrap);
 
-  // Firebase Auth is still initializing - never redirect to /login while the
-  // first auth state has not resolved. This prevents the temporary redirect to
-  // /login that forced users to close & reopen the PWA.
-  if (authStatus === 'initializing') {
-    return <PageLoader fullScreen />;
-  }
+  // Single deterministic source of truth for the global startup gate. Each
+  // non-ready phase renders the bounded StartupScreen, which times out into a
+  // recoverable error instead of spinning forever.
+  const startupPhase = deriveStartupPhase({
+    authStatus,
+    authUser,
+    currentUser,
+    appReady,
+    bootstrapError,
+  });
 
-  // A recoverable bootstrap/auth error takes precedence over the login
-  // redirect (matches the previous contract where an error screen was shown
-  // even when authUser was null).
-  if (bootstrapError) {
+  if (startupPhase !== 'ready') {
     return (
-      <div className="min-h-screen bg-gray-50 flex flex-col items-center justify-center p-4">
-        <div
-          role="alert"
-          className="bg-white p-6 rounded-2xl shadow-sm max-w-md w-full text-center border border-gray-100"
-        >
-          <div className="w-12 h-12 bg-danger-50 text-danger-500 rounded-full flex items-center justify-center mx-auto mb-4">
-            <span className="text-2xl font-bold" aria-hidden="true">!</span>
-          </div>
-          <h2 className="text-xl font-bold text-gray-900 mb-2">{t('connectionErrorTitle')}</h2>
-          <p className="text-gray-500 mb-6 text-sm">{bootstrapError}</p>
-          <Button onClick={retryBootstrap} fullWidth>
-            {t('retry')}
-          </Button>
-        </div>
-      </div>
+      <StartupScreen
+        phase={startupPhase}
+        error={bootstrapError}
+        onRetry={retryBootstrap}
+        onSignOut={authUser ? () => { void signOut(); } : undefined}
+      />
     );
   }
 
@@ -54,18 +47,9 @@ export function AppLayout() {
     return <Navigate to="/login" replace />;
   }
 
-  // Logged in but no user doc yet (takes a moment to sync)
-  if (authUser && currentUser === null) {
-    return <PageLoader fullScreen label={t('settingUp')} />;
-  }
-
   // Logged in, user doc exists, but no familyId -> Onboarding (unless already there)
   if (currentUser && !currentUser.familyId && location.pathname !== '/onboarding') {
     return <Navigate to="/onboarding" replace />;
-  }
-
-  if (currentUser?.familyId && !appReady) {
-    return <PageLoader fullScreen />;
   }
 
   if (

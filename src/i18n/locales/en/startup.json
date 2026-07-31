@@ -1,0 +1,11 @@
+{
+  "preparing": "Preparing your family dashboard…",
+  "reassurance": "This is taking a little longer than usual. Still working on it…",
+  "stepAuth": "Checking your sign-in",
+  "stepProfile": "Loading your profile",
+  "stepFamily": "Preparing your family data",
+  "errorTitle": "Connection problem",
+  "timeoutBody": "Startup is taking longer than expected. Check your connection and try again.",
+  "retry": "Retry",
+  "signOut": "Sign out"
+}

@@ -18,6 +18,7 @@ import type enRequests from './locales/en/requests.json';
 import type enReversals from './locales/en/reversals.json';
 import type enBulletin from './locales/en/bulletin.json';
 import type enLegal from './locales/en/legal.json';
+import type enStartup from './locales/en/startup.json';
 
 /**
  * Strongly-typed resource shape, keyed by NAMESPACE (not language). `en` is the
@@ -46,6 +47,11 @@ interface Resources {
   reversals: typeof enReversals;
   bulletin: typeof enBulletin;
   legal: typeof enLegal;
+  startup: typeof enStartup;
+  // The Help Center resolves article/category keys dynamically at runtime, so
+  // its namespace is registered with an open key map rather than a literal
+  // key union.
+  help: Record<string, string>;
 }
 
 declare module 'i18next' {

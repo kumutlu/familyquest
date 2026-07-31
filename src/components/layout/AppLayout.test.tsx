@@ -109,3 +109,49 @@ describe('AppLayout — mobile bottom navigation layout', () => {
     expect(screen.queryByRole('dialog', { name: 'Set up your family' })).not.toBeInTheDocument();
   });
 });
+
+describe('AppLayout — global startup gate', () => {
+  const renderWith = (storeState: any, path = '/') => {
+    const state = { ...mockStoreState, ...storeState };
+    (useStore as any).mockImplementation((selector: any) => (selector ? selector(state) : state));
+    return render(
+      <MemoryRouter initialEntries={[path]}>
+        <AppLayout />
+      </MemoryRouter>,
+    );
+  };
+
+  beforeEach(async () => {
+    await act(async () => { await i18n.changeLanguage('en'); });
+  });
+
+  it('shows the deterministic startup screen while auth is initializing', () => {
+    renderWith({ authStatus: 'initializing', authUser: undefined, currentUser: null, appReady: false });
+    expect(screen.getByRole('status')).toHaveTextContent('Preparing your family dashboard…');
+    expect(screen.getByText('Checking your sign-in')).toBeInTheDocument();
+  });
+
+  it('shows the profile step when the user document has not arrived yet', () => {
+    renderWith({ currentUser: null, appReady: false });
+    expect(screen.getByText('Loading your profile')).toBeInTheDocument();
+  });
+
+  it('shows the family step while family data is still bootstrapping', () => {
+    renderWith({ appReady: false });
+    expect(screen.getByText('Preparing your family data')).toBeInTheDocument();
+  });
+
+  it('shows a recoverable error with Retry wired to the store, not an endless spinner', async () => {
+    const retryBootstrap = vi.fn();
+    renderWith({ appReady: false, bootstrapError: '[Family] permission-denied: nope', retryBootstrap });
+    expect(screen.getByRole('alert')).toHaveTextContent('[Family] permission-denied: nope');
+    await act(async () => { screen.getByRole('button', { name: 'Retry' }).click(); });
+    expect(retryBootstrap).toHaveBeenCalledTimes(1);
+  });
+
+  it('renders the dashboard chrome once startup is ready', () => {
+    renderWith({});
+    expect(screen.queryByRole('status')).not.toBeInTheDocument();
+    expect(screen.getAllByText('Home')).toHaveLength(2);
+  });
+});

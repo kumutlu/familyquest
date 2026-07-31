@@ -257,7 +257,7 @@ describe('auth bootstrap regression', () => {
   it('1. protected route shows loading while auth is initializing and does NOT redirect to /login', () => {
     // authStatus is 'initializing' and no auth event fired yet.
     renderAppLayoutAt('/');
-    expect(screen.getByText('Loading…')).toBeInTheDocument();
+    expect(screen.getByText('Preparing your family dashboard…')).toBeInTheDocument();
     expect(screen.queryByText('Login Page')).not.toBeInTheDocument();
   });
 
@@ -305,7 +305,7 @@ describe('auth bootstrap regression', () => {
 
     renderAppLayoutAt('/');
     expect(await screen.findByText('Connection problem')).toBeInTheDocument();
-    expect(screen.queryByText('Loading…')).not.toBeInTheDocument();
+    expect(screen.queryByText('Preparing your family dashboard…')).not.toBeInTheDocument();
   });
 
   it('5. authenticated session restored on cold launch: no temporary redirect to /login', async () => {

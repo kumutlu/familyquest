@@ -80,7 +80,7 @@ describe('rendered bootstrap boundary', () => {
 
   it('14/15. hard refresh shows loading, never temporary zero summaries, then renders real data', async () => {
     renderApp();
-    expect(screen.getByText('Loading…')).toBeInTheDocument();
+    expect(screen.getByText('Preparing your family dashboard…')).toBeInTheDocument();
     expect(screen.queryByText('Children')).not.toBeInTheDocument();
     expect(screen.queryByText('Pending (0)')).not.toBeInTheDocument();
 
@@ -104,7 +104,7 @@ describe('rendered bootstrap boundary', () => {
   it('drives persisted auth, profile, and every parent resource before revealing dashboard values', async () => {
     useStore.getState().cleanup();
     renderApp();
-    expect(screen.getByText('Loading…')).toBeInTheDocument();
+    expect(screen.getByText('Preparing your family dashboard…')).toBeInTheDocument();
 
     act(() => useStore.getState().initAuth());
     await act(async () => {
@@ -119,7 +119,7 @@ describe('rendered bootstrap boundary', () => {
       metadata: { fromCache: false },
     }));
 
-    expect(screen.getByText('Loading…')).toBeInTheDocument();
+    expect(screen.getByText('Preparing your family dashboard…')).toBeInTheDocument();
     expect(screen.queryByText('Children')).not.toBeInTheDocument();
     expect(screen.queryByText('Pending (0)')).not.toBeInTheDocument();
 

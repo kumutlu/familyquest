@@ -1,0 +1,11 @@
+{
+  "preparing": "Aile paneliniz hazırlanıyor…",
+  "reassurance": "Bu işlem normalden biraz uzun sürüyor. Hâlâ çalışıyoruz…",
+  "stepAuth": "Oturumunuz kontrol ediliyor",
+  "stepProfile": "Profiliniz yükleniyor",
+  "stepFamily": "Aile verileriniz hazırlanıyor",
+  "errorTitle": "Bağlantı sorunu",
+  "timeoutBody": "Başlatma beklenenden uzun sürüyor. Bağlantınızı kontrol edip tekrar deneyin.",
+  "retry": "Tekrar dene",
+  "signOut": "Çıkış yap"
+}

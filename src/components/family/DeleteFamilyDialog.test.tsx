@@ -13,7 +13,7 @@ import { render, screen, act, waitFor } from '@testing-library/react';
 import { DeleteFamilyDialog } from './DeleteFamilyDialog';
 import i18n from '../../i18n/config';
 
-const mockSignOut = vi.fn(async () => {});
+const mockSignOut = vi.fn(async (..._args: any[]) => {});
 const mockRequestFamilyDeletion = vi.fn();
 const mockFetchFamilyDeletionStatus = vi.fn();
 
