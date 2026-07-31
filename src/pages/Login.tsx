@@ -270,6 +270,7 @@ export function Login() {
           {/* Child panel (Phase 3) */}
           {tab === 'child' && (
             <div role="tabpanel" id="panel-child" aria-labelledby="tab-child">
+              <h3 className="mb-4 text-lg font-semibold text-gray-900">{t('auth:childSignIn')}</h3>
               <form className="space-y-6" onSubmit={handleChildLogin} noValidate>
                 <div>
                   <label htmlFor="child-family-code" className="block text-sm font-medium text-gray-700">{t('auth:familyCode')}</label>
@@ -323,7 +324,7 @@ export function Login() {
               </form>
 
               <div className="mt-6 text-center">
-                <Link to="/signup" className="text-sm font-medium text-primary-600 hover:text-primary-500">{t('auth:noAccount')} {t('auth:signUp')}</Link>
+                <Link to="/join-family" className="text-sm font-medium text-primary-600 hover:text-primary-500">{t('auth:firstTimeHere')} {t('auth:joinYourFamily')}</Link>
               </div>
             </div>
           )}

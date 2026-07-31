@@ -10,6 +10,7 @@ import { Wallets } from './pages/Wallets';
 import { Settings } from './pages/Settings';
 import { Login } from './pages/Login';
 import { Signup } from './pages/Signup';
+import { JoinFamily } from './pages/JoinFamily';
 import { Onboarding } from './pages/Onboarding';
 import { PrivacyPolicy } from './pages/legal/PrivacyPolicy';
 import { TermsOfService } from './pages/legal/TermsOfService';
@@ -60,6 +61,7 @@ function App() {
         <Routes>
           <Route path="/login" element={<Login />} />
           <Route path="/signup" element={<Signup />} />
+          <Route path="/join-family" element={<JoinFamily />} />
 
           {/* Public legal surfaces — intentionally outside <AppLayout> so they
               render without authentication and without app navigation. */}

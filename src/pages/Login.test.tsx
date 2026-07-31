@@ -136,6 +136,43 @@ describe('Login — Child tab renders correctly', () => {
       expect(screen.getByLabelText(/family code/i)).toHaveFocus(),
     );
   });
+
+  it('shows the "Child sign in" heading', async () => {
+    const user = userEvent.setup();
+    renderLogin();
+    await user.click(screen.getByRole('tab', { name: 'Child' }));
+    expect(screen.getByRole('heading', { name: /child sign in/i })).toBeInTheDocument();
+  });
+});
+
+describe('Login — Child footer link', () => {
+  it('links to the dedicated child join page and never to parent signup', async () => {
+    const user = userEvent.setup();
+    renderLogin();
+    await user.click(screen.getByRole('tab', { name: 'Child' }));
+    const link = screen.getByRole('link', { name: /first time here\? join your family/i });
+    expect(link).toHaveAttribute('href', '/join-family');
+    expect(screen.queryByRole('link', { name: /sign up/i })).not.toBeInTheDocument();
+    screen.getAllByRole('link').forEach(anchor => {
+      expect(anchor).not.toHaveAttribute('href', '/signup');
+    });
+  });
+
+  it('keeps the parent footer pointing at parent signup (unchanged)', () => {
+    renderLogin();
+    const link = screen.getByRole('link', { name: /don't have an account\? sign up/i });
+    expect(link).toHaveAttribute('href', '/signup');
+  });
+
+  it('renders the Turkish child footer copy', async () => {
+    const user = userEvent.setup();
+    await act(async () => { await i18n.changeLanguage('tr'); });
+    renderLogin();
+    await user.click(screen.getByRole('tab', { name: 'Çocuk' }));
+    expect(screen.getByRole('heading', { name: 'Çocuk girişi' })).toBeInTheDocument();
+    const link = screen.getByRole('link', { name: 'İlk kez mi geldin? Ailene katıl' });
+    expect(link).toHaveAttribute('href', '/join-family');
+  });
 });
 
 describe('Login — Child validation', () => {
