@@ -19,7 +19,7 @@
 // ---------------------------------------------------------------------------
 
 import { getAuth } from 'firebase-admin/auth';
-import { getFirestore, FieldValue } from 'firebase-admin/firestore';
+import { getFirestore, FieldValue, Timestamp } from 'firebase-admin/firestore';
 import {
   HttpsError,
   onCall,
@@ -188,6 +188,36 @@ function validateDeleteFamilyInput(input: unknown): DeleteFamilyInput {
     familyId: data.familyId,
     familyNameConfirmation: data.familyNameConfirmation,
     clientReqId: data.clientReqId,
+  };
+}
+
+// ---------------------------------------------------------------------------
+// Receipt schema (R3)
+// ---------------------------------------------------------------------------
+
+export interface FamilyDeletionReceipt {
+  schemaVersion: 1;
+  familyId: string;
+  requestedBy: string;
+  startedAt: unknown;
+  completedAt: unknown;
+  outcome: 'completed';
+  expiresAt: unknown;
+}
+
+function buildReceipt(
+  ctx: FamilyDeletionContext,
+  familyId: string,
+  job: FamilyDeletionJob,
+): FamilyDeletionReceipt {
+  return {
+    schemaVersion: 1,
+    familyId,
+    requestedBy: job.requestedBy,
+    startedAt: job.startedAt ?? FieldValue.serverTimestamp(),
+    completedAt: FieldValue.serverTimestamp(),
+    outcome: 'completed',
+    expiresAt: Timestamp.fromMillis(ctx.now() + RECEIPT_TTL_MS),
   };
 }
 
@@ -728,13 +758,11 @@ async function runPhaseOnce(
 
       // Receipt first (durable completion marker), family document last,
       // then the job itself is removed.
-      await receiptRef(db, familyId).set({
-        schemaVersion: 1,
-        familyId,
-        completedAt: FieldValue.serverTimestamp(),
-        expiresAtMs: ctx.now() + RECEIPT_TTL_MS,
-        progress: job.progress,
-      });
+      //
+      // Receipt schema (spec): schemaVersion, familyId, requestedBy, startedAt,
+      // completedAt, outcome, expiresAt. No progress counts are retained and
+      // expiresAt is a Timestamp so the Firestore TTL policy can act on it.
+      await receiptRef(db, familyId).set(buildReceipt(ctx, familyId, job));
       await familyRef(db, familyId).delete();
       await jobRef(db, familyId).update({
         state: 'completed',

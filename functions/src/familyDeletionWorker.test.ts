@@ -17,6 +17,9 @@ vi.mock('firebase-admin/firestore', () => ({
     serverTimestamp: () => ({ __serverTimestamp: true }),
     delete: () => ({ __delete: true }),
   },
+  Timestamp: {
+    fromMillis: (ms: number) => ({ __timestampMs: ms, toMillis: () => ms }),
+  },
 }));
 vi.mock('firebase-admin/auth', () => ({
   getAuth: () => ({}),
@@ -335,11 +338,23 @@ describe('processFamilyDeletionImpl — full run', () => {
     expect(db.store.has('task_occurrences/occ1')).toBe(false);
     expect(db.store.has('gamification_events/ev1')).toBe(false);
 
-    // Durable receipt written with sanitized content only.
+    // Durable receipt written with the spec schema only (R3).
     const receipt = db.store.get(`familyDeletionReceipts/${FAMILY_ID}`);
     expect(receipt).toBeDefined();
+    expect(Object.keys(receipt).sort()).toEqual([
+      'completedAt', 'expiresAt', 'familyId', 'outcome', 'requestedBy', 'schemaVersion', 'startedAt',
+    ]);
     expect(receipt.familyId).toBe(FAMILY_ID);
-    expect(receipt.expiresAtMs).toBeGreaterThan(NOW);
+    expect(receipt.schemaVersion).toBe(1);
+    expect(receipt.requestedBy).toBe('owner-uid');
+    expect(receipt.outcome).toBe('completed');
+    expect(receipt.startedAt).toBeDefined();
+    expect(receipt.completedAt).toBeDefined();
+    // expiresAt is a Timestamp 30 days after completion, never a raw number.
+    expect(typeof receipt.expiresAt).toBe('object');
+    expect(receipt.expiresAt.toMillis()).toBe(NOW + 30 * 24 * 60 * 60 * 1000);
+    expect(receipt.progress).toBeUndefined();
+    expect(receipt.expiresAtMs).toBeUndefined();
     expect(JSON.stringify(receipt)).not.toContain('Worker Family');
 
     // Managed identities removed; self-registered accounts preserved.

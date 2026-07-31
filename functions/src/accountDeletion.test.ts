@@ -13,6 +13,9 @@ vi.mock('firebase-admin/firestore', () => ({
     serverTimestamp: () => ({ __serverTimestamp: true }),
     delete: () => ({ __delete: true }),
   },
+  Timestamp: {
+    fromMillis: (ms: number) => ({ __timestampMs: ms, toMillis: () => ms }),
+  },
 }));
 vi.mock('firebase-admin/auth', () => ({
   getAuth: () => ({}),
