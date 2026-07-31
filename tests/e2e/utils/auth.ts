@@ -14,7 +14,7 @@ export async function loginAs(page: Page, email: string) {
   await page.click('button[type="submit"]');
 
   // Wait for the dashboard to load
-  await expect(page.locator('text="FamilyQuest"').first()).toBeVisible({ timeout: 10000 });
+  await expect(page.locator('text="Queki"').first()).toBeVisible({ timeout: 10000 });
 }
 
 export async function logout(page: Page) {

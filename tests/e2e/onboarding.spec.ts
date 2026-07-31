@@ -19,7 +19,7 @@ test.describe('Onboarding Flow', () => {
     await page.click('button[type="submit"]');
     
     // Wait for onboarding to start
-    await expect(page.locator('text="Welcome to FamilyQuest"')).toBeVisible();
+    await expect(page.locator('text="Welcome to Queki"')).toBeVisible();
     
     // Step 1: Create family
     await page.fill('input[type="text"]', 'Test Family');
@@ -45,7 +45,7 @@ test.describe('Onboarding Flow', () => {
     await page.click('button:has-text("Finish Setup")');
     
     // Should be redirected to dashboard
-    await expect(page.locator('text="FamilyQuest"')).toBeVisible();
+    await expect(page.locator('text="Queki"')).toBeVisible();
   });
 
   test('Onboarding with parent and child', async ({ page }) => {
@@ -82,7 +82,7 @@ test.describe('Onboarding Flow', () => {
     
     // Finish setup
     await page.click('button:has-text("Finish Setup")');
-    await expect(page.locator('text="FamilyQuest"')).toBeVisible();
+    await expect(page.locator('text="Queki"')).toBeVisible();
   });
 
   test('Onboarding validation - empty name', async ({ page }) => {
@@ -275,7 +275,7 @@ test.describe('Onboarding Flow', () => {
     // Complete setup
     await page.click('button:has-text("Continue to Invite Code")');
     await page.click('button:has-text("Finish Setup")');
-    await expect(page.locator('text="FamilyQuest"')).toBeVisible();
+    await expect(page.locator('text="Queki"')).toBeVisible();
   });
 
   test('Onboarding no duplicate family on retry', async ({ page }) => {
@@ -310,7 +310,7 @@ test.describe('Onboarding Flow', () => {
     await loginAs(page, 'noduplicateuser@test.com');
     
     // Should be on dashboard, not onboarding
-    await expect(page.locator('text="FamilyQuest"')).toBeVisible();
-    await expect(page.locator('text="Welcome to FamilyQuest"')).not.toBeVisible();
+    await expect(page.locator('text="Queki"')).toBeVisible();
+    await expect(page.locator('text="Welcome to Queki"')).not.toBeVisible();
   });
 });

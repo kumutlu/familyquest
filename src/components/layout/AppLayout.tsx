@@ -74,7 +74,7 @@ export function AppLayout() {
               <div className="w-8 h-8 bg-primary-500 rounded-xl flex items-center justify-center text-white font-bold">
                 F
               </div>
-              <span className="text-xl font-extrabold tracking-tight text-gray-900">FamilyQuest</span>
+              <span className="text-xl font-extrabold tracking-tight text-gray-900">Queki</span>
             </Link>
 
             {/* Desktop Navigation */}

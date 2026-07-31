@@ -29,8 +29,8 @@ describe('i18n auth namespace — English rendering', () => {
 
   it('interpolates the app name into auth titles', async () => {
     await i18n.loadNamespaces(['auth']);
-    expect(i18n.t('auth:signInTitle', { appName: 'FamilyQuest' })).toBe('Sign in to FamilyQuest');
-    expect(i18n.t('auth:welcome', { appName: 'FamilyQuest' })).toBe('Welcome to FamilyQuest');
+    expect(i18n.t('auth:signInTitle', { appName: 'Queki' })).toBe('Sign in to Queki');
+    expect(i18n.t('auth:welcome', { appName: 'Queki' })).toBe('Welcome to Queki');
   });
 
   it('interpolates step counts', async () => {
@@ -59,8 +59,8 @@ describe('i18n auth namespace — Turkish rendering', () => {
   it('interpolates the app name into auth titles (Turkish)', async () => {
     await i18n.loadNamespaces(['auth']);
     await i18n.changeLanguage('tr');
-    expect(i18n.t('auth:signInTitle', { appName: 'FamilyQuest' })).toBe('FamilyQuest\'e giriş yap');
-    expect(i18n.t('auth:welcome', { appName: 'FamilyQuest' })).toBe('FamilyQuest\'e hoş geldiniz');
+    expect(i18n.t('auth:signInTitle', { appName: 'Queki' })).toBe('Queki\'e giriş yap');
+    expect(i18n.t('auth:welcome', { appName: 'Queki' })).toBe('Queki\'e hoş geldiniz');
   });
 
   it('interpolates step counts (Turkish)', async () => {

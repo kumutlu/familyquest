@@ -280,7 +280,7 @@ describe('Login — Parent login unaffected by child flow', () => {
 describe('Login — i18n (English + Turkish + switching)', () => {
   it('renders English strings by default', () => {
     renderLogin();
-    expect(screen.getByRole('heading', { name: /sign in to familyquest/i })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: /sign in to queki/i })).toBeInTheDocument();
     expect(screen.getByRole('tab', { name: 'Parent' })).toBeInTheDocument();
     expect(screen.getByRole('tab', { name: 'Child' })).toBeInTheDocument();
     expect(screen.getByLabelText(/email address/i)).toBeInTheDocument();
@@ -290,7 +290,7 @@ describe('Login — i18n (English + Turkish + switching)', () => {
   it('renders Turkish strings when the language is switched to tr', async () => {
     await act(async () => { await i18n.changeLanguage('tr'); });
     renderLogin();
-    expect(screen.getByRole('heading', { name: /familyquest'e giriş yap/i })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: /queki'e giriş yap/i })).toBeInTheDocument();
     expect(screen.getByRole('tab', { name: 'Ebeveyn' })).toBeInTheDocument();
     expect(screen.getByRole('tab', { name: 'Çocuk' })).toBeInTheDocument();
     expect(screen.getByLabelText(/e-posta adresi/i)).toBeInTheDocument();

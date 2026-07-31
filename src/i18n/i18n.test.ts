@@ -82,7 +82,7 @@ describe('i18n initialization', () => {
     expect(i18n.hasResourceBundle('en', 'common')).toBe(true);
     // Lazy namespaces are NOT loaded up-front.
     expect(i18n.hasResourceBundle('en', 'auth')).toBe(false);
-    expect(i18n.t('common:appName')).toBe('FamilyQuest');
+    expect(i18n.t('common:appName')).toBe('Queki');
   });
 
   it('does not emit console errors or warnings during core operations', async () => {

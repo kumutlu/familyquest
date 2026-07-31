@@ -64,8 +64,8 @@ export default defineConfig(({ mode }) => {
         'mask-icon.svg',
       ],
       manifest: {
-        name: 'FamilyQuest',
-        short_name: 'FamilyQuest',
+        name: 'Queki',
+        short_name: 'Queki',
         description: 'Gamify your family chores and routines',
         theme_color: '#0f766e',
         background_color: '#0f766e',
