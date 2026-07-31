@@ -120,7 +120,14 @@ beforeEach(() => {
   db.store.set(`families/${FAMILY_ID}`, { name: 'Leave Family' });
   db.store.set('users/owner-uid', { familyId: FAMILY_ID, role: 'owner' });
   db.store.set('users/parent-uid', {
-    familyId: FAMILY_ID, role: 'parent', displayName: 'Parent', points: 3, xp: 9, level: 1,
+    uid: 'parent-uid', familyId: FAMILY_ID, role: 'parent', displayName: 'Parent',
+    email: 'p@example.com', avatarUrl: 'https://avatar/parent', avatarId: 'starter-cat',
+    rewardPoints: 30, lifetimeXP: 900, currentStreak: 2, longestStreak: 7,
+    lastActiveDate: 'ts', walletBalance: 250, joinRequestId: 'jr-9',
+    lastGoalTxId: 'tx-goal', lastManualTxId: 'tx-manual', lastTransferTxId: 'tx-transfer',
+    lastTransferReqId: 'req-transfer', lastPenaltyTxId: 'tx-penalty',
+    lastFundTxId: 'tx-fund', lastBehaviourEventId: 'ev-1', lastRedemptionId: 'red-1',
+    lastReversalId: 'rev-1',
   });
   db.store.set('users/adult-child-uid', { familyId: FAMILY_ID, role: 'child', displayName: 'Teen' });
   db.store.set('users/managed-uid', { familyId: FAMILY_ID, role: 'child', isManaged: true });
@@ -137,7 +144,20 @@ describe('leaveFamilyImpl', () => {
     expect(profile.displayName).toBe('Parent');
     expect(profile.familyId).toBeUndefined();
     expect(profile.role).toBeUndefined();
-    expect(profile.points).toBeUndefined();
+    // R2: every real family-scoped field is erased.
+    for (const field of [
+      'rewardPoints', 'lifetimeXP', 'currentStreak', 'longestStreak', 'lastActiveDate',
+      'walletBalance', 'joinRequestId', 'lastGoalTxId', 'lastManualTxId', 'lastTransferTxId',
+      'lastTransferReqId', 'lastPenaltyTxId', 'lastFundTxId', 'lastBehaviourEventId',
+      'lastRedemptionId', 'lastReversalId',
+    ]) {
+      expect(profile[field], `expected ${field} to be cleared`).toBeUndefined();
+    }
+    // Account-level identity fields survive.
+    expect(profile.uid).toBe('parent-uid');
+    expect(profile.email).toBe('p@example.com');
+    expect(profile.avatarUrl).toBe('https://avatar/parent');
+    expect(profile.avatarId).toBe('starter-cat');
     expect(db.store.has(`families/${FAMILY_ID}/users/parent-uid`)).toBe(false);
     // Family and remaining members untouched.
     expect(db.store.has(`families/${FAMILY_ID}`)).toBe(true);

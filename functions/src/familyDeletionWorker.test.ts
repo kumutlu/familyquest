@@ -257,8 +257,17 @@ function seedWorld(db: any, auth: any) {
   db.store.set(`familyDeletionJobs/${FAMILY_ID}`, makeJob());
 
   // Self-registered owner and parent (profiles preserved, family fields cleared).
+  // Seeded with the REAL profile schema (R2): rewardPoints/lifetimeXP/streaks/
+  // wallet mirror/join linkage/last*TxId markers.
   db.store.set('users/owner-uid', {
-    familyId: FAMILY_ID, role: 'owner', displayName: 'Owner', email: 'o@example.com', points: 10, xp: 5, level: 2,
+    uid: 'owner-uid', familyId: FAMILY_ID, role: 'owner', displayName: 'Owner',
+    email: 'o@example.com', avatarUrl: 'https://avatar/owner', avatarId: 'starter-cat',
+    rewardPoints: 120, lifetimeXP: 4200, currentStreak: 3, longestStreak: 9,
+    lastActiveDate: 'ts', walletBalance: 550, joinRequestId: 'jr-1',
+    lastGoalTxId: 'tx-goal', lastManualTxId: 'tx-manual', lastTransferTxId: 'tx-transfer',
+    lastTransferReqId: 'req-transfer', lastPenaltyTxId: 'tx-penalty',
+    lastFundTxId: 'tx-fund', lastBehaviourEventId: 'ev-1', lastRedemptionId: 'red-1',
+    lastReversalId: 'rev-1',
   });
   auth.users.set('owner-uid', { customClaims: { familyId: FAMILY_ID, role: 'owner' } });
   db.store.set('users/parent-uid', { familyId: FAMILY_ID, role: 'parent', displayName: 'Parent' });
@@ -341,12 +350,22 @@ describe('processFamilyDeletionImpl — full run', () => {
     expect(db.store.has('users/owner-uid')).toBe(true);
     expect(db.store.has('users/parent-uid')).toBe(true);
 
-    // Self-registered profiles keep identity but lose family linkage.
+    // Self-registered profiles keep identity but lose family linkage and every
+    // real family-scoped field (R2).
     const owner = db.store.get('users/owner-uid');
     expect(owner.displayName).toBe('Owner');
-    expect(owner.familyId).toBeUndefined();
-    expect(owner.role).toBeUndefined();
-    expect(owner.points).toBeUndefined();
+    expect(owner.email).toBe('o@example.com');
+    expect(owner.uid).toBe('owner-uid');
+    expect(owner.avatarUrl).toBe('https://avatar/owner');
+    expect(owner.avatarId).toBe('starter-cat');
+    for (const field of [
+      'familyId', 'role', 'rewardPoints', 'lifetimeXP', 'currentStreak', 'longestStreak',
+      'lastActiveDate', 'walletBalance', 'joinRequestId', 'lastGoalTxId', 'lastManualTxId',
+      'lastTransferTxId', 'lastTransferReqId', 'lastPenaltyTxId', 'lastFundTxId',
+      'lastBehaviourEventId', 'lastRedemptionId', 'lastReversalId',
+    ]) {
+      expect(owner[field], `expected ${field} to be cleared`).toBeUndefined();
+    }
 
     // Claims stripped and refresh tokens revoked for real accounts.
     expect(auth.users.get('owner-uid').customClaims).toEqual({});

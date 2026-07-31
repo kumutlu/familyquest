@@ -62,6 +62,34 @@ export const LEGACY_ROOT_NAMESPACES: readonly string[] = [
 ];
 
 // ---------------------------------------------------------------------------
+// Family-scoped profile fields (R2)
+// ---------------------------------------------------------------------------
+//
+// A departing self-registered member keeps their account-level identity
+// (uid, displayName, email, avatarUrl, avatarId, language preferences,
+// createdAt) and loses every field that only has meaning inside a family.
+// These are the REAL schema fields written by src/lib/api.ts; the previously
+// cleared `points`/`xp`/`level`/`streak`/`familyJoinedAt` never existed.
+export const FAMILY_SCOPED_PROFILE_FIELDS: readonly string[] = [
+  // Membership
+  'familyId', 'role', 'joinRequestId',
+  // Gamification
+  'rewardPoints', 'lifetimeXP', 'currentStreak', 'longestStreak', 'lastActiveDate',
+  // Money mirror and ledger markers
+  'walletBalance',
+  'lastGoalTxId', 'lastManualTxId', 'lastTransferTxId', 'lastTransferReqId',
+  'lastPenaltyTxId', 'lastFundTxId', 'lastBehaviourEventId', 'lastRedemptionId',
+  'lastReversalId',
+];
+
+/** Field-delete map used by both family deletion and leaveFamily. */
+export function familyScopedProfileClearUpdate(): Record<string, unknown> {
+  const update: Record<string, unknown> = {};
+  for (const field of FAMILY_SCOPED_PROFILE_FIELDS) update[field] = FieldValue.delete();
+  return update;
+}
+
+// ---------------------------------------------------------------------------
 // Job schema
 // ---------------------------------------------------------------------------
 
@@ -593,15 +621,7 @@ async function runPhaseOnce(
       for (const docSnap of snap.docs) {
         // Every remaining member is self-registered: preserve the profile,
         // clear every family relationship and gamification value.
-        await docSnap.ref.update({
-          familyId: FieldValue.delete(),
-          role: FieldValue.delete(),
-          points: FieldValue.delete(),
-          xp: FieldValue.delete(),
-          level: FieldValue.delete(),
-          streak: FieldValue.delete(),
-          familyJoinedAt: FieldValue.delete(),
-        });
+        await docSnap.ref.update(familyScopedProfileClearUpdate());
         cleared += 1;
       }
       await setPhase(ctx, familyId, {
@@ -802,15 +822,7 @@ export async function leaveFamilyImpl(
     if (familySnap.exists && familySnap.data().lifecycleState === 'deleting') {
       throw new HttpsError('failed-precondition', 'FAMILY_DELETING');
     }
-    t.update(db.doc(`users/${callerUid}`), {
-      familyId: FieldValue.delete(),
-      role: FieldValue.delete(),
-      points: FieldValue.delete(),
-      xp: FieldValue.delete(),
-      level: FieldValue.delete(),
-      streak: FieldValue.delete(),
-      familyJoinedAt: FieldValue.delete(),
-    });
+    t.update(db.doc(`users/${callerUid}`), familyScopedProfileClearUpdate());
     t.delete(db.doc(`families/${familyId}/users/${callerUid}`));
   });
 
