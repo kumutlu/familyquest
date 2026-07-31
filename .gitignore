@@ -10,6 +10,10 @@ lerna-debug.log*
 node_modules
 dist
 dist-ssr
+# Cloud Functions build output. Regenerated deterministically by
+# `npm --prefix functions run build` (rm -rf lib && tsc), which Firebase runs
+# as a hosting/functions predeploy step — it must never be committed.
+functions/lib/
 coverage
 .firebase/
 .worktrees/
