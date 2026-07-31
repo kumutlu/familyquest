@@ -561,12 +561,41 @@ export async function processFamilyDeletionImpl(
 
 type PhaseOutcome = 'continue' | 'yield' | 'completed';
 
+/**
+ * Ownership-guarded job write. A worker that has lost its lease (takeover by
+ * the recovery scheduler) must never write to the job again, and must never
+ * resurrect its own expired lease.
+ */
+async function updateOwnedJob(
+  ctx: FamilyDeletionContext,
+  familyId: string,
+  updates: Record<string, unknown>,
+): Promise<void> {
+  const { db } = ctx;
+  await db.runTransaction(async (t: any) => {
+    const snap = await t.get(jobRef(db, familyId));
+    if (!snap.exists) return;
+    const job = snap.data() as FamilyDeletionJob;
+    if (job.leaseOwner !== ctx.invocationId) return;
+    t.update(jobRef(db, familyId), updates);
+  });
+}
+
 async function setPhase(ctx: FamilyDeletionContext, familyId: string, updates: Record<string, unknown>): Promise<void> {
-  await jobRef(ctx.db, familyId).update({
+  await updateOwnedJob(ctx, familyId, {
     ...updates,
     leaseExpiresAt: ctx.now() + LEASE_MS,
     updatedAt: FieldValue.serverTimestamp(),
   });
+}
+
+/**
+ * Extends the lease mid-phase. Long member loops, Auth round-trips and large
+ * batch deletions can each outlive the 5-minute lease, which would otherwise
+ * let the recovery scheduler run a second worker concurrently.
+ */
+async function renewLease(ctx: FamilyDeletionContext, familyId: string): Promise<void> {
+  await updateOwnedJob(ctx, familyId, { leaseExpiresAt: ctx.now() + LEASE_MS });
 }
 
 async function membersQuery(ctx: FamilyDeletionContext, familyId: string, limit: number) {
@@ -594,6 +623,7 @@ async function runPhaseOnce(
     case 'revoke_member_access': {
       const snap = await membersQuery(ctx, familyId, BATCH_LIMIT);
       for (const docSnap of snap.docs) {
+        await renewLease(ctx, familyId);
         const profile = docSnap.data() as Record<string, any>;
         const authUid = profile.isManaged === true
           ? (typeof profile.authUid === 'string' && profile.authUid ? profile.authUid : null)
@@ -629,6 +659,7 @@ async function runPhaseOnce(
       }
       let deleted = 0;
       for (const docSnap of snap.docs) {
+        await renewLease(ctx, familyId);
         const profile = docSnap.data() as Record<string, any>;
         const { authUid } = await verifyManagedChild(ctx, familyId, docSnap.id, profile);
         if (authUid) {
@@ -655,6 +686,7 @@ async function runPhaseOnce(
       }
       let cleared = 0;
       for (const docSnap of snap.docs) {
+        await renewLease(ctx, familyId);
         // Every remaining member is self-registered: preserve the profile,
         // clear every family relationship and gamification value.
         await docSnap.ref.update(familyScopedProfileClearUpdate());
@@ -709,6 +741,7 @@ async function runPhaseOnce(
       }
       let deletedDocs = 0;
       for (const coll of collections) {
+        await renewLease(ctx, familyId);
         deletedDocs += await recursiveDeleteCollection(ctx, coll);
       }
       await setPhase(ctx, familyId, {

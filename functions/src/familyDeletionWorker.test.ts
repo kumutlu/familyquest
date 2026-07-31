@@ -69,12 +69,23 @@ function applyUpdate(existing: Record<string, any>, updates: Record<string, unkn
 function makeFakeDb() {
   const store = new Map<string, Record<string, any>>();
 
+  // Every numeric leaseExpiresAt write to a job document, tagged with the
+  // phase the job was in at the time, so tests can prove in-phase renewal.
+  const leaseWrites: Array<{ phase: string; leaseExpiresAt: number }> = [];
+  const recordLease = (path: string, data: Record<string, unknown>) => {
+    if (!path.startsWith('familyDeletionJobs/')) return;
+    const value = data.leaseExpiresAt;
+    if (typeof value !== 'number') return;
+    leaseWrites.push({ phase: (store.get(path)?.phase ?? 'unknown') as string, leaseExpiresAt: value });
+  };
+
   const makeRef = (path: string): any => ({
     path,
     id: path.split('/').pop() as string,
     get: async () => snapOf(path),
     set: (data: Record<string, unknown>) => { store.set(path, { ...data }); },
     update: (data: Record<string, unknown>) => {
+      recordLease(path, data);
       store.set(path, applyUpdate(store.get(path) ?? {}, data));
     },
     delete: () => { store.delete(path); },
@@ -140,6 +151,7 @@ function makeFakeDb() {
   const db: any = {
     store,
     txLog,
+    leaseWrites,
     doc: makeRef,
     collection: (path: string) => makeQuery(path, []),
     runTransaction: async (cb: (tx: any) => Promise<any>) => {
@@ -154,7 +166,10 @@ function makeFakeDb() {
       txLog.push(writes.map(([op, ref]) => `${op} ${ref.path}`));
       for (const [op, ref, data] of writes) {
         if (op === 'set') store.set(ref.path, { ...data });
-        else if (op === 'update') store.set(ref.path, applyUpdate(store.get(ref.path) ?? {}, data));
+        else if (op === 'update') {
+          recordLease(ref.path, data);
+          store.set(ref.path, applyUpdate(store.get(ref.path) ?? {}, data));
+        }
         else store.delete(ref.path);
       }
       return result;
@@ -507,6 +522,59 @@ describe('processFamilyDeletionImpl — errors', () => {
     expect(result.done).toBe(true);
     expect(auth.deleted.filter((u: string) => u === 'auth-child-1').length).toBe(1);
     expect(db.store.has(`families/${FAMILY_ID}`)).toBe(false);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// In-phase lease renewal (R5)
+// ---------------------------------------------------------------------------
+
+function seedRevokePhase(members: string[]) {
+  db.store.clear();
+  db.store.set(`families/${FAMILY_ID}`, { name: 'Worker Family', lifecycleState: 'deleting' });
+  db.store.set(`familyDeletionJobs/${FAMILY_ID}`, makeJob({ phase: 'revoke_member_access' }));
+  for (const uid of members) {
+    db.store.set(`users/${uid}`, { familyId: FAMILY_ID, role: 'parent', displayName: uid });
+    auth.users.set(uid, { customClaims: { familyId: FAMILY_ID, role: 'parent' } });
+  }
+}
+
+describe('lease renewal inside long phases', () => {
+  it('advances leaseExpiresAt between members, not only at phase boundaries', async () => {
+    seedRevokePhase(['m1', 'm2', 'm3']);
+    let clock = NOW;
+    const clockCtx = makeCtx(db, auth, { now: () => (clock += 1_000) } as any);
+    await processFamilyDeletionImpl(clockCtx, FAMILY_ID);
+
+    const inPhase = db.leaseWrites.filter((w: any) => w.phase === 'revoke_member_access');
+    // One write per member plus the phase-boundary write.
+    expect(inPhase.length).toBeGreaterThanOrEqual(4);
+    const values = inPhase.map((w: any) => w.leaseExpiresAt);
+    expect([...values].sort((a: number, b: number) => a - b)).toEqual(values);
+  });
+
+  it('never resurrects a lease taken over by another worker', async () => {
+    seedRevokePhase(['m1', 'm2', 'm3']);
+    const takeoverExpiry = NOW + 10 * 60 * 1000;
+    let calls = 0;
+    const original = auth.revokeRefreshTokens.bind(auth);
+    auth.revokeRefreshTokens = async (uid: string) => {
+      calls += 1;
+      if (calls === 1) {
+        // A recovery worker takes the job over mid-phase.
+        const job = db.store.get(`familyDeletionJobs/${FAMILY_ID}`);
+        db.store.set(`familyDeletionJobs/${FAMILY_ID}`, {
+          ...job, leaseOwner: 'worker-B', leaseExpiresAt: takeoverExpiry,
+        });
+      }
+      return original(uid);
+    };
+
+    await processFamilyDeletionImpl(ctx, FAMILY_ID);
+
+    const job = db.store.get(`familyDeletionJobs/${FAMILY_ID}`);
+    expect(job.leaseOwner).toBe('worker-B');
+    expect(job.leaseExpiresAt).toBe(takeoverExpiry);
   });
 });
 
