@@ -42,7 +42,13 @@ export const FAMILY_SUBCOLLECTION_REGISTRY: readonly string[] = [
   'challenges', 'funds', 'fund_transactions', 'reversal_events', 'reversals',
   'transfer_requests', 'money_requests', 'petbox_requests',
   'profile_update_requests', 'users', 'childLoginIndex', 'childLogins',
-  'childLoginAudit', 'childLoginIdempotency', 'task_occurrences',
+  'childLoginAudit', 'childLoginIdempotency',
+  // Child join requests (parent-readable projection + server-only secrets).
+  // Both are family subcollections and are removed with the family; the
+  // provisional Auth users they reference are disabled and unclaimed, and are
+  // reaped by purgeExpiredChildJoinRequests.
+  'child_join_requests', 'childJoinSecrets',
+  'task_occurrences',
   'gamification_events', 'daily_eligibility', 'daily_progress',
   'gamification_summaries', 'gamification_checkpoints',
 ];
@@ -59,6 +65,8 @@ export const FAMILY_NESTED_SUBCOLLECTIONS: readonly string[] = [
 export const LEGACY_ROOT_NAMESPACES: readonly string[] = [
   'task_occurrences', 'gamification_events', 'daily_eligibility',
   'gamification_checkpoints',
+  // Opaque requestId -> familyId map for unauthenticated child join polling.
+  'childJoinRequestLookup',
 ];
 
 // ---------------------------------------------------------------------------

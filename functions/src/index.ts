@@ -165,3 +165,13 @@ export {
   requestFamilyJoin,
   regenerateFamilyCode,
 } from './familyMembership';
+
+// Child join request with mandatory parent approval; see childJoinRequest.ts.
+export {
+  submitChildJoinRequest,
+  getChildJoinRequestStatus,
+  cancelChildJoinRequest,
+  approveChildJoinRequest,
+  rejectChildJoinRequest,
+  purgeExpiredChildJoinRequests,
+} from './childJoinRequest';

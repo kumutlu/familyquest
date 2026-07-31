@@ -229,8 +229,8 @@ function makeCtx(overrides: Partial<ChildJoinContext> = {}): ChildJoinContext & 
     db,
     auth,
     now: () => currentNow,
-    generateId: () => `req-${++idSeq}`,
-    generateSecret: () => `secret-${++secretSeq}`,
+    generateId: () => `joinreq-${++idSeq}`,
+    generateSecret: () => `request-secret-${++secretSeq}`,
     ...overrides,
   } as any;
 }

@@ -199,11 +199,19 @@ beforeEach(() => {
 
 describe('family deletion registry', () => {
   it('keeps the reviewed subcollection registry intact and duplicate-free', () => {
-    expect(FAMILY_SUBCOLLECTION_REGISTRY.length).toBe(37);
-    expect(new Set(FAMILY_SUBCOLLECTION_REGISTRY).size).toBe(37);
+    expect(FAMILY_SUBCOLLECTION_REGISTRY.length).toBe(39);
+    expect(new Set(FAMILY_SUBCOLLECTION_REGISTRY).size).toBe(39);
     expect(FAMILY_NESTED_SUBCOLLECTIONS.length).toBe(5);
     expect(DELETION_PHASES[0]).toBe('inventory_members');
     expect(DELETION_PHASES[DELETION_PHASES.length - 1]).toBe('finalize');
+  });
+
+  it('covers child join requests and their server-only secrets', () => {
+    // Family deletion must remove pending join requests and their username
+    // reservations along with the rest of the family.
+    expect(FAMILY_SUBCOLLECTION_REGISTRY).toContain('child_join_requests');
+    expect(FAMILY_SUBCOLLECTION_REGISTRY).toContain('childJoinSecrets');
+    expect(FAMILY_SUBCOLLECTION_REGISTRY).toContain('childLoginIndex');
   });
 });
 

@@ -1635,6 +1635,17 @@ service cloud.firestore {
     // SERVER-ONLY FAMILY/ACCOUNT DELETION COLLECTIONS
     // Deletion jobs and receipts are owned exclusively by Cloud Functions.
     // Clients must never read or write them.
+    // Child join request infrastructure (root, server-owned). The lookup maps
+    // an opaque requestId to a familyId for the unauthenticated status/cancel
+    // callables; the rate-limit counters back abuse protection. Neither is ever
+    // client readable or writable — the Admin SDK is the only writer.
+    match /childJoinRequestLookup/{requestId} {
+      allow read, write: if false;
+    }
+    match /childJoinRateLimits/{limitKey} {
+      allow read, write: if false;
+    }
+
     match /familyDeletionJobs/{jobId} {
       allow read, write: if false;
     }
@@ -2272,6 +2283,28 @@ service cloud.firestore {
         allow read, write: if false;
       }
       match /childLoginIdempotency/{clientReqId} {
+        allow read, write: if false;
+      }
+
+      // =========================================================================
+      // CHILD JOIN REQUESTS — PARENT-READABLE PROJECTION + SERVER-ONLY SECRETS
+      // =========================================================================
+      // A child who is not yet a member submits a join request from
+      // /join-family. Until a parent of THIS family approves it, the request
+      // grants zero family read/write access: no membership document exists, no
+      // custom claims are issued, and the provisional Auth user is disabled.
+      //
+      // child_join_requests holds only the requested username, status and
+      // timestamps so the Approval Center can render a card. It contains NO
+      // family code and NO credential material, and it is written exclusively
+      // by the trusted backend (approve/reject/expire/cancel callables).
+      match /child_join_requests/{requestId} {
+        allow read: if isParent(familyId);
+        allow write: if false;
+      }
+      // Server-only sidecar: provisional Auth uid, synthetic email and the
+      // hashed one-time request secret. Never readable by any client.
+      match /childJoinSecrets/{requestId} {
         allow read, write: if false;
       }
 
