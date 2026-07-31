@@ -29,7 +29,7 @@ vi.mock('firebase-admin/functions', () => ({
   }),
 }));
 
-import { readFileSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 
 import {
   deleteFamilyImpl,
@@ -427,7 +427,11 @@ describe('purgeExpiredFamilyDeletionReceiptsImpl', () => {
   });
 
   it('declares a Firestore TTL policy on the receipt expiry field as the primary reaper', () => {
-    const config = JSON.parse(readFileSync('../firebase.json', 'utf8'));
+    // The suite runs from both the repository root and functions/, so locate
+    // firebase.json relative to whichever cwd is in effect.
+    const configPath = ['firebase.json', '../firebase.json'].find(p => existsSync(p));
+    expect(configPath).toBeDefined();
+    const config = JSON.parse(readFileSync(configPath as string, 'utf8'));
     expect(config.firestore.ttl).toEqual(
       expect.arrayContaining([
         { collectionGroup: 'familyDeletionReceipts', field: RECEIPT_TTL_FIELD },
