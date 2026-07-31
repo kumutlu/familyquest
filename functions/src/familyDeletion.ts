@@ -143,6 +143,14 @@ export interface FamilyDeletionJob {
 const LEASE_MS = 5 * 60 * 1000;
 const MAX_AUTOMATIC_ATTEMPTS = 8;
 const RECEIPT_TTL_MS = 30 * 24 * 60 * 60 * 1000;
+/**
+ * Receipt expiry field. Firestore's native TTL policy (declared in
+ * firebase.json) is the primary reaper; purgeExpiredFamilyDeletionReceiptsImpl
+ * is the belt-and-braces sweeper for projects where the policy is not yet
+ * active and for the emulator, which has no TTL support.
+ */
+export const RECEIPT_TTL_FIELD = 'expiresAt';
+const RECEIPT_PURGE_BATCH = 200;
 const BATCH_LIMIT = 50;
 
 const CLIENT_REQ_ID_RE = /^[A-Za-z0-9_-]{8,64}$/;
@@ -951,6 +959,32 @@ export async function recoverFamilyDeletionJobsImpl(ctx: FamilyDeletionContext):
 }
 
 // ---------------------------------------------------------------------------
+// purgeExpiredFamilyDeletionReceipts — receipt TTL sweeper
+// ---------------------------------------------------------------------------
+
+/**
+ * Deletes completion receipts whose TTL has elapsed. Receipts contain no
+ * family name, invite code, username or email, so expiry is purely a
+ * retention-hygiene measure. Jobs and family documents are never touched.
+ */
+export async function purgeExpiredFamilyDeletionReceiptsImpl(
+  ctx: FamilyDeletionContext,
+): Promise<number> {
+  const { db } = ctx;
+  const snap = await db
+    .collection('familyDeletionReceipts')
+    .where(RECEIPT_TTL_FIELD, '<=', Timestamp.fromMillis(ctx.now()))
+    .limit(RECEIPT_PURGE_BATCH)
+    .get();
+  let deleted = 0;
+  for (const docSnap of snap.docs) {
+    await docSnap.ref.delete();
+    deleted += 1;
+  }
+  return deleted;
+}
+
+// ---------------------------------------------------------------------------
 // leaveFamily — non-owner self-registered departure
 // ---------------------------------------------------------------------------
 
@@ -1052,5 +1086,13 @@ export const recoverFamilyDeletionJobs = onSchedule(
   { region: 'europe-west1', schedule: 'every 10 minutes' },
   async () => {
     await recoverFamilyDeletionJobsImpl(makeContext());
+  },
+);
+
+// Backstop for the native Firestore TTL policy declared in firebase.json.
+export const purgeExpiredFamilyDeletionReceipts = onSchedule(
+  { region: 'europe-west1', schedule: 'every 24 hours' },
+  async () => {
+    await purgeExpiredFamilyDeletionReceiptsImpl(makeContext());
   },
 );

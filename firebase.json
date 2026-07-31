@@ -4,7 +4,13 @@
       "npm run test:rules"
     ],
     "rules": "firestore.rules",
-    "indexes": "firestore.indexes.json"
+    "indexes": "firestore.indexes.json",
+    "ttl": [
+      {
+        "collectionGroup": "familyDeletionReceipts",
+        "field": "expiresAt"
+      }
+    ]
   },
   "functions": {
     "source": "functions",

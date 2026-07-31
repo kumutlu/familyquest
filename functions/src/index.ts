@@ -157,6 +157,7 @@ export {
   leaveFamily,
   processFamilyDeletion,
   recoverFamilyDeletionJobs,
+  purgeExpiredFamilyDeletionReceipts,
 } from './familyDeletion';
 export { deleteAccount } from './accountDeletion';
 

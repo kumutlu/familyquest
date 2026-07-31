@@ -29,9 +29,13 @@ vi.mock('firebase-admin/functions', () => ({
   }),
 }));
 
+import { readFileSync } from 'node:fs';
+
 import {
   deleteFamilyImpl,
   getFamilyDeletionStatusImpl,
+  purgeExpiredFamilyDeletionReceiptsImpl,
+  RECEIPT_TTL_FIELD,
   FAMILY_SUBCOLLECTION_REGISTRY,
   FAMILY_NESTED_SUBCOLLECTIONS,
   DELETION_PHASES,
@@ -78,13 +82,39 @@ function makeFakeDb() {
   const db: any = {
     store,
     doc: makeRef,
-    collection: (path: string) => ({
-      doc: (id?: string) => makeRef(`${path}/${id || Math.random().toString(36).slice(2)}`),
-      where: () => ({
-        limit: () => ({ get: async () => ({ empty: true, docs: [], size: 0 }) }),
-      }),
-      limit: () => ({ get: async () => ({ empty: true, docs: [], size: 0 }) }),
-    }),
+    collection: (path: string) => {
+      // Minimal query support: a single range filter plus limit, which is all
+      // the receipt-expiry purge needs.
+      const millis = (v: any) => (v && typeof v.toMillis === 'function' ? v.toMillis() : v);
+      const matching = (field?: string, op?: string, value?: unknown) => {
+        const docs: any[] = [];
+        for (const [docPath, data] of store) {
+          if (!docPath.startsWith(`${path}/`)) continue;
+          if (docPath.slice(path.length + 1).includes('/')) continue;
+          if (field) {
+            const actual = millis((data as any)[field]);
+            const expected = millis(value);
+            if (op === '<=' && !(actual !== undefined && actual <= (expected as number))) continue;
+            if (op === '==' && actual !== expected) continue;
+          }
+          docs.push({
+            id: docPath.split('/').pop(),
+            data: () => data,
+            ref: makeRef(docPath),
+          });
+        }
+        return docs;
+      };
+      const result = (docs: any[]) => ({ empty: docs.length === 0, docs, size: docs.length });
+      return {
+        doc: (id?: string) => makeRef(`${path}/${id || Math.random().toString(36).slice(2)}`),
+        where: (field: string, op: string, value: unknown) => ({
+          limit: (n: number) => ({ get: async () => result(matching(field, op, value).slice(0, n)) }),
+          get: async () => result(matching(field, op, value)),
+        }),
+        limit: (n: number) => ({ get: async () => result(matching().slice(0, n)) }),
+      };
+    },
     runTransaction: async (cb: (tx: any) => Promise<any>) => {
       const writes: Array<['set' | 'update' | 'delete', FakeRef, Record<string, unknown>]> = [];
       const tx = {
@@ -349,6 +379,60 @@ describe('getFamilyDeletionStatusImpl', () => {
     db.store.set(`familyDeletionReceipts/${FAMILY_ID}`, { schemaVersion: 1, familyId: FAMILY_ID });
     const status = await getFamilyDeletionStatusImpl(ctx, 'anyone', FAMILY_ID);
     expect(status).toEqual({ familyId: FAMILY_ID, state: 'completed' });
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Receipt TTL and scheduled expiry cleanup (R7)
+// ---------------------------------------------------------------------------
+
+describe('purgeExpiredFamilyDeletionReceiptsImpl', () => {
+  const ts = (ms: number) => ({ __timestampMs: ms, toMillis: () => ms });
+
+  it('deletes only receipts whose expiresAt has already elapsed', async () => {
+    db.store.set('familyDeletionReceipts/expired-1', {
+      schemaVersion: 1, familyId: 'expired-1', outcome: 'completed', expiresAt: ts(999_999),
+    });
+    db.store.set('familyDeletionReceipts/expired-2', {
+      schemaVersion: 1, familyId: 'expired-2', outcome: 'completed', expiresAt: ts(1_000_000),
+    });
+    db.store.set('familyDeletionReceipts/live', {
+      schemaVersion: 1, familyId: 'live', outcome: 'completed', expiresAt: ts(1_000_001),
+    });
+
+    const deleted = await purgeExpiredFamilyDeletionReceiptsImpl(ctx);
+
+    expect(deleted).toBe(2);
+    expect(db.store.has('familyDeletionReceipts/expired-1')).toBe(false);
+    expect(db.store.has('familyDeletionReceipts/expired-2')).toBe(false);
+    expect(db.store.has('familyDeletionReceipts/live')).toBe(true);
+  });
+
+  it('is a no-op when nothing has expired', async () => {
+    db.store.set('familyDeletionReceipts/live', {
+      schemaVersion: 1, familyId: 'live', outcome: 'completed', expiresAt: ts(2_000_000),
+    });
+    expect(await purgeExpiredFamilyDeletionReceiptsImpl(ctx)).toBe(0);
+    expect(db.store.has('familyDeletionReceipts/live')).toBe(true);
+  });
+
+  it('never touches deletion jobs or family documents', async () => {
+    db.store.set(`familyDeletionJobs/${FAMILY_ID}`, makeJob({}));
+    db.store.set('familyDeletionReceipts/expired-1', {
+      schemaVersion: 1, familyId: 'expired-1', outcome: 'completed', expiresAt: ts(1),
+    });
+    await purgeExpiredFamilyDeletionReceiptsImpl(ctx);
+    expect(db.store.has(`familyDeletionJobs/${FAMILY_ID}`)).toBe(true);
+    expect(db.store.has(`families/${FAMILY_ID}`)).toBe(true);
+  });
+
+  it('declares a Firestore TTL policy on the receipt expiry field as the primary reaper', () => {
+    const config = JSON.parse(readFileSync('../firebase.json', 'utf8'));
+    expect(config.firestore.ttl).toEqual(
+      expect.arrayContaining([
+        { collectionGroup: 'familyDeletionReceipts', field: RECEIPT_TTL_FIELD },
+      ]),
+    );
   });
 });
 
