@@ -70,6 +70,7 @@ const familyResources = [
   'families/fam1/wallets',
   'users',
   'families/fam1/join_requests',
+  'families/fam1/child_join_requests',
   'families/fam1/task_completions',
   'families/fam1/redemptions',
   'families/fam1/feed',
@@ -91,7 +92,8 @@ const familyResources = [
 ] as const;
 
 const childFamilyResources = familyResources
-  .filter(target => target !== 'families/fam1/join_requests')
+  .filter(target =>
+    target !== 'families/fam1/join_requests' && target !== 'families/fam1/child_join_requests')
   .map(target => {
     if (target === 'families/fam1/wallets') return 'families/fam1/wallets/user1';
     if (target === 'families/fam1/gamification_summaries') return 'families/fam1/gamification_summaries/user1';

@@ -61,6 +61,7 @@ const emptyFamilyState = () => ({
   familyData: null,
   familyMembers: [] as any[],
   joinRequests: [] as any[],
+  childJoinRequests: [] as any[],
   tasks: [] as any[],
   taskCompletions: [] as any[],
   rewards: [] as any[],
@@ -119,6 +120,7 @@ interface AppState {
   familyData: any | null;
   familyMembers: any[];
   joinRequests: any[];
+  childJoinRequests: any[];
   tasks: any[];
   taskCompletions: any[];
   rewards: any[];
@@ -744,6 +746,7 @@ export const useStore = create<AppState>((set, get) => ({
       subscribePlanned('members', 'Members', snapshot => set({ familyMembers: docs(snapshot) }));
       if (currentUser?.role === 'parent' || currentUser?.role === 'owner') {
         subscribePlanned('joinRequests', 'Join requests', snapshot => set({ joinRequests: docs(snapshot) }));
+        subscribePlanned('childJoinRequests', 'Child join requests', snapshot => set({ childJoinRequests: docs(snapshot) }));
         subscribePlanned('taskCompletions', 'Task completions', snapshot => set({ taskCompletions: docs(snapshot) }));
         subscribePlanned('redemptions', 'Redemptions', snapshot => set({ redemptions: docs(snapshot) }));
         subscribePlanned('walletTransactions', 'Wallet transactions', snapshot => set({ walletTransactions: normalizeHistory(docs(snapshot)) }));

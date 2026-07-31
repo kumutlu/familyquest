@@ -1,4 +1,12 @@
-export type ApprovalType = 'task' | 'transfer' | 'money_request' | 'petbox' | 'join' | 'profile_update'
+export type ApprovalType =
+  | 'task'
+  | 'transfer'
+  | 'money_request'
+  | 'petbox'
+  | 'join'
+  | 'child_join'
+  | 'profile_update'
+  | 'goal'
 
 export const approvalKey = (type: ApprovalType, id: string) => `${type}:${id}`
 

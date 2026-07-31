@@ -16,6 +16,7 @@ export type BootstrapResource =
   | 'family'
   | 'members'
   | 'joinRequests'
+  | 'childJoinRequests'
   | 'tasks'
   | 'taskCompletions'
   | 'rewards'
@@ -56,6 +57,25 @@ export type BootstrapQueryPlanEntry =
   }
 
 export const bootstrapCompositeIndexes = [
+  // Child join requests: the hourly expiry sweep queries every family's pending
+  // requests by expiry (collection group), and the Approval Center reads a
+  // single family's requests newest-first.
+  {
+    collectionGroup: 'child_join_requests',
+    queryScope: 'COLLECTION_GROUP',
+    fields: [
+      { fieldPath: 'status', order: 'ASCENDING' },
+      { fieldPath: 'expiresAtMs', order: 'ASCENDING' },
+    ],
+  },
+  {
+    collectionGroup: 'child_join_requests',
+    queryScope: 'COLLECTION',
+    fields: [
+      { fieldPath: 'status', order: 'ASCENDING' },
+      { fieldPath: 'createdAtMs', order: 'DESCENDING' },
+    ],
+  },
   {
     collectionGroup: 'transfer_requests',
     queryScope: 'COLLECTION',
@@ -127,6 +147,7 @@ export const bootstrapResources: BootstrapResource[] = [
   'family',
   'members',
   'joinRequests',
+  'childJoinRequests',
   'tasks',
   'taskCompletions',
   'rewards',
@@ -161,7 +182,10 @@ export const criticalBootstrapResources: BootstrapResource[] = [
   'wallets',
 ]
 
-const childBootstrapResources = bootstrapResources.filter(resource => resource !== 'joinRequests' && resource !== 'reversals')
+const childBootstrapResources = bootstrapResources.filter(
+  resource =>
+    resource !== 'joinRequests' && resource !== 'reversals' && resource !== 'childJoinRequests',
+)
 
 export const bootstrapResourcesForRole = (role: BootstrapRole | unknown) =>
   role === 'parent' || role === 'owner' ? bootstrapResources : childBootstrapResources
@@ -196,6 +220,9 @@ export function createBootstrapQueryPlan(
   if (parentPlan) {
     plan.push(
       { resource: 'joinRequests', key: 'joinRequests', kind: 'query', target: collection(db, `${familyPath}/join_requests`) },
+      // Child join requests are parent-only by rule; the documents contain no
+      // credential material (see functions/src/childJoinRequest.ts).
+      { resource: 'childJoinRequests', key: 'childJoinRequests', kind: 'query', target: collection(db, `${familyPath}/child_join_requests`) },
       { resource: 'taskCompletions', key: 'taskCompletions', kind: 'query', target: collection(db, `${familyPath}/task_completions`) },
       { resource: 'redemptions', key: 'redemptions', kind: 'query', target: collection(db, `${familyPath}/redemptions`) },
       { resource: 'walletTransactions', key: 'walletTransactions', kind: 'query', target: collection(db, `${familyPath}/wallet_transactions`) },

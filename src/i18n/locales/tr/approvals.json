@@ -18,6 +18,7 @@
     "siblingMoneyRequest": "Kardeş Para İsteği",
     "petBoxDonation": "Evcil Kutusu Bağışı",
     "profileUpdateRequest": "Profil Güncelleme İsteği",
+    "childJoinRequest": "Çocuk Katılma İsteği",
     "goalWithdrawal": "Hedef Çekimi",
     "goalContribution": "Hedef Katkısı"
   },
@@ -31,6 +32,7 @@
     "moneyRequestSiblingMessage": "{{requestedFromName}}, {{requesterName}}’in isteğini kabul etti. Ebeveyn onayı bekleniyor: \"{{message}}\"",
     "petBoxDonation": "{{childName}}, {{fundName}} kutusuna bağış yapmak istiyor.",
     "profileUpdate": "{{childName}} profilini güncellemek istiyor{{changes}}.",
+    "childJoin": "{{username}} ailene katılmak istiyor.",
     "goalWithdrawal": "{{childName}}, \"{{goalTitle}}\" hedefinden para çekmek istiyor.",
     "goalContribution": "{{childName}}, \"{{goalTitle}}\" hedefine katkı yapmak istiyor."
   },

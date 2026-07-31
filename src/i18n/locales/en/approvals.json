@@ -18,6 +18,7 @@
     "siblingMoneyRequest": "Sibling Money Request",
     "petBoxDonation": "Pet Box Donation",
     "profileUpdateRequest": "Profile Update Request",
+    "childJoinRequest": "Child Join Request",
     "goalWithdrawal": "Goal Withdrawal",
     "goalContribution": "Goal Contribution"
   },
@@ -31,6 +32,7 @@
     "moneyRequestSiblingMessage": "{{requestedFromName}} accepted {{requesterName}}’s request. Awaiting parent approval: \"{{message}}\"",
     "petBoxDonation": "{{childName}} wants to donate to {{fundName}}.",
     "profileUpdate": "{{childName}} wants to update their profile{{changes}}.",
+    "childJoin": "{{username}} wants to join your family.",
     "goalWithdrawal": "{{childName}} wants to withdraw from \"{{goalTitle}}\".",
     "goalContribution": "{{childName}} wants to contribute to \"{{goalTitle}}\"."
   },

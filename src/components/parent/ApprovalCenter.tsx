@@ -29,10 +29,11 @@ import {
   type MoneyRequestIdentity,
 } from '../../lib/moneyRequestContracts';
 import { isPetBoxEnabled } from '../../lib/familyFeatures';
+import { approveChildJoinRequest, rejectChildJoinRequest } from '../../lib/childJoinApi';
 
 export function ApprovalCenter() {
   const { t } = useTranslation('approvals');
-  const { currentUser, tasks, familyMembers, familyData, rewards, taskCompletions, transferRequests, moneyRequests, petboxRequests, profileUpdateRequests, goalRequests, savingsGoals } = useStore();
+  const { currentUser, tasks, familyMembers, familyData, rewards, taskCompletions, transferRequests, moneyRequests, petboxRequests, profileUpdateRequests, goalRequests, savingsGoals, childJoinRequests } = useStore();
   const { openRequest } = useRequestDetail();
 
   const [activeTab, setActiveTab] = useState<'pending' | 'history'>('pending');
@@ -96,9 +97,22 @@ export function ApprovalCenter() {
       };
     }));
 
+    // 7. Child join requests (mandatory parent approval before a managed-child
+    // identity is created). The documents carry no credential material.
+    items.push(...(childJoinRequests || []).map(r => ({
+      id: r.id,
+      category: 'child_join',
+      requestedUsername: r.displayUsername || r.normalizedUsername || '',
+      status: r.status,
+      sortDate: r.createdAt?.toDate
+        ? r.createdAt.toDate()
+        : new Date(typeof r.createdAtMs === 'number' ? r.createdAtMs : Date.now()),
+      isPending: r.status === 'pending',
+    })));
+
     items.sort((a, b) => b.sortDate.getTime() - a.sortDate.getTime());
     return items;
-  }, [taskCompletions, transferRequests, moneyRequests, petboxRequests, profileUpdateRequests, goalRequests, savingsGoals, familyData]);
+  }, [taskCompletions, transferRequests, moneyRequests, petboxRequests, profileUpdateRequests, goalRequests, savingsGoals, childJoinRequests, familyData]);
 
   const itemKey = (item: any) => approvalKey(item.category as ApprovalType, item.id);
   const pendingApprovals = timeline.filter(item => item.isPending && !optimisticallyRemovedIds.has(itemKey(item)));
@@ -124,6 +138,8 @@ export function ApprovalCenter() {
         // Only withdrawal requests require parent approval; contribution
         // requests are also surfaced here when approvalRequired was set.
         await approveGoalWithdrawal(currentUser.familyId, item.id, `${Date.now()}-${item.id}`);
+      } else if (item.category === 'child_join') {
+        await approveChildJoinRequest(currentUser.familyId, item.id);
       } else {
         await getRequestActions(item.category as RequestCategory).approve?.(currentUser.familyId, item.id);
       }
@@ -147,6 +163,8 @@ export function ApprovalCenter() {
     try {
       if (item.category === 'goal') {
         await rejectGoalWithdrawal(currentUser.familyId, item.id, rejectionReason);
+      } else if (item.category === 'child_join') {
+        await rejectChildJoinRequest(currentUser.familyId, item.id);
       } else {
         await getRequestActions(item.category as RequestCategory).reject?.(currentUser.familyId, item.id, rejectionReason);
       }
@@ -315,6 +333,11 @@ export function ApprovalCenter() {
       });
       avatarSrc = item.requestedAvatar || child?.avatarUrl || '';
       fallback = (item.childName || child?.displayName || '?')[0] || '?';
+    } else if (item.category === 'child_join') {
+      title = t('type.childJoinRequest');
+      description = t('desc.childJoin', { username: item.requestedUsername });
+      avatarSrc = '';
+      fallback = (item.requestedUsername || '?')[0] || '?';
     } else if (item.category === 'goal') {
       const child = familyMembers.find(c => c.id === item.childId);
       const isWithdrawal = item.requestType === 'withdrawal';
