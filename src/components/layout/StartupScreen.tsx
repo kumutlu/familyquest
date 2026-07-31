@@ -8,13 +8,22 @@ import type { StartupPhase } from './startupState';
 export const STARTUP_REASSURANCE_DELAY_MS = 4000;
 
 /**
- * Hard upper bound on any single startup phase. Firebase Auth, the profile
- * listener and the family listeners can all stall silently (offline device,
- * blocked long-poll, permission-denied that never surfaces), which previously
- * left the app on a blank "Loading…" screen forever. After this bound we always
- * show a recoverable error.
+ * Hard upper bound on a SINGLE startup phase (not on the whole startup).
+ *
+ * Firebase Auth, the profile listener and the family listeners can all stall
+ * silently (offline device, blocked long-poll, permission-denied that never
+ * surfaces), which previously left the app on a blank "Loading…" screen
+ * forever. After this bound we show a recoverable *UI* state.
+ *
+ * The budget was raised from 15s to 20s because the family phase fans out to
+ * ~20 parallel `getDocsFromServer` reads plus their listeners; on a slow but
+ * perfectly healthy mobile connection that legitimately exceeded 15s and
+ * produced the "Connection problem" false positive. The threshold change is a
+ * secondary mitigation only — the primary fix is that reaching the bound is now
+ * a *recoverable UI state* that clears itself the moment the phase resolves,
+ * and that Retry genuinely restarts the bootstrap and its timers.
  */
-export const STARTUP_TIMEOUT_MS = 15000;
+export const STARTUP_TIMEOUT_MS = 20000;
 
 export interface StartupScreenProps {
   phase: StartupPhase;
@@ -23,6 +32,12 @@ export interface StartupScreenProps {
   onRetry: () => void;
   /** Provided only when there is a session that can actually be ended. */
   onSignOut?: () => void;
+  /**
+   * Monotonic bootstrap attempt counter from the store. Changing it restarts
+   * every startup timer even when the phase label itself is unchanged (e.g.
+   * Retry pressed while still in the `family` phase).
+   */
+  attempt?: number;
 }
 
 /** Honest, phase-specific step label shown under the primary message. */
@@ -37,32 +52,39 @@ const PHASE_STEP_KEY = {
  * bounded timeout and recovery actions. It never renders a fabricated progress
  * percentage — only the phase it is genuinely waiting on.
  */
-export function StartupScreen({ phase, error, onRetry, onSignOut }: StartupScreenProps) {
+export function StartupScreen({ phase, error, onRetry, onSignOut, attempt = 0 }: StartupScreenProps) {
   // `startup` is bundled synchronously (see src/i18n/config.ts) so the very
   // first paint is already localised in English and Turkish.
   const { t } = useTranslation('startup');
   const [showReassurance, setShowReassurance] = useState(false);
-  const [timedOut, setTimedOut] = useState(false);
+  // The timeout is recorded as the *attempt token it belongs to*, never as a
+  // bare boolean. A stale token can therefore never leak into the next phase or
+  // the next retry, not even for the single render before effects re-run.
+  const [timedOutToken, setTimedOutToken] = useState<string | null>(null);
 
   const isLoadingPhase = phase === 'auth' || phase === 'profile' || phase === 'family';
+  const token = `${phase}:${attempt}`;
 
   useEffect(() => {
     setShowReassurance(false);
     if (!isLoadingPhase) return undefined;
     const handle = setTimeout(() => setShowReassurance(true), STARTUP_REASSURANCE_DELAY_MS);
     return () => clearTimeout(handle);
-  }, [phase, isLoadingPhase]);
+  }, [token, isLoadingPhase]);
 
   useEffect(() => {
-    setTimedOut(false);
+    setTimedOutToken(null);
     if (!isLoadingPhase) return undefined;
-    const handle = setTimeout(() => setTimedOut(true), STARTUP_TIMEOUT_MS);
+    const handle = setTimeout(() => setTimedOutToken(token), STARTUP_TIMEOUT_MS);
     return () => clearTimeout(handle);
-  }, [phase, isLoadingPhase]);
+  }, [token, isLoadingPhase]);
 
   if (phase === 'ready') return null;
 
-  const failed = phase === 'error' || timedOut;
+  // A timeout is a per-phase, per-attempt UI recovery state. As soon as the
+  // phase advances (late success, next phase, or a retry) the token no longer
+  // matches and the loading screen returns automatically — no refresh needed.
+  const failed = phase === 'error' || timedOutToken === token;
 
   if (failed) {
     const body = phase === 'error' && error ? error : t('timeoutBody');

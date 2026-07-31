@@ -104,6 +104,12 @@ interface AppState {
   appReady: boolean;
   loading: boolean;
   bootstrapError: string | null;
+  /**
+   * Monotonic counter incremented by retryBootstrap(). The startup screen keys
+   * its timers off it so a retry restarts the timeout even when the derived
+   * startup phase label is unchanged.
+   */
+  bootstrapAttempt: number;
   featureErrors: Record<string, string | null>;
   bootstrapStatus: Record<BootstrapResource, BootstrapStatus>;
   activeFamilyId: string | null;
@@ -217,6 +223,7 @@ export const useStore = create<AppState>((set, get) => ({
   appReady: false,
   loading: true,
   bootstrapError: null,
+  bootstrapAttempt: 0,
   featureErrors: {},
   bootstrapStatus: createBootstrapStatus('idle'),
   activeFamilyId: null,
@@ -907,7 +914,22 @@ export const useStore = create<AppState>((set, get) => ({
     const { currentUser, authUser } = get();
     if (authUser === null) return;
     if (currentUser?.familyId) {
-      set({ bootstrapError: null });
+      // A retry must genuinely restart the family bootstrap. Previously we
+      // called loadFamilyData() directly, but it short-circuits when the family
+      // is already active with attached listeners — exactly the stuck/slow state
+      // in which Retry is offered — so the button was a no-op and users had to
+      // reload the page. Tear the listeners down and clear activeFamilyId so the
+      // guard cannot swallow the retry.
+      stopFamilyListeners();
+      set(current => ({
+        bootstrapError: null,
+        featureErrors: {},
+        activeFamilyId: null,
+        familyLoading: true,
+        appReady: false,
+        loading: true,
+        bootstrapAttempt: current.bootstrapAttempt + 1,
+      }));
       get().loadFamilyData(currentUser.id, currentUser.familyId);
       return;
     }
@@ -917,8 +939,8 @@ export const useStore = create<AppState>((set, get) => ({
     stopFamilyListeners();
     authUnsubscribe?.();
     authUnsubscribe = null;
-    set({
-      authStatus: 'initializing',
+    set(current => ({
+      authStatus: 'initializing' as const,
       authInitialized: false,
       authLoading: true,
       profileLoading: false,
@@ -928,7 +950,8 @@ export const useStore = create<AppState>((set, get) => ({
       featureErrors: {},
       appReady: false,
       loading: true,
-    });
+      bootstrapAttempt: current.bootstrapAttempt + 1,
+    }));
     get().initAuth();
   },
 

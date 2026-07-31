@@ -23,6 +23,7 @@ export function AppLayout() {
   const currentUser = useStore(state => state.currentUser);
   const appReady = useStore(state => state.appReady);
   const bootstrapError = useStore(state => state.bootstrapError);
+  const bootstrapAttempt = useStore(state => state.bootstrapAttempt);
   const retryBootstrap = useStore(state => state.retryBootstrap);
 
   // Single deterministic source of truth for the global startup gate. Each
@@ -40,6 +41,7 @@ export function AppLayout() {
     return (
       <StartupScreen
         phase={startupPhase}
+        attempt={bootstrapAttempt}
         error={bootstrapError}
         onRetry={retryBootstrap}
         onSignOut={authUser ? () => { void signOut(); } : undefined}

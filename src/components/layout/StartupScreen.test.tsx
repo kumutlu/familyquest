@@ -112,6 +112,81 @@ describe('StartupScreen', () => {
     expect(screen.queryByRole('status')).not.toBeInTheDocument();
   });
 
+  it('19. REGRESSION: Retry in the same phase restarts the timers via the attempt token', async () => {
+    const { rerender } = render(<StartupScreen phase="family" attempt={0} onRetry={vi.fn()} />);
+    await advance(STARTUP_TIMEOUT_MS);
+    expect(screen.getByRole('alert')).toBeInTheDocument();
+
+    // retryBootstrap() bumps the attempt counter while the phase label stays
+    // "family". The screen must return to loading and get a fresh budget.
+    rerender(<StartupScreen phase="family" attempt={1} onRetry={vi.fn()} />);
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+    expect(screen.getByRole('status')).toBeInTheDocument();
+    await advance(STARTUP_TIMEOUT_MS - 1);
+    expect(screen.getByRole('status')).toBeInTheDocument();
+    await advance(1);
+    expect(screen.getByRole('alert')).toBeInTheDocument();
+  });
+
+  it('12. REGRESSION: a late auth success after the timeout leaves the error screen automatically', async () => {
+    const { rerender } = render(<StartupScreen phase="auth" onRetry={vi.fn()} />);
+    await advance(STARTUP_TIMEOUT_MS);
+    expect(screen.getByRole('alert')).toBeInTheDocument();
+    rerender(<StartupScreen phase="ready" onRetry={vi.fn()} />);
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+    expect(screen.queryByRole('status')).not.toBeInTheDocument();
+  });
+
+  it('13. REGRESSION: a late profile success after the timeout leaves the error screen automatically', async () => {
+    const { rerender } = render(<StartupScreen phase="profile" onRetry={vi.fn()} />);
+    await advance(STARTUP_TIMEOUT_MS);
+    expect(screen.getByRole('alert')).toBeInTheDocument();
+    rerender(<StartupScreen phase="ready" onRetry={vi.fn()} />);
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+  });
+
+  it('14. REGRESSION: a late family success after the timeout leaves the error screen automatically', async () => {
+    const { rerender } = render(<StartupScreen phase="family" onRetry={vi.fn()} />);
+    await advance(STARTUP_TIMEOUT_MS);
+    expect(screen.getByRole('alert')).toBeInTheDocument();
+    rerender(<StartupScreen phase="ready" onRetry={vi.fn()} />);
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+  });
+
+  it('15. REGRESSION: an auth-phase timeout never carries into the profile phase, not even for one render', async () => {
+    const { rerender } = render(<StartupScreen phase="auth" onRetry={vi.fn()} />);
+    await advance(STARTUP_TIMEOUT_MS);
+    expect(screen.getByRole('alert')).toBeInTheDocument();
+    // Synchronous assertion: the very first render of the next phase must
+    // already be a loading screen, before any effect has had a chance to run.
+    rerender(<StartupScreen phase="profile" onRetry={vi.fn()} />);
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+    expect(screen.getByRole('status')).toBeInTheDocument();
+  });
+
+  it('16. restarts the timer when the phase changes so each phase gets a full budget', async () => {
+    const { rerender } = render(<StartupScreen phase="auth" onRetry={vi.fn()} />);
+    await advance(STARTUP_TIMEOUT_MS - 1000);
+    rerender(<StartupScreen phase="family" onRetry={vi.fn()} />);
+    await advance(STARTUP_TIMEOUT_MS - 1000);
+    expect(screen.getByRole('status')).toBeInTheDocument();
+    await advance(1000);
+    expect(screen.getByRole('alert')).toBeInTheDocument();
+  });
+
+  it('17. a genuine bootstrap error is never replaced by the generic timeout copy', async () => {
+    render(<StartupScreen phase="error" error="[Family] permission-denied" onRetry={vi.fn()} />);
+    await advance(STARTUP_TIMEOUT_MS * 2);
+    expect(screen.getByRole('alert')).toHaveTextContent('[Family] permission-denied');
+    expect(screen.getByRole('alert')).not.toHaveTextContent('taking longer than expected');
+  });
+
+  it('18. leaves no pending timers once the app becomes ready', async () => {
+    const { rerender } = render(<StartupScreen phase="family" onRetry={vi.fn()} />);
+    rerender(<StartupScreen phase="ready" onRetry={vi.fn()} />);
+    expect(vi.getTimerCount()).toBe(0);
+  });
+
   it('11. clears every timeout handle on unmount', async () => {
     const clearSpy = vi.spyOn(globalThis, 'clearTimeout');
     const { unmount } = render(<StartupScreen phase="auth" onRetry={vi.fn()} />);
