@@ -22,15 +22,26 @@ export function Onboarding() {
   const handleCreateFamily = async (event: React.FormEvent) => {
     event.preventDefault();
     if (!currentUser || !familyName.trim()) return;
+    // Authoritative identity: the user document id (which is the auth uid).
+    // The denormalised `uid` field is only a fallback and must never be the
+    // source of truth for the onboarding completion path.
+    const userId = currentUser.id ?? currentUser.uid;
+    if (!userId) return;
     setLoading(true);
     setError('');
     try {
-      const { user } = await createFamilyAndParent(
-        currentUser.uid,
+      const { familyId, user } = await createFamilyAndParent(
+        userId,
         currentUser.displayName,
         familyName.trim(),
       );
-      refreshCurrentUser(currentUser.uid, { familyId: user.familyId, role: user.role });
+      // Re-evaluate family state from the authoritative reloaded user document
+      // (falling back to the freshly created family id) before routing, so the
+      // route guard can never bounce the user back to Create Family.
+      refreshCurrentUser(userId, {
+        familyId: user.familyId ?? familyId,
+        role: user.role ?? 'owner',
+      });
       navigate('/', { replace: true });
     } catch (caught: any) {
       setError(caught?.message || t('common:errorOccurred'));

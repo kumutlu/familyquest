@@ -856,17 +856,25 @@ export const useStore = create<AppState>((set, get) => ({
    */
   refreshCurrentUser: (uid, updatedUser) => {
     const state = get();
-    if (state.authUser?.uid !== uid) return;
 
-    // Update the currentUser with the new familyId and role
+    // Authoritative identity for the signed-in session. Callers may pass a
+    // denormalised value (or nothing at all); we never let that decide whether
+    // the family state is applied. Only an explicit mismatch with the
+    // authenticated session is ignored — a late refresh for a user who has
+    // since signed out or switched accounts.
+    const authoritativeUid = state.authUser?.uid ?? state.currentUser?.id ?? uid;
+    if (!authoritativeUid) return;
+    if (uid && uid !== authoritativeUid && uid !== state.currentUser?.id) return;
+
+    // Update the currentUser with the authoritative familyId and role.
     set(current => ({
       currentUser: current.currentUser
         ? { ...current.currentUser, familyId: updatedUser.familyId, role: updatedUser.role }
-        : { id: uid, familyId: updatedUser.familyId, role: updatedUser.role },
+        : { id: authoritativeUid, familyId: updatedUser.familyId, role: updatedUser.role },
     }));
 
     // Now load the family data since we have a familyId
-    get().loadFamilyData(uid, updatedUser.familyId);
+    get().loadFamilyData(authoritativeUid, updatedUser.familyId);
   },
 
   loadReversals: () => {
