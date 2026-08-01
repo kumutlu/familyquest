@@ -25,6 +25,7 @@ import { FamilyBulletin } from '../bulletin/FamilyBulletin';
 import { FamilySetupPrompt } from '../family/FamilySetupPrompt';
 import { AddChildModal } from '../family/AddChildModal';
 import { shouldShowFamilySetupPrompt } from '../../lib/familySetup';
+import { DailyCheckinHistory } from '../checkins/DailyCheckinHistory';
 
 const joinRequestProcessingKey = (request: { id: string; uid: string }) => `join:${request.id}:${request.uid}`;
 
@@ -199,6 +200,8 @@ export function ParentDashboard() {
       </div>
 
       <ChildrenOverview />
+
+      <DailyCheckinHistory />
 
       <RecentActivity />
 
