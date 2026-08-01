@@ -2,7 +2,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { act, render, screen } from '@testing-library/react';
 import { AppLayout } from './AppLayout';
 import { useStore } from '../../store/useStore';
-import { MemoryRouter } from 'react-router-dom';
+import { MemoryRouter, Routes, Route } from 'react-router-dom';
 import '@testing-library/jest-dom/vitest';
 import i18n from '../../i18n/config';
 
@@ -153,5 +153,27 @@ describe('AppLayout — global startup gate', () => {
     renderWith({});
     expect(screen.queryByRole('status')).not.toBeInTheDocument();
     expect(screen.getAllByText('Home')).toHaveLength(2);
+  });
+
+  it('redirects an existing family owner away from /onboarding', () => {
+    const state = {
+      ...mockStoreState,
+      currentUser: { id: 'u1', uid: 'u1', familyId: 'f1', role: 'owner' },
+    };
+    (useStore as any).mockImplementation((selector: any) => (selector ? selector(state) : state));
+    render(
+      <MemoryRouter initialEntries={['/onboarding']}>
+        <Routes>
+          <Route path="/" element={<AppLayout />}>
+            <Route index element={<div>DASHBOARD</div>} />
+            <Route path="onboarding" element={<div>CREATE FAMILY SCREEN</div>} />
+          </Route>
+        </Routes>
+      </MemoryRouter>,
+    );
+    // The onboarding route must never render for a user who already has a
+    // family; the layout redirects to the dashboard instead.
+    expect(screen.queryByText('CREATE FAMILY SCREEN')).not.toBeInTheDocument();
+    expect(screen.getByText('DASHBOARD')).toBeInTheDocument();
   });
 });

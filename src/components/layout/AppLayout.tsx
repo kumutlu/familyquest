@@ -59,6 +59,12 @@ export function AppLayout() {
     return <Navigate to="/onboarding" replace />;
   }
 
+  // Logged in with a family -> onboarding is complete and must never render
+  // again, even when the route is opened directly or restored from history.
+  if (currentUser?.familyId && location.pathname === '/onboarding') {
+    return <Navigate to="/" replace />;
+  }
+
   if (
     currentUser?.role === 'child' &&
     currentUser?.isManaged === true &&
