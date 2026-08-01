@@ -212,6 +212,30 @@ describe('DailyCheckinSettings writes', () => {
     );
   });
 
+  it('preserves an earlier successful family intent when a later sibling write fails', async () => {
+    apiMocks.updateFamilySettings
+      .mockResolvedValueOnce(undefined)
+      .mockRejectedValueOnce(new Error('offline'))
+      .mockResolvedValueOnce(undefined);
+    const user = userEvent.setup();
+    renderSettings('owner');
+    const childrenToggle = screen.getByRole('switch', { name: /Enable check-ins for children/i });
+    const historyToggle = screen.getByRole('switch', { name: /Show check-in history/i });
+
+    await user.click(childrenToggle);
+    await waitFor(() => expect(apiMocks.updateFamilySettings).toHaveBeenCalledTimes(1));
+    await user.click(historyToggle);
+    expect(await screen.findByRole('alert')).toHaveTextContent(
+      "We couldn't save this setting. Please try again.",
+    );
+    await user.click(historyToggle);
+
+    await waitFor(() => expect(apiMocks.updateFamilySettings).toHaveBeenCalledTimes(3));
+    expect(apiMocks.updateFamilySettings).toHaveBeenNthCalledWith(3, 'family-1', {
+      dailyCheckins: { childrenEnabled: false, historyVisibleToParents: true },
+    });
+  });
+
   it('guards a rapid double click with a single in-flight write', async () => {
     let resolveWrite!: () => void;
     apiMocks.updateParentDailyCheckinPreference.mockImplementation(() => new Promise<void>(resolve => {

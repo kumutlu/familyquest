@@ -125,7 +125,7 @@ export function DailyCheckinSettings() {
           } catch (error) {
             familyWriteBaseline.current = {
               familyId,
-              settings: resolvedDailyCheckinSettings(useStore.getState().familyData?.dailyCheckins),
+              settings: baseline,
             };
             throw error;
           }
