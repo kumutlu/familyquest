@@ -36,6 +36,10 @@ describe('daily check-in domain', () => {
     expect(familyDayKey(new Date('2026-08-01T23:30:00Z'), 'invalid')).toBe('2026-08-02');
   });
 
+  it('uses Europe/London when legacy timezone data is absent', () => {
+    expect(familyDayKey(new Date('2026-08-01T00:30:00Z'), undefined)).toBe('2026-08-01');
+  });
+
   it.each([
     [{ resolved: false }, 'loading'],
     [{ resolved: true, role: 'child', childrenEnabled: true, checkinExists: false, skipExists: false }, 'eligible'],

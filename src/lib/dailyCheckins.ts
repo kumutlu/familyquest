@@ -27,9 +27,10 @@ export const resolvedParentParticipation = (value?: Partial<{ parentParticipatio
   value?.parentParticipationEnabled ?? false;
 
 const validTimezone = (value?: string) => {
+  if (!value) return 'Europe/London';
   try {
     new Intl.DateTimeFormat('en-CA', { timeZone: value }).format(0);
-    return value!;
+    return value;
   } catch {
     return 'Europe/London';
   }
