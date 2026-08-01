@@ -9,6 +9,16 @@
     "subtitle": "Ailenizde bugün neler olduğuna göz atın.",
     "family": "{{name}} ailesi"
   },
+  "nextAction": {
+    "inviteFamily": "Aile üyeleri davet et",
+    "createGoal": "Bir hedef oluştur",
+    "createTask": "Bir görev oluştur",
+    "continueSetup": "Kurulumu devam et"
+  },
+  "continueSetup": {
+    "allDone": "Hazırsınız! Aileniz kullanıma hazır.",
+    "inProgress": "Ailenizi kurmaya devam etmek için bu adımları tamamlayın."
+  },
   "quickActions": {
     "heading": "Hızlı İşlemler",
     "newTask": "Yeni Görev",

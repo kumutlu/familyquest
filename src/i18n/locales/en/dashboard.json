@@ -1,4 +1,14 @@
 {
+  "nextAction": {
+    "inviteFamily": "Invite family members",
+    "createGoal": "Create a goal",
+    "createTask": "Create a task",
+    "continueSetup": "Continue Setup"
+  },
+  "continueSetup": {
+    "allDone": "You're all set! Your family is ready to go.",
+    "inProgress": "Complete these steps to finish setting up your family."
+  },
   "greeting": "Hello, {{name}}",
   "summary": "Your family summary",
   "loading": "Loading Dashboard…",
