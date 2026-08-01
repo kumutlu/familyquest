@@ -44,7 +44,11 @@ vi.mock('./notifications', () => ({
   applyNotificationWrites: vi.fn(),
 }));
 
-import { completeFamilyWelcomeSetup, updateFamilySettings } from './api';
+import {
+  completeFamilyWelcomeSetup,
+  updateFamilySettings,
+  updateParentDailyCheckinPreference,
+} from './api';
 
 describe('family settings API', () => {
   beforeEach(() => {
@@ -97,6 +101,26 @@ describe('family settings API', () => {
     expect(firestore.updateDoc).toHaveBeenCalledWith(
       { id: 'family-1', path: 'families/family-1' },
       { currencyCode },
+    );
+  });
+
+  it('allowlists both family-level daily check-in settings', async () => {
+    await updateFamilySettings('family-1', {
+      dailyCheckins: { childrenEnabled: false, historyVisibleToParents: true },
+    });
+
+    expect(firestore.updateDoc).toHaveBeenCalledWith(
+      { id: 'family-1', path: 'families/family-1' },
+      { dailyCheckins: { childrenEnabled: false, historyVisibleToParents: true } },
+    );
+  });
+
+  it('writes only the signed-in adult preference field', async () => {
+    await updateParentDailyCheckinPreference('parent-1', true);
+
+    expect(firestore.updateDoc).toHaveBeenCalledWith(
+      { id: 'parent-1', path: 'users/parent-1' },
+      { dailyCheckins: { parentParticipationEnabled: true } },
     );
   });
 
