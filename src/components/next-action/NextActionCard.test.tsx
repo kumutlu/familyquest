@@ -80,7 +80,7 @@ describe('NextActionCard', () => {
     expect(screen.getByRole('button', { name: 'Create a task' })).toBeInTheDocument();
   });
 
-  it('shows Continue Setup once everything is configured', () => {
+  it('shows the all-set state once everything is configured', () => {
     state.familyMembers = [{ id: 'owner', role: 'owner' }, { id: 'c1', role: 'child' }];
     state.rewards = [{ id: 'r1' }];
     state.tasks = [{ id: 't1' }];
@@ -89,7 +89,8 @@ describe('NextActionCard', () => {
         <NextActionCard />
       </MemoryRouter>,
     );
-    expect(screen.getByRole('button', { name: 'Continue Setup' })).toBeInTheDocument();
+    expect(screen.getByText("You're all set")).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: "You're all set" })).not.toBeInTheDocument();
   });
 
   it('navigates to the rewards page from the create-reward action', async () => {
