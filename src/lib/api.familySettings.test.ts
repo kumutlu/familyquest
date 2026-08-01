@@ -115,6 +115,22 @@ describe('family settings API', () => {
     );
   });
 
+  it('strips unexpected nested fields from family daily check-in settings', async () => {
+    await updateFamilySettings('family-1', {
+      dailyCheckins: {
+        childrenEnabled: false,
+        historyVisibleToParents: true,
+        parentParticipationEnabled: true,
+        unrelated: 'not-allowed',
+      },
+    } as any);
+
+    expect(firestore.updateDoc).toHaveBeenCalledWith(
+      { id: 'family-1', path: 'families/family-1' },
+      { dailyCheckins: { childrenEnabled: false, historyVisibleToParents: true } },
+    );
+  });
+
   it('writes only the signed-in adult preference field', async () => {
     await updateParentDailyCheckinPreference('parent-1', true);
 

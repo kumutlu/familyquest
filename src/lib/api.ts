@@ -293,7 +293,12 @@ export const updateFamilySettings = async (familyId: string, updates: FamilySett
   if (updates.weekStartsOn !== undefined) allowedUpdates.weekStartsOn = updates.weekStartsOn;
   if (updates.gamificationConfig !== undefined) allowedUpdates.gamificationConfig = updates.gamificationConfig;
   if (updates.petBoxEnabled !== undefined) allowedUpdates.petBoxEnabled = updates.petBoxEnabled;
-  if (updates.dailyCheckins !== undefined) allowedUpdates.dailyCheckins = updates.dailyCheckins;
+  if (updates.dailyCheckins !== undefined) {
+    allowedUpdates.dailyCheckins = {
+      childrenEnabled: updates.dailyCheckins.childrenEnabled,
+      historyVisibleToParents: updates.dailyCheckins.historyVisibleToParents,
+    };
+  }
   if (Object.keys(allowedUpdates).length === 0) throw new Error('No family settings to update');
 
   await updateDoc(doc(db, 'families', familyId), allowedUpdates);
