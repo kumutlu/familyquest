@@ -5,7 +5,8 @@
     "createTask": "Create a task",
     "createReward": "Create a reward",
     "continueSetup": "Continue Setup",
-    "reviewJoinRequests": "Review join requests"
+    "reviewJoinRequests": "Review join requests",
+    "allSet": "You're all set"
   },
   "continueSetup": {
     "allDone": "You're all set! Your family is ready to go.",

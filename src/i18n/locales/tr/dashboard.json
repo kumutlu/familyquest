@@ -15,7 +15,8 @@
     "createTask": "Bir görev oluştur",
     "createReward": "Bir ödül oluştur",
     "continueSetup": "Kurulumu devam et",
-    "reviewJoinRequests": "Katılım isteklerini incele"
+    "reviewJoinRequests": "Katılım isteklerini incele",
+    "allSet": "Hazırsınız"
   },
   "continueSetup": {
     "allDone": "Hazırsınız! Aileniz kullanıma hazır.",
