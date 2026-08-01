@@ -8,6 +8,7 @@ import { Rewards } from './pages/Rewards';
 import { Wallet } from './pages/Wallet';
 import { Wallets } from './pages/Wallets';
 import { Settings } from './pages/Settings';
+import { ContinueSetup } from './pages/ContinueSetup';
 import { Login } from './pages/Login';
 import { Signup } from './pages/Signup';
 import { JoinFamily } from './pages/JoinFamily';
@@ -84,6 +85,7 @@ function App() {
             <Route path="notifications" element={<Notifications />} />
             <Route path="history" element={<TransactionHistoryScreen />} />
             <Route path="settings" element={<Settings />} />
+            <Route path="continue-setup" element={<ContinueSetup />} />
 
             {/* Help Center. `search` and `category/:id` are declared before the
                 catch-all `:articleId` so they are never swallowed by it. */}
