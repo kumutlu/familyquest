@@ -78,6 +78,7 @@ interface DailyCheckinRecord {
   userId: string;
   localDate: string;
   animal: DailyCheckinAnimal;
+  catalogVersion: 1;
   createdAt: Timestamp;
   updatedAt: Timestamp;
 }
@@ -100,6 +101,8 @@ interface DailyCheckinSkip {
 ```
 
 A skip is interaction-control state, not a mood entry. It is never returned by history or included in summaries.
+
+`catalogVersion` is required and fixed at `1` so a future catalog can preserve the meaning and presentation contract of historical selections without changing V1 records.
 
 Document IDs are deterministic and constructed from the authenticated profile ID plus the resolved local date. Submission runs in a Firestore transaction: it reads the same-day documents, writes or safely replays the check-in with server timestamp sentinels, and deletes an existing same-day skip. Skipping runs in a transaction that first reads the check-in and creates the skip only when no valid check-in exists. A check-in is authoritative and can never be suppressed or replaced by a skip.
 
@@ -195,7 +198,7 @@ Rules enforce the capabilities rather than trusting hidden UI:
 - a member may create/read their own same-family daily record and skip;
 - owners and parents may read same-family check-in records only when `historyVisibleToParents` resolves true;
 - skips remain self-readable only and are never parent-history data;
-- document IDs, `familyId`, `userId`, `localDate`, exact field sets, and animal allowlists are validated;
+- document IDs, `familyId`, `userId`, `localDate`, exact field sets, `catalogVersion == 1`, and animal allowlists are validated;
 - clients cannot update or delete submitted check-ins except for the submission transaction's deletion of their own same-day skip;
 - cross-family access is denied.
 
@@ -221,6 +224,30 @@ Family export dynamically includes family subcollections, so both record types a
 - History is bounded and skipped entirely while disabled.
 - Subscription errors flow through the store's existing feature-error mechanism and do not block unrelated dashboard content.
 
+## Analytics policy
+
+The only analytics events that a future compatible analytics layer may emit are:
+
+- Daily Check-in modal opened;
+- Daily Check-in completed;
+- Daily Check-in skipped.
+
+They may measure aggregate feature usage only. They must never include the selected animal ID, animal name, feeling label, child identity, user identity, family identity, check-in document ID, free text, emotional information, or any value or combination of values that could reconstruct a member's selection.
+
+The current application explicitly has no product analytics SDK. V1 therefore adds no Daily Check-in analytics. The three event names are an allowlist policy, not an instruction to add tracking. If a later existing analytics system cannot guarantee anonymous, selection-free events, Daily Check-in analytics must remain disabled.
+
+## Offline behavior
+
+The current Firebase initialization uses the Firestore web client's default in-memory local cache. It does not enable durable IndexedDB persistence, and the application has no custom offline write queue. V1 must not add a separate queue solely for Daily Check-ins.
+
+The modal may appear during a same-session network interruption when all eligibility inputs are already available from local listener state. It must still wait for complete eligibility resolution; a network interruption does not permit assumptions about missing check-in or skip documents.
+
+Selection and skip operations use the same Firestore client and transaction semantics as the rest of the application. Because both operations require authoritative reads and atomic check-in-versus-skip precedence, V1 does not claim an offline transaction is durably saved. While an operation is pending, the experience remains locked and shows neutral localized pending copy. It does not show the success toast, report server confirmation, close as successfully completed, or update the current-day badge merely from component state.
+
+If Firestore accepts and resolves the transaction, the resulting persisted listener state drives modal closure, badge display, and confirmation. If Firestore rejects the transaction, including because authoritative reads cannot complete offline, the modal stays open, the experience-wide lock is released, retry remains available, and a localized non-diagnostic error is shown. A failed skip is never remembered in component state.
+
+Reloading always derives completion and skip state from Firestore. Since the project does not configure durable browser persistence, V1 never describes an unresolved in-memory offline operation as “saved offline.” If the project later enables durable Firebase persistence, a separate approved design must define how pending-write metadata maps to neutral queued or saved-offline UI without implying server confirmation.
+
 ## Test strategy
 
 Implementation follows strict red-green-refactor cycles. Each behavior is introduced by a focused failing test, observed failing for the expected missing behavior, implemented minimally, and run green before refactoring.
@@ -228,6 +255,7 @@ Implementation follows strict red-green-refactor cycles. Each behavior is introd
 ### Domain tests
 
 - immutable animal IDs and complete presentation metadata;
+- fixed `catalogVersion: 1` compatibility metadata;
 - family timezone resolution, DST boundaries, fallback timezone, and date rollover;
 - child and parent eligibility including unresolved state;
 - deterministic daily IDs and check-in precedence;
@@ -244,6 +272,7 @@ Implementation follows strict red-green-refactor cycles. Each behavior is introd
 - disabled history causes no history subscription;
 - history queries are bounded and ordered;
 - write failures do not create local success.
+- offline/unavailable transaction states remain pending or fail truthfully without an in-memory completion flag.
 
 ### Firestore emulator tests
 
@@ -254,6 +283,7 @@ Implementation follows strict red-green-refactor cycles. Each behavior is introd
 - skip privacy and exclusion from history;
 - cross-family denial;
 - exact schemas, stable animal IDs, deterministic identity, immutable records, and request-time-compatible timestamps;
+- required `catalogVersion == 1` and rejection of missing or unsupported catalog versions;
 - check-in and skip transaction precedence.
 
 ### Component and accessibility tests
@@ -269,6 +299,7 @@ Implementation follows strict red-green-refactor cycles. Each behavior is introd
 - history member filter, chronology, seven-day summary, empty state, and disabled state;
 - English and Turkish key parity;
 - prohibited diagnostic language is absent.
+- pending/offline copy does not imply server confirmation or durable offline storage.
 
 ### Isolation and lifecycle regression tests
 
@@ -281,3 +312,21 @@ Implementation follows strict red-green-refactor cycles. Each behavior is introd
 ## Delivery boundaries
 
 This version does not add notes, AI summaries, diagnoses, predictions, inferred risk, notifications, themed dashboards, rewards, streaks, analytics, or new illustration packages. Those are outside the approved scope.
+
+### Future Extensions (Out of Scope)
+
+The following ideas are intentionally excluded from V1 and must not be implemented by this plan:
+
+- separate emoji and animal presentation modes;
+- alternative or custom family animal packs;
+- optional follow-up questions such as “Why do you feel this way?”;
+- free-text notes;
+- AI-generated weekly summaries;
+- psychological interpretation, diagnosis, prediction, alerts, or risk scoring;
+- a family-wide daily mood board;
+- seasonal animals or collectible packs;
+- rewards, points, XP, streak incentives, achievements, or wallet benefits;
+- notifications based on a selected animal or feeling;
+- dashboard-wide theme changes based on the selection.
+
+These may be evaluated in later, separately approved designs. Their mention here must not expand the current implementation scope.
