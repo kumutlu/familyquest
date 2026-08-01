@@ -59,19 +59,19 @@ describe('NextActionCard', () => {
     expect(navigate).toHaveBeenCalledWith('/continue-setup');
   });
 
-  it('prompts to create a goal once the family is populated', () => {
+  it('prompts to create a reward once the family is populated', () => {
     state.familyMembers = [{ id: 'owner', role: 'owner' }, { id: 'c1', role: 'child' }];
     render(
       <MemoryRouter>
         <NextActionCard />
       </MemoryRouter>,
     );
-    expect(screen.getByRole('button', { name: 'Create a goal' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Create a reward' })).toBeInTheDocument();
   });
 
-  it('prompts to create a task once a goal exists', () => {
+  it('prompts to create a task once a reward exists', () => {
     state.familyMembers = [{ id: 'owner', role: 'owner' }, { id: 'c1', role: 'child' }];
-    state.savingsGoals = [{ id: 'g1' }];
+    state.rewards = [{ id: 'r1' }];
     render(
       <MemoryRouter>
         <NextActionCard />
@@ -82,7 +82,7 @@ describe('NextActionCard', () => {
 
   it('shows Continue Setup once everything is configured', () => {
     state.familyMembers = [{ id: 'owner', role: 'owner' }, { id: 'c1', role: 'child' }];
-    state.savingsGoals = [{ id: 'g1' }];
+    state.rewards = [{ id: 'r1' }];
     state.tasks = [{ id: 't1' }];
     render(
       <MemoryRouter>
@@ -92,7 +92,7 @@ describe('NextActionCard', () => {
     expect(screen.getByRole('button', { name: 'Continue Setup' })).toBeInTheDocument();
   });
 
-  it('navigates to the goals page from the create-goal action', async () => {
+  it('navigates to the rewards page from the create-reward action', async () => {
     state.familyMembers = [{ id: 'owner', role: 'owner' }, { id: 'c1', role: 'child' }];
     const user = userEvent.setup();
     render(
@@ -100,8 +100,8 @@ describe('NextActionCard', () => {
         <NextActionCard />
       </MemoryRouter>,
     );
-    await user.click(screen.getByRole('button', { name: 'Create a goal' }));
-    expect(navigate).toHaveBeenCalledWith('/goals');
+    await user.click(screen.getByRole('button', { name: 'Create a reward' }));
+    expect(navigate).toHaveBeenCalledWith('/rewards');
   });
 
   it('surfaces pending join requests as the top priority for an owner', () => {

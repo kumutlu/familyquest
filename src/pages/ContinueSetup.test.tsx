@@ -6,7 +6,7 @@ import i18n from '../i18n/config';
 
 const state = vi.hoisted(() => ({
   familyMembers: [] as any[],
-  savingsGoals: [] as any[],
+  rewards: [] as any[],
   tasks: [] as any[],
   familyData: { id: 'f1', inviteCode: 'ABC123' } as any,
 }));
@@ -25,7 +25,7 @@ import { ContinueSetup } from './ContinueSetup';
 beforeEach(async () => {
   vi.clearAllMocks();
   state.familyMembers = [];
-  state.savingsGoals = [];
+  state.rewards = [];
   state.tasks = [];
   state.familyData = { id: 'f1', inviteCode: 'ABC123' };
   if (!navigator.clipboard || typeof navigator.clipboard.writeText !== 'function') {
@@ -54,27 +54,27 @@ describe('ContinueSetup', () => {
     // Invite card is shown because the family has no other members yet.
     expect(screen.getByText('ABC123')).toBeInTheDocument();
     // CTAs for the still-incomplete steps are offered.
-    expect(screen.getByRole('button', { name: 'Create a goal' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Create a reward' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Create a task' })).toBeInTheDocument();
   });
 
   it('hides the invite card and earlier CTAs once those steps are complete', () => {
     state.familyMembers = [{ id: 'owner', role: 'owner' }, { id: 'c1', role: 'child' }];
-    state.savingsGoals = [{ id: 'g1' }];
+    state.rewards = [{ id: 'r1' }];
     render(
       <MemoryRouter>
         <ContinueSetup />
       </MemoryRouter>,
     );
-    // Family invited + a goal exists, so only the task CTA remains.
+    // Family invited + a reward exists, so only the task CTA remains.
     expect(screen.queryByText('ABC123')).not.toBeInTheDocument();
-    expect(screen.queryByRole('button', { name: 'Create a goal' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Create a reward' })).not.toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Create a task' })).toBeInTheDocument();
   });
 
   it('navigates to the tasks page from the create-task CTA', async () => {
     state.familyMembers = [{ id: 'owner', role: 'owner' }, { id: 'c1', role: 'child' }];
-    state.savingsGoals = [{ id: 'g1' }];
+    state.rewards = [{ id: 'r1' }];
     const user = userEvent.setup();
     render(
       <MemoryRouter>
@@ -87,7 +87,7 @@ describe('ContinueSetup', () => {
 
   it('shows the all-done message and hides the invite card when fully configured', () => {
     state.familyMembers = [{ id: 'owner', role: 'owner' }, { id: 'c1', role: 'child' }];
-    state.savingsGoals = [{ id: 'g1' }];
+    state.rewards = [{ id: 'r1' }];
     state.tasks = [{ id: 't1' }];
     render(
       <MemoryRouter>
