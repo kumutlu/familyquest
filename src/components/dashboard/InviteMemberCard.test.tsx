@@ -77,4 +77,17 @@ describe('InviteMemberCard', () => {
     await user.click(screen.getByRole('button', { name: 'Share' }));
     expect(await screen.findByText('Copied')).toBeInTheDocument();
   });
+
+  it('offers an add-child-directly action that opens the managed-child flow', async () => {
+    const onAddChild = vi.fn();
+    const user = userEvent.setup();
+    render(
+      <MemoryRouter>
+        <InviteMemberCard onAddChild={onAddChild} />
+      </MemoryRouter>,
+    );
+    const addChildButton = screen.getByRole('button', { name: 'Add child directly' });
+    await user.click(addChildButton);
+    expect(onAddChild).toHaveBeenCalledTimes(1);
+  });
 });
