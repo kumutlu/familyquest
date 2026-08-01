@@ -112,6 +112,12 @@ const resetStore = () => {
     authUser: undefined,
     currentUser: null,
     familyData: null,
+    dailyCheckinDay: null,
+    dailyCheckinStateResolved: false,
+    todayDailyCheckin: null,
+    todayDailyCheckinSkip: null,
+    dailyCheckinHistory: [],
+    dailyCheckinHistoryResolved: false,
     bootstrapStatus: {} as any,
     error: null,
     // Stub the family-data bootstrap so these tests focus on the auth/profile
@@ -245,8 +251,25 @@ describe('auth bootstrap regression', () => {
     fireSignedIn();
     await waitFor(() => expect(useStore.getState().appReady).toBe(true));
 
+    useStore.setState({
+      dailyCheckinDay: '2026-08-01',
+      dailyCheckinStateResolved: true,
+      todayDailyCheckin: { id: 'stale-checkin' },
+      todayDailyCheckinSkip: { id: 'stale-skip' },
+      dailyCheckinHistory: [{ id: 'stale-history' }],
+      dailyCheckinHistoryResolved: true,
+    } as any);
+
     await act(async () => authState.listener?.(null));
     await waitFor(() => expect(useStore.getState().authStatus).toBe('unauthenticated'));
+    expect(useStore.getState()).toMatchObject({
+      dailyCheckinDay: null,
+      dailyCheckinStateResolved: false,
+      todayDailyCheckin: null,
+      todayDailyCheckinSkip: null,
+      dailyCheckinHistory: [],
+      dailyCheckinHistoryResolved: false,
+    });
     await i18n.changeLanguage('en');
     await act(async () => authState.listener?.(makeAuthUser()));
 
