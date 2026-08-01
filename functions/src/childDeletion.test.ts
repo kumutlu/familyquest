@@ -73,6 +73,7 @@ function makeFakeDb() {
 
   const db: any = {
     store,
+    failNextBatchCommit: false,
     doc: makeRef,
     collection: (path: string) => ({
       doc: (id?: string) => {
@@ -129,6 +130,10 @@ function makeFakeDb() {
       return {
         delete: (ref: FakeRef) => { deletions.push(ref); },
         commit: async () => {
+          if (db.failNextBatchCommit) {
+            db.failNextBatchCommit = false;
+            throw new Error('batch commit failed');
+          }
           for (const ref of deletions) store.delete(ref.path);
         },
       };
@@ -385,6 +390,41 @@ describe('deleteChild — ALLOWED', () => {
     expect(db.store.has(`families/${FAMILY_ID}/daily_checkin_skips/child-skip`)).toBe(false);
     expect(db.store.has(`families/${FAMILY_ID}/daily_checkins/other-checkin`)).toBe(true);
     expect(db.store.has(`families/${FAMILY_ID}/daily_checkin_skips/other-skip`)).toBe(true);
+  });
+
+  it('pages daily check-in cleanup until more than 500 records per collection are gone', async () => {
+    for (let index = 0; index < 501; index += 1) {
+      db.store.set(`families/${FAMILY_ID}/daily_checkins/child-checkin-${index}`, { userId: 'child1' });
+      db.store.set(`families/${FAMILY_ID}/daily_checkin_skips/child-skip-${index}`, { userId: 'child1' });
+    }
+    db.store.set(`families/${FAMILY_ID}/daily_checkins/other-checkin`, { userId: 'child2' });
+    db.store.set(`families/${FAMILY_ID}/daily_checkin_skips/other-skip`, { userId: 'child2' });
+
+    await deleteChildImpl(makeCtx(db, auth), 'owner1', {
+      childId: 'child1', displayNameConfirmation: 'Test', clientReqId: 'del-daily-pages',
+    });
+
+    expect([...db.store.values()].some((data: any) => data.userId === 'child1')).toBe(false);
+    expect(db.store.has(`families/${FAMILY_ID}/daily_checkins/other-checkin`)).toBe(true);
+    expect(db.store.has(`families/${FAMILY_ID}/daily_checkin_skips/other-skip`)).toBe(true);
+  });
+
+  it('keeps deletion retryable when daily check-in cleanup fails', async () => {
+    db.store.set(`families/${FAMILY_ID}/daily_checkins/child-checkin`, { userId: 'child1' });
+    db.failNextBatchCommit = true;
+    const input = {
+      childId: 'child1', displayNameConfirmation: 'Test', clientReqId: 'del-daily-retry',
+    };
+
+    await expect(deleteChildImpl(makeCtx(db, auth), 'owner1', input)).rejects.toThrow('batch commit failed');
+    expect(db.store.has('users/child1')).toBe(true);
+    expect(db.store.get(`families/${FAMILY_ID}/childLoginIdempotency/del-daily-retry`)?.status)
+      .not.toBe('completed');
+
+    await expect(deleteChildImpl(makeCtx(db, auth), 'owner1', input))
+      .resolves.toEqual({ childId: 'child1', deleted: true });
+    expect(db.store.has(`families/${FAMILY_ID}/daily_checkins/child-checkin`)).toBe(false);
+    expect(db.store.has('users/child1')).toBe(false);
   });
 
   it('does not remove other children login records', async () => {

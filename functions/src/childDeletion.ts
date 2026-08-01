@@ -172,19 +172,17 @@ async function purgeDailyCheckinRecords(
 ): Promise<void> {
   const BATCH_LIMIT = 500;
   for (const collectionName of ['daily_checkins', 'daily_checkin_skips']) {
-    try {
+    while (true) {
       const snapshot = await db
         .collection(`${FAMILIES}/${familyId}/${collectionName}`)
         .where('userId', '==', childId)
         .limit(BATCH_LIMIT)
         .get();
-      if (snapshot.empty) continue;
+      if (snapshot.empty) break;
 
       const batch = db.batch();
       for (const doc of snapshot.docs) batch.delete(doc.ref);
       await batch.commit();
-    } catch {
-      // Best-effort cleanup; retries and family deletion remain idempotent.
     }
   }
 }
@@ -334,6 +332,11 @@ export async function deleteChildImpl(
     }
   }
 
+  // Daily check-ins identify their subject with `userId`, not `childId`.
+  // Finish this retryable cleanup before deleting the profile or recording
+  // terminal idempotency state.
+  await purgeDailyCheckinRecords(db, familyId, childId);
+
   // --- Phase 3: Firestore cleanup (transactional) -----------------
   const usernameIndexRef = db.doc(
     `${FAMILIES}/${familyId}/${CHILD_LOGIN_INDEX}/${normalizeUsernameForIndex(child.displayName as string)}`,
@@ -445,9 +448,6 @@ export async function deleteChildImpl(
       // Best-effort cleanup; missing collections are expected
     }
   }
-
-  // Daily check-ins identify their subject with `userId`, not `childId`.
-  await purgeDailyCheckinRecords(db, familyId, childId);
 
   // Also delete any documents in child-specific sub-collections that
   // use the child's UID as the document ID (e.g. family members who

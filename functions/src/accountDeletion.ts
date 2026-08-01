@@ -77,26 +77,28 @@ async function deleteAuthUserQuietly(ctx: FamilyDeletionContext, uid: string): P
   }
 }
 
-/** Delete at most one Firestore batch of per-user records per collection. */
+/** Delete per-user records in bounded Firestore batches. */
 async function purgeDailyCheckinRecords(
   ctx: FamilyDeletionContext,
   uid: string,
   familyId: string | null,
 ): Promise<void> {
-  if (!familyId) return;
-
   const BATCH_LIMIT = 500;
   for (const collectionName of ['daily_checkins', 'daily_checkin_skips']) {
-    const snapshot = await ctx.db
-      .collection(`families/${familyId}/${collectionName}`)
-      .where('userId', '==', uid)
-      .limit(BATCH_LIMIT)
-      .get();
-    if (snapshot.empty) continue;
+    while (true) {
+      const collection = familyId
+        ? ctx.db.collection(`families/${familyId}/${collectionName}`)
+        : ctx.db.collectionGroup(collectionName);
+      const snapshot = await collection
+        .where('userId', '==', uid)
+        .limit(BATCH_LIMIT)
+        .get();
+      if (snapshot.empty) break;
 
-    const batch = ctx.db.batch();
-    for (const doc of snapshot.docs) batch.delete(doc.ref);
-    await batch.commit();
+      const batch = ctx.db.batch();
+      for (const doc of snapshot.docs) batch.delete(doc.ref);
+      await batch.commit();
+    }
   }
 }
 

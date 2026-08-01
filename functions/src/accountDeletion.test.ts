@@ -109,10 +109,25 @@ function makeFakeDb() {
     },
     doc: (id?: string) => makeRef(`${collPath}/${id || Math.random().toString(36).slice(2)}`),
   });
+  const makeCollectionGroupQuery = (collectionId: string, filters: Array<[string, unknown]>): any => ({
+    where: (field: string, _op: string, value: unknown) =>
+      makeCollectionGroupQuery(collectionId, [...filters, [field, value]]),
+    limit: (n: number) => ({
+      get: async () => {
+        const docs = [...store.keys()]
+          .filter(path => path.split('/').at(-2) === collectionId)
+          .map(path => snapOf(path))
+          .filter(snap => filters.every(([field, value]) => (snap.data() as any)?.[field] === value))
+          .slice(0, n);
+        return { empty: docs.length === 0, docs, size: docs.length };
+      },
+    }),
+  });
   const db: any = {
     store,
     doc: makeRef,
     collection: (path: string) => makeQuery(path, []),
+    collectionGroup: (collectionId: string) => makeCollectionGroupQuery(collectionId, []),
     batch: () => {
       const deletions: any[] = [];
       return {
@@ -232,6 +247,40 @@ describe('deleteAccountImpl — guards', () => {
 });
 
 describe('deleteAccountImpl — non-owner adult', () => {
+  it('removes daily check-in history after family membership was already cleared', async () => {
+    db.store.set('users/left-uid', { role: 'parent', displayName: 'Already Left' });
+    auth.users.set('left-uid', { customClaims: {} });
+    db.store.set(`families/${FAMILY_ID}/daily_checkins/left-checkin`, { userId: 'left-uid' });
+    db.store.set(`families/${FAMILY_ID}/daily_checkins/owner-checkin`, { userId: 'owner-uid' });
+    db.store.set(`families/${FAMILY_ID}/daily_checkin_skips/left-skip`, { userId: 'left-uid' });
+    db.store.set(`families/${FAMILY_ID}/daily_checkin_skips/owner-skip`, { userId: 'owner-uid' });
+
+    const result = await deleteAccountImpl(ctx, 'left-uid', {}, FRESH_AUTH);
+
+    expect(result.status).toBe('completed');
+    expect(db.store.has(`families/${FAMILY_ID}/daily_checkins/left-checkin`)).toBe(false);
+    expect(db.store.has(`families/${FAMILY_ID}/daily_checkin_skips/left-skip`)).toBe(false);
+    expect(db.store.has(`families/${FAMILY_ID}/daily_checkins/owner-checkin`)).toBe(true);
+    expect(db.store.has(`families/${FAMILY_ID}/daily_checkin_skips/owner-skip`)).toBe(true);
+  });
+
+  it('pages collection-group cleanup until more than 500 records are gone', async () => {
+    db.store.set('users/left-uid', { role: 'parent', displayName: 'Already Left' });
+    auth.users.set('left-uid', { customClaims: {} });
+    for (let index = 0; index < 501; index += 1) {
+      db.store.set(`families/${FAMILY_ID}/daily_checkins/checkin-${index}`, { userId: 'left-uid' });
+      db.store.set(`families/${FAMILY_ID}/daily_checkin_skips/skip-${index}`, { userId: 'left-uid' });
+    }
+    db.store.set(`families/${FAMILY_ID}/daily_checkins/owner-checkin`, { userId: 'owner-uid' });
+    db.store.set(`families/${FAMILY_ID}/daily_checkin_skips/owner-skip`, { userId: 'owner-uid' });
+
+    await deleteAccountImpl(ctx, 'left-uid', {}, FRESH_AUTH);
+
+    expect([...db.store.values()].some(data => data.userId === 'left-uid')).toBe(false);
+    expect(db.store.has(`families/${FAMILY_ID}/daily_checkins/owner-checkin`)).toBe(true);
+    expect(db.store.has(`families/${FAMILY_ID}/daily_checkin_skips/owner-skip`)).toBe(true);
+  });
+
   it('deletes profile, membership projection, claims and Auth (last), preserving the family', async () => {
     db.store.set(`families/${FAMILY_ID}/daily_checkins/parent-checkin`, { userId: 'parent-uid' });
     db.store.set(`families/${FAMILY_ID}/daily_checkins/owner-checkin`, { userId: 'owner-uid' });
