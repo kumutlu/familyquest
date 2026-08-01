@@ -38,6 +38,7 @@ export const NAMESPACES = [
   'bulletin',
   'legal',
   'help',
+  'checkins',
 ] as const;
 export type Namespace = (typeof NAMESPACES)[number];
 
