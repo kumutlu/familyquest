@@ -359,6 +359,28 @@ describe('Settings — role visibility', () => {
     expect(screen.getByText('Member count')).toBeInTheDocument();
   });
 
+  it('mounts all Daily Check-in controls for the owner', () => {
+    renderSettings('owner');
+
+    expect(screen.getByRole('switch', { name: /Enable check-ins for children/i })).toBeVisible();
+    expect(screen.getByRole('switch', { name: /Participate as a parent/i })).toBeVisible();
+    expect(screen.getByRole('switch', { name: /Show check-in history/i })).toBeVisible();
+  });
+
+  it('mounts only the personal Daily Check-in control for a regular parent', () => {
+    renderSettings('parent');
+
+    expect(screen.getByRole('switch', { name: /Participate as a parent/i })).toBeVisible();
+    expect(screen.queryByRole('switch', { name: /Enable check-ins for children/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole('switch', { name: /Show check-in history/i })).not.toBeInTheDocument();
+  });
+
+  it('does not mount the Daily Check-in card for a child', () => {
+    renderSettings('child');
+
+    expect(screen.queryByRole('heading', { name: /Daily check-ins/i })).not.toBeInTheDocument();
+  });
+
   it('3. Child does not see management controls', () => {
     renderSettings('child');
     expect(screen.queryByLabelText('Copy invite code')).not.toBeInTheDocument();
