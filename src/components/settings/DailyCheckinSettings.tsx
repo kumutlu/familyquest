@@ -52,6 +52,7 @@ function SettingsToggle({ checked, description, disabled, error, label, onClick 
 }
 
 type ToggleKey = 'children' | 'parent' | 'history';
+type FamilyCheckinSettings = ReturnType<typeof resolvedDailyCheckinSettings>;
 
 const emptyToggleState = (): Record<ToggleKey, boolean> => ({
   children: false,
@@ -71,6 +72,10 @@ export function DailyCheckinSettings() {
   const familyData = useStore(state => state.familyData);
   const locks = useRef(new Set<ToggleKey>());
   const familyWriteQueue = useRef<Promise<unknown>>(Promise.resolve());
+  const familyWriteBaseline = useRef<{
+    familyId: string;
+    settings: FamilyCheckinSettings;
+  } | null>(null);
   const [saving, setSaving] = useState(emptyToggleState);
   const [errors, setErrors] = useState(emptyErrorState);
   const parent = isParentRole(currentUser?.role);
@@ -107,13 +112,23 @@ export function DailyCheckinSettings() {
     void runWrite(key, () => {
       const write = familyWriteQueue.current
         .catch(() => undefined)
-        .then(() => {
-          const persisted = resolvedDailyCheckinSettings(
-            useStore.getState().familyData?.dailyCheckins,
-          );
-          return updateFamilySettings(familyId, {
-            dailyCheckins: { ...persisted, [field]: enabled },
-          });
+        .then(async () => {
+          const persisted = resolvedDailyCheckinSettings(useStore.getState().familyData?.dailyCheckins);
+          const baseline = familyWriteBaseline.current?.familyId === familyId
+            ? familyWriteBaseline.current.settings
+            : persisted;
+          const next = { ...baseline, [field]: enabled };
+
+          try {
+            await updateFamilySettings(familyId, { dailyCheckins: next });
+            familyWriteBaseline.current = { familyId, settings: next };
+          } catch (error) {
+            familyWriteBaseline.current = {
+              familyId,
+              settings: resolvedDailyCheckinSettings(useStore.getState().familyData?.dailyCheckins),
+            };
+            throw error;
+          }
         });
       familyWriteQueue.current = write;
       return write;

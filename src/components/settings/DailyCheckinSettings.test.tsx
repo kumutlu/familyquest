@@ -157,7 +157,7 @@ describe('DailyCheckinSettings writes', () => {
     });
   });
 
-  it('serializes sibling family toggles and builds the second payload from the first persisted result', async () => {
+  it('serializes sibling family toggles and preserves the first intent before its listener update', async () => {
     let resolveFirstWrite!: () => void;
     apiMocks.updateFamilySettings
       .mockImplementationOnce(() => new Promise<void>(resolve => {
@@ -175,14 +175,6 @@ describe('DailyCheckinSettings writes', () => {
       dailyCheckins: { childrenEnabled: false, historyVisibleToParents: false },
     });
 
-    act(() => {
-      useStore.setState({
-        familyData: {
-          ...useStore.getState().familyData,
-          dailyCheckins: { childrenEnabled: false, historyVisibleToParents: false },
-        },
-      });
-    });
     await act(async () => {
       resolveFirstWrite();
     });
@@ -191,6 +183,33 @@ describe('DailyCheckinSettings writes', () => {
     expect(apiMocks.updateFamilySettings).toHaveBeenNthCalledWith(2, 'family-1', {
       dailyCheckins: { childrenEnabled: false, historyVisibleToParents: true },
     });
+  });
+
+  it('recovers the queued family baseline from persisted settings after a failed write', async () => {
+    let rejectFirstWrite!: (error: Error) => void;
+    apiMocks.updateFamilySettings
+      .mockImplementationOnce(() => new Promise<void>((_resolve, reject) => {
+        rejectFirstWrite = reject;
+      }))
+      .mockResolvedValueOnce(undefined);
+    const user = userEvent.setup();
+    renderSettings('owner');
+
+    await user.click(screen.getByRole('switch', { name: /Enable check-ins for children/i }));
+    await user.click(screen.getByRole('switch', { name: /Show check-in history/i }));
+
+    expect(apiMocks.updateFamilySettings).toHaveBeenCalledOnce();
+    await act(async () => {
+      rejectFirstWrite(new Error('offline'));
+    });
+
+    await waitFor(() => expect(apiMocks.updateFamilySettings).toHaveBeenCalledTimes(2));
+    expect(apiMocks.updateFamilySettings).toHaveBeenNthCalledWith(2, 'family-1', {
+      dailyCheckins: { childrenEnabled: true, historyVisibleToParents: true },
+    });
+    expect(await screen.findByRole('alert')).toHaveTextContent(
+      "We couldn't save this setting. Please try again.",
+    );
   });
 
   it('guards a rapid double click with a single in-flight write', async () => {
