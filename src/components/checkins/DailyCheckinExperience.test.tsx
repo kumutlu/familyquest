@@ -192,6 +192,61 @@ describe('DailyCheckinExperience mutation truthfulness', () => {
     expect(screen.queryByText("Today you're a Cheetah.")).not.toBeInTheDocument();
   });
 
+  it('releases an old pending operation when the same member and day move to another family', async () => {
+    const oldRequest = deferred<{ status: 'written' }>();
+    vi.mocked(submitDailyCheckin).mockReturnValue(oldRequest.promise);
+    const user = renderExperience();
+    await user.click(screen.getByRole('button', { name: /Cheetah, energetic/i }));
+    expect(screen.getByRole('status')).toHaveTextContent('Saving your check-in…');
+
+    seedStoreUpdate({
+      currentUser: { ...child, familyId: 'family-2' },
+      familyData: { ...enabledFamily, id: 'family-2' },
+      todayDailyCheckin: null,
+      todayDailyCheckinSkip: null,
+    });
+
+    const newFamilyChoice = screen.getByRole('button', { name: /Cheetah, energetic/i });
+    expect(newFamilyChoice).toBeEnabled();
+    expect(screen.getByRole('status')).not.toHaveTextContent('Saving your check-in…');
+
+    await act(async () => { oldRequest.resolve({ status: 'written' }); });
+
+    expect(newFamilyChoice).toBeEnabled();
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+    expect(screen.queryByText("Today you're a Cheetah.")).not.toBeInTheDocument();
+  });
+
+  it('resets a pending operation on role transition and ignores its late rejection during a new request', async () => {
+    const oldRequest = deferred<{ status: 'written' }>();
+    const newRequest = deferred<{ status: 'written' }>();
+    vi.mocked(submitDailyCheckin)
+      .mockReturnValueOnce(oldRequest.promise)
+      .mockReturnValueOnce(newRequest.promise);
+    const user = renderExperience();
+    await user.click(screen.getByRole('button', { name: /Cheetah, energetic/i }));
+
+    seedStoreUpdate({
+      currentUser: {
+        ...child,
+        role: 'parent',
+        dailyCheckins: { parentParticipationEnabled: true },
+      },
+    });
+
+    const newRoleChoice = screen.getByRole('button', { name: /Lion, brave/i });
+    expect(newRoleChoice).toBeEnabled();
+    await user.click(newRoleChoice);
+    expect(submitDailyCheckin).toHaveBeenCalledTimes(2);
+    expect(screen.getByRole('status')).toHaveTextContent('Saving your check-in…');
+
+    await act(async () => { oldRequest.reject({ code: 'unavailable' }); });
+
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+    expect(screen.getByRole('status')).toHaveTextContent('Saving your check-in…');
+    expect(screen.getByRole('button', { name: /Lion, brave/i })).toBeDisabled();
+  });
+
   it('closes a skip only after the current-day listener persists it and never confirms a mood', async () => {
     vi.mocked(skipDailyCheckin).mockResolvedValue({ status: 'written' });
     const user = renderExperience();

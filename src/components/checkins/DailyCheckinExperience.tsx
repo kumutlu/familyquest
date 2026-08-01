@@ -22,6 +22,7 @@ const DAY_REFRESH_INTERVAL_MS = 60_000;
 
 type PendingOperation = {
   kind: 'checkin' | 'skip';
+  contextKey: string;
   familyId: string;
   userId: string;
   localDate: string;
@@ -61,14 +62,28 @@ export function DailyCheckinExperience({ children }: DailyCheckinExperienceProps
   const role = isChildRole(currentUser?.role)
     ? 'child'
     : isParentRole(currentUser?.role) ? 'parent' : undefined;
+  const childrenEnabled = resolvedDailyCheckinSettings(familyData?.dailyCheckins).childrenEnabled;
+  const parentParticipationEnabled = resolvedParentParticipation(currentUser?.dailyCheckins);
   const requiredInputsResolved = Boolean(
     currentUser && familyData && dailyCheckinDay && role && dailyCheckinStateResolved,
   );
+  const activeContextKey = JSON.stringify([
+    currentUser?.id ?? null,
+    currentUser?.familyId ?? null,
+    familyData?.id ?? null,
+    currentUser?.role ?? null,
+    role ?? null,
+    dailyCheckinDay,
+    dailyCheckinStateResolved,
+    childrenEnabled,
+    parentParticipationEnabled,
+  ]);
+  const previousContextKeyRef = useRef(activeContextKey);
   const eligibility = resolveDailyCheckinEligibility({
     resolved: requiredInputsResolved,
     role,
-    childrenEnabled: resolvedDailyCheckinSettings(familyData?.dailyCheckins).childrenEnabled,
-    parentParticipationEnabled: resolvedParentParticipation(currentUser?.dailyCheckins),
+    childrenEnabled,
+    parentParticipationEnabled,
     checkinExists: Boolean(validRecord),
     skipExists: Boolean(validSkip),
   });
@@ -80,14 +95,16 @@ export function DailyCheckinExperience({ children }: DailyCheckinExperienceProps
 
   useEffect(() => {
     const operation = operationRef.current;
-    if (!operation) return;
-    if (operation.localDate !== dailyCheckinDay || operation.userId !== currentUser?.id) {
+    const contextChanged = previousContextKeyRef.current !== activeContextKey;
+    previousContextKeyRef.current = activeContextKey;
+    if (contextChanged || (operation && operation.contextKey !== activeContextKey)) {
       operationRef.current = null;
       lockedRef.current = false;
       setLocked(false);
       setError(null);
       return;
     }
+    if (!operation) return;
 
     const recordPersisted = operation.kind === 'checkin' && Boolean(validRecord);
     const skipPersisted = operation.kind === 'skip' && Boolean(validSkip || validRecord);
@@ -108,7 +125,7 @@ export function DailyCheckinExperience({ children }: DailyCheckinExperienceProps
         });
       }
     }
-  }, [currentUser?.id, dailyCheckinDay, t, validRecord, validSkip]);
+  }, [activeContextKey, t, validRecord, validSkip]);
 
   const beginOperation = (operation: PendingOperation) => {
     if (lockedRef.current) return;
@@ -136,7 +153,12 @@ export function DailyCheckinExperience({ children }: DailyCheckinExperienceProps
   };
 
   const operationIdentity = currentUser && dailyCheckinDay
-    ? { familyId: currentUser.familyId, userId: currentUser.id, localDate: dailyCheckinDay }
+    ? {
+        contextKey: activeContextKey,
+        familyId: currentUser.familyId,
+        userId: currentUser.id,
+        localDate: dailyCheckinDay,
+      }
     : null;
 
   return (
