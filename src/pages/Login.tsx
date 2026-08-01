@@ -164,7 +164,7 @@ export function Login() {
       {/* ------------------------------------------------------------------ */}
       <aside
         aria-label={t('auth:intro.aboutLabel')}
-        className="bg-gradient-to-br from-primary-600 to-primary-800 text-white px-6 py-8 sm:px-10 lg:px-16 lg:py-12 flex flex-col justify-center"
+        className="bg-gradient-to-br from-primary-600 to-primary-800 text-white px-6 py-5 sm:px-10 sm:py-6 lg:px-16 lg:py-12 flex flex-col justify-center"
       >
         <div className="mx-auto w-full max-w-md lg:max-w-lg">
           {/* Brand */}
@@ -173,16 +173,19 @@ export function Login() {
             <span className="text-xl font-bold tracking-tight">{t('auth:intro.brand')}</span>
           </div>
 
-          {/* Headline + supporting copy */}
-          <h1 className="mt-6 lg:mt-10 text-2xl sm:text-3xl lg:text-4xl font-extrabold leading-tight">
+          {/* Headline + supporting copy. On phones the intro must stay compact
+              so the auth card remains near the top of the viewport, so the
+              supporting paragraph is desktop-only. */}
+          <h1 className="mt-3 lg:mt-10 text-lg sm:text-xl lg:text-4xl font-extrabold leading-tight">
             {t('auth:intro.headline')}
           </h1>
-          <p className="mt-3 lg:mt-4 text-sm sm:text-base lg:text-lg text-primary-100">
+          <p className="mt-3 lg:mt-4 text-sm sm:text-base lg:text-lg text-primary-100 hidden lg:block">
             {t('auth:intro.supporting')}
           </p>
 
-          {/* Benefits */}
-          <ul className="mt-6 lg:mt-8 space-y-3 lg:space-y-4">
+          {/* Benefits — desktop only; on phones they would push the sign-in
+              form below the fold. */}
+          <ul className="mt-6 lg:mt-8 space-y-3 lg:space-y-4 hidden lg:block">
             {benefits.map(({ icon: Icon, label }) => (
               <li key={label} className="flex items-start gap-3">
                 <span
