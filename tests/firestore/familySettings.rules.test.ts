@@ -46,7 +46,52 @@ afterAll(async () => {
 const familyRef = (uid: 'owner' | 'parent' | 'child') =>
   doc(testEnv.authenticatedContext(uid).firestore(), `families/${FAMILY_ID}`);
 
+const userRef = (actorUid: 'owner' | 'parent' | 'child', targetUid: 'owner' | 'parent' | 'child') =>
+  doc(testEnv.authenticatedContext(actorUid).firestore(), `users/${targetUid}`);
+
 describe('family settings ownership', () => {
+  it('allows only the owner to update family daily check-in settings', async () => {
+    await expect(assertSucceeds(updateDoc(familyRef('owner'), {
+      dailyCheckins: { childrenEnabled: false, historyVisibleToParents: true },
+    }))).resolves.toBeUndefined();
+    await expect(assertFails(updateDoc(familyRef('parent'), {
+      dailyCheckins: { childrenEnabled: true, historyVisibleToParents: false },
+    }))).resolves.toBeDefined();
+  });
+
+  it('rejects malformed family daily check-in settings', async () => {
+    for (const dailyCheckins of [
+      { childrenEnabled: true },
+      { childrenEnabled: true, historyVisibleToParents: false, extra: true },
+      { childrenEnabled: 'true', historyVisibleToParents: false },
+      { childrenEnabled: true, historyVisibleToParents: 'false' },
+    ]) {
+      await expect(assertFails(updateDoc(familyRef('owner'), { dailyCheckins }))).resolves.toBeDefined();
+    }
+  });
+
+  it('allows each adult to update only their own participation preference', async () => {
+    await expect(assertSucceeds(updateDoc(userRef('parent', 'parent'), {
+      dailyCheckins: { parentParticipationEnabled: true },
+    }))).resolves.toBeUndefined();
+    await expect(assertFails(updateDoc(userRef('parent', 'owner'), {
+      dailyCheckins: { parentParticipationEnabled: true },
+    }))).resolves.toBeDefined();
+    await expect(assertFails(updateDoc(userRef('child', 'child'), {
+      dailyCheckins: { parentParticipationEnabled: true },
+    }))).resolves.toBeDefined();
+  });
+
+  it('rejects malformed adult participation preferences', async () => {
+    for (const dailyCheckins of [
+      {},
+      { parentParticipationEnabled: true, extra: true },
+      { parentParticipationEnabled: 'true' },
+    ]) {
+      await expect(assertFails(updateDoc(userRef('parent', 'parent'), { dailyCheckins }))).resolves.toBeDefined();
+    }
+  });
+
   it('allows the owner to update family and regional settings', async () => {
     await expect(assertSucceeds(updateDoc(familyRef('owner'), {
       name: 'Updated family',
