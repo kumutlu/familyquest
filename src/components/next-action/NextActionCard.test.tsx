@@ -8,6 +8,9 @@ const state = vi.hoisted(() => ({
   familyMembers: [] as any[],
   savingsGoals: [] as any[],
   tasks: [] as any[],
+  rewards: [] as any[],
+  joinRequests: [] as any[],
+  currentUser: null as any,
 }));
 const navigate = vi.hoisted(() => vi.fn());
 
@@ -26,6 +29,9 @@ beforeEach(async () => {
   state.familyMembers = [];
   state.savingsGoals = [];
   state.tasks = [];
+  state.rewards = [];
+  state.joinRequests = [];
+  state.currentUser = null;
   await i18n.loadNamespaces('dashboard');
   await i18n.changeLanguage('en');
 });
@@ -96,5 +102,31 @@ describe('NextActionCard', () => {
     );
     await user.click(screen.getByRole('button', { name: 'Create a goal' }));
     expect(navigate).toHaveBeenCalledWith('/goals');
+  });
+
+  it('surfaces pending join requests as the top priority for an owner', () => {
+    state.currentUser = { role: 'owner' };
+    state.familyMembers = [{ id: 'owner', role: 'owner' }, { id: 'c1', role: 'child' }];
+    state.joinRequests = [{ id: 'j1', status: 'pending' }];
+    render(
+      <MemoryRouter>
+        <NextActionCard />
+      </MemoryRouter>,
+    );
+    expect(screen.getByRole('button', { name: 'Review join requests' })).toBeInTheDocument();
+  });
+
+  it('navigates to the dashboard to review join requests', async () => {
+    state.currentUser = { role: 'owner' };
+    state.familyMembers = [{ id: 'owner', role: 'owner' }, { id: 'c1', role: 'child' }];
+    state.joinRequests = [{ id: 'j1', status: 'pending' }];
+    const user = userEvent.setup();
+    render(
+      <MemoryRouter>
+        <NextActionCard />
+      </MemoryRouter>,
+    );
+    await user.click(screen.getByRole('button', { name: 'Review join requests' }));
+    expect(navigate).toHaveBeenCalledWith('/');
   });
 });
