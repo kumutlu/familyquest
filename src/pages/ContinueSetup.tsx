@@ -1,7 +1,7 @@
 import { useTranslation } from 'react-i18next';
 import { useStore } from '../store/useStore';
 import { useNavigate } from 'react-router-dom';
-import { Users, Target, CheckSquare, CheckCircle, Circle } from 'lucide-react';
+import { Users, Gift, CheckSquare, CheckCircle, Circle } from 'lucide-react';
 import type { ComponentType } from 'react';
 import { Button } from '../components/ui/Button';
 import { InviteMemberCard } from '../components/dashboard/InviteMemberCard';
@@ -18,16 +18,16 @@ interface SetupStep {
 export function ContinueSetup() {
   const { t } = useTranslation('dashboard');
   const navigate = useNavigate();
-  const { familyMembers, savingsGoals, tasks } = useStore(s => s);
+  const { familyMembers, rewards, tasks } = useStore(s => s);
 
   const hasFamily = familyMembers.length > 1;
-  const hasGoals = savingsGoals.length > 0;
+  const hasRewards = rewards.length > 0;
   const hasTasks = tasks.length > 0;
-  const allDone = hasFamily && hasGoals && hasTasks;
+  const allDone = hasFamily && hasRewards && hasTasks;
 
   const steps: SetupStep[] = [
     { key: 'inviteFamily', done: hasFamily, icon: Users, action: () => navigate('/') },
-    { key: 'createGoal', done: hasGoals, icon: Target, action: () => navigate('/goals') },
+    { key: 'createReward', done: hasRewards, icon: Gift, action: () => navigate('/rewards') },
     { key: 'createTask', done: hasTasks, icon: CheckSquare, action: () => navigate('/tasks') },
   ];
 
@@ -62,9 +62,9 @@ export function ContinueSetup() {
       </ol>
 
       {!hasFamily && <InviteMemberCard />}
-      {!hasGoals && (
-        <Button fullWidth onClick={() => navigate('/goals')}>
-          {t('nextAction.createGoal')}
+      {!hasRewards && (
+        <Button fullWidth onClick={() => navigate('/rewards')}>
+          {t('nextAction.createReward')}
         </Button>
       )}
       {!hasTasks && (
