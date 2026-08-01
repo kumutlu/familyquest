@@ -1,15 +1,13 @@
 # Parent Activation System — Design Spec
 
 - **Date:** 2026-08-01
-- **Status:** DRAFT (for approval — authored by Zoo from the 5 candidate gaps; not yet approved)
+- **Status:** APPROVED — implemented in Sprint 1
 - **Branch under audit:** `todo-theme` @ `ddbb9cc`
 - **Related sprint:** Sprint 1 (Parent onboarding surface)
 
-> This document is a DRAFT produced because the originally-approved spec text was
-> never committed and could not be delivered through the chat channel. It is
-> derived strictly from the 5 candidate gaps identified during the Sprint 1
-> implementation review. **Do not implement until approved.** Edit freely before
-> sign-off.
+> Approved by the product owner. Sprint 1 (R1–R5) is implemented via TDD with
+> paired red/green commits; all acceptance criteria below are verified by
+> `npx vitest run` and `npx tsc --noEmit`.
 
 ---
 
@@ -109,19 +107,19 @@ flowchart TD
 
 ## 5. Acceptance Criteria
 
-- [ ] **R1:** With a pending join request, `NextActionCard` shows "Review join
+- [x] **R1:** With a pending join request, `NextActionCard` shows "Review join
       requests" and navigates to `/` on click (test + manual).
-- [ ] **R2:** With a populated family and zero rewards, the card shows "Create a
+- [x] **R2:** With a populated family and zero rewards, the card shows "Create a
       reward" → `/rewards`; `ContinueSetup` shows a `createReward` step and
       `allDone` requires rewards.
-- [ ] **R3:** With family + rewards + tasks present and no pending joins, the card
+- [x] **R3:** With family + rewards + tasks present and no pending joins, the card
       shows a non-clickable "all set" state.
-- [ ] **R4:** New tests fail before the fix and pass after; they cover store
+- [x] **R4:** New tests fail before the fix and pass after; they cover store
       re-hydration and component re-mount with pre-populated state.
-- [ ] **R5:** `InviteMemberCard` exposes both a share-code action and an
+- [x] **R5:** `InviteMemberCard` exposes both a share-code action and an
       "Add child directly" action that opens the managed-child modal.
-- [ ] All 14 pre-existing tests still pass; no change to the uncommitted Sprint 1
-      working tree beyond the spec-driven edits.
+- [x] All pre-existing tests still pass (52 tests across the dashboard,
+      next-action, and continue-setup suites) and `tsc --noEmit` is clean.
 
 ## 6. i18n Changes
 
