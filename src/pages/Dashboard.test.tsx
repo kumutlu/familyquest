@@ -57,7 +57,9 @@ vi.mock('../components/dashboard/PetBoxSummaryCard', () => ({
 import { Dashboard } from './Dashboard';
 
 describe('Dashboard role routing', () => {
-  beforeEach(() => {
+  beforeEach(async () => {
+    await i18n.loadNamespaces(['checkins']);
+    await i18n.changeLanguage('en');
     store.state = {
       currentUser: { id: 'owner-1', familyId: 'family-1', role: 'owner', displayName: 'Kemal' },
       feed: [],
@@ -96,6 +98,30 @@ describe('Dashboard role routing', () => {
     store.state.currentUser.role = 'admin';
     render(<MemoryRouter><Dashboard /></MemoryRouter>);
     expect(screen.getByText('Approval Center Section')).toBeInTheDocument();
+  });
+
+  it.each([
+    ['child', 'Total Points'],
+    ['parent', 'Approval Center Section'],
+  ])('mounts the shared daily check-in experience once around the %s branch', (role, branchContent) => {
+    store.state.currentUser = {
+      id: `${role}-1`, familyId: 'family-1', role, displayName: 'Alex',
+      dailyCheckins: { parentParticipationEnabled: true },
+    };
+    store.state.familyData = {
+      id: 'family-1', timezone: 'Europe/London',
+      dailyCheckins: { childrenEnabled: true, historyVisibleToParents: true },
+    };
+    store.state.dailyCheckinDay = '2026-08-01';
+    store.state.dailyCheckinStateResolved = true;
+    store.state.todayDailyCheckin = null;
+    store.state.todayDailyCheckinSkip = null;
+    store.state.refreshDailyCheckinDay = vi.fn();
+
+    render(<MemoryRouter><Dashboard /></MemoryRouter>);
+
+    expect(screen.getByText(branchContent)).toBeVisible();
+    expect(screen.getAllByRole('dialog', { name: /who are you today/i })).toHaveLength(1);
   });
 });
 
