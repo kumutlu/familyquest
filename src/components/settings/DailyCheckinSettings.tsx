@@ -70,6 +70,7 @@ export function DailyCheckinSettings() {
   const currentUser = useStore(state => state.currentUser);
   const familyData = useStore(state => state.familyData);
   const locks = useRef(new Set<ToggleKey>());
+  const familyWriteQueue = useRef<Promise<unknown>>(Promise.resolve());
   const [saving, setSaving] = useState(emptyToggleState);
   const [errors, setErrors] = useState(emptyErrorState);
   const parent = isParentRole(currentUser?.role);
@@ -101,9 +102,22 @@ export function DailyCheckinSettings() {
     field: 'childrenEnabled' | 'historyVisibleToParents',
   ) => {
     if (!familyData?.id) return;
-    void runWrite(key, () => updateFamilySettings(familyData.id, {
-      dailyCheckins: { ...familySettings, [field]: !familySettings[field] },
-    }));
+    const familyId = familyData.id;
+    const enabled = !familySettings[field];
+    void runWrite(key, () => {
+      const write = familyWriteQueue.current
+        .catch(() => undefined)
+        .then(() => {
+          const persisted = resolvedDailyCheckinSettings(
+            useStore.getState().familyData?.dailyCheckins,
+          );
+          return updateFamilySettings(familyId, {
+            dailyCheckins: { ...persisted, [field]: enabled },
+          });
+        });
+      familyWriteQueue.current = write;
+      return write;
+    });
   };
 
   const updateParentToggle = () => {

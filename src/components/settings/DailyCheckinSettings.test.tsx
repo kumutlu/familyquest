@@ -157,6 +157,42 @@ describe('DailyCheckinSettings writes', () => {
     });
   });
 
+  it('serializes sibling family toggles and builds the second payload from the first persisted result', async () => {
+    let resolveFirstWrite!: () => void;
+    apiMocks.updateFamilySettings
+      .mockImplementationOnce(() => new Promise<void>(resolve => {
+        resolveFirstWrite = resolve;
+      }))
+      .mockResolvedValueOnce(undefined);
+    const user = userEvent.setup();
+    renderSettings('owner');
+
+    await user.click(screen.getByRole('switch', { name: /Enable check-ins for children/i }));
+    await user.click(screen.getByRole('switch', { name: /Show check-in history/i }));
+
+    expect(apiMocks.updateFamilySettings).toHaveBeenCalledOnce();
+    expect(apiMocks.updateFamilySettings).toHaveBeenNthCalledWith(1, 'family-1', {
+      dailyCheckins: { childrenEnabled: false, historyVisibleToParents: false },
+    });
+
+    act(() => {
+      useStore.setState({
+        familyData: {
+          ...useStore.getState().familyData,
+          dailyCheckins: { childrenEnabled: false, historyVisibleToParents: false },
+        },
+      });
+    });
+    await act(async () => {
+      resolveFirstWrite();
+    });
+
+    await waitFor(() => expect(apiMocks.updateFamilySettings).toHaveBeenCalledTimes(2));
+    expect(apiMocks.updateFamilySettings).toHaveBeenNthCalledWith(2, 'family-1', {
+      dailyCheckins: { childrenEnabled: false, historyVisibleToParents: true },
+    });
+  });
+
   it('guards a rapid double click with a single in-flight write', async () => {
     let resolveWrite!: () => void;
     apiMocks.updateParentDailyCheckinPreference.mockImplementation(() => new Promise<void>(resolve => {
