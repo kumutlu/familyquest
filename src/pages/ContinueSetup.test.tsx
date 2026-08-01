@@ -99,4 +99,33 @@ describe('ContinueSetup', () => {
     ).toBeInTheDocument();
     expect(screen.queryByText('ABC123')).not.toBeInTheDocument();
   });
+
+  it('reflects persisted setup progress on re-entry after a reload', () => {
+    // Simulate a reload: the store is re-hydrated from Firestore with the
+    // completed family/rewards/tasks, then the dashboard is re-mounted.
+    state.familyMembers = [{ id: 'owner', role: 'owner' }, { id: 'c1', role: 'child' }];
+    state.rewards = [{ id: 'r1' }];
+    state.tasks = [{ id: 't1' }];
+
+    const { unmount } = render(
+      <MemoryRouter>
+        <ContinueSetup />
+      </MemoryRouter>,
+    );
+    expect(
+      screen.getByText("You're all set! Your family is ready to go."),
+    ).toBeInTheDocument();
+
+    // Re-mount (re-entry) without changing the store — progress must persist.
+    unmount();
+    render(
+      <MemoryRouter>
+        <ContinueSetup />
+      </MemoryRouter>,
+    );
+    expect(
+      screen.getByText("You're all set! Your family is ready to go."),
+    ).toBeInTheDocument();
+    expect(screen.queryByText('ABC123')).not.toBeInTheDocument();
+  });
 });
