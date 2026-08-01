@@ -16,7 +16,7 @@ const ICONS: Record<string, ComponentType<{ className?: string }>> = {
 export function NextActionCard() {
   const { t } = useTranslation('dashboard');
   const navigate = useNavigate();
-  const { familyMembers, rewards, tasks, joinRequests, currentUser } = useStore();
+  const { familyMembers = [], rewards = [], tasks = [], joinRequests = [], currentUser = null } = useStore();
 
   // Determine the single most important next action for the parent.
   // `familyMembers` always includes the owner, so "no other members" means

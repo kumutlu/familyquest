@@ -18,7 +18,7 @@ interface SetupStep {
 export function ContinueSetup() {
   const { t } = useTranslation('dashboard');
   const navigate = useNavigate();
-  const { familyMembers, rewards, tasks } = useStore(s => s);
+  const { familyMembers = [], rewards = [], tasks = [] } = useStore(s => s);
 
   const hasFamily = familyMembers.length > 1;
   const hasRewards = rewards.length > 0;
