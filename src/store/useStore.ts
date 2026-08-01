@@ -191,6 +191,11 @@ let familyListeners = new Map<string, ListenerRegistration>();
 let authGeneration = 0;
 let familyGeneration = 0;
 let refreshActiveDailyCheckinDay: ((now: Date) => void) | null = null;
+let activeFamilySubscriptionIdentity: {
+  familyId: string;
+  profileId: string;
+  role: BootstrapRole;
+} | null = null;
 
 const stopProfileListener = () => {
   profileUnsubscribe?.();
@@ -200,6 +205,7 @@ const stopProfileListener = () => {
 const stopFamilyListeners = () => {
   familyGeneration += 1;
   refreshActiveDailyCheckinDay = null;
+  activeFamilySubscriptionIdentity = null;
   const subscriptions = [...familyListeners.values()];
   familyListeners.clear();
   subscriptions.forEach(({ unsubscribe }) => unsubscribe());
@@ -524,14 +530,27 @@ export const useStore = create<AppState>((set, get) => ({
     ) return;
 
     familyId = safeFamilyId;
+    const requestedProfileId = state.currentUser.id;
+    const requestedRole = state.currentUser.role as BootstrapRole;
 
-    if (state.activeFamilyId === familyId && familyListeners.size > 0) return;
+    if (
+      state.activeFamilyId === familyId &&
+      familyListeners.size > 0 &&
+      activeFamilySubscriptionIdentity?.familyId === familyId &&
+      activeFamilySubscriptionIdentity?.profileId === requestedProfileId &&
+      activeFamilySubscriptionIdentity.role === requestedRole
+    ) return;
 
     stopFamilyListeners();
     const generation = familyGeneration;
     const owningAuthGeneration = authGeneration;
 
-    const role = state.currentUser.role as BootstrapRole;
+    const role = requestedRole;
+    activeFamilySubscriptionIdentity = {
+      familyId,
+      profileId: requestedProfileId,
+      role,
+    };
     const roleResources = bootstrapResourcesForRole(role);
     const requiredResources = criticalBootstrapResources.filter(resource => roleResources.includes(resource));
     const queryPlan = createBootstrapQueryPlan(db, {
@@ -560,8 +579,13 @@ export const useStore = create<AppState>((set, get) => ({
     const isCurrent = () =>
       familyGeneration === generation &&
       authGeneration === owningAuthGeneration &&
+      activeFamilySubscriptionIdentity?.familyId === familyId &&
+      activeFamilySubscriptionIdentity.profileId === requestedProfileId &&
+      activeFamilySubscriptionIdentity.role === role &&
       get().activeFamilyId === familyId &&
-      get().currentUser?.familyId === familyId;
+      get().currentUser?.familyId === familyId &&
+      get().currentUser?.id === requestedProfileId &&
+      get().currentUser?.role === role;
 
     const markReady = (resource: BootstrapResource) => {
       const status = get().bootstrapStatus[resource];
@@ -659,12 +683,17 @@ export const useStore = create<AppState>((set, get) => ({
       activeDailyCheckinDay = day;
       stopFamilyListener('todayDailyCheckin');
       stopFamilyListener('todayDailyCheckinSkip');
-      set({
+      set(current => ({
         dailyCheckinDay: day,
         dailyCheckinStateResolved: false,
         todayDailyCheckin: null,
         todayDailyCheckinSkip: null,
-      });
+        featureErrors: {
+          ...current.featureErrors,
+          todayDailyCheckin: null,
+          todayDailyCheckinSkip: null,
+        },
+      }));
 
       let checkinResolved = false;
       let skipResolved = false;
@@ -695,6 +724,7 @@ export const useStore = create<AppState>((set, get) => ({
           error => {
             if (!isCurrentDailyCheckin()) return;
             logDevError(name, error, { document: path });
+            dailyCheckinListenerGeneration += 1;
             stopFamilyListener(name);
             set(current => ({
               featureErrors: { ...current.featureErrors, [name]: errorText(name, error) },
@@ -745,7 +775,11 @@ export const useStore = create<AppState>((set, get) => ({
       if (familyListeners.has('dailyCheckinHistory')) return;
 
       const listenerGeneration = ++dailyCheckinHistoryListenerGeneration;
-      set({ dailyCheckinHistory: [], dailyCheckinHistoryResolved: false });
+      set(current => ({
+        dailyCheckinHistory: [],
+        dailyCheckinHistoryResolved: false,
+        featureErrors: { ...current.featureErrors, dailyCheckinHistory: null },
+      }));
       const target = query(
         collection(db, `families/${familyId}/daily_checkins`),
         orderBy('createdAt', 'desc'),
@@ -754,7 +788,8 @@ export const useStore = create<AppState>((set, get) => ({
       const isCurrentHistory = () =>
         isCurrent() &&
         listenerGeneration === dailyCheckinHistoryListenerGeneration &&
-        get().currentUser?.id === currentUser.id;
+        get().currentUser?.id === currentUser.id &&
+        (get().currentUser?.role === 'parent' || get().currentUser?.role === 'owner');
       const unsubscribe = onSnapshot(
         target,
         { includeMetadataChanges: true },
@@ -772,6 +807,7 @@ export const useStore = create<AppState>((set, get) => ({
             orderBy: ['createdAt', 'desc'],
             limit: 100,
           });
+          dailyCheckinHistoryListenerGeneration += 1;
           stopFamilyListener('dailyCheckinHistory');
           set(current => ({
             dailyCheckinHistory: [],

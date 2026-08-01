@@ -100,6 +100,12 @@ const hydrate = (role: 'child' | 'parent' | 'owner' = 'child') => {
   useStore.getState().loadFamilyData(role === 'child' ? 'child-1' : 'adult-1', 'family-1');
 };
 
+const changeRole = (role: 'child' | 'parent' | 'owner') => {
+  const currentUser = useStore.getState().currentUser;
+  useStore.setState({ currentUser: { ...currentUser, role } } as any);
+  useStore.getState().loadFamilyData(currentUser.id, 'family-1');
+};
+
 beforeEach(() => {
   vi.useFakeTimers();
   vi.setSystemTime(new Date('2026-08-01T12:00:00Z'));
@@ -239,5 +245,124 @@ describe('daily check-in store subscriptions', () => {
       },
     }]);
     expect(useStore.getState().dailyCheckinHistory).toEqual([]);
+  });
+
+  it('tears down parent history immediately when the same-family profile becomes a child', () => {
+    hydrate('parent');
+    emitFamily({ dailyCheckins: { historyVisibleToParents: true } });
+    const history = activeListeners('families/family-1/daily_checkins')
+      .find(listener => listener.target.type === 'query')!;
+    emitCollection(history, [{
+      id: 'adult-1_2026-08-01',
+      data: {
+        familyId: 'family-1', userId: 'adult-1', localDate: '2026-08-01',
+        animal: 'owl', catalogVersion: 1, createdAt: 1, updatedAt: 1,
+      },
+    }]);
+
+    changeRole('child');
+
+    expect(history.unsubscribe).toHaveBeenCalledOnce();
+    expect(useStore.getState().dailyCheckinHistory).toEqual([]);
+    emitFamily({ dailyCheckins: { historyVisibleToParents: true } });
+    expect(activeListeners('families/family-1/daily_checkins')
+      .filter(listener => listener.target.type === 'query')).toHaveLength(0);
+    expect(useStore.getState().dailyCheckinHistoryResolved).toBe(true);
+  });
+
+  it('starts parent history when the same-family child profile becomes a parent', () => {
+    hydrate('child');
+    emitFamily({ dailyCheckins: { historyVisibleToParents: true } });
+    expect(activeListeners('families/family-1/daily_checkins')).toHaveLength(0);
+
+    changeRole('parent');
+    emitFamily({ dailyCheckins: { historyVisibleToParents: true } });
+
+    expect(activeListeners('families/family-1/daily_checkins')
+      .filter(listener => listener.target.type === 'query')).toHaveLength(1);
+    expect(useStore.getState().dailyCheckinHistoryResolved).toBe(false);
+  });
+
+  it('ignores queued current-document callbacks after either listener errors', () => {
+    hydrate('child');
+    emitFamily({ timezone: 'Europe/London' });
+    const checkinPath = 'families/family-1/daily_checkins/child-1_2026-08-01';
+    const skipPath = 'families/family-1/daily_checkin_skips/child-1_2026-08-01';
+    const checkin = activeListeners(checkinPath)[0];
+    const skip = activeListeners(skipPath)[0];
+
+    checkin.error({ code: 'unavailable', message: 'offline' });
+    checkin.next({
+      id: 'child-1_2026-08-01',
+      exists: () => true,
+      data: () => ({
+        familyId: 'family-1', userId: 'child-1', localDate: '2026-08-01',
+        animal: 'owl', catalogVersion: 1, createdAt: 1, updatedAt: 1,
+      }),
+      metadata: { fromCache: false },
+    });
+    skip.next({
+      id: 'child-1_2026-08-01',
+      exists: () => false,
+      data: () => undefined,
+      metadata: { fromCache: false },
+    });
+
+    expect(useStore.getState().todayDailyCheckin).toBeNull();
+    expect(useStore.getState().todayDailyCheckinSkip).toBeNull();
+    expect(useStore.getState().dailyCheckinStateResolved).toBe(false);
+  });
+
+  it('ignores a queued history callback after the history listener errors', () => {
+    hydrate('parent');
+    emitFamily({ dailyCheckins: { historyVisibleToParents: true } });
+    const history = activeListeners('families/family-1/daily_checkins')
+      .find(listener => listener.target.type === 'query')!;
+
+    history.error({ code: 'unavailable', message: 'offline' });
+    emitCollection(history, [{
+      id: 'late',
+      data: {
+        familyId: 'family-1', userId: 'adult-1', localDate: '2026-08-01',
+        animal: 'owl', catalogVersion: 1, createdAt: 1, updatedAt: 1,
+      },
+    }]);
+
+    expect(useStore.getState().dailyCheckinHistory).toEqual([]);
+    expect(useStore.getState().dailyCheckinHistoryResolved).toBe(true);
+  });
+
+  it.each([
+    ['todayDailyCheckin', 'families/family-1/daily_checkins/child-1_2026-08-01'],
+    ['todayDailyCheckinSkip', 'families/family-1/daily_checkin_skips/child-1_2026-08-01'],
+  ] as const)('clears the %s feature error when current-day listeners recover', (name, failedPath) => {
+    hydrate('child');
+    emitFamily({ timezone: 'Europe/London' });
+    activeListeners(failedPath)[0].error({ code: 'unavailable', message: 'offline' });
+    expect(useStore.getState().featureErrors[name]).toContain('unavailable');
+
+    useStore.getState().refreshDailyCheckinDay();
+
+    expect(useStore.getState().featureErrors[name]).toBeNull();
+    emitDocument('families/family-1/daily_checkins/child-1_2026-08-01');
+    emitDocument('families/family-1/daily_checkin_skips/child-1_2026-08-01');
+    expect(useStore.getState().dailyCheckinStateResolved).toBe(true);
+  });
+
+  it('clears the history feature error when the parent history listener recovers', () => {
+    hydrate('parent');
+    emitFamily({ dailyCheckins: { historyVisibleToParents: true } });
+    const history = activeListeners('families/family-1/daily_checkins')
+      .find(listener => listener.target.type === 'query')!;
+    history.error({ code: 'unavailable', message: 'offline' });
+    expect(useStore.getState().featureErrors.dailyCheckinHistory).toContain('unavailable');
+
+    emitFamily({ dailyCheckins: { historyVisibleToParents: true } });
+
+    expect(useStore.getState().featureErrors.dailyCheckinHistory).toBeNull();
+    const recoveredHistory = activeListeners('families/family-1/daily_checkins')
+      .find(listener => listener.target.type === 'query')!;
+    emitCollection(recoveredHistory, []);
+    expect(useStore.getState().dailyCheckinHistoryResolved).toBe(true);
   });
 });
