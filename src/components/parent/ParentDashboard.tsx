@@ -23,6 +23,8 @@ import { PetBoxSummaryCard } from '../dashboard/PetBoxSummaryCard';
 import { isPetBoxEnabled } from '../../lib/familyFeatures';
 import { FamilyBulletin } from '../bulletin/FamilyBulletin';
 import { FamilySetupPrompt } from '../family/FamilySetupPrompt';
+import { NextActionCard } from '../next-action/NextActionCard';
+import { InviteMemberCard } from '../dashboard/InviteMemberCard';
 import { AddChildModal } from '../family/AddChildModal';
 import { shouldShowFamilySetupPrompt } from '../../lib/familySetup';
 
@@ -107,6 +109,10 @@ export function ParentDashboard() {
   return (
     <div className="space-y-8 animate-in fade-in duration-300 pb-8">
       <DashboardHeader />
+
+      <NextActionCard />
+
+      <InviteMemberCard />
 
       <QuickActions
         onNewTask={() => setIsTaskModalOpen(true)}
