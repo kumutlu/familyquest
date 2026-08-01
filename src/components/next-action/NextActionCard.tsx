@@ -1,6 +1,6 @@
 import { useStore } from '../../store/useStore';
 import { useTranslation } from 'react-i18next';
-import { UserPlus, Target, ListChecks, ArrowUpRight } from 'lucide-react';
+import { UserPlus, Target, ListChecks, ArrowUpRight, Bell } from 'lucide-react';
 import type { ComponentType } from 'react';
 import { useNavigate } from 'react-router-dom';
 
@@ -9,21 +9,28 @@ const ICONS: Record<string, ComponentType<{ className?: string }>> = {
   'nextAction.createGoal': Target,
   'nextAction.createTask': ListChecks,
   'nextAction.continueSetup': ArrowUpRight,
+  'nextAction.reviewJoinRequests': Bell,
 };
 
 export function NextActionCard() {
   const { t } = useTranslation('dashboard');
   const navigate = useNavigate();
-  const { familyMembers, savingsGoals, tasks } = useStore();
+  const { familyMembers, savingsGoals, tasks, joinRequests, currentUser } = useStore();
 
   // Determine the single most important next action for the parent.
   // `familyMembers` always includes the owner, so "no other members" means
   // the family has not been populated yet.
-  let titleKey: 'nextAction.inviteFamily' | 'nextAction.createGoal' | 'nextAction.createTask' | 'nextAction.continueSetup' =
+  const isOwnerOrParent = currentUser?.role === 'owner' || currentUser?.role === 'parent';
+  const hasPendingJoin = isOwnerOrParent && joinRequests.some(request => request.status === 'pending');
+
+  let titleKey: 'nextAction.inviteFamily' | 'nextAction.createGoal' | 'nextAction.createTask' | 'nextAction.continueSetup' | 'nextAction.reviewJoinRequests' =
     'nextAction.continueSetup';
   let target = '/continue-setup';
 
-  if (familyMembers.length <= 1) {
+  if (hasPendingJoin) {
+    titleKey = 'nextAction.reviewJoinRequests';
+    target = '/';
+  } else if (familyMembers.length <= 1) {
     titleKey = 'nextAction.inviteFamily';
     target = '/continue-setup';
   } else if (savingsGoals.length === 0) {

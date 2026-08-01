@@ -13,7 +13,8 @@
     "inviteFamily": "Aile üyeleri davet et",
     "createGoal": "Bir hedef oluştur",
     "createTask": "Bir görev oluştur",
-    "continueSetup": "Kurulumu devam et"
+    "continueSetup": "Kurulumu devam et",
+    "reviewJoinRequests": "Katılım isteklerini incele"
   },
   "continueSetup": {
     "allDone": "Hazırsınız! Aileniz kullanıma hazır.",

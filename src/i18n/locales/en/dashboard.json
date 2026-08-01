@@ -3,7 +3,8 @@
     "inviteFamily": "Invite family members",
     "createGoal": "Create a goal",
     "createTask": "Create a task",
-    "continueSetup": "Continue Setup"
+    "continueSetup": "Continue Setup",
+    "reviewJoinRequests": "Review join requests"
   },
   "continueSetup": {
     "allDone": "You're all set! Your family is ready to go.",
