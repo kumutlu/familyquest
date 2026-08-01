@@ -6,7 +6,7 @@ import type { ComponentType } from 'react';
 import { Button } from '../components/ui/Button';
 import { InviteMemberCard } from '../components/dashboard/InviteMemberCard';
 
-type StepKey = 'inviteFamily' | 'createGoal' | 'createTask';
+type StepKey = 'inviteFamily' | 'createReward' | 'createTask';
 
 interface SetupStep {
   key: StepKey;
