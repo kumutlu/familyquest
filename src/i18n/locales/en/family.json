@@ -4,6 +4,7 @@
   "addChild": "Add child",
   "childAdded": "Child added successfully",
   "inviteMember": "Invite Member",
+  "addChildDirectly": "Add child directly",
   "inviteCopied": "Invite code copied to clipboard.",
   "loading": "Loading Family…",
   "loginCreated": "Login created for {{name}}.",

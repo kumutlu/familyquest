@@ -1,13 +1,13 @@
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Button } from '../ui/Button';
-import { Copy, Share2, Pencil, CheckCircle, AlertTriangle } from 'lucide-react';
+import { Copy, Share2, Pencil, CheckCircle, AlertTriangle, UserPlus } from 'lucide-react';
 import { useStore } from '../../store/useStore';
 import { useNavigate } from 'react-router-dom';
 
 type CopyStatus = 'idle' | 'copying' | 'copied' | 'error';
 
-export function InviteMemberCard() {
+export function InviteMemberCard({ onAddChild }: { onAddChild?: () => void }) {
   const { t } = useTranslation(['family', 'common', 'settings']);
   const { familyData } = useStore();
   const inviteCode = familyData?.inviteCode;
@@ -97,6 +97,19 @@ export function InviteMemberCard() {
           </Button>
         </div>
       </div>
+
+      {onAddChild && (
+        <Button
+          variant="ghost"
+          size="sm"
+          onClick={onAddChild}
+          className="mt-3 w-full"
+          aria-label={t('family:addChildDirectly')}
+        >
+          <UserPlus size={14} className="mr-1" />
+          {t('family:addChildDirectly')}
+        </Button>
+      )}
 
       {copyStatus === 'copied' && (
         <p className="mt-2 flex items-center gap-1 text-sm text-green-600">

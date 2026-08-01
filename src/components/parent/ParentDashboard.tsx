@@ -112,7 +112,7 @@ export function ParentDashboard() {
 
       <NextActionCard />
 
-      <InviteMemberCard />
+      <InviteMemberCard onAddChild={() => setIsAddChildOpen(true)} />
 
       <QuickActions
         onNewTask={() => setIsTaskModalOpen(true)}

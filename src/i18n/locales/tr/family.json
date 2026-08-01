@@ -4,6 +4,7 @@
   "addChild": "Çocuk ekle",
   "childAdded": "Çocuk başarıyla eklendi",
   "inviteMember": "Üye Davet Et",
+  "addChildDirectly": "Çocuğu doğrudan ekle",
   "inviteCopied": "Davet kodu panoya kopyalandı.",
   "loading": "Aile yükleniyor…",
   "loginCreated": "{{name}} için giriş oluşturuldu.",

@@ -61,7 +61,7 @@ export function ContinueSetup() {
         })}
       </ol>
 
-      {!hasFamily && <InviteMemberCard />}
+      {!hasFamily && <InviteMemberCard onAddChild={() => navigate('/')} />}
       {!hasRewards && (
         <Button fullWidth onClick={() => navigate('/rewards')}>
           {t('nextAction.createReward')}
