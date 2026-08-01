@@ -165,6 +165,30 @@ function assertTargetIsManagedChild(
   }
 }
 
+async function purgeDailyCheckinRecords(
+  db: Firestore,
+  familyId: string,
+  childId: string,
+): Promise<void> {
+  const BATCH_LIMIT = 500;
+  for (const collectionName of ['daily_checkins', 'daily_checkin_skips']) {
+    try {
+      const snapshot = await db
+        .collection(`${FAMILIES}/${familyId}/${collectionName}`)
+        .where('userId', '==', childId)
+        .limit(BATCH_LIMIT)
+        .get();
+      if (snapshot.empty) continue;
+
+      const batch = db.batch();
+      for (const doc of snapshot.docs) batch.delete(doc.ref);
+      await batch.commit();
+    } catch {
+      // Best-effort cleanup; retries and family deletion remain idempotent.
+    }
+  }
+}
+
 // ---------------------------------------------------------------------------
 // Core implementation (injectable context for testing)
 // ---------------------------------------------------------------------------
@@ -421,6 +445,9 @@ export async function deleteChildImpl(
       // Best-effort cleanup; missing collections are expected
     }
   }
+
+  // Daily check-ins identify their subject with `userId`, not `childId`.
+  await purgeDailyCheckinRecords(db, familyId, childId);
 
   // Also delete any documents in child-specific sub-collections that
   // use the child's UID as the document ID (e.g. family members who

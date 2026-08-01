@@ -60,6 +60,17 @@ function makeFakeDb() {
     },
   });
 
+  const docsInCollection = (collectionPath: string) => {
+    const collectionDepth = collectionPath.split('/').length;
+    return [...store.entries()]
+      .filter(([path]) => path.startsWith(`${collectionPath}/`) && path.split('/').length === collectionDepth + 1)
+      .map(([path, data]) => ({
+        id: path.split('/').pop(),
+        data: () => data,
+        ref: makeRef(path),
+      }));
+  };
+
   const db: any = {
     store,
     doc: makeRef,
@@ -68,13 +79,16 @@ function makeFakeDb() {
         const realId = id || Math.random().toString(36).slice(2);
         return makeRef(`${path}/${realId}`);
       },
-      where: (_field: string, _op: string, _value: unknown) => ({
-        limit: () => ({
-          get: async () => ({
-            empty: true,
-            docs: [],
-            size: 0,
-          }),
+      where: (field: string, _op: string, value: unknown) => ({
+        limit: (limit: number) => ({
+          get: async () => {
+            const isDailyCheckinCollection = path.endsWith('/daily_checkins')
+              || path.endsWith('/daily_checkin_skips');
+            const docs = (isDailyCheckinCollection ? docsInCollection(path) : [])
+              .filter(doc => doc.data()[field] === value)
+              .slice(0, limit);
+            return { empty: docs.length === 0, docs, size: docs.length };
+          },
         }),
       }),
       add: async (data: Record<string, unknown>) => {
@@ -110,10 +124,15 @@ function makeFakeDb() {
       }
       return result;
     },
-    batch: () => ({
-      delete: (_ref: FakeRef) => {},
-      commit: async () => {},
-    }),
+    batch: () => {
+      const deletions: FakeRef[] = [];
+      return {
+        delete: (ref: FakeRef) => { deletions.push(ref); },
+        commit: async () => {
+          for (const ref of deletions) store.delete(ref.path);
+        },
+      };
+    },
   };
   return db as any;
 }
@@ -348,6 +367,24 @@ describe('deleteChild — ALLOWED', () => {
     });
     expect(db.store.has(`families/${FAMILY_ID}`)).toBe(true);
     expect(db.store.has(`families/${FAMILY_ID}/childLogins/child2`)).toBe(true);
+  });
+
+  it('removes only the managed child daily check-in records matched by userId', async () => {
+    db.store.set(`families/${FAMILY_ID}/daily_checkins/child-checkin`, { userId: 'child1' });
+    db.store.set(`families/${FAMILY_ID}/daily_checkins/other-checkin`, { userId: 'child2' });
+    db.store.set(`families/${FAMILY_ID}/daily_checkin_skips/child-skip`, { userId: 'child1' });
+    db.store.set(`families/${FAMILY_ID}/daily_checkin_skips/other-skip`, { userId: 'child2' });
+
+    await deleteChildImpl(makeCtx(db, auth), 'owner1', {
+      childId: 'child1',
+      displayNameConfirmation: 'Test',
+      clientReqId: 'del-daily-checkins',
+    });
+
+    expect(db.store.has(`families/${FAMILY_ID}/daily_checkins/child-checkin`)).toBe(false);
+    expect(db.store.has(`families/${FAMILY_ID}/daily_checkin_skips/child-skip`)).toBe(false);
+    expect(db.store.has(`families/${FAMILY_ID}/daily_checkins/other-checkin`)).toBe(true);
+    expect(db.store.has(`families/${FAMILY_ID}/daily_checkin_skips/other-skip`)).toBe(true);
   });
 
   it('does not remove other children login records', async () => {

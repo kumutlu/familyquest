@@ -43,6 +43,8 @@ export const OPERATIONAL_SUBCOLLECTIONS = [
   'approval_history',
   'savings_goals',
   'join_requests',
+  'daily_checkins',
+  'daily_checkin_skips',
 ] as const
 
 const WALLET_POINTER_FIELDS = [

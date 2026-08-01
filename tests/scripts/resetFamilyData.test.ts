@@ -121,10 +121,18 @@ function seededStore() {
   store.collectionDocuments.set('families/fam-1/feed', [
     record('families/fam-1/feed/feed-1', { text: 'History' }),
   ])
+  store.collectionDocuments.set('families/fam-1/daily_checkins', [
+    record('families/fam-1/daily_checkins/checkin-1', { userId: 'child-1', localDate: '2026-08-01' }),
+  ])
+  store.collectionDocuments.set('families/fam-1/daily_checkin_skips', [
+    record('families/fam-1/daily_checkin_skips/skip-1', { userId: 'child-2', localDate: '2026-08-01' }),
+  ])
   store.collectionDocuments.set('families/fam-2/tasks', [
     record('families/fam-2/tasks/do-not-delete', { title: 'Other family' }),
   ])
-  store.subcollections.set('families/fam-1', ['tasks', 'feed', 'wallets'])
+  store.subcollections.set('families/fam-1', [
+    'tasks', 'feed', 'wallets', 'daily_checkins', 'daily_checkin_skips',
+  ])
   return store
 }
 
@@ -214,6 +222,9 @@ describe('exportFamilyData', () => {
         wallets: [{ path: 'families/fam-1/wallets/child-1' }],
       },
     })
+    const exported = writer.writes[0].value as { subcollections: Record<string, unknown> }
+    expect(exported.subcollections).toHaveProperty('daily_checkins')
+    expect(exported.subcollections).toHaveProperty('daily_checkin_skips')
   })
 })
 
@@ -229,6 +240,10 @@ describe('runFamilyReset', () => {
 
     expect(result.executed).toBe(false)
     expect(result.backupPath).toBeNull()
+    expect(OPERATIONAL_SUBCOLLECTIONS).toEqual(expect.arrayContaining([
+      'daily_checkins',
+      'daily_checkin_skips',
+    ]))
     expect(result.collections.map(item => item.collectionPath)).toEqual(expect.arrayContaining(
       OPERATIONAL_SUBCOLLECTIONS.map(name => `families/fam-1/${name}`),
     ))
@@ -237,6 +252,8 @@ describe('runFamilyReset', () => {
       { collectionPath: 'families/fam-1/tasks/task-1/comments', documentCount: 1 },
       { collectionPath: 'families/fam-1/tasks/task-1/comments/comment-1/audit', documentCount: 1 },
       { collectionPath: 'families/fam-1/tasks/orphan-task/attachments', documentCount: 1 },
+      { collectionPath: 'families/fam-1/daily_checkins', documentCount: 1 },
+      { collectionPath: 'families/fam-1/daily_checkin_skips', documentCount: 1 },
     ]))
     expect(formatResetReport(result)).toContain(
       'families/fam-1/tasks/orphan-task/attachments: 1 document(s) to delete',
@@ -265,6 +282,8 @@ describe('runFamilyReset', () => {
     expect(operations).toContainEqual({ type: 'delete', path: 'families/fam-1/tasks/orphan-task/attachments/attachment-1' })
     expect(operations).not.toContainEqual({ type: 'delete', path: 'families/fam-1/tasks/orphan-task' })
     expect(operations).toContainEqual({ type: 'delete', path: 'families/fam-1/feed/feed-1' })
+    expect(operations).toContainEqual({ type: 'delete', path: 'families/fam-1/daily_checkins/checkin-1' })
+    expect(operations).toContainEqual({ type: 'delete', path: 'families/fam-1/daily_checkin_skips/skip-1' })
     expect(operations.some(op => op.path.startsWith('families/fam-2/'))).toBe(false)
     expect(operations.some(op => op.type === 'delete' && op.path === 'families/fam-1')).toBe(false)
     expect(operations.some(op => op.type === 'delete' && op.path.startsWith('users/'))).toBe(false)

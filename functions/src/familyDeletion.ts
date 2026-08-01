@@ -51,6 +51,7 @@ export const FAMILY_SUBCOLLECTION_REGISTRY: readonly string[] = [
   'task_occurrences',
   'gamification_events', 'daily_eligibility', 'daily_progress',
   'gamification_summaries', 'gamification_checkpoints',
+  'daily_checkins', 'daily_checkin_skips',
 ];
 
 export const FAMILY_NESTED_SUBCOLLECTIONS: readonly string[] = [

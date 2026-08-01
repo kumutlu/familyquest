@@ -77,6 +77,29 @@ async function deleteAuthUserQuietly(ctx: FamilyDeletionContext, uid: string): P
   }
 }
 
+/** Delete at most one Firestore batch of per-user records per collection. */
+async function purgeDailyCheckinRecords(
+  ctx: FamilyDeletionContext,
+  uid: string,
+  familyId: string | null,
+): Promise<void> {
+  if (!familyId) return;
+
+  const BATCH_LIMIT = 500;
+  for (const collectionName of ['daily_checkins', 'daily_checkin_skips']) {
+    const snapshot = await ctx.db
+      .collection(`families/${familyId}/${collectionName}`)
+      .where('userId', '==', uid)
+      .limit(BATCH_LIMIT)
+      .get();
+    if (snapshot.empty) continue;
+
+    const batch = ctx.db.batch();
+    for (const doc of snapshot.docs) batch.delete(doc.ref);
+    await batch.commit();
+  }
+}
+
 /** Firestore membership cleanup + profile purge. Auth deletion is separate and always last. */
 async function purgeProfile(ctx: FamilyDeletionContext, uid: string, familyId: string | null): Promise<void> {
   const { db } = ctx;
@@ -120,6 +143,7 @@ export async function deleteAccountImpl(
 
   // Scenario: no family membership at all.
   if (!familyId) {
+    await purgeDailyCheckinRecords(ctx, callerUid, null);
     await purgeProfile(ctx, callerUid, null);
     await deleteAuthUserQuietly(ctx, callerUid);
     return { status: 'completed' };
@@ -127,6 +151,7 @@ export async function deleteAccountImpl(
 
   // Scenario: non-owner adult or self-registered child.
   if (profile.role !== 'owner') {
+    await purgeDailyCheckinRecords(ctx, callerUid, familyId);
     await purgeProfile(ctx, callerUid, familyId);
     await stripClaimsQuietly(ctx, callerUid);
     await deleteAuthUserQuietly(ctx, callerUid);
@@ -153,6 +178,7 @@ export async function deleteAccountImpl(
 
   if (!family) {
     // Orphaned owner profile: nothing family-side to protect.
+    await purgeDailyCheckinRecords(ctx, callerUid, familyId);
     await purgeProfile(ctx, callerUid, familyId);
     await stripClaimsQuietly(ctx, callerUid);
     await deleteAuthUserQuietly(ctx, callerUid);
@@ -172,6 +198,7 @@ export async function deleteAccountImpl(
     if (!successorDoc) {
       throw new HttpsError('failed-precondition', 'SUCCESSOR_NOT_ELIGIBLE');
     }
+    await purgeDailyCheckinRecords(ctx, callerUid, familyId);
     await db.runTransaction(async (t: any) => {
       const [ownerSnap, succSnap] = await Promise.all([
         t.get(userRef(db, callerUid)),
