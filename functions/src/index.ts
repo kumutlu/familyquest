@@ -166,6 +166,15 @@ export {
   regenerateFamilyCode,
 } from './familyMembership';
 
+// Role-authoritative invitation records; see familyInvitations.ts. The
+// resulting family role is always derived server-side from the stored
+// invitation, never from client input or URL parameters.
+export {
+  createFamilyInvitation,
+  previewInvitation,
+  acceptInvitation,
+} from './familyInvitations';
+
 // Child join request with mandatory parent approval; see childJoinRequest.ts.
 export {
   submitChildJoinRequest,
