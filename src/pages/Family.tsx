@@ -20,9 +20,11 @@ import { ChildLoginSection, type ChildLoginMember } from '../components/family/C
 import { CreateChildLoginDialog } from '../components/family/CreateChildLoginDialog';
 import { Toast, type ToastData } from '../components/ui/Toast';
 import { AddChildModal } from '../components/family/AddChildModal';
+import { InviteMemberCard } from '../components/dashboard/InviteMemberCard';
 
 export function Family() {
   const { t } = useTranslation('family');
+  const { t: tCommon } = useTranslation('common');
   const { currentUser, familyMembers, loading, tasks, taskCompletions, challenges } = useStore();
   const [activeTab, setActiveTab] = useState<'current' | 'history'>('current');
   
@@ -39,6 +41,7 @@ export function Family() {
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   const [isAddChildOpen, setIsAddChildOpen] = useState(false);
+  const [isInviteOpen, setIsInviteOpen] = useState(false);
 
   // Open-session clock: rolls the weekly scoreboard over on Monday while the
   // app stays open (no full reload needed).
@@ -139,13 +142,7 @@ export function Family() {
                 <UserPlus size={16} className="mr-1 shrink-0" />
                 {t('addChild')}
               </Button>
-              <Button variant="secondary" size="sm" onClick={() => {
-                const inviteCode = document.querySelector('[data-invite-code]') as HTMLElement;
-                if (inviteCode) {
-                  navigator.clipboard.writeText(inviteCode.textContent || '');
-                  showToast(t('inviteCopied'));
-                }
-              }} className="bg-primary-50 text-primary-700 border-primary-300 hover:bg-primary-100 whitespace-nowrap">
+              <Button variant="secondary" size="sm" onClick={() => setIsInviteOpen(true)} className="bg-primary-50 text-primary-700 border-primary-300 hover:bg-primary-100 whitespace-nowrap">
                 <UserPlus size={16} className="mr-1 shrink-0" />
                 {t('inviteMember')}
               </Button>
@@ -366,6 +363,27 @@ export function Family() {
             showToast(t('childAdded'));
           }}
         />
+      )}
+
+      {/* Invite Member Modal */}
+      {isInviteOpen && (
+        <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-gray-900/40 backdrop-blur-sm">
+          <div className="bg-white w-full sm:max-w-md sm:rounded-3xl rounded-t-3xl shadow-xl overflow-hidden flex flex-col">
+            <div className="px-6 py-4 flex justify-between items-center border-b border-gray-100">
+              <h3 className="text-xl font-bold text-gray-900">{t('inviteMember')}</h3>
+              <button
+                onClick={() => setIsInviteOpen(false)}
+                aria-label={tCommon('closeDialog')}
+                className="p-2 -mr-2 bg-gray-100 hover:bg-gray-200 rounded-full text-gray-500"
+              >
+                ✕
+              </button>
+            </div>
+            <div className="p-6">
+              <InviteMemberCard />
+            </div>
+          </div>
+        </div>
       )}
 
       {/* Toast / snackbar */}
