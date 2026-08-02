@@ -185,6 +185,9 @@ describe('ParentDashboard', () => {
         setup: { welcomePromptCompleted: true },
       },
       familyMembers: [{ id: 'child-1', role: 'child', displayName: 'Existing Child' }],
+      // Activated family: setup complete, so Focus Mode stays off.
+      rewards: [{ id: 'r-1', title: 'Gold Star' }],
+      tasks: [{ id: 't-1', title: 'Tidy room' }],
     };
     render(<MemoryRouter><ParentDashboard /></MemoryRouter>);
 
@@ -236,6 +239,8 @@ describe('ParentDashboard summary cards (Phase 3)', () => {
         { id: 'c-1', role: 'child' },
         { id: 'c-2', role: 'child' },
       ],
+      rewards: [{ id: 'r-1', title: 'Gold Star' }],
+      tasks: [{ id: 't-1', title: 'Tidy room' }],
       savingsGoals: [
         { goalId: 'g-1', title: 'Bike', status: 'active', currentAmountPence: 500, targetAmountPence: 1000 },
         { goalId: 'g-2', title: 'Tablet', status: 'active', currentAmountPence: 200, targetAmountPence: 800 },
@@ -266,6 +271,8 @@ describe('ParentDashboard summary cards (Phase 3)', () => {
         { id: 'c-1', role: 'child' },
         { id: 'c-2', role: 'child' },
       ],
+      rewards: [{ id: 'r-1', title: 'Gold Star' }],
+      tasks: [{ id: 't-1', title: 'Tidy room' }],
       savingsGoals: [
         { goalId: 'g-1', title: 'Bike', status: 'active', currentAmountPence: 500, targetAmountPence: 1000 },
       ],

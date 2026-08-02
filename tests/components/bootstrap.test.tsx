@@ -160,6 +160,9 @@ describe('rendered bootstrap boundary', () => {
       // (zero children -> redirect) does not intercept this dashboard/reversals
       // assertion. The test's intent is the reversals loader, not onboarding.
       familyMembers: [{ id: 'child1', role: 'child', displayName: 'Ava' }],
+      // Setup complete, so Dashboard Focus Mode does not suppress the feed.
+      tasks: [{ id: 'task1', title: 'Tidy room', isActive: true }],
+      rewards: [{ id: 'reward1', title: 'Movie', isActive: true }],
       loadReversals,
     });
 

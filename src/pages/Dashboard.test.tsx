@@ -18,6 +18,7 @@ const store = vi.hoisted(() => ({
     tasks: [
       { id: 't-1', title: 'Brush teeth', isActive: true, assigneeId: 'owner-1' },
     ],
+    rewards: [{ id: 'r-1', title: 'Gold Star' }],
     taskCompletions: [],
     moneyRequests: [] as any[],
     myGamificationSummary: null,
@@ -70,6 +71,8 @@ describe('Dashboard role routing', () => {
       ],
       funds: [{ id: 'f-1', name: 'Rex', species: 'dog', balance: 1500, emergencyGoal: 5000 }],
       tasks: [{ id: 't-1', title: 'Brush teeth', isActive: true, assigneeId: 'owner-1' }],
+      // Activated family (child + reward + task) so Focus Mode stays off.
+      rewards: [{ id: 'r-1', title: 'Gold Star' }],
       taskCompletions: [],
       moneyRequests: [],
       myGamificationSummary: null,
@@ -115,6 +118,7 @@ describe('Dashboard summary cards', () => {
       ],
       funds: [{ id: 'f-1', name: 'Rex', species: 'dog', balance: 1500, emergencyGoal: 5000 }],
       tasks: [{ id: 't-1', title: 'Brush teeth', isActive: true, assigneeId: 'owner-1' }],
+      rewards: [{ id: 'r-1', title: 'Gold Star' }],
       taskCompletions: [],
       moneyRequests: [],
       myGamificationSummary: null,
