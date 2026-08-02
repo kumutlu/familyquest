@@ -308,6 +308,15 @@ export const completeFamilyWelcomeSetup = async (familyId: string, uid: string) 
   });
 };
 
+/**
+ * Approves a pending join request.
+ *
+ * `role` is only a *suggestion* from the reviewing owner. When the request was
+ * created from an authoritative invitation record the server stamped an
+ * `intendedRole` on it, and that value wins — the owner can approve or reject,
+ * but cannot change the role the invitation granted. Firestore rules enforce
+ * the same invariant, so a tampered client cannot bypass it either.
+ */
 export const approveJoinRequest = async (familyId: string, requestId: string, role: 'parent' | 'child') => {
   if (role !== 'child' && role !== 'parent') throw new Error('Unsupported approval role');
   const reviewerUid = auth.currentUser?.uid;
@@ -321,9 +330,17 @@ export const approveJoinRequest = async (familyId: string, requestId: string, ro
     const uid = requestDoc.data().uid;
     const displayName = requestDoc.data().displayName;
     if (typeof uid !== 'string' || typeof displayName !== 'string' || !displayName.trim()) throw new Error('Join request identity is invalid');
+
+    // Invitation-derived requests carry a server-written intendedRole which
+    // overrides whatever the reviewer picked. `owner` is never grantable.
+    const intendedRole = requestDoc.data().intendedRole;
+    if (intendedRole !== undefined && intendedRole !== 'parent' && intendedRole !== 'child') {
+      throw new Error('Join request role is invalid');
+    }
+    const effectiveRole: 'parent' | 'child' = intendedRole ?? role;
     const userRef = doc(db, 'users', uid);
 
-    if (role === 'child') {
+    if (effectiveRole === 'child') {
       transaction.set(doc(db, `families/${familyId}/wallets`, uid), {
         balance: 0, createdAt: serverTimestamp(), migratedFromLegacy: true,
       }, { merge: true });
@@ -332,9 +349,9 @@ export const approveJoinRequest = async (familyId: string, requestId: string, ro
       uid,
       joinRequestId: requestId,
       familyId,
-      role,
+      role: effectiveRole,
       displayName,
-      avatarUrl: `https://api.dicebear.com/7.x/${role === 'parent' ? 'avataaars' : 'bottts'}/svg?seed=${displayName}`,
+      avatarUrl: `https://api.dicebear.com/7.x/${effectiveRole === 'parent' ? 'avataaars' : 'bottts'}/svg?seed=${displayName}`,
       rewardPoints: 0,
       lifetimeXP: 0,
       currentStreak: 0,
@@ -343,12 +360,12 @@ export const approveJoinRequest = async (familyId: string, requestId: string, ro
     }, { merge: true });
 
     transaction.update(requestRef, {
-      status: 'approved', assignedRole: role,
+      status: 'approved', assignedRole: effectiveRole,
       ...reviewerFields(reviewerUid, reviewerDoc.data().displayName || 'Owner', serverTimestamp()),
     });
     transaction.set(doc(db, `families/${familyId}/feed`, `join_${requestId}`), {
       actorId: reviewerUid, type: 'custom',
-      text: `${displayName} has joined the family as a ${role}!`, timestamp: serverTimestamp(),
+      text: `${displayName} has joined the family as a ${effectiveRole}!`, timestamp: serverTimestamp(),
     });
   });
 };

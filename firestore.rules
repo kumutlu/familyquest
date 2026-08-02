@@ -1676,6 +1676,15 @@ service cloud.firestore {
         && (!request.resource.data.diff(resource.data).affectedKeys().hasAny(['setup'])
             || isValidFamilySetup(request.resource.data.setup));
 
+      // Role-authoritative invitation records. Written exclusively by the
+      // trusted backend (createFamilyInvitation / acceptInvitation) and never
+      // readable by clients — the validated projection is returned by the
+      // previewInvitation callable instead, so no family information leaks
+      // before the invitation has been validated.
+      match /invitations/{inviteCode} {
+        allow read, write: if false;
+      }
+
       match /join_requests/{requestId} {
         // Creation is server-authoritative: the callable resolves the private
         // family code with Admin SDK and writes the request without a role.
@@ -1685,6 +1694,12 @@ service cloud.firestore {
           && request.resource.data.reviewedBy == authProfileId()
           && request.resource.data.reviewedAt == request.time
           && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'assignedRole', 'rejectionReason', 'reviewedBy', 'reviewedByName', 'reviewedAt'])
+          // When the request originated from an invitation, the server stamped
+          // an intendedRole on it. The approving owner may accept or reject,
+          // but may NOT change the role the invitation granted.
+          && (request.resource.data.status != 'approved'
+              || !('intendedRole' in resource.data)
+              || request.resource.data.get('assignedRole', 'null') == resource.data.intendedRole)
           && ((request.resource.data.status == 'rejected' && request.resource.data.rejectionReason is string && request.resource.data.rejectionReason.trim().size() > 0)
               || hasValidJoinApproval(familyId, requestId, resource.data, request.resource.data));
         allow read: if isFamilyMember(familyId) || (isAuthenticated() && resource.data.uid == authProfileId());
