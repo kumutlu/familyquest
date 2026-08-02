@@ -8,6 +8,7 @@ import { signInChild, mapSignInChildError, normalizeUsernamePreview } from '../l
 import { signInWithCustomToken } from 'firebase/auth';
 import { auth } from '../lib/firebase';
 import { useStore } from '../store/useStore';
+import { postAuthDestination } from '../lib/inviteLink';
 
 type LoginTab = 'parent' | 'child';
 
@@ -48,7 +49,9 @@ export function Login() {
   // tree). Defer it to an effect.
   useEffect(() => {
     if (authStatus === 'authenticated') {
-      navigate('/', { replace: true });
+      // Resume a pending invitation instead of the dashboard when the visitor
+      // arrived from a /join link; the code survived the sign-in round trip.
+      navigate(postAuthDestination('/'), { replace: true });
     }
   }, [authStatus, navigate]);
 
