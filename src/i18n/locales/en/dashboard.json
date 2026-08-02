@@ -8,6 +8,36 @@
     "reviewJoinRequests": "Review join requests",
     "allSet": "You're all set"
   },
+  "focus": {
+    "welcomeSubtitle": "Let's get your family ready.",
+    "progress": "Step {{current}} of {{total}}",
+    "progressLabel": "Setup progress",
+    "steps": {
+      "addChild": {
+        "title": "Invite or add your first child",
+        "description": "Your family needs a child before tasks and rewards mean anything.",
+        "duration": "This usually takes less than 30 seconds.",
+        "cta": "Add your first child"
+      },
+      "pendingInvite": {
+        "title": "Waiting for your child to join",
+        "description": "Share the family code again if they haven't joined yet.",
+        "duration": "They can join in less than 30 seconds."
+      },
+      "createReward": {
+        "title": "Create your first reward",
+        "description": "Rewards give your child something to work towards.",
+        "duration": "This usually takes less than 20 seconds.",
+        "cta": "Create your first reward"
+      },
+      "createTask": {
+        "title": "Create your first task",
+        "description": "Tasks are how your child earns points and rewards.",
+        "duration": "This usually takes less than 20 seconds.",
+        "cta": "Create your first task"
+      }
+    }
+  },
   "continueSetup": {
     "allDone": "You're all set! Your family is ready to go.",
     "inProgress": "Complete these steps to finish setting up your family."

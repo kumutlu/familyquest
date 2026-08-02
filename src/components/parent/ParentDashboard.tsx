@@ -27,6 +27,8 @@ import { NextActionCard } from '../next-action/NextActionCard';
 import { InviteMemberCard } from '../dashboard/InviteMemberCard';
 import { AddChildModal } from '../family/AddChildModal';
 import { shouldShowFamilySetupPrompt } from '../../lib/familySetup';
+import { FocusModeDashboard } from './dashboard/FocusModeDashboard';
+import { getFocusModeState } from '../../lib/focusMode';
 
 const joinRequestProcessingKey = (request: { id: string; uid: string }) => `join:${request.id}:${request.uid}`;
 
@@ -38,6 +40,8 @@ export function ParentDashboard() {
     familyMembers,
     familyData,
     joinRequests,
+    rewards = [],
+    tasks = [],
     loading,
     bootstrapError,
     appReady,
@@ -105,6 +109,25 @@ export function ParentDashboard() {
 
   const petBoxEnabled = isPetBoxEnabled(familyData);
   const summaryCols = petBoxEnabled ? 'lg:grid-cols-4' : 'lg:grid-cols-3';
+
+  const focus = getFocusModeState({ familyMembers, rewards, tasks, joinRequests, currentUser });
+
+  // Focus Mode: while setup is incomplete, suppress every non-essential
+  // dashboard section and show a single guided next action instead.
+  if (focus.isFocusMode) {
+    return (
+      <div data-testid="dashboard-focus-mode">
+        <FocusModeDashboard onAddChild={() => setIsAddChildOpen(true)} />
+
+        {isAddChildOpen && (
+          <AddChildModal
+            familyId={currentUser.familyId}
+            onClose={() => setIsAddChildOpen(false)}
+          />
+        )}
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-8 animate-in fade-in duration-300 pb-8">
