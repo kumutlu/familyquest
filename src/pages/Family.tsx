@@ -137,16 +137,20 @@ export function Family() {
             </Button>
           )}
           {isOwnerRole(currentUser?.role) && (
-            <>
-              <Button variant="outline" size="sm" onClick={() => setIsAddChildOpen(true)} className="border-primary-300 text-primary-700 hover:bg-primary-50 whitespace-nowrap">
-                <UserPlus size={16} className="mr-1 shrink-0" />
-                {t('addChild')}
-              </Button>
-              <Button variant="secondary" size="sm" onClick={() => setIsInviteOpen(true)} className="bg-primary-50 text-primary-700 border-primary-300 hover:bg-primary-100 whitespace-nowrap">
-                <UserPlus size={16} className="mr-1 shrink-0" />
-                {t('inviteMember')}
-              </Button>
-            </>
+            <Button variant="outline" size="sm" onClick={() => setIsAddChildOpen(true)} className="border-primary-300 text-primary-700 hover:bg-primary-50 whitespace-nowrap">
+              <UserPlus size={16} className="mr-1 shrink-0" />
+              {t('addChild')}
+            </Button>
+          )}
+          {/* Inviting is a parent-level capability, not an owner-only one: a
+              second parent/adult must be able to share the family code too.
+              Gating this on the owner role left every non-owner parent with no
+              working invite entry point at all. */}
+          {isParentRole(currentUser?.role) && (
+            <Button variant="secondary" size="sm" onClick={() => setIsInviteOpen(true)} className="bg-primary-50 text-primary-700 border-primary-300 hover:bg-primary-100 whitespace-nowrap">
+              <UserPlus size={16} className="mr-1 shrink-0" />
+              {t('inviteMember')}
+            </Button>
           )}
         </div>
       </header>
@@ -365,12 +369,28 @@ export function Family() {
         />
       )}
 
-      {/* Invite Member Modal */}
+      {/* Invite Member Modal.
+          Rendered as a real dialog: labelled for screen readers, dismissible
+          with Escape and with a backdrop click, and focused on open. */}
       {isInviteOpen && (
-        <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-gray-900/40 backdrop-blur-sm">
-          <div className="bg-white w-full sm:max-w-md sm:rounded-3xl rounded-t-3xl shadow-xl overflow-hidden flex flex-col">
+        <div
+          className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-gray-900/40 backdrop-blur-sm"
+          onClick={() => setIsInviteOpen(false)}
+          onKeyDown={event => {
+            if (event.key === 'Escape') setIsInviteOpen(false);
+          }}
+        >
+          <div
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="invite-member-dialog-title"
+            tabIndex={-1}
+            ref={node => node?.focus()}
+            onClick={event => event.stopPropagation()}
+            className="bg-white w-full sm:max-w-md sm:rounded-3xl rounded-t-3xl shadow-xl overflow-hidden flex flex-col focus:outline-none"
+          >
             <div className="px-6 py-4 flex justify-between items-center border-b border-gray-100">
-              <h3 className="text-xl font-bold text-gray-900">{t('inviteMember')}</h3>
+              <h3 id="invite-member-dialog-title" className="text-xl font-bold text-gray-900">{t('inviteMember')}</h3>
               <button
                 onClick={() => setIsInviteOpen(false)}
                 aria-label={tCommon('closeDialog')}

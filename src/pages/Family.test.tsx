@@ -86,7 +86,10 @@ describe('Family page', () => {
       currentUser: { id: 'b', role: 'parent', familyId: 'f1' },
       familyMembers: []
     });
-    expect(screen.getAllByRole('button').length).toBe(4);
+    // A parent (non-owner) gets the Invite Member button too — inviting is a
+    // parent-level capability, not owner-only. This count is the regression
+    // guard for the P0 fix where the button was missing for non-owner parents.
+    expect(screen.getAllByRole('button').length).toBe(5);
     unmountParent();
 
     renderFamily({

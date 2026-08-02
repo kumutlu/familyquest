@@ -13,7 +13,10 @@ export async function loginAs(page: Page, email: string) {
   // Submit the form
   await page.click('button[type="submit"]');
 
-  // Wait for the dashboard to load
+  // Wait for the post-login redirect to leave the login route. Waiting on the
+  // URL (rather than only on the "Queki" text) is more robust against transient
+  // auth-emulator latency and avoids flaky "still on the login page" failures.
+  await page.waitForURL(url => url.pathname !== '/login', { timeout: 15000 });
   await expect(page.locator('text="Queki"').first()).toBeVisible({ timeout: 10000 });
 }
 
