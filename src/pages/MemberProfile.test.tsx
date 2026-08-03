@@ -18,7 +18,7 @@ vi.mock('../components/reversals/HistoryActionControl', () => ({ HistoryActionCo
 vi.mock('../components/dashboard/GamificationSummaryCard', () => ({
   GamificationSummaryCard: ({ summary }: { summary: any }) => (
     <div data-testid="gamification-summary">
-      {summary?.isAvailable ? `Level ${summary.level}` : 'Loading…'}
+      {summary?.isAvailable ? `Streaks for level ${summary.level}` : 'Loading…'}
     </div>
   ),
 }));
@@ -31,7 +31,7 @@ describe('MemberProfile gamification summary', () => {
     await i18n.changeLanguage('en');
   });
 
-  it('shows loading state when summary is unavailable', () => {
+  it('still shows progression (derived from lifetime XP) when the projection is unavailable', () => {
     store.state = {
       familyMembers: [{ id: 'child-1', role: 'child', displayName: 'Test Child', rewardPoints: 100 }],
       loading: false,
@@ -46,8 +46,10 @@ describe('MemberProfile gamification summary', () => {
         </Routes>
       </MemoryRouter>
     );
-    expect(screen.getByTestId('gamification-summary')).toBeInTheDocument();
-    expect(screen.getByText('Loading…')).toBeInTheDocument();
+    // No streak card (no server projection) but progression is always present.
+    expect(screen.queryByTestId('gamification-summary')).not.toBeInTheDocument();
+    expect(screen.getByTestId('profile-progression')).toBeInTheDocument();
+    expect(screen.getByTestId('profile-level')).toHaveTextContent('Level 1');
   });
 
   it('shows gamification summary for available child data', () => {
@@ -101,10 +103,10 @@ describe('MemberProfile gamification summary', () => {
       </MemoryRouter>
     );
     expect(screen.getByTestId('gamification-summary')).toBeInTheDocument();
-    expect(screen.getByText('Level 3')).toBeInTheDocument();
+    expect(screen.getByTestId('profile-level')).toHaveTextContent('Level 3');
   });
 
-  it('shows rebuilding state when rebuildRequired is true', () => {
+  it('hides the streak card but keeps progression when rebuildRequired is true', () => {
     store.state = {
       familyMembers: [{ id: 'child-1', role: 'child', displayName: 'Test Child', rewardPoints: 100 }],
       loading: false,
@@ -135,11 +137,11 @@ describe('MemberProfile gamification summary', () => {
         </Routes>
       </MemoryRouter>
     );
-    expect(screen.getByTestId('gamification-summary')).toBeInTheDocument();
-    expect(screen.getByText('Loading…')).toBeInTheDocument();
+    expect(screen.queryByTestId('gamification-summary')).not.toBeInTheDocument();
+    expect(screen.getByTestId('profile-progression')).toBeInTheDocument();
   });
 
-  it('shows no misleading zeroes when summary is unavailable', () => {
+  it('shows no misleading streak data when the projection is unavailable', () => {
     store.state = {
       familyMembers: [{ id: 'child-1', role: 'child', displayName: 'Test Child', rewardPoints: 100 }],
       loading: false,
@@ -154,7 +156,7 @@ describe('MemberProfile gamification summary', () => {
         </Routes>
       </MemoryRouter>
     );
-    // Should show "Loading…" not "0" for streaks/level
+    // Streak stats are projection-only; never invented from the fallback.
     expect(screen.queryByText('Level 0')).not.toBeInTheDocument();
     expect(screen.queryByText('Current Streak')).not.toBeInTheDocument();
   });
@@ -214,7 +216,7 @@ describe('MemberProfile gamification summary', () => {
     );
     // Should show child-2's summary (level 3), not child-1's (level 2)
     expect(screen.getByText('Child Two')).toBeInTheDocument();
-    expect(screen.getByText('Level 3')).toBeInTheDocument();
+    expect(screen.getByTestId('profile-level')).toHaveTextContent('Level 3');
   });
 
   it('shows not found when member does not exist', () => {

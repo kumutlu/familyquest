@@ -1,4 +1,6 @@
 import type { GamificationSummaryV1, DailyProgressV1 } from '../domain/gamification/types'
+import { GAMIFICATION_CONFIG_V1 } from '../domain/gamification/config'
+import { levelProgressForXp } from '../domain/gamification/level'
 
 /**
  * View model for gamification summary display.
@@ -19,9 +21,10 @@ export interface GamificationSummaryView {
 }
 
 /**
- * XP per level constant (from GAMIFICATION_CONFIG_V1)
+ * XP per level constant — sourced from the canonical gamification config so the
+ * UI can never drift from the server-side level formula.
  */
-const XP_PER_LEVEL = 1000
+const XP_PER_LEVEL = GAMIFICATION_CONFIG_V1.xpPerLevel
 
 /**
  * Adapts a GamificationSummaryV1 and optional DailyProgressV1 into a view model
@@ -72,11 +75,64 @@ export function adaptGamificationSummary(
 }
 
 /**
+ * Progression view model.
+ *
+ * Unlike {@link GamificationSummaryView} this view is *always* complete: when the
+ * server-side gamification projection is missing, dirty or still rebuilding we
+ * derive the progression from the member's authoritative `lifetimeXP` balance
+ * (the same value the XP awards are written to in `users/{id}`), so the profile
+ * never renders an empty progression block.
+ */
+export interface ProgressionView {
+  readonly level: number
+  readonly xpTotal: number
+  readonly lifetimeXp: number
+  readonly xpProgressInLevel: number
+  readonly xpToNextLevel: number
+  readonly percentage: number
+  readonly source: 'projection' | 'derived'
+}
+
+/**
+ * Resolves the progression to display for a member.
+ *
+ * @param summary  Gamification projection document (may be null/dirty/rebuilding).
+ * @param member   Member record providing the `lifetimeXP` fallback.
+ */
+export function resolveProgression(
+  summary: GamificationSummaryV1 | null | undefined,
+  member: { lifetimeXP?: number | null } | null | undefined,
+): ProgressionView {
+  const projectionUsable =
+    !!summary && !summary.rebuildRequired && summary.projectionStatus !== 'rebuilding'
+
+  const rawXp = projectionUsable ? Number(summary!.xpTotal) : Number(member?.lifetimeXP)
+  // `levelProgressForXp` (the canonical formula) requires a non-negative safe
+  // integer, so normalise defensively before delegating to it.
+  const xpTotal = Number.isFinite(rawXp) ? Math.max(0, Math.floor(rawXp)) : 0
+
+  // Single source of truth: the same helper the engine and the Cloud Functions
+  // projection use (`levelForXp` / `levelProgressForXp` with the config's
+  // `xpPerLevel`). No independent formula lives here.
+  const progress = levelProgressForXp(xpTotal, XP_PER_LEVEL)
+
+  return {
+    level: projectionUsable ? summary!.level : progress.level,
+    xpTotal,
+    lifetimeXp: xpTotal,
+    xpProgressInLevel: progress.xpIntoLevel,
+    xpToNextLevel: progress.xpToNextLevel,
+    percentage: progress.percentage,
+    source: projectionUsable ? 'projection' : 'derived',
+  }
+}
+
+/**
  * Computes the level from XP total.
- * Level = floor(xpTotal / XP_PER_LEVEL) + 1
+ * Thin wrapper over the canonical {@link levelProgressForXp} helper.
  */
 export function levelFromXp(xpTotal: number): number {
-  return Math.floor(xpTotal / XP_PER_LEVEL) + 1
+  return levelProgressForXp(xpTotal, XP_PER_LEVEL).level
 }
 
 /**

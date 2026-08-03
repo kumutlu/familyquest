@@ -357,7 +357,7 @@ describe('Phase 2D i18n — Member profile (English)', () => {
     );
     expect(screen.getByText('Profile')).toBeInTheDocument();
     expect(screen.getByText('0 Reward Points')).toBeInTheDocument();
-    expect(screen.getByText('Level 1')).toBeInTheDocument();
+    expect(screen.getAllByText('Level 1').length).toBeGreaterThan(0);
     expect(screen.getByText('0 Total XP')).toBeInTheDocument();
     expect(screen.getByText('Current Streak')).toBeInTheDocument();
     expect(screen.getByText('Best Streak')).toBeInTheDocument();
@@ -398,7 +398,7 @@ describe('Phase 2D i18n — Member profile (Turkish)', () => {
     );
     expect(screen.getByText('Profil')).toBeInTheDocument();
     expect(screen.getByText('0 Ödül Puanı')).toBeInTheDocument();
-    expect(screen.getByText('Seviye 1')).toBeInTheDocument();
+    expect(screen.getAllByText('Seviye 1').length).toBeGreaterThan(0);
     expect(screen.getByText('0 Toplam XP')).toBeInTheDocument();
     expect(screen.getByText('Mevcut Seri')).toBeInTheDocument();
     expect(screen.getByText('En İyi Seri')).toBeInTheDocument();

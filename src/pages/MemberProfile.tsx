@@ -11,7 +11,7 @@ import { cn } from '../lib/utils';
 import { formatDate } from '../i18n/format';
 import { HistoryActionControl } from '../components/reversals/HistoryActionControl';
 import { GamificationSummaryCard } from '../components/dashboard/GamificationSummaryCard';
-import { adaptGamificationSummary } from '../lib/gamificationAdapters';
+import { adaptGamificationSummary, resolveProgression } from '../lib/gamificationAdapters';
 import type { GamificationSummaryV1, DailyProgressV1 } from '../domain/gamification/types';
 
 /**
@@ -41,19 +41,37 @@ function formatDayKey(date: Date): string {
 export function MemberProfile() {
   const { t } = useTranslation(['profile', 'dashboard']);
   const { id } = useParams();
-  const { familyMembers, loading, behaviourEvents, gamificationSummaries, dailyProgress } = useStore();
+  const {
+    familyMembers,
+    loading,
+    behaviourEvents,
+    gamificationSummaries,
+    dailyProgress,
+    myGamificationSummary,
+    currentUser,
+  } = useStore();
 
   if (loading) return <PageLoader label={t('profile:loading')} />;
 
   const member = familyMembers.find(m => m.id === id);
   if (!member) return <div className="p-8 text-center text-gray-500">{t('profile:notFound')}</div>;
 
-  // Get gamification summary for this child
-  const summaryDoc = gamificationSummaries.find(
-    (s: GamificationSummaryV1) => s.childId === id,
-  ) ?? null;
+  // Get gamification summary for this child.
+  //
+  // Children are not allowed to read the whole `gamification_summaries`
+  // collection, so the store only populates `myGamificationSummary` for them
+  // (`gamificationSummaries` stays empty). Reading the collection alone made the
+  // progression permanently unavailable for a child viewing their own profile.
+  const summaryDoc =
+    (gamificationSummaries.find((s: GamificationSummaryV1) => s.childId === id) ?? null) ||
+    (myGamificationSummary && (myGamificationSummary.childId === id || currentUser?.id === id)
+      ? (myGamificationSummary as GamificationSummaryV1)
+      : null);
   const todaysProgress = getTodaysProgress(dailyProgress, id!, formatDayKey(new Date()));
   const gamificationView = adaptGamificationSummary(summaryDoc, todaysProgress);
+  // Always-complete progression: falls back to the member's lifetimeXP balance
+  // when the server projection is missing or rebuilding.
+  const progression = resolveProgression(summaryDoc, member);
 
   const userEvents = behaviourEvents.filter(e => e.userId === id).slice(0, 10);
 
@@ -69,15 +87,12 @@ export function MemberProfile() {
       <div className="flex flex-col items-center text-center space-y-4 py-4">
         <div className="relative">
           <Avatar src={member.avatarUrl} fallback={member.displayName[0]} size="xl" className="w-24 h-24 ring-4 ring-white shadow-xl" />
-          {gamificationView?.isAvailable ? (
-            <div className="absolute -bottom-2 -right-2 bg-primary-500 text-white w-8 h-8 rounded-full flex items-center justify-center font-bold border-2 border-white shadow-sm">
-              {gamificationView.level}
-            </div>
-          ) : (
-            <div className="absolute -bottom-2 -right-2 bg-gray-300 text-white w-8 h-8 rounded-full flex items-center justify-center font-bold border-2 border-white shadow-sm">
-              ?
-            </div>
-          )}
+          <div
+            data-testid="profile-avatar-level-badge"
+            className="absolute -bottom-2 -right-2 bg-primary-500 text-white w-8 h-8 rounded-full flex items-center justify-center font-bold border-2 border-white shadow-sm"
+          >
+            {progression.level}
+          </div>
         </div>
 
         <div>
@@ -86,8 +101,60 @@ export function MemberProfile() {
         </div>
       </div>
 
-      {/* Gamification summary card - shows level, XP, streaks, and daily progress */}
-      <GamificationSummaryCard summary={gamificationView} />
+      {/* Progression — always rendered from the projection or the lifetimeXP fallback */}
+      <Card data-testid="profile-progression" className="border-none bg-primary-500 text-white">
+        <CardContent className="p-4">
+          <div className="flex items-baseline justify-between">
+            <p data-testid="profile-level" className="text-sm font-bold uppercase tracking-wider">
+              {t('profile:level', { level: progression.level })}
+            </p>
+            <span className="text-sm font-medium text-primary-100">{progression.percentage}%</span>
+          </div>
+
+          <div className="mt-3 h-2.5 w-full overflow-hidden rounded-full bg-primary-700">
+            <div
+              data-testid="profile-progress-bar"
+              role="progressbar"
+              aria-valuenow={progression.percentage}
+              aria-valuemin={0}
+              aria-valuemax={100}
+              className="h-2.5 rounded-full bg-white transition-all duration-500 ease-out"
+              style={{ width: `${progression.percentage}%` }}
+            />
+          </div>
+
+          <div className="mt-3 flex items-center justify-between text-xs font-medium text-primary-100">
+            <span data-testid="profile-current-xp">
+              {t('profile:currentXp', { count: progression.xpProgressInLevel })}
+            </span>
+            <span data-testid="profile-next-level-xp">
+              {t('profile:toNextLevel', { count: progression.xpToNextLevel })}
+            </span>
+          </div>
+
+          <div className="mt-4 grid grid-cols-2 gap-3 text-center">
+            <div>
+              <p className="text-xs font-bold uppercase tracking-wider text-primary-200">
+                {t('profile:rewardPointsLabel')}
+              </p>
+              <p data-testid="profile-reward-points" className="font-bold text-white">
+                {member.rewardPoints || 0}
+              </p>
+            </div>
+            <div>
+              <p className="text-xs font-bold uppercase tracking-wider text-primary-200">
+                {t('profile:lifetimeXpLabel')}
+              </p>
+              <p data-testid="profile-lifetime-xp" className="font-bold text-white">
+                {progression.lifetimeXp}
+              </p>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Streaks / daily goal detail — only when the server projection is available */}
+      {gamificationView.isAvailable && <GamificationSummaryCard summary={gamificationView} />}
 
       <section>
         <h2 className="text-lg font-bold text-gray-900 mb-4">{t('profile:behaviourHistory')}</h2>
