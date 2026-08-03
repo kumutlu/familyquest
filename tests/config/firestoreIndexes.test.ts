@@ -8,9 +8,25 @@ describe('Firestore composite index configuration', () => {
     const indexConfig = JSON.parse(readFileSync('firestore.indexes.json', 'utf8'))
 
     expect(firebaseConfig.firestore.indexes).toBe('firestore.indexes.json')
-    expect(indexConfig).toEqual({
-      indexes: bootstrapCompositeIndexes,
-      fieldOverrides: [],
+    expect(indexConfig.indexes).toEqual(bootstrapCompositeIndexes)
+    expect(Object.keys(indexConfig).sort()).toEqual(['fieldOverrides', 'indexes'])
+  })
+
+  it('retains the single-field override required by the invitation collection-group query', () => {
+    // functions/src/familyInvitations.ts runs
+    //   db.collectionGroup('invitations').where('code', '==', code)
+    // which requires an explicit COLLECTION_GROUP scoped single-field index on
+    // `code`. Automatic single-field indexes are COLLECTION scoped only, so this
+    // override is required by a real production query and must not be removed.
+    const indexConfig = JSON.parse(readFileSync('firestore.indexes.json', 'utf8'))
+
+    const override = indexConfig.fieldOverrides.find(
+      (entry: any) => entry.collectionGroup === 'invitations' && entry.fieldPath === 'code',
+    )
+    expect(override).toBeDefined()
+    expect(override.indexes).toContainEqual({
+      order: 'ASCENDING',
+      queryScope: 'COLLECTION_GROUP',
     })
   })
 
