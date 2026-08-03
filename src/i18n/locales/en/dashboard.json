@@ -89,6 +89,8 @@
   "gamification": {
     "level": "Level {{level}}",
     "loading": "Loading…",
+    "unavailableTitle": "Progress",
+    "unavailable": "Progress details aren't available right now.",
     "updating": "Updating…",
     "xpTotal": "{{xp}} Total XP",
     "xpToNext": "{{xp}} XP to Level {{level}}",

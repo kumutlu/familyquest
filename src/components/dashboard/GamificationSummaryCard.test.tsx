@@ -24,6 +24,8 @@ vi.mock('react-i18next', () => ({
         'gamification.perfectDay': 'Perfect Day',
         'gamification.rebuilding': 'Updating…',
         'gamification.noEligibleTasks': 'No tasks today',
+        'gamification.unavailableTitle': 'Progress',
+        'gamification.unavailable': "Progress details aren't available right now.",
       };
       return translations[key] || key;
     },
@@ -31,17 +33,24 @@ vi.mock('react-i18next', () => ({
 }));
 
 describe('GamificationSummaryCard', () => {
-  it('renders skeleton placeholder when summary is null', () => {
-    render(<GamificationSummaryCard summary={null} />);
+  it('renders skeleton placeholder when summary is null and a request is in flight', () => {
+    render(<GamificationSummaryCard summary={null} loading />);
     expect(screen.getByTestId('gamification-summary-skeleton')).toBeInTheDocument();
     // Must never look like a real production card
     expect(screen.queryByText(/Level 1/)).not.toBeInTheDocument();
     expect(screen.queryByText(/Updating/)).not.toBeInTheDocument();
   });
 
-  it('renders skeleton placeholder when summary is undefined', () => {
-    render(<GamificationSummaryCard summary={undefined as any} />);
+  it('renders skeleton placeholder when summary is undefined and a request is in flight', () => {
+    render(<GamificationSummaryCard summary={undefined as any} loading />);
     expect(screen.getByTestId('gamification-summary-skeleton')).toBeInTheDocument();
+    expect(screen.queryByText(/Level 1/)).not.toBeInTheDocument();
+  });
+
+  it('renders the fallback card when summary is null and nothing is loading', () => {
+    render(<GamificationSummaryCard summary={null} />);
+    expect(screen.queryByTestId('gamification-summary-skeleton')).not.toBeInTheDocument();
+    expect(screen.getByTestId('gamification-summary-unavailable')).toBeInTheDocument();
     expect(screen.queryByText(/Level 1/)).not.toBeInTheDocument();
   });
 
@@ -60,7 +69,8 @@ describe('GamificationSummaryCard', () => {
       isAvailable: false,
     };
     render(<GamificationSummaryCard summary={summary} />);
-    expect(screen.getByTestId('gamification-summary-skeleton')).toBeInTheDocument();
+    expect(screen.getByTestId('gamification-summary-unavailable')).toBeInTheDocument();
+    expect(screen.queryByTestId('gamification-summary-skeleton')).not.toBeInTheDocument();
     expect(screen.queryByText(/Level 1/)).not.toBeInTheDocument();
     expect(screen.queryByText(/Updating/)).not.toBeInTheDocument();
   });

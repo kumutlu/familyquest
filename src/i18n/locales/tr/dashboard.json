@@ -89,6 +89,8 @@
   "gamification": {
     "level": "Seviye {{level}}",
     "loading": "Yükleniyor…",
+    "unavailableTitle": "İlerleme",
+    "unavailable": "İlerleme ayrıntıları şu anda kullanılamıyor.",
     "updating": "Güncelleniyor…",
     "xpTotal": "{{xp}} Toplam XP",
     "xpToNext": "{{xp}} XP seviye {{level}}'e",
