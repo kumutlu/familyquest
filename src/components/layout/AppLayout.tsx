@@ -136,8 +136,17 @@ export function AppLayout() {
         <Outlet />
       </main>
 
-      {/* Bottom Navigation (Mobile Only) */}
-      <nav className="md:hidden fixed bottom-0 left-0 right-0 bg-white border-t border-gray-100 pb-[env(safe-area-inset-bottom)] z-40">
+      {/* Bottom Navigation (Mobile Only).
+          Single shared instance owned by the app shell. It is the last child of
+          the layout root and must never be nested inside transformed or
+          scrolling containers, otherwise `position: fixed` would resolve
+          against that ancestor instead of the viewport. */}
+      <nav
+        data-testid="mobile-bottom-nav"
+        aria-label={t('nav.primary', { defaultValue: 'Primary' })}
+        className="md:hidden fixed inset-x-0 bottom-0 bg-white border-t border-gray-100 pb-[env(safe-area-inset-bottom)] z-40"
+        style={{ position: 'fixed', left: 0, right: 0, bottom: 0 }}
+      >
         <div className="flex justify-around items-center h-16">
           {navItems.map((item) => {
             const isActive = location.pathname === item.path;
