@@ -103,12 +103,20 @@ describe('gamification allowlist — traceability to the inventory', () => {
   })
 
   it('every inventory item marked TEMPORARY COMPATIBILITY has a removal phase', () => {
-    const rows = inventoryText.split('\n').filter((l) => l.includes('TEMPORARY COMPATIBILITY'))
-    expect(rows.length).toBeGreaterThan(0)
-    for (const row of rows) {
-      if (row.trim().startsWith('|') && row.includes('Meaning')) continue
-      if (row.trim().startsWith('| **TEMPORARY COMPATIBILITY**')) continue
-      expect(/Phase\s\d/.test(row), `no removal phase: ${row.slice(0, 120)}`).toBe(true)
+    // Per-file disposition headings look like:
+    //   #### `path` — TEMPORARY COMPATIBILITY · Phase 6 · risk Low
+    const items = inventoryText
+      .split('\n')
+      .filter((l) => l.startsWith('####') && l.includes('TEMPORARY COMPATIBILITY'))
+    expect(items.length).toBeGreaterThan(0)
+    for (const item of items) {
+      expect(/Phase\s\d/.test(item), `no removal phase: ${item.slice(0, 120)}`).toBe(true)
+    }
+  })
+
+  it('marks no allowlisted frontend file as TEMPORARY COMPATIBILITY without a phase', () => {
+    for (const entry of allowlist.entries) {
+      expect(VALID_PHASES).toContain(entry.removalPhase)
     }
   })
 })

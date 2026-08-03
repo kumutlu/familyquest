@@ -1,0 +1,163 @@
+{
+  "$schema": "./gamification-allowlist.schema.json",
+  "description": "Shrink-only allowlist of pre-existing gamification boundary violations. Entries may be removed, never added. See docs/gamification-v3/05-current-state-inventory.md.",
+  "inventory": "docs/gamification-v3/05-current-state-inventory.md",
+  "baselineGeneratedAt": "2026-08-03",
+  "baselineEntryCount": 16,
+  "entries": [
+    {
+      "path": "src/components/dashboard/GamificationSummaryCard.tsx",
+      "violations": [
+        "local-level-formula"
+      ],
+      "inventory": "docs/gamification-v3/05-current-state-inventory.md#4-summary-table--all-direct-firestore-gamification-reads-from-the-ui-layer",
+      "removalPhase": "Phase 4",
+      "note": "Phase 0 baseline violation. Removed when this file moves to the single reader/writer."
+    },
+    {
+      "path": "src/components/parent/dashboard/ChildSummaryCard.tsx",
+      "violations": [
+        "local-level-formula",
+        "user-balance-read"
+      ],
+      "inventory": "docs/gamification-v3/05-current-state-inventory.md#4-summary-table--all-direct-firestore-gamification-reads-from-the-ui-layer",
+      "removalPhase": "Phase 4",
+      "note": "Phase 0 baseline violation. Removed when this file moves to the single reader/writer."
+    },
+    {
+      "path": "src/components/profile/ProfileEditorModal.tsx",
+      "violations": [
+        "firestore-import",
+        "user-balance-read"
+      ],
+      "inventory": "docs/gamification-v3/05-current-state-inventory.md#4-summary-table--all-direct-firestore-gamification-reads-from-the-ui-layer",
+      "removalPhase": "Phase 4",
+      "note": "Phase 0 baseline violation. Removed when this file moves to the single reader/writer."
+    },
+    {
+      "path": "src/components/reversals/ReversalHistoryPanel.tsx",
+      "violations": [
+        "user-balance-read"
+      ],
+      "inventory": "docs/gamification-v3/05-current-state-inventory.md#4-summary-table--all-direct-firestore-gamification-reads-from-the-ui-layer",
+      "removalPhase": "Phase 3",
+      "note": "Phase 0 baseline violation. Removed when this file moves to the single reader/writer."
+    },
+    {
+      "path": "src/lib/achievements.ts",
+      "violations": [
+        "user-balance-read"
+      ],
+      "inventory": "docs/gamification-v3/05-current-state-inventory.md#3-summary-table--all-ui-side-gamification-calculations",
+      "removalPhase": "Phase 4",
+      "note": "Phase 0 baseline violation. Removed when this file moves to the single reader/writer."
+    },
+    {
+      "path": "src/lib/api.ts",
+      "violations": [
+        "balance-write",
+        "firestore-import",
+        "user-balance-read"
+      ],
+      "inventory": "docs/gamification-v3/05-current-state-inventory.md#2-summary-table--all-client-side-gamification-writes",
+      "removalPhase": "Phase 3",
+      "note": "Phase 0 baseline violation. Removed when this file moves to the single reader/writer."
+    },
+    {
+      "path": "src/lib/behaviour.ts",
+      "violations": [
+        "user-balance-read"
+      ],
+      "inventory": "docs/gamification-v3/05-current-state-inventory.md#2-summary-table--all-client-side-gamification-writes",
+      "removalPhase": "Phase 3",
+      "note": "Phase 0 baseline violation. Removed when this file moves to the single reader/writer."
+    },
+    {
+      "path": "src/lib/bootstrapQueries.ts",
+      "violations": [
+        "firestore-import",
+        "summary-read"
+      ],
+      "inventory": "docs/gamification-v3/05-current-state-inventory.md#3-summary-table--all-ui-side-gamification-calculations",
+      "removalPhase": "Phase 4",
+      "note": "Phase 0 baseline violation. Removed when this file moves to the single reader/writer."
+    },
+    {
+      "path": "src/lib/gamificationAdapters.ts",
+      "violations": [
+        "local-level-formula",
+        "user-balance-read"
+      ],
+      "inventory": "docs/gamification-v3/05-current-state-inventory.md#6-summary-table--legacy-fallbacks",
+      "removalPhase": "Phase 4",
+      "note": "Phase 0 baseline violation. Removed when this file moves to the single reader/writer."
+    },
+    {
+      "path": "src/lib/googleRedirectAuth.ts",
+      "violations": [
+        "firestore-import"
+      ],
+      "inventory": "docs/gamification-v3/05-current-state-inventory.md#2-summary-table--all-client-side-gamification-writes",
+      "removalPhase": "Phase 3",
+      "note": "Phase 0 baseline violation. Removed when this file moves to the single reader/writer."
+    },
+    {
+      "path": "src/lib/reversalApi.ts",
+      "violations": [
+        "balance-write",
+        "firestore-import",
+        "user-balance-read"
+      ],
+      "inventory": "docs/gamification-v3/05-current-state-inventory.md#2-summary-table--all-client-side-gamification-writes",
+      "removalPhase": "Phase 3",
+      "note": "Phase 0 baseline violation. Removed when this file moves to the single reader/writer."
+    },
+    {
+      "path": "src/lib/reversalHistory.ts",
+      "violations": [
+        "user-balance-read"
+      ],
+      "inventory": "docs/gamification-v3/05-current-state-inventory.md#2-summary-table--all-client-side-gamification-writes",
+      "removalPhase": "Phase 3",
+      "note": "Phase 0 baseline violation. Removed when this file moves to the single reader/writer."
+    },
+    {
+      "path": "src/pages/Dashboard.tsx",
+      "violations": [
+        "user-balance-read"
+      ],
+      "inventory": "docs/gamification-v3/05-current-state-inventory.md#4-summary-table--all-direct-firestore-gamification-reads-from-the-ui-layer",
+      "removalPhase": "Phase 4",
+      "note": "Phase 0 baseline violation. Removed when this file moves to the single reader/writer."
+    },
+    {
+      "path": "src/pages/Family.tsx",
+      "violations": [
+        "gamification-arithmetic",
+        "user-balance-read",
+        "weekly-from-completions"
+      ],
+      "inventory": "docs/gamification-v3/05-current-state-inventory.md#7-summary-table--independent-leaderboard-calculations",
+      "removalPhase": "Phase 4",
+      "note": "Phase 0 baseline violation. Removed when this file moves to the single reader/writer."
+    },
+    {
+      "path": "src/pages/MemberProfile.tsx",
+      "violations": [
+        "user-balance-read"
+      ],
+      "inventory": "docs/gamification-v3/05-current-state-inventory.md#4-summary-table--all-direct-firestore-gamification-reads-from-the-ui-layer",
+      "removalPhase": "Phase 4",
+      "note": "Phase 0 baseline violation. Removed when this file moves to the single reader/writer."
+    },
+    {
+      "path": "src/pages/Rewards.tsx",
+      "violations": [
+        "user-balance-read"
+      ],
+      "inventory": "docs/gamification-v3/05-current-state-inventory.md#4-summary-table--all-direct-firestore-gamification-reads-from-the-ui-layer",
+      "removalPhase": "Phase 4",
+      "note": "Phase 0 baseline violation. Removed when this file moves to the single reader/writer."
+    }
+  ]
+}
