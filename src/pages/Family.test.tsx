@@ -187,15 +187,29 @@ describe('Family page', () => {
       expect(await screen.findByRole('dialog')).toBeInTheDocument();
     });
 
-    it('Invite Member opens the invite flow showing the family invite code', async () => {
+    it('Invite Member opens the redesigned invite flow without exposing any code', async () => {
       const user = userEvent.setup();
       renderFamily(ownerState);
 
-      expect(screen.queryByText('ABC123')).toBeNull();
+      expect(screen.queryByRole('heading', { name: 'Invite someone' })).toBeNull();
 
       await user.click(screen.getByRole('button', { name: /invite member/i }));
 
-      expect(await screen.findByText('ABC123')).toBeInTheDocument();
+      expect(await screen.findByRole('heading', { name: 'Invite someone' })).toBeInTheDocument();
+      expect(screen.getByText('Who would you like to add?')).toBeInTheDocument();
+      // The raw family code is never shown by default any more.
+      expect(screen.queryByText('ABC123')).toBeNull();
+    });
+
+    it('Managed Child jumps straight into the existing add-child flow', async () => {
+      const user = userEvent.setup();
+      renderFamily(ownerState);
+
+      await user.click(screen.getByRole('button', { name: /invite member/i }));
+      await user.click(await screen.findByRole('button', { name: /Create managed child/ }));
+
+      expect(screen.queryByRole('heading', { name: 'Invite someone' })).toBeNull();
+      expect(await screen.findByRole('dialog')).toBeInTheDocument();
     });
   });
 });

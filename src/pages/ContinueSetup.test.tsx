@@ -51,8 +51,8 @@ describe('ContinueSetup', () => {
     expect(
       screen.getByText('Complete these steps to finish setting up your family.'),
     ).toBeInTheDocument();
-    // Invite card is shown because the family has no other members yet.
-    expect(screen.getByText('ABC123')).toBeInTheDocument();
+    // Invite flow is shown because the family has no other members yet.
+    expect(screen.getByRole('heading', { name: 'Invite someone' })).toBeInTheDocument();
     // CTAs for the still-incomplete steps are offered.
     expect(screen.getByRole('button', { name: 'Create a reward' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Create a task' })).toBeInTheDocument();
@@ -67,7 +67,7 @@ describe('ContinueSetup', () => {
       </MemoryRouter>,
     );
     // Family invited + a reward exists, so only the task CTA remains.
-    expect(screen.queryByText('ABC123')).not.toBeInTheDocument();
+    expect(screen.queryByRole('heading', { name: 'Invite someone' })).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Create a reward' })).not.toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Create a task' })).toBeInTheDocument();
   });
@@ -97,7 +97,7 @@ describe('ContinueSetup', () => {
     expect(
       screen.getByText("You're all set! Your family is ready to go."),
     ).toBeInTheDocument();
-    expect(screen.queryByText('ABC123')).not.toBeInTheDocument();
+    expect(screen.queryByRole('heading', { name: 'Invite someone' })).not.toBeInTheDocument();
   });
 
   it('reflects persisted setup progress on re-entry after a reload', () => {

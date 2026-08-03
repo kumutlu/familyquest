@@ -383,24 +383,31 @@ export function Family() {
           <div
             role="dialog"
             aria-modal="true"
-            aria-labelledby="invite-member-dialog-title"
+            aria-label={t('invite.title')}
             tabIndex={-1}
             ref={node => node?.focus()}
             onClick={event => event.stopPropagation()}
             className="bg-white w-full sm:max-w-md sm:rounded-3xl rounded-t-3xl shadow-xl overflow-hidden flex flex-col focus:outline-none"
           >
-            <div className="px-6 py-4 flex justify-between items-center border-b border-gray-100">
-              <h3 id="invite-member-dialog-title" className="text-xl font-bold text-gray-900">{t('inviteMember')}</h3>
+            {/* A bottom sheet on mobile: a grabber, a single close affordance
+                and then the flow itself. The flow owns its own title so the
+                sheet never repeats it. */}
+            <div className="flex items-center justify-end px-4 pt-3">
               <button
                 onClick={() => setIsInviteOpen(false)}
                 aria-label={tCommon('closeDialog')}
-                className="p-2 -mr-2 bg-gray-100 hover:bg-gray-200 rounded-full text-gray-500"
+                className="h-11 w-11 flex items-center justify-center bg-gray-100 hover:bg-gray-200 rounded-full text-gray-500"
               >
                 ✕
               </button>
             </div>
-            <div className="p-6">
-              <InviteMemberCard />
+            <div className="px-5 pb-6 pt-1">
+              <InviteMemberCard
+                onManagedChild={() => {
+                  setIsInviteOpen(false);
+                  setIsAddChildOpen(true);
+                }}
+              />
             </div>
           </div>
         </div>

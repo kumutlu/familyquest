@@ -75,14 +75,14 @@ describe('FocusModeDashboard', () => {
     expect(onAddChild).toHaveBeenCalledTimes(1);
   });
 
-  it('shows the waiting state with copy and share secondary actions and no primary CTA', () => {
+  it('shows the waiting state with the invite flow and no primary CTA', () => {
     state.joinRequests = [{ id: 'jr1', status: 'pending', displayName: 'Ada' }];
     renderFocus();
 
     expect(screen.getByRole('heading', { name: 'Waiting for your child to join' })).toBeInTheDocument();
-    expect(screen.getByText('ABC123')).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: /copy/i })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: /share/i })).toBeInTheDocument();
+    // The invite flow starts from the role choice — never from a raw code.
+    expect(screen.getByRole('heading', { name: 'Invite someone' })).toBeInTheDocument();
+    expect(screen.queryByText('ABC123')).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Add your first child' })).not.toBeInTheDocument();
     expect(screen.getByText('Step 2 of 4')).toBeInTheDocument();
   });
