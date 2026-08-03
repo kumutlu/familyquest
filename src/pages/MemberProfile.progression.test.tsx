@@ -103,3 +103,89 @@ describe('MemberProfile progression section', () => {
     expect(screen.queryByTestId('gamification-summary-skeleton')).not.toBeInTheDocument();
   });
 });
+
+describe('MemberProfile progression for a parent viewing another member', () => {
+  beforeEach(async () => {
+    await i18n.loadNamespaces(['profile', 'dashboard']);
+    await i18n.changeLanguage('en');
+    store.state = {
+      currentUser: { id: 'parent-1', role: 'owner', lifetimeXP: 9000, rewardPoints: 999 },
+      familyMembers: [
+        { id: 'parent-1', role: 'owner', displayName: 'Parent One', rewardPoints: 999, lifetimeXP: 9000 },
+        { id: 'parent-2', role: 'parent', displayName: 'Parent Two', rewardPoints: 12, lifetimeXP: 3200 },
+        { id: 'child-1', role: 'child', displayName: 'Mnalium', rewardPoints: 100, lifetimeXP: 2500 },
+        { id: 'child-2', role: 'child', displayName: 'Alisya', rewardPoints: 40, lifetimeXP: 1250 },
+      ],
+      loading: false,
+      behaviourEvents: [],
+      gamificationSummaries: [],
+      dailyProgress: [],
+      // The signed-in parent's own projection must never leak into a child view.
+      myGamificationSummary: readyProjection('parent-1', 9000, 10),
+    };
+  });
+
+  it('renders the child values when no projection exists (regression)', () => {
+    renderProfile('/family/child-1');
+
+    expect(screen.getByText('Mnalium')).toBeInTheDocument();
+    expect(screen.getByTestId('profile-level')).toHaveTextContent('Level 3');
+    expect(screen.getByTestId('profile-lifetime-xp')).toHaveTextContent('2500');
+    expect(screen.getByTestId('profile-reward-points')).toHaveTextContent('100');
+    expect(screen.getByTestId('profile-progress-bar')).toHaveAttribute('aria-valuenow', '50');
+    expect(screen.queryByTestId('profile-lifetime-xp')).not.toHaveTextContent('9000');
+    expect(screen.queryByTestId('gamification-summary-skeleton')).not.toBeInTheDocument();
+  });
+
+  it('resolves a projection stored only under the document id', () => {
+    // Production projections are keyed by child id; the `childId` field may be
+    // absent on legacy documents.
+    const { childId: _childId, ...withoutChildId } = readyProjection('child-1', 4100, 5);
+    store.state.gamificationSummaries = [{ id: 'child-1', ...withoutChildId }];
+    renderProfile('/family/child-1');
+
+    expect(screen.getByTestId('profile-level')).toHaveTextContent('Level 5');
+    expect(screen.getByTestId('profile-lifetime-xp')).toHaveTextContent('4100');
+  });
+
+  it('uses the target child projection when it is ready', () => {
+    store.state.gamificationSummaries = [
+      readyProjection('child-1', 2500, 3),
+      readyProjection('child-2', 1250, 2),
+    ];
+    renderProfile('/family/child-2');
+
+    expect(screen.getByTestId('profile-level')).toHaveTextContent('Level 2');
+    expect(screen.getByTestId('profile-lifetime-xp')).toHaveTextContent('1250');
+  });
+
+  it('renders the parent own progression when viewing self', () => {
+    renderProfile('/family/parent-1');
+
+    expect(screen.getByTestId('profile-level')).toHaveTextContent('Level 10');
+    expect(screen.getByTestId('profile-lifetime-xp')).toHaveTextContent('9000');
+  });
+
+  it('renders another parent progression from their lifetime XP', () => {
+    renderProfile('/family/parent-2');
+
+    expect(screen.getByTestId('profile-lifetime-xp')).toHaveTextContent('3200');
+    expect(screen.getByTestId('profile-level')).toHaveTextContent('Level 4');
+  });
+
+  it('renders distinct values when the route changes between children', () => {
+    const first = renderProfile('/family/child-1');
+    expect(screen.getByTestId('profile-lifetime-xp')).toHaveTextContent('2500');
+    first.unmount();
+
+    renderProfile('/family/child-2');
+    expect(screen.getByTestId('profile-lifetime-xp')).toHaveTextContent('1250');
+  });
+
+  it('shows a not-found state for an unknown member', () => {
+    renderProfile('/family/ghost');
+
+    expect(screen.queryByTestId('profile-progression')).not.toBeInTheDocument();
+    expect(screen.getByTestId('profile-not-found')).toBeInTheDocument();
+  });
+});

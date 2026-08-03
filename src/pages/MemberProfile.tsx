@@ -53,20 +53,36 @@ export function MemberProfile() {
 
   if (loading) return <PageLoader label={t('profile:loading')} />;
 
-  const member = familyMembers.find(m => m.id === id);
-  if (!member) return <div className="p-8 text-center text-gray-500">{t('profile:notFound')}</div>;
+  // Always resolve the *target* member from the route param first. Falling back
+  // to `currentUser` only when the route points at the signed-in user keeps a
+  // parent viewing a child from ever rendering their own values.
+  const member =
+    familyMembers.find(m => m.id === id) ??
+    (currentUser?.id === id ? currentUser : undefined);
+  if (!member) {
+    return (
+      <div data-testid="profile-not-found" className="p-8 text-center text-gray-500">
+        {t('profile:notFound')}
+      </div>
+    );
+  }
 
-  // Get gamification summary for this child.
+  // Get the gamification projection for the *viewed* member.
   //
-  // Children are not allowed to read the whole `gamification_summaries`
-  // collection, so the store only populates `myGamificationSummary` for them
-  // (`gamificationSummaries` stays empty). Reading the collection alone made the
-  // progression permanently unavailable for a child viewing their own profile.
-  const summaryDoc =
-    (gamificationSummaries.find((s: GamificationSummaryV1) => s.childId === id) ?? null) ||
-    (myGamificationSummary && (myGamificationSummary.childId === id || currentUser?.id === id)
-      ? (myGamificationSummary as GamificationSummaryV1)
-      : null);
+  // - Parents read the whole `gamification_summaries` collection. Documents are
+  //   keyed by child id; the `childId` field is absent on legacy documents, so
+  //   the document id must be matched as well (this was the parent-viewing-child
+  //   regression: the lookup silently missed and progression stayed empty).
+  // - Children cannot read the collection, so the store only populates
+  //   `myGamificationSummary`. That document is only ever valid for the member
+  //   it belongs to — never keyed off `currentUser` alone, which would leak the
+  //   signed-in parent's XP into a child's profile.
+  const ownSummary = myGamificationSummary as (GamificationSummaryV1 & { id?: string }) | null;
+  const summaryDoc: GamificationSummaryV1 | null =
+    (gamificationSummaries.find(
+      (s: GamificationSummaryV1 & { id?: string }) => s.childId === id || s.id === id,
+    ) ?? null) ||
+    (ownSummary && (ownSummary.childId === id || ownSummary.id === id) ? ownSummary : null);
   const todaysProgress = getTodaysProgress(dailyProgress, id!, formatDayKey(new Date()));
   const gamificationView = adaptGamificationSummary(summaryDoc, todaysProgress);
   // Always-complete progression: falls back to the member's lifetimeXP balance
