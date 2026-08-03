@@ -870,11 +870,11 @@ export async function addBehaviourEvent(
       familyDoc.data().debtLimitPence ?? DEFAULT_DEBT_LIMIT_PENCE,
     );
 
-    if (input.type === 'positive') {
-      transaction.update(childRef, { rewardPoints: effect.rewardPoints, lifetimeXP: effect.lifetimeXP, lastBehaviourEventId: eventRef.id });
-    } else if (input.type === 'negative') {
-      transaction.update(childRef, { rewardPoints: effect.rewardPoints, lastBehaviourEventId: eventRef.id });
-    } else {
+    // Reward points and XP for positive/negative behaviour are awarded
+    // server-side by the `onBehaviourEventCreated` processor (idempotent,
+    // writes gamification_summaries.xpTotal and the immutable gamification
+    // event). The client must never write authoritative balances here.
+    if (input.type === 'financial') {
       transaction.update(walletRef, { balance: effect.walletBalance, lastPenaltyTxId: ledgerRef!.id });
     }
 

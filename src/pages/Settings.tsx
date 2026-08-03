@@ -373,13 +373,23 @@ export function Settings() {
     t('categories.petBoxUpdates'),
   ];
 
+  // The raw build timestamp is stored as ISO; it is localised only here, for
+  // display, using the active app language (date + time).
   const buildTimestamp = (() => {
     const date = new Date(FAMILYQUEST_BUILD.builtAt);
-    return Number.isNaN(date.getTime()) ? FAMILYQUEST_BUILD.builtAt : formatDate(date);
+    return Number.isNaN(date.getTime())
+      ? FAMILYQUEST_BUILD.builtAt
+      : formatDate(date, undefined, {
+          year: 'numeric',
+          month: '2-digit',
+          day: '2-digit',
+          hour: '2-digit',
+          minute: '2-digit',
+        });
   })();
 
-  const environment = (import.meta.env.MODE || 'development').toUpperCase();
-  const projectId = import.meta.env.VITE_FIREBASE_PROJECT_ID as string | undefined;
+  const environment = FAMILYQUEST_BUILD.environment;
+  const projectId = FAMILYQUEST_BUILD.firebaseProjectId;
 
   return (
     <div className="max-w-2xl mx-auto space-y-8">
@@ -643,10 +653,10 @@ export function Settings() {
         <Card>
           <CardContent className="p-5 divide-y divide-gray-100">
             <Row label={t('appVersion')} value={FAMILYQUEST_BUILD.version} />
-            <Row label={t('buildCommit')} value={FAMILYQUEST_BUILD.sha.slice(0, 7)} />
+            <Row label={t('buildCommit')} value={FAMILYQUEST_BUILD.sha} />
             <Row label={t('buildTimestamp')} value={buildTimestamp} />
             <Row label={t('environment')} value={environment} />
-            <Row label={t('firebaseProject')} value={projectId ?? '—'} />
+            <Row label={t('firebaseProject')} value={projectId} />
             {(legalLinks.privacyPolicy || legalLinks.terms || legalLinks.accountDeletion) && (
               <nav aria-label={t('legalLinksAria')} className="pt-3 flex flex-col gap-2">
                 {legalLinks.privacyPolicy && (

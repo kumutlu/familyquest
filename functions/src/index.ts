@@ -20,6 +20,7 @@ import {
   type PushNotificationInput,
 } from './pushDelivery';
 import { AdminGamificationRepository } from './gamificationRepository';
+import { AdminBehaviourRepository } from './behaviourRepository';
 import { createGamificationTriggers } from './gamificationTriggers';
 import { finalizeGamificationDaysOnce } from './gamificationScheduler';
 import { ensureFamilyGamificationInitialized } from './familyGamificationInit';
@@ -48,6 +49,31 @@ const gamificationTriggers = createGamificationTriggers({
 
 export const onTaskCompletionWritten = gamificationTriggers.onTaskCompletionWritten;
 export const onGamificationReversalCreated = gamificationTriggers.onGamificationReversalCreated;
+
+const behaviourRepository = new AdminBehaviourRepository(db);
+
+/**
+ * Server-authoritative behaviour awarding. The client only creates the
+ * behaviour event; reward points, XP projection, level and the immutable
+ * gamification event are all derived here, idempotently.
+ */
+export const onBehaviourEventCreated = onDocumentCreated(
+  'families/{familyId}/behaviour_events/{behaviourEventId}',
+  async (event) => {
+    const result = await behaviourRepository.processBehaviourEvent({
+      familyId: event.params.familyId,
+      behaviourEventId: event.params.behaviourEventId,
+      processingAt: event.time ? Date.parse(event.time) : Date.now(),
+    });
+    if (result.status === 'ignored') {
+      console.warn('[behaviour-ignored]', JSON.stringify({
+        familyId: event.params.familyId,
+        behaviourEventId: event.params.behaviourEventId,
+        reason: result.reason,
+      }));
+    }
+  },
+);
 
 /**
  * Backstop for family creation. The client already stamps

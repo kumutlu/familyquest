@@ -586,9 +586,19 @@ describe('Settings — about / build info', () => {
   it('11. About section uses real build info', () => {
     renderSettings('owner');
     const section = screen.getByRole('region', { name: /About/i });
+    expect(FAMILYQUEST_BUILD.version).not.toBe('0.0.0');
     expect(within(section).getByText(FAMILYQUEST_BUILD.version)).toBeInTheDocument();
-    expect(within(section).getByText(FAMILYQUEST_BUILD.sha.slice(0, 7))).toBeInTheDocument();
+    expect(within(section).getByText(FAMILYQUEST_BUILD.sha)).toBeInTheDocument();
+    expect(within(section).getByText(FAMILYQUEST_BUILD.environment)).toBeInTheDocument();
     expect(within(section).getByText('familyquest-beta-402cb')).toBeInTheDocument();
+  });
+
+  it('renders the build timestamp with both date and time', () => {
+    renderSettings('owner');
+    const section = screen.getByRole('region', { name: /About/i });
+    expect(Number.isNaN(new Date(FAMILYQUEST_BUILD.builtAt).getTime())).toBe(false);
+    // Localised output varies by language; assert a date *and* a time are shown.
+    expect(within(section).getByText(/\d{2}[./]\d{2}[./]\d{4}.*\d{2}:\d{2}/)).toBeInTheDocument();
   });
 
   it('renders the configured privacy, terms and account-deletion links safely', () => {

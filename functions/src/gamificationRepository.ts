@@ -34,12 +34,20 @@ import {
   type GamificationMigrationStatus,
 } from '../../src/domain/gamification/migrationState'
 import { logicalCompletionKey, taskXpEventId, taskXpReversalEventId } from '../../src/domain/gamification/xp'
-import { authoritativePeriodKey, buildDailyEligibilitySnapshot, type RepositoryScheduledTask } from './dailyEligibilityAdapter'
-import type {
-  GamificationProcessResult,
-  GamificationProcessorRepository,
-  ProcessApprovedCompletionArgs,
-  ProcessTaskInvalidationArgs,
+import {
+  authoritativePeriodKey,
+  buildDailyEligibilitySnapshot,
+  taskIsAwardableForChild,
+  type RepositoryScheduledTask,
+} from './dailyEligibilityAdapter'
+import {
+  DeterministicProcessorFailure,
+  GAMIFICATION_PROCESSOR_VERSION,
+  type GamificationProcessResult,
+  type GamificationProcessorRepository,
+  type ProcessApprovedCompletionArgs,
+  type ProcessTaskInvalidationArgs,
+  type ProcessorFailureRecord,
 } from './gamificationProcessor'
 import {
   mergeRebuildStreams,
@@ -180,7 +188,8 @@ function taskFromDocument(document: QueryDocumentSnapshot | DocumentSnapshot): R
   const data = document.data() ?? {}
   return {
     id: document.id,
-    assigneeId: typeof data.assigneeId === 'string' ? data.assigneeId : undefined,
+    // An empty or missing assignee means the task is shared/family-wide.
+    assigneeId: typeof data.assigneeId === 'string' && data.assigneeId.length > 0 ? data.assigneeId : undefined,
     pointsReward: data.pointsReward,
     requiresApproval: typeof data.requiresApproval === 'boolean' ? data.requiresApproval : undefined,
     type: typeof data.type === 'string' ? data.type : undefined,
@@ -202,6 +211,14 @@ function taskFromDocument(document: QueryDocumentSnapshot | DocumentSnapshot): R
     dueWeekday: Number.isInteger(data.dueWeekday) ? data.dueWeekday : undefined,
     customDays: Array.isArray(data.customDays) ? data.customDays : undefined,
   }
+}
+
+/**
+ * Tasks a child may be awarded for on this day: assigned to them, or shared
+ * (no assigneeId). Tasks assigned to a different child are excluded.
+ */
+function awardableTasks(documents: readonly QueryDocumentSnapshot[], childId: string): readonly RepositoryScheduledTask[] {
+  return documents.map(taskFromDocument).filter(task => taskIsAwardableForChild(task, childId))
 }
 
 function effectFromData(data: DocumentData): TaskGamificationEffectV1 {
@@ -501,6 +518,26 @@ export class AdminGamificationRepository implements
   GamificationSchedulerRepository {
   constructor(private readonly db: Firestore) {}
 
+  /**
+   * Dead-letter record for a non-transient processor failure. Written once per
+   * completion (merge), so a redelivered event does not fan out records, and
+   * never marks the award as processed.
+   */
+  async recordProcessorFailure(record: ProcessorFailureRecord): Promise<void> {
+    console.error('[gamification-processor-failure]', JSON.stringify(record))
+    await this.db.doc(`families/${record.familyId}/gamification_processor_failures/${record.completionId}`).set({
+      schemaVersion: 1,
+      familyId: record.familyId,
+      completionId: record.completionId,
+      ...(record.childId !== undefined ? { childId: record.childId } : {}),
+      ...(record.taskId !== undefined ? { taskId: record.taskId } : {}),
+      reason: record.reason,
+      failedAt: timestamp(record.failedAt),
+      processorVersion: record.processorVersion ?? GAMIFICATION_PROCESSOR_VERSION,
+      retryable: false,
+    }, { merge: true })
+  }
+
   async processApprovedCompletion(args: ProcessApprovedCompletionArgs): Promise<GamificationProcessResult> {
     const familyRef = this.db.doc(`families/${args.familyId}`)
     const completionRef = familyRef.collection('task_completions').doc(args.completionId)
@@ -542,13 +579,17 @@ export class AdminGamificationRepository implements
       if (!childDocument.exists) throw new Error(`Child ${childId} does not exist`)
       const child = childDocument.data()!
       if (child.familyId !== args.familyId || child.role !== 'child' || child.status === 'deleted' || child.status === 'disabled' || child.disabled === true) {
-        throw new Error('Completion child is not an active child in this family')
+        throw new DeterministicProcessorFailure('child_not_active_in_family', { childId, taskId })
       }
       const completedAt = millis(completion.completedAt, 'completion completedAt')
       const timezone = timezoneOf(family)
       const dayKey = familyDayKey(completedAt, timezone)
       const task = taskFromDocument(taskDocument)
-      if (task.assigneeId !== childId) throw new Error('Completion task is not assigned to this child')
+      // Shared/family-wide tasks (no assigneeId) may be completed by any active
+      // child in the family; an assigned task must match the completion child.
+      if (!taskIsAwardableForChild(task, childId)) {
+        throw new DeterministicProcessorFailure('task_assigned_to_another_child', { childId, taskId })
+      }
       if (typeof task.pointsReward !== 'number' || !Number.isSafeInteger(task.pointsReward) || task.pointsReward < 0) {
         throw new Error(`Task ${taskId} has an invalid reward`)
       }
@@ -571,12 +612,13 @@ export class AdminGamificationRepository implements
         return { status: 'duplicate', logicalCompletionKey: logicalKey }
       }
 
-      const tasksQuery = familyRef.collection('tasks').where('assigneeId', '==', childId)
-      const tasks = await transaction.get(tasksQuery)
+      // The family task collection is read in full and filtered in memory:
+      // Firestore cannot express "assigneeId == childId OR assigneeId missing".
+      const tasks = await transaction.get(familyRef.collection('tasks'))
       const config = resolveGamificationConfig(family.gamification)
       const expectedSnapshot = buildDailyEligibilitySnapshot({
         familyId: args.familyId, childId, dayKey, timezone, dailyGoalPercentage: config.dailyGoalPercentage,
-        tasks: tasks.docs.map(taskFromDocument), effectiveAt: localDayStart(dayKey, timezone), createdAt: args.processingAt,
+        tasks: awardableTasks(tasks.docs, childId), effectiveAt: localDayStart(dayKey, timezone), createdAt: args.processingAt,
       })
       const snapshot = eligibilityDocument.exists ? eligibilityFromData(eligibilityDocument.data()!) : expectedSnapshot
       if (snapshot.familyId !== args.familyId || snapshot.childId !== childId || snapshot.dayKey !== dayKey || snapshot.timezone !== timezone
@@ -792,11 +834,11 @@ export class AdminGamificationRepository implements
       const checkpointRef = familyRef.collection('gamification_checkpoints').doc(childId)
       const [eligibilityDocument, progressDocument, summaryDocument, checkpointDocument, tasks] = await Promise.all([
         transaction.get(eligibilityRef), transaction.get(progressRef), transaction.get(summaryRef), transaction.get(checkpointRef),
-        transaction.get(familyRef.collection('tasks').where('assigneeId', '==', childId)),
+        transaction.get(familyRef.collection('tasks')),
       ])
       const snapshot = eligibilityDocument.exists ? eligibilityFromData(eligibilityDocument.data()!) : buildDailyEligibilitySnapshot({
         familyId, childId, dayKey, timezone, dailyGoalPercentage: resolveGamificationConfig(family.gamification).dailyGoalPercentage,
-        tasks: tasks.docs.map(taskFromDocument), effectiveAt: localDayStart(dayKey, timezone), createdAt: processingAt,
+        tasks: awardableTasks(tasks.docs, childId), effectiveAt: localDayStart(dayKey, timezone), createdAt: processingAt,
       })
       const priorProgress = progressDocument.exists ? progressFromData(progressDocument.data()!) : undefined
       if (priorProgress?.finalized === true) return { snapshotCreated: false, finalized: false }

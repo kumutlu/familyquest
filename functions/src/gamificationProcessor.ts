@@ -1,3 +1,5 @@
+export const GAMIFICATION_PROCESSOR_VERSION = 'gamification-processor-v2-shared-tasks'
+
 export interface ProcessApprovedCompletionArgs {
   readonly familyId: string
   readonly completionId: string
@@ -9,13 +11,41 @@ export interface ProcessTaskInvalidationArgs extends ProcessApprovedCompletionAr
 }
 
 export interface GamificationProcessResult {
-  readonly status: 'processed' | 'duplicate' | 'ignored'
+  readonly status: 'processed' | 'duplicate' | 'ignored' | 'failed'
   readonly logicalCompletionKey?: string
+  readonly reason?: string
+}
+
+/**
+ * A validation failure that will never succeed on retry (wrong family, wrong
+ * assignee, inactive child, malformed reward). These are written to the
+ * processor dead-letter collection and swallowed so Cloud Functions does not
+ * retry them forever. Every other error stays retryable.
+ */
+export class DeterministicProcessorFailure extends Error {
+  constructor(
+    readonly reason: string,
+    readonly context: { readonly childId?: string; readonly taskId?: string } = {},
+  ) {
+    super(`Deterministic gamification failure: ${reason}`)
+    this.name = 'DeterministicProcessorFailure'
+  }
+}
+
+export interface ProcessorFailureRecord {
+  readonly familyId: string
+  readonly completionId: string
+  readonly childId?: string
+  readonly taskId?: string
+  readonly reason: string
+  readonly failedAt: number
+  readonly processorVersion: string
 }
 
 export interface GamificationProcessorRepository {
   processApprovedCompletion(args: ProcessApprovedCompletionArgs): Promise<GamificationProcessResult>
   processTaskInvalidation(args: ProcessTaskInvalidationArgs): Promise<GamificationProcessResult>
+  recordProcessorFailure(record: ProcessorFailureRecord): Promise<void>
 }
 
 export interface GamificationProcessorDependencies {
@@ -33,13 +63,37 @@ function processingAt(dependencies: GamificationProcessorDependencies): number {
   return value
 }
 
+async function runWithDeadLettering(
+  dependencies: GamificationProcessorDependencies,
+  identity: { readonly familyId: string; readonly completionId: string; readonly failedAt: number },
+  run: () => Promise<GamificationProcessResult>,
+): Promise<GamificationProcessResult> {
+  try {
+    return await run()
+  } catch (error) {
+    if (!(error instanceof DeterministicProcessorFailure)) throw error
+    await dependencies.repository.recordProcessorFailure({
+      familyId: identity.familyId,
+      completionId: identity.completionId,
+      ...(error.context.childId !== undefined ? { childId: error.context.childId } : {}),
+      ...(error.context.taskId !== undefined ? { taskId: error.context.taskId } : {}),
+      reason: error.reason,
+      failedAt: identity.failedAt,
+      processorVersion: GAMIFICATION_PROCESSOR_VERSION,
+    })
+    return { status: 'failed', reason: error.reason }
+  }
+}
+
 export async function processApprovedCompletion(
   dependencies: GamificationProcessorDependencies,
   args: Omit<ProcessApprovedCompletionArgs, 'processingAt'>,
 ): Promise<GamificationProcessResult> {
   assertId(args.familyId, 'familyId')
   assertId(args.completionId, 'completionId')
-  return dependencies.repository.processApprovedCompletion({ ...args, processingAt: processingAt(dependencies) })
+  const at = processingAt(dependencies)
+  return runWithDeadLettering(dependencies, { ...args, failedAt: at }, () =>
+    dependencies.repository.processApprovedCompletion({ ...args, processingAt: at }))
 }
 
 export async function processTaskInvalidation(
@@ -49,5 +103,7 @@ export async function processTaskInvalidation(
   assertId(args.familyId, 'familyId')
   assertId(args.completionId, 'completionId')
   if (args.immutableReversalId !== undefined) assertId(args.immutableReversalId, 'immutableReversalId')
-  return dependencies.repository.processTaskInvalidation({ ...args, processingAt: processingAt(dependencies) })
+  const at = processingAt(dependencies)
+  return runWithDeadLettering(dependencies, { familyId: args.familyId, completionId: args.completionId, failedAt: at }, () =>
+    dependencies.repository.processTaskInvalidation({ ...args, processingAt: at }))
 }

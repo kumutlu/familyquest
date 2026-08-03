@@ -3,6 +3,7 @@ import {
   authoritativePeriodKey,
   buildDailyEligibilitySnapshot,
   isTaskEligibleForDay,
+  taskIsAwardableForChild,
   type RepositoryScheduledTask,
 } from './dailyEligibilityAdapter'
 
@@ -62,6 +63,25 @@ describe('dailyEligibilityAdapter', () => {
       familyId: 'family-1', childId: 'child-1', dayKey: DAY, timezone: 'Europe/London', dailyGoalPercentage: 80,
       effectiveAt: 1, createdAt: 2, tasks: [task({ pointsReward: Number.NaN })],
     })).toThrow(/reward/i)
+  })
+
+  it('treats a task without an assignee as shared with every child in the family', () => {
+    const shared = task({ id: 'shared', assigneeId: undefined })
+    expect(taskIsAwardableForChild(shared, 'child-1')).toBe(true)
+    expect(taskIsAwardableForChild(shared, 'child-2')).toBe(true)
+    expect(taskIsAwardableForChild(task(), 'child-1')).toBe(true)
+    expect(taskIsAwardableForChild(task(), 'child-2')).toBe(false)
+    expect(isTaskEligibleForDay(shared, 'child-2', DAY, 'Europe/London')).toBe(true)
+  })
+
+  it('includes shared tasks in taskWeights without including other children tasks', () => {
+    const snapshot = buildDailyEligibilitySnapshot({
+      familyId: 'family-1', childId: 'child-1', dayKey: DAY, timezone: 'Europe/London',
+      dailyGoalPercentage: 80, effectiveAt: Date.parse('2026-07-23T00:00:00Z'), createdAt: Date.parse('2026-07-23T00:05:00Z'),
+      tasks: [task(), task({ id: 'shared', assigneeId: undefined }), task({ id: 'other', assigneeId: 'child-2' })],
+    })
+    expect(snapshot.taskWeights).toEqual({ 'shared': 20, 'task-1': 20 })
+    expect(snapshot).toMatchObject({ eligibleTaskCount: 2, eligiblePoints: 40 })
   })
 
   it('returns an immutable zero denominator when no positive-weight task is eligible', () => {

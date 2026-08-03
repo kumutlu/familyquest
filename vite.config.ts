@@ -6,9 +6,24 @@ import { loadEnv } from 'vite'
 import { execFileSync } from 'node:child_process'
 import { readFileSync } from 'node:fs'
 
-const buildSha = execFileSync('git', ['rev-parse', 'HEAD'], { encoding: 'utf8' }).trim()
+// Build metadata is resolved once, at config load time, and injected as
+// compile-time constants. Git may be unavailable (e.g. CI tarball builds), so
+// resolution must never throw and fail the build.
+function resolveBuildSha(): string {
+  try {
+    const sha = execFileSync('git', ['rev-parse', '--short=7', 'HEAD'], {
+      encoding: 'utf8',
+      stdio: ['ignore', 'pipe', 'ignore'],
+    }).trim()
+    return sha || 'unknown'
+  } catch {
+    return 'unknown'
+  }
+}
+
+const buildSha = resolveBuildSha()
 const builtAt = new Date().toISOString()
-const appVersion = JSON.parse(readFileSync('package.json', 'utf8')).version
+const appVersion: string = JSON.parse(readFileSync('package.json', 'utf8')).version ?? 'unknown'
 
 // Deterministic production config: when building, force the production mode so
 // Vite explicitly loads the committed `.env.production` and embeds the Firebase
