@@ -96,6 +96,13 @@ export interface ProgressionView {
 /**
  * Resolves the progression to display for a member.
  *
+ * TODO(gamification-legacy-fallback): the `member.lifetimeXP` fallback below is a
+ * temporary safety net. Operational removal condition: every production family
+ * member has a ready (non-rebuilding, non-rebuildRequired) document at
+ * `families/{familyId}/gamification_summaries/{memberId}` — verified by a full
+ * production projection audit — after which this parameter and the `derived`
+ * source branch must be deleted and callers switched to projection-only reads.
+ *
  * @param summary  Gamification projection document (may be null/dirty/rebuilding).
  * @param member   Member record providing the `lifetimeXP` fallback.
  */
