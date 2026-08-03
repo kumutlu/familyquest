@@ -22,6 +22,7 @@ import {
 import { AdminGamificationRepository } from './gamificationRepository';
 import { createGamificationTriggers } from './gamificationTriggers';
 import { finalizeGamificationDaysOnce } from './gamificationScheduler';
+import { ensureFamilyGamificationInitialized } from './familyGamificationInit';
 
 // Region chosen to be close to the project's European user base.
 const REGION = 'europe-west1';
@@ -47,6 +48,31 @@ const gamificationTriggers = createGamificationTriggers({
 
 export const onTaskCompletionWritten = gamificationTriggers.onTaskCompletionWritten;
 export const onGamificationReversalCreated = gamificationTriggers.onGamificationReversalCreated;
+
+/**
+ * Backstop for family creation. The client already stamps
+ * `gamificationMigration` inside the family-creation transaction, so this is
+ * normally a no-op; it exists so that a family created through any other path
+ * can never be left in the `inactive` state that makes the processor silently
+ * ignore every task completion.
+ */
+export const onFamilyCreatedInitializeGamification = onDocumentCreated(
+  'families/{familyId}',
+  async (event) => {
+    const familyId = event.params.familyId;
+    const result = await ensureFamilyGamificationInitialized(
+      db,
+      familyId,
+      event.time ? new Date(event.time) : new Date(),
+    );
+    if (result.outcome === 'initialized' || result.outcome === 'malformed') {
+      console.warn(
+        '[gamification-init]',
+        JSON.stringify({ familyId, outcome: result.outcome }),
+      );
+    }
+  },
+);
 
 export const finalizeGamificationDays = onSchedule('every 60 minutes', async () => {
   await finalizeGamificationDaysOnce({ repository: gamificationRepository, now: () => Date.now() });

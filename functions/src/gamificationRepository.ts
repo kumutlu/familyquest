@@ -29,6 +29,10 @@ import {
   type SemanticCursorV1,
   type TaskGamificationEffectV1,
 } from '../../src/domain/gamification/types'
+import {
+  GAMIFICATION_READY_STATUSES,
+  type GamificationMigrationStatus,
+} from '../../src/domain/gamification/migrationState'
 import { logicalCompletionKey, taskXpEventId, taskXpReversalEventId } from '../../src/domain/gamification/xp'
 import { authoritativePeriodKey, buildDailyEligibilitySnapshot, type RepositoryScheduledTask } from './dailyEligibilityAdapter'
 import type {
@@ -52,7 +56,7 @@ import type {
   GamificationSchedulerRepository,
 } from './gamificationScheduler'
 
-type MigrationStatus = 'inactive' | 'prepared' | 'baseline_complete' | 'active'
+type MigrationStatus = GamificationMigrationStatus
 
 interface MigrationState {
   readonly status: MigrationStatus
@@ -91,8 +95,22 @@ interface StoredRebuildRecord {
   readonly value: DocumentData
 }
 
-const APPROVED_STATUSES: readonly MigrationStatus[] = ['prepared', 'baseline_complete', 'active']
+const APPROVED_STATUSES: readonly MigrationStatus[] = GAMIFICATION_READY_STATUSES
 const REBUILD_STREAM_LIMIT = 125
+
+/**
+ * Structured, one-shot diagnostic for a completion the processor refuses to
+ * award. These are the failures that are otherwise completely silent: the user
+ * sees a completed task and no points.
+ */
+function warnIgnoredCompletion(details: {
+  readonly familyId: string
+  readonly completionId: string
+  readonly migrationStatus: MigrationStatus
+  readonly reason: 'migration_not_ready'
+}): void {
+  console.warn('[gamification-ignored]', JSON.stringify(details))
+}
 
 function millis(value: unknown, label: string): number {
   if (value instanceof Date && Number.isSafeInteger(value.getTime()) && value.getTime() >= 0) return value.getTime()
@@ -496,7 +514,19 @@ export class AdminGamificationRepository implements
       const completion = completionDocument.data()!
       if (completion.status !== 'approved') return { status: 'ignored' }
       const migration = migrationState(family)
-      if (!APPROVED_STATUSES.includes(migration.status)) return { status: 'ignored' }
+      if (!APPROVED_STATUSES.includes(migration.status)) {
+        // A family stuck outside the ready states awards nothing while task
+        // completion still appears to succeed to the user. Make that visible.
+        // One warning per ignored completion — the transaction runs once per
+        // completion, so this cannot loop.
+        warnIgnoredCompletion({
+          familyId: args.familyId,
+          completionId: args.completionId,
+          migrationStatus: migration.status,
+          reason: 'migration_not_ready',
+        })
+        return { status: 'ignored' }
+      }
       if (migration.cutoverAt === undefined) throw new Error('Prepared gamification migration requires cutoverAt')
       const approvedAt = millis(completion.approvedAt, 'completion approvedAt')
       if (approvedAt < migration.cutoverAt) return { status: 'ignored' }

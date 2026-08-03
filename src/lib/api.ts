@@ -48,6 +48,7 @@ import {
 import type { SupportedCurrencyCode } from '../i18n/format';
 import { isSupportedLanguage, type SupportedLanguage } from '../i18n';
 import { isPetBoxEnabled } from './familyFeatures';
+import { buildInitialGamificationMigration } from '../domain/gamification/migrationState';
 import {
   computeNetChild,
   computeMatchPence,
@@ -241,7 +242,12 @@ export const createFamilyAndParent = async (uid: string, _name: string, familyNa
       inviteCode,
       ownerId: uid,
       createdBy: uid,
-      createdAt: serverTimestamp()
+      createdAt: serverTimestamp(),
+      // Every family is gamification-ready from the instant it exists. Without
+      // this the Cloud Function processor sees the default `inactive` state and
+      // returns `ignored`, so no task completion ever awards points.
+      // cutoverAt == creation time, so no completion can predate the cutover.
+      gamificationMigration: buildInitialGamificationMigration(serverTimestamp()),
     });
     transaction.update(userRef, {
       familyId: familyRef.id,

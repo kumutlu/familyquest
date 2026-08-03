@@ -19,6 +19,8 @@
     "test:e2e:mobile": "firebase emulators:exec --only firestore,auth,functions 'playwright test --config playwright.mobile.config.ts'",
     "test:e2e:mobile:preview": "firebase emulators:exec --only firestore,auth,functions 'QUEKI_MOBILE_BASE_URL=http://localhost:5175 playwright test --config playwright.mobile.config.ts'",
     "test:smoke": "playwright test --config playwright.prod.config.ts",
+    "gamification:repair:dry-run": "tsx scripts/repair-gamification-migration.ts --dry-run",
+    "gamification:repair": "tsx scripts/repair-gamification-migration.ts --execute",
     "data:export": "tsx scripts/export-family-data.ts",
     "data:reset:dry-run": "tsx scripts/reset-family-data.ts --dry-run",
     "data:reset": "tsx scripts/reset-family-data.ts --execute"
