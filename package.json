@@ -1,7 +1,7 @@
 {
   "name": "familyquest",
   "private": true,
-  "version": "0.0.0",
+  "version": "1.0.0-beta.1",
   "type": "module",
   "scripts": {
     "dev": "vite",
@@ -16,6 +16,8 @@
     "test:migration:gamification": "firebase emulators:exec --only firestore 'vitest run scripts/migrate-legacy-xp.test.ts'",
     "test:functions:gamification": "firebase emulators:exec --only firestore 'vitest run tests/functions/gamification.integration.test.ts'",
     "test:e2e": "firebase emulators:exec --only firestore,auth,functions 'playwright test'",
+    "test:e2e:mobile": "firebase emulators:exec --only firestore,auth,functions 'playwright test --config playwright.mobile.config.ts'",
+    "test:e2e:mobile:preview": "firebase emulators:exec --only firestore,auth,functions 'QUEKI_MOBILE_BASE_URL=http://localhost:5175 playwright test --config playwright.mobile.config.ts'",
     "test:smoke": "playwright test --config playwright.prod.config.ts",
     "data:export": "tsx scripts/export-family-data.ts",
     "data:reset:dry-run": "tsx scripts/reset-family-data.ts --dry-run",

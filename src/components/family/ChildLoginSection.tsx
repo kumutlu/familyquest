@@ -1,4 +1,4 @@
-import { useState, type KeyboardEvent as ReactKeyboardEvent, type MouseEvent as ReactMouseEvent } from 'react';
+import { useRef, useState, type KeyboardEvent as ReactKeyboardEvent, type MouseEvent as ReactMouseEvent } from 'react';
 import { createPortal } from 'react-dom';
 import { useTranslation } from 'react-i18next';
 import { Loader2 } from 'lucide-react';
@@ -68,6 +68,12 @@ export function ChildLoginSection({ member, onRequestCreate }: ChildLoginSection
   const [deleteNameInput, setDeleteNameInput] = useState('');
   const [deleteBusy, setDeleteBusy] = useState(false);
   const [deleteFeedback, setDeleteFeedback] = useState('');
+  /**
+   * Synchronous in-flight guard. `deleteBusy` is React state, so it is still
+   * `false` for a second activation dispatched in the same task (a real
+   * double tap on a phone) and would let a duplicate callable through.
+   */
+  const deleteInFlight = useRef(false);
 
   /**
    * The whole managed-child card is wrapped in a router <Link> on the Family
@@ -139,7 +145,8 @@ export function ChildLoginSection({ member, onRequestCreate }: ChildLoginSection
       return;
     }
     // Guard against duplicate submissions (double tap on mobile).
-    if (deleteBusy) return;
+    if (deleteInFlight.current || deleteBusy) return;
+    deleteInFlight.current = true;
     setDeleteBusy(true);
     setDeleteFeedback('');
     try {
@@ -149,6 +156,7 @@ export function ChildLoginSection({ member, onRequestCreate }: ChildLoginSection
     } catch (error) {
       setDeleteFeedback(mapChildLoginError(error));
     } finally {
+      deleteInFlight.current = false;
       setDeleteBusy(false);
     }
   };
