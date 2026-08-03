@@ -214,7 +214,13 @@ export function MemberProfile() {
         </h2>
         <div className="grid grid-cols-2 gap-3">
           {ACHIEVEMENTS.map(badge => {
-            const isUnlocked = badge.checkUnlocked(member);
+            // XP badges evaluate the authoritative projection XP for the *viewed*
+            // member; spendable-points badges keep using the profile rewardPoints.
+            const isUnlocked = badge.checkUnlocked({
+              xpTotal: progression.xpTotal,
+              rewardPoints: member.rewardPoints || 0,
+              longestStreak: member.longestStreak || 0,
+            });
 
             // Map icon string to component
             const IconComp =
