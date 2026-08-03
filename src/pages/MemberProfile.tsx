@@ -10,7 +10,7 @@ import { ACHIEVEMENTS } from '../lib/achievements';
 import { cn } from '../lib/utils';
 import { formatDate } from '../i18n/format';
 import { HistoryActionControl } from '../components/reversals/HistoryActionControl';
-import { resolveProgression } from '../lib/gamificationAdapters';
+import { resolveProgression, resolveStreaks } from '../lib/gamificationAdapters';
 import type { GamificationSummaryV1 } from '../domain/gamification/types';
 
 export function MemberProfile() {
@@ -60,10 +60,13 @@ export function MemberProfile() {
   // Always-complete progression: falls back to the member's lifetimeXP balance
   // when the server projection is missing or rebuilding.
   const progression = resolveProgression(summaryDoc, member);
-  // Streaks come from the authoritative projection when present, otherwise from
-  // the legacy member counters so the single card is never partially empty.
-  const currentStreak = summaryDoc?.currentStreak ?? member.currentStreak ?? 0;
-  const bestStreak = summaryDoc?.bestStreak ?? member.longestStreak ?? 0;
+  // ONE resolved streak source drives both the displayed streaks and the
+  // streak-based achievements below. A ready projection wins even when it
+  // reports 0, so a badge can never be unlocked from a stale legacy
+  // `longestStreak` while the card displays 0.
+  const streaks = resolveStreaks(summaryDoc, member);
+  const currentStreak = streaks.currentStreak;
+  const bestStreak = streaks.bestStreak;
 
   const userEvents = behaviourEvents.filter(e => e.userId === id).slice(0, 10);
 
@@ -216,7 +219,8 @@ export function MemberProfile() {
             const isUnlocked = badge.checkUnlocked({
               xpTotal: progression.xpTotal,
               rewardPoints: member.rewardPoints || 0,
-              longestStreak: member.longestStreak || 0,
+              // Same resolved source as the Best Streak display above.
+              longestStreak: bestStreak,
             });
 
             // Map icon string to component

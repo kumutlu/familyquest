@@ -135,6 +135,48 @@ export function resolveProgression(
 }
 
 /**
+ * Resolved streak view.
+ *
+ * There is exactly ONE streak source per member, and it feeds both the streak
+ * display and streak-based achievement evaluation. A *ready* projection always
+ * wins — including when it legitimately reports 0 — so a badge can never be
+ * unlocked from a stale legacy `longestStreak` while the card shows 0.
+ * The legacy member counters are only consulted when no usable projection
+ * exists (missing, rebuilding or dirty).
+ */
+export interface StreakView {
+  readonly currentStreak: number
+  readonly bestStreak: number
+  readonly source: 'projection' | 'legacy'
+}
+
+function nonNegativeInteger(value: unknown): number {
+  const numeric = Number(value)
+  return Number.isFinite(numeric) ? Math.max(0, Math.floor(numeric)) : 0
+}
+
+export function resolveStreaks(
+  summary: GamificationSummaryV1 | null | undefined,
+  member: { currentStreak?: number | null; longestStreak?: number | null } | null | undefined,
+): StreakView {
+  const projectionUsable =
+    !!summary && !summary.rebuildRequired && summary.projectionStatus !== 'rebuilding'
+
+  if (projectionUsable) {
+    return {
+      currentStreak: nonNegativeInteger(summary!.currentStreak),
+      bestStreak: nonNegativeInteger(summary!.bestStreak),
+      source: 'projection',
+    }
+  }
+  return {
+    currentStreak: nonNegativeInteger(member?.currentStreak),
+    bestStreak: nonNegativeInteger(member?.longestStreak),
+    source: 'legacy',
+  }
+}
+
+/**
  * Computes the level from XP total.
  * Thin wrapper over the canonical {@link levelProgressForXp} helper.
  */
