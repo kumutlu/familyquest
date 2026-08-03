@@ -54,6 +54,24 @@ describe('AppLayout — mobile bottom navigation layout', () => {
     );
   };
 
+  it('renders exactly one mobile bottom navigation, anchored to the viewport', () => {
+    const { container } = renderAppLayout();
+    const navs = screen.getAllByTestId('mobile-bottom-nav');
+    expect(navs).toHaveLength(1);
+    const nav = navs[0];
+    // Anchored to the viewport bottom, not to page content.
+    expect(nav.className).toMatch(/\bfixed\b/);
+    expect(nav.className).toMatch(/bottom-0/);
+    expect(nav.className).toMatch(/inset-x-0/);
+    expect(nav.className).toMatch(/pb-\[env\(safe-area-inset-bottom\)\]/);
+    expect(nav.style.position).toBe('fixed');
+    // Must be the last child of the layout root — never nested inside the
+    // scrolling/transformable main content area.
+    const root = container.querySelector('div.min-h-dvh')!;
+    expect(root.lastElementChild).toBe(nav);
+    expect(container.querySelector('main')!.contains(nav)).toBe(false);
+  });
+
   it('uses min-h-dvh (dynamic viewport) instead of min-h-screen (100vh)', () => {
     const { container } = renderAppLayout();
     const outerDiv = container.querySelector('div.min-h-dvh');
