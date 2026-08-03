@@ -33,6 +33,28 @@ export interface FocusModeState {
 
 const isParentRole = (role?: string) => role === 'owner' || role === 'parent';
 
+/**
+ * Authoritative activation check (Sprint 1 specification).
+ *
+ * A family is activated once it has at least one other member (child or
+ * parent), at least one reward and at least one task. Activated families must
+ * never see onboarding surfaces on the Dashboard.
+ *
+ * Note: this is intentionally derived from real family data only — never from
+ * account age, milestone flags or per-user overrides — so long-standing
+ * families created before any milestone field existed are handled correctly.
+ */
+export function isFamilySetupComplete(input: FocusModeInput): boolean {
+  const familyMembers = input.familyMembers ?? [];
+  const rewards = input.rewards ?? [];
+  const tasks = input.tasks ?? [];
+
+  const hasChild = familyMembers.some(member => member?.role === 'child');
+  const hasOtherMembers = familyMembers.length > 1;
+
+  return (hasChild || hasOtherMembers) && rewards.length > 0 && tasks.length > 0;
+}
+
 export function getFocusModeState(input: FocusModeInput): FocusModeState {
   const familyMembers = input.familyMembers ?? [];
   const rewards = input.rewards ?? [];
@@ -58,10 +80,9 @@ export function getFocusModeState(input: FocusModeInput): FocusModeState {
   const hasOtherMembers = familyMembers.length > 1;
   const hasPendingJoin = joinRequests.some(request => request?.status === 'pending');
   const hasRewards = rewards.length > 0;
-  const hasTasks = tasks.length > 0;
 
   // Backward compatibility: an activated family never enters Focus Mode.
-  if ((hasChild || hasOtherMembers) && hasRewards && hasTasks) return complete;
+  if (isFamilySetupComplete({ familyMembers, rewards, tasks })) return complete;
 
   let step: FocusStepKey;
   if (hasPendingJoin) step = 'pendingInvite';
