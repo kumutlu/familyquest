@@ -78,6 +78,8 @@ function listFiles() {
         f === 'firestore.indexes.json',
     )
     .filter((f) => !/\.(png|jpg|jpeg|svg|ico|webp|woff2?|ttf)$/i.test(f))
+    // The generator itself necessarily contains every search term.
+    .filter((f) => f !== 'scripts/gamification-inventory.cjs')
     .sort()
 }
 
