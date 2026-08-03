@@ -10,33 +10,8 @@ import { ACHIEVEMENTS } from '../lib/achievements';
 import { cn } from '../lib/utils';
 import { formatDate } from '../i18n/format';
 import { HistoryActionControl } from '../components/reversals/HistoryActionControl';
-import { GamificationSummaryCard } from '../components/dashboard/GamificationSummaryCard';
-import { adaptGamificationSummary, resolveProgression } from '../lib/gamificationAdapters';
-import type { GamificationSummaryV1, DailyProgressV1 } from '../domain/gamification/types';
-
-/**
- * Helper to get today's progress for a child from the daily progress array.
- * The dayKey format is YYYYMMDD.
- */
-function getTodaysProgress(
-  dailyProgress: DailyProgressV1[],
-  childId: string,
-  todayKey: string,
-): DailyProgressV1 | null {
-  return dailyProgress.find(
-    (p) => p.childId === childId && p.dayKey === todayKey,
-  ) ?? null;
-}
-
-/**
- * Formats a date as YYYYMMDD for dayKey comparison.
- */
-function formatDayKey(date: Date): string {
-  const year = date.getFullYear();
-  const month = String(date.getMonth() + 1).padStart(2, '0');
-  const day = String(date.getDate()).padStart(2, '0');
-  return `${year}${month}${day}`;
-}
+import { resolveProgression } from '../lib/gamificationAdapters';
+import type { GamificationSummaryV1 } from '../domain/gamification/types';
 
 export function MemberProfile() {
   const { t } = useTranslation(['profile', 'dashboard']);
@@ -46,7 +21,6 @@ export function MemberProfile() {
     loading,
     behaviourEvents,
     gamificationSummaries,
-    dailyProgress,
     myGamificationSummary,
     currentUser,
   } = useStore();
@@ -83,11 +57,13 @@ export function MemberProfile() {
       (s: GamificationSummaryV1 & { id?: string }) => s.childId === id || s.id === id,
     ) ?? null) ||
     (ownSummary && (ownSummary.childId === id || ownSummary.id === id) ? ownSummary : null);
-  const todaysProgress = getTodaysProgress(dailyProgress, id!, formatDayKey(new Date()));
-  const gamificationView = adaptGamificationSummary(summaryDoc, todaysProgress);
   // Always-complete progression: falls back to the member's lifetimeXP balance
   // when the server projection is missing or rebuilding.
   const progression = resolveProgression(summaryDoc, member);
+  // Streaks come from the authoritative projection when present, otherwise from
+  // the legacy member counters so the single card is never partially empty.
+  const currentStreak = summaryDoc?.currentStreak ?? member.currentStreak ?? 0;
+  const bestStreak = summaryDoc?.bestStreak ?? member.longestStreak ?? 0;
 
   const userEvents = behaviourEvents.filter(e => e.userId === id).slice(0, 10);
 
@@ -165,12 +141,33 @@ export function MemberProfile() {
                 {progression.lifetimeXp}
               </p>
             </div>
+            <div>
+              <p className="text-xs font-bold uppercase tracking-wider text-primary-200">
+                {t('profile:dayStreak')}
+              </p>
+              <p
+                data-testid="profile-current-streak"
+                className="flex items-center justify-center gap-1 font-bold text-white"
+              >
+                <Flame size={14} className="text-warning-300" />
+                {currentStreak}
+              </p>
+            </div>
+            <div>
+              <p className="text-xs font-bold uppercase tracking-wider text-primary-200">
+                {t('profile:bestStreak')}
+              </p>
+              <p
+                data-testid="profile-best-streak"
+                className="flex items-center justify-center gap-1 font-bold text-white"
+              >
+                <Star size={14} className="text-reward-300" />
+                {bestStreak}
+              </p>
+            </div>
           </div>
         </CardContent>
       </Card>
-
-      {/* Streaks / daily goal detail — only when the server projection is available */}
-      {gamificationView.isAvailable && <GamificationSummaryCard summary={gamificationView} />}
 
       <section>
         <h2 className="text-lg font-bold text-gray-900 mb-4">{t('profile:behaviourHistory')}</h2>

@@ -547,13 +547,27 @@ describe('GamificationSummaryCard Accessibility', () => {
     expect(screen.getByText('Perfect Day')).toBeInTheDocument();
   });
 
-  it('shows loading state when summary unavailable', () => {
+  it('shows the loading skeleton only while a request is in flight', () => {
+    render(
+      <MemoryRouter>
+        <GamificationSummaryCard summary={null} loading />
+      </MemoryRouter>
+    );
+
+    const skeleton = screen.getByTestId('gamification-summary-skeleton');
+    expect(skeleton).toBeInTheDocument();
+    expect(skeleton).toHaveAttribute('aria-busy', 'true');
+    expect(skeleton).toHaveAttribute('role', 'status');
+  });
+
+  it('shows the static unavailable fallback when no request is in flight', () => {
     render(
       <MemoryRouter>
         <GamificationSummaryCard summary={null} />
       </MemoryRouter>
     );
 
-    expect(screen.getByText('Loading…')).toBeInTheDocument();
+    expect(screen.getByTestId('gamification-summary-unavailable')).toBeInTheDocument();
+    expect(screen.queryByTestId('gamification-summary-skeleton')).not.toBeInTheDocument();
   });
 });

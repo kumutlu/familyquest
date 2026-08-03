@@ -52,7 +52,7 @@ describe('MemberProfile gamification summary', () => {
     expect(screen.getByTestId('profile-level')).toHaveTextContent('Level 1');
   });
 
-  it('shows gamification summary for available child data', () => {
+  it('renders a single merged progression card for available child data', () => {
     store.state = {
       familyMembers: [{ id: 'child-1', role: 'child', displayName: 'Test Child', rewardPoints: 100 }],
       loading: false,
@@ -102,8 +102,57 @@ describe('MemberProfile gamification summary', () => {
         </Routes>
       </MemoryRouter>
     );
-    expect(screen.getByTestId('gamification-summary')).toBeInTheDocument();
+    // The legacy second card is gone; all values live on one card.
+    expect(screen.queryByTestId('gamification-summary')).not.toBeInTheDocument();
+    expect(screen.getAllByTestId('profile-progression')).toHaveLength(1);
     expect(screen.getByTestId('profile-level')).toHaveTextContent('Level 3');
+    expect(screen.getByTestId('profile-current-streak')).toHaveTextContent('2');
+    expect(screen.getByTestId('profile-best-streak')).toHaveTextContent('5');
+  });
+
+  it('renders exactly one progression card with no duplicated level/XP/progress bar', () => {
+    store.state = {
+      familyMembers: [{ id: 'child-1', role: 'child', displayName: 'Test Child', rewardPoints: 100 }],
+      loading: false,
+      behaviourEvents: [],
+      gamificationSummaries: [{
+        schemaVersion: 1,
+        familyId: 'family-1',
+        childId: 'child-1',
+        xpTotal: 2500,
+        level: 3,
+        currentStreak: 2,
+        bestStreak: 5,
+        perfectDayCount: 1,
+        lastQualifiedDayKey: null,
+        projectionRevision: 1,
+        foldedThrough: null,
+        rebuildRequired: false,
+        earliestDirtyCursor: null,
+        projectionStatus: 'ready',
+        updatedAt: Date.now(),
+      }],
+      dailyProgress: [],
+    };
+    render(
+      <MemoryRouter initialEntries={['/family/child-1']}>
+        <Routes>
+          <Route path="/family/:id" element={<MemberProfile />} />
+        </Routes>
+      </MemoryRouter>
+    );
+
+    expect(screen.getAllByTestId('profile-progression')).toHaveLength(1);
+    expect(screen.getAllByTestId('profile-level')).toHaveLength(1);
+    expect(screen.getAllByTestId('profile-progress-bar')).toHaveLength(1);
+    expect(screen.getAllByRole('progressbar')).toHaveLength(1);
+    expect(screen.getAllByTestId('profile-current-xp')).toHaveLength(1);
+    expect(screen.getAllByTestId('profile-next-level-xp')).toHaveLength(1);
+    expect(screen.getAllByTestId('profile-lifetime-xp')).toHaveLength(1);
+    expect(screen.getAllByTestId('profile-reward-points')).toHaveLength(1);
+    expect(screen.getAllByTestId('profile-current-streak')).toHaveLength(1);
+    expect(screen.getAllByTestId('profile-best-streak')).toHaveLength(1);
+    expect(screen.queryByTestId('gamification-summary')).not.toBeInTheDocument();
   });
 
   it('hides the streak card but keeps progression when rebuildRequired is true', () => {
