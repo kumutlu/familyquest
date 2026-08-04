@@ -2374,6 +2374,35 @@ service cloud.firestore {
       match /gamification_checkpoints/{checkpointId} {
         allow read, write: if false;
       }
+
+      // =====================================================================
+      // GAMIFICATION V3 — SHADOW COLLECTIONS (Phase 2)
+      // =====================================================================
+      // Written ONLY by the trusted backend (Admin SDK / Cloud Functions).
+      // Clients must NEVER be able to create, update, or delete V3 ledger or
+      // projection documents. Family members may read only according to existing
+      // family boundaries and role requirements.
+      //
+      // TEMPORARY BRIDGE (amendment 1): These collections are written by the
+      // Phase 2 shadow writer. Phase 3 must move trigger-backed flows to
+      // server-authoritative callable/transaction paths before this bridge
+      // is removed.
+      // =====================================================================
+
+      match /gamification_events_v3/{eventId} {
+        allow read: if isFamilyMember(familyId);
+        allow write: if false;
+      }
+
+      match /gamification_state_v3/{memberId} {
+        allow read: if isFamilyMember(familyId);
+        allow write: if false;
+      }
+
+      match /gamification_v3_failures/{failureId} {
+        allow read: if isParent(familyId);
+        allow write: if false;
+      }
     }
   }
 }
