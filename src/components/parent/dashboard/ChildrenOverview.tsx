@@ -99,9 +99,13 @@ export function ChildrenOverview() {
                   !isTaskDoneThisPeriod(task, taskCompletions, now, child.id),
               ).length;
 
-              // Get gamification summary and today's progress for this child
+              // Get gamification summary and today's progress for this child.
+              // Legacy/backfilled summary documents may omit `childId`; the
+              // document id is always the child id, so fall back to it
+              // (mirrors the MemberProfile lookup).
               const summaryDoc = gamificationSummaries.find(
-                (s: GamificationSummaryV1) => s.childId === child.id,
+                (s: GamificationSummaryV1 & { id?: string }) =>
+                  s.childId === child.id || s.id === child.id,
               ) ?? null;
               const todaysProgress = getTodaysProgress(dailyProgress, child.id, todayKey);
               const gamificationView = adaptGamificationSummary(summaryDoc, todaysProgress);

@@ -345,6 +345,46 @@ describe('ChildrenOverview', () => {
     });
   });
 
+  describe('summary lookup by document id', () => {
+    it('resolves a summary whose childId field is missing using the document id', () => {
+      store.state = {
+        familyMembers: [
+          { id: 'c-1', role: 'child', displayName: 'Alisya' },
+        ],
+        childWallets: [{ id: 'c-1', balance: 1000 }],
+        tasks: [],
+        taskCompletions: [],
+        gamificationSummaries: [
+          {
+            id: 'c-1', // document id only, no childId field
+            schemaVersion: 1,
+            familyId: 'f-1',
+            xpTotal: 86,
+            level: 1,
+            currentStreak: 0,
+            bestStreak: 0,
+            perfectDayCount: 0,
+            lastQualifiedDayKey: null,
+            projectionRevision: 1,
+            foldedThrough: null,
+            rebuildRequired: false,
+            earliestDirtyCursor: null,
+            projectionStatus: 'ready',
+            updatedAt: Date.now(),
+          },
+        ],
+        dailyProgress: [],
+        bootstrapStatus: { wallets: 'ready', gamificationSummaries: 'ready' },
+      } as any;
+
+      render(withRouter(<ChildrenOverview />));
+
+      expect(screen.getByText('Alisya')).toBeInTheDocument();
+      expect(screen.getByText('Level 1')).toBeInTheDocument();
+      expect(screen.queryByText('Updating…')).not.toBeInTheDocument();
+    });
+  });
+
   describe('empty state', () => {
     it('returns null when there are no children', () => {
       store.state = {
