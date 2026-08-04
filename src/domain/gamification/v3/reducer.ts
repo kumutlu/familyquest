@@ -25,11 +25,51 @@ export interface ReducerContextV3 {
   readonly memberId?: string
 }
 
-/** Canonical ordering: effectiveAt, then createdAt, then eventId. */
+/**
+ * Event-type precedence for deterministic ordering when effectiveAt and
+ * createdAt are identical.
+ *
+ * Canonical ordering:
+ *   1. effectiveAt (ascending)
+ *   2. createdAt (ascending)
+ *   3. eventType precedence (see EVENT_PRECEDENCE below)
+ *   4. eventId (ascending, final stable tie-breaker)
+ *
+ * Precedence rules:
+ *   - LEGACY_BASELINE (0): opens the ledger, must be first
+ *   - WEEK_ROLLOVER (1): marker event
+ *   - Earning events (2-5): TASK_APPROVED, BEHAVIOUR_POSITIVE,
+ *     DAILY_GOAL_AWARDED, PERFECT_DAY_AWARDED
+ *   - Spending events (6-9): BEHAVIOUR_NEGATIVE, REWARD_REDEEMED,
+ *     AVATAR_UNLOCKED, MANUAL_ADJUSTMENT
+ *   - REVERSAL (10): references prior events, must be last
+ *
+ * This ensures that at the same timestamp:
+ *   - baseline opens the ledger
+ *   - earnings are applied before spending (rewardPoints never negative)
+ *   - reversals are applied after the original event
+ */
+const EVENT_PRECEDENCE: Readonly<Record<string, number>> = Object.freeze({
+  LEGACY_BASELINE: 0,
+  WEEK_ROLLOVER: 1,
+  TASK_APPROVED: 2,
+  BEHAVIOUR_POSITIVE: 3,
+  DAILY_GOAL_AWARDED: 4,
+  PERFECT_DAY_AWARDED: 5,
+  BEHAVIOUR_NEGATIVE: 6,
+  REWARD_REDEEMED: 7,
+  AVATAR_UNLOCKED: 8,
+  MANUAL_ADJUSTMENT: 9,
+  REVERSAL: 10,
+})
+
 export function sortEventsV3(events: readonly GamificationEventV3[]): GamificationEventV3[] {
   return [...events].sort((a, b) => {
     if (a.effectiveAt !== b.effectiveAt) return a.effectiveAt < b.effectiveAt ? -1 : 1
     if (a.createdAt !== b.createdAt) return a.createdAt < b.createdAt ? -1 : 1
+    const pa = EVENT_PRECEDENCE[a.eventType] ?? 99
+    const pb = EVENT_PRECEDENCE[b.eventType] ?? 99
+    if (pa !== pb) return pa - pb
     if (a.eventId !== b.eventId) return a.eventId < b.eventId ? -1 : 1
     return 0
   })

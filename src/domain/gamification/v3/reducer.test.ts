@@ -356,3 +356,70 @@ describe('reducer purity', () => {
     expect(() => reduceGamificationEventsV3([task('t2', 5), foreign], CTX)).toThrow(/single member/i)
   })
 })
+
+describe('deterministic event ordering', () => {
+  const SAME_TS = '2026-01-05T10:00:00.000Z'
+
+  function makeSameTsEvent(overrides: Partial<GamificationEventV3> & { eventType: GamificationEventV3['eventType'] }): GamificationEventV3 {
+    return makeEvent({ effectiveAt: SAME_TS, createdAt: SAME_TS, ...overrides })
+  }
+
+  it('processes earning before spending at the same timestamp', () => {
+    // Positive behaviour (+5) before negative behaviour (-5) = 0, not -5
+    const events = [
+      makeSameTsEvent({ eventType: 'BEHAVIOUR_NEGATIVE', eventId: 'behaviour:f:m:n', rewardPointsDelta: -5, xpDelta: 0, weeklyPointsDelta: 0 }),
+      makeSameTsEvent({ eventType: 'BEHAVIOUR_POSITIVE', eventId: 'behaviour:f:m:p', rewardPointsDelta: 5, xpDelta: 5, weeklyPointsDelta: 5 }),
+    ]
+    const state = reduceGamificationEventsV3(events, CTX)
+    expect(state.rewardPoints).toBe(0) // +5 then -5, never negative
+  })
+
+  it('processes baseline before all other events at the same timestamp', () => {
+    const events = [
+      makeSameTsEvent({ eventType: 'TASK_APPROVED', eventId: 'task-approved:f:m:t1', rewardPointsDelta: 5, xpDelta: 5, weeklyPointsDelta: 5 }),
+      makeSameTsEvent({ eventType: 'LEGACY_BASELINE', eventId: 'legacy-baseline:f:m:v3', rewardPointsDelta: 100, xpDelta: 100, weeklyPointsDelta: 0 }),
+    ]
+    const state = reduceGamificationEventsV3(events, CTX)
+    expect(state.rewardPoints).toBe(105) // baseline first, then task
+  })
+
+  it('processes original event before its reversal at the same timestamp', () => {
+    const original = makeSameTsEvent({ eventType: 'TASK_APPROVED', eventId: 'task-approved:f:m:t1', rewardPointsDelta: 10, xpDelta: 10, weeklyPointsDelta: 10 })
+    const reversal = makeSameTsEvent({ eventType: 'REVERSAL', eventId: 'reversal:task-approved:f:m:t1:r1', rewardPointsDelta: -10, xpDelta: -10, weeklyPointsDelta: -10, reversalOfEventId: 'task-approved:f:m:t1' })
+    const events = [reversal, original] // reversed order in input
+    const state = reduceGamificationEventsV3(events, CTX)
+    expect(state.rewardPoints).toBe(0) // original processed first, then reversal
+  })
+
+  it('produces identical results for shuffled input permutations', () => {
+    const events = [
+      makeSameTsEvent({ eventType: 'BEHAVIOUR_POSITIVE', eventId: 'behaviour:f:m:a', rewardPointsDelta: 10, xpDelta: 10, weeklyPointsDelta: 10 }),
+      makeSameTsEvent({ eventType: 'BEHAVIOUR_NEGATIVE', eventId: 'behaviour:f:m:b', rewardPointsDelta: -3, xpDelta: 0, weeklyPointsDelta: 0 }),
+      makeSameTsEvent({ eventType: 'TASK_APPROVED', eventId: 'task-approved:f:m:c', rewardPointsDelta: 5, xpDelta: 5, weeklyPointsDelta: 5 }),
+    ]
+    const reference = reduceGamificationEventsV3(events, CTX)
+    for (let i = 0; i < 10; i++) {
+      const shuffled = [...events].sort(() => Math.random() - 0.5)
+      const result = reduceGamificationEventsV3(shuffled, CTX)
+      expect(result.rewardPoints).toBe(reference.rewardPoints)
+      expect(result.xpTotal).toBe(reference.xpTotal)
+    }
+  })
+
+  it('produces identical results on repeated rebuild', () => {
+    const events = [
+      makeSameTsEvent({ eventType: 'LEGACY_BASELINE', eventId: 'legacy-baseline:f:m:v3', rewardPointsDelta: 100, xpDelta: 100, weeklyPointsDelta: 0 }),
+      makeSameTsEvent({ eventType: 'TASK_APPROVED', eventId: 'task-approved:f:m:t1', rewardPointsDelta: 5, xpDelta: 5, weeklyPointsDelta: 5 }),
+      makeSameTsEvent({ eventType: 'BEHAVIOUR_POSITIVE', eventId: 'behaviour:f:m:p1', rewardPointsDelta: 20, xpDelta: 20, weeklyPointsDelta: 20 }),
+      makeSameTsEvent({ eventType: 'BEHAVIOUR_NEGATIVE', eventId: 'behaviour:f:m:n1', rewardPointsDelta: -5, xpDelta: 0, weeklyPointsDelta: 0 }),
+      makeSameTsEvent({ eventType: 'REWARD_REDEEMED', eventId: 'reward-redeemed:f:m:r1', rewardPointsDelta: -10, xpDelta: 0, weeklyPointsDelta: 0 }),
+    ]
+    const first = reduceGamificationEventsV3(events, CTX)
+    for (let i = 0; i < 5; i++) {
+      const result = reduceGamificationEventsV3(events, CTX)
+      expect(result.rewardPoints).toBe(first.rewardPoints)
+      expect(result.xpTotal).toBe(first.xpTotal)
+      expect(result.weeklyPoints).toBe(first.weeklyPoints)
+    }
+  })
+})
