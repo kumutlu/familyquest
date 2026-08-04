@@ -18,6 +18,7 @@ describe('gamificationAdapters', () => {
         todayGoalReached: null,
         todayPerfectDay: null,
         isAvailable: false,
+        isUpdating: false,
       });
     });
 
@@ -26,7 +27,7 @@ describe('gamificationAdapters', () => {
       expect(result.isAvailable).toBe(false);
     });
 
-    it('returns unavailable view when rebuildRequired is true', () => {
+    it('keeps the dirty projection own values (priority 2) and flags updating', () => {
       const summary: GamificationSummaryV1 = {
         schemaVersion: 1,
         familyId: 'fam1',
@@ -44,11 +45,16 @@ describe('gamificationAdapters', () => {
         projectionStatus: 'ready',
         updatedAt: Date.now(),
       };
+      // A dirty projection is still authoritative: its own xpTotal/level are
+      // shown (never replaced by the lifetimeXP mirror), flagged as updating.
       const result = adaptGamificationSummary(summary, undefined);
-      expect(result.isAvailable).toBe(false);
+      expect(result.isAvailable).toBe(true);
+      expect(result.isUpdating).toBe(true);
+      expect(result.xpTotal).toBe(5000);
+      expect(result.level).toBe(5);
     });
 
-    it('returns unavailable view when projectionStatus is rebuilding', () => {
+    it('keeps the rebuilding projection own values (priority 2) and flags updating', () => {
       const summary: GamificationSummaryV1 = {
         schemaVersion: 1,
         familyId: 'fam1',
@@ -67,7 +73,10 @@ describe('gamificationAdapters', () => {
         updatedAt: Date.now(),
       };
       const result = adaptGamificationSummary(summary, undefined);
-      expect(result.isAvailable).toBe(false);
+      expect(result.isAvailable).toBe(true);
+      expect(result.isUpdating).toBe(true);
+      expect(result.xpTotal).toBe(5000);
+      expect(result.level).toBe(5);
     });
 
     it('computes level and XP progress from xpTotal', () => {
@@ -209,6 +218,132 @@ describe('gamificationAdapters', () => {
       const result = adaptGamificationSummary(summary, undefined);
       expect(result.xpProgressInLevel).toBe(0);
       expect(result.xpToNextLevel).toBe(1000);
+    });
+
+    it('falls back to member.lifetimeXP when the summary is null and a member is provided', () => {
+      const result = adaptGamificationSummary(null, undefined, { lifetimeXP: 2500 });
+      expect(result.isAvailable).toBe(true);
+      expect(result.xpTotal).toBe(2500);
+      expect(result.level).toBe(3);
+      expect(result.xpProgressInLevel).toBe(500);
+      expect(result.xpToNextLevel).toBe(500);
+    });
+
+    it('uses the dirty summary own xpTotal, never the lifetimeXP mirror (priority 2)', () => {
+      const summary: GamificationSummaryV1 = {
+        schemaVersion: 1,
+        familyId: 'fam1',
+        childId: 'child1',
+        xpTotal: 9999,
+        level: 99,
+        currentStreak: 3,
+        bestStreak: 10,
+        perfectDayCount: 5,
+        lastQualifiedDayKey: '20240101',
+        projectionRevision: 1,
+        foldedThrough: null,
+        rebuildRequired: true,
+        earliestDirtyCursor: null,
+        projectionStatus: 'ready',
+        updatedAt: Date.now(),
+      };
+      // A dirty projection is still authoritative: its own xpTotal is shown,
+      // NOT the legacy lifetimeXP mirror (1000).
+      const result = adaptGamificationSummary(summary, undefined, { lifetimeXP: 1000 });
+      expect(result.isAvailable).toBe(true);
+      expect(result.isUpdating).toBe(true);
+      expect(result.xpTotal).toBe(9999);
+      expect(result.level).toBe(99);
+    });
+
+    it('uses the rebuilding summary own xpTotal, never the lifetimeXP mirror (priority 2)', () => {
+      const summary: GamificationSummaryV1 = {
+        schemaVersion: 1,
+        familyId: 'fam1',
+        childId: 'child1',
+        xpTotal: 9999,
+        level: 99,
+        currentStreak: 3,
+        bestStreak: 10,
+        perfectDayCount: 5,
+        lastQualifiedDayKey: '20240101',
+        projectionRevision: 1,
+        foldedThrough: null,
+        rebuildRequired: false,
+        earliestDirtyCursor: null,
+        projectionStatus: 'rebuilding',
+        updatedAt: Date.now(),
+      };
+      const result = adaptGamificationSummary(summary, undefined, { lifetimeXP: 420 });
+      expect(result.isAvailable).toBe(true);
+      expect(result.isUpdating).toBe(true);
+      expect(result.xpTotal).toBe(9999);
+    });
+
+    it('still returns unavailable when no member is available to fall back to', () => {
+      // No member => no authoritative lifetimeXP to derive from => nothing to show.
+      const result = adaptGamificationSummary(null, undefined);
+      expect(result.isAvailable).toBe(false);
+      expect(result.isUpdating).toBe(false);
+    });
+
+    it('REQUIRED: dirty summary xpTotal=420 with member.lifetimeXP=400 keeps 420', () => {
+      const summary: GamificationSummaryV1 = {
+        schemaVersion: 1,
+        familyId: 'fam1',
+        childId: 'child1',
+        xpTotal: 420,
+        level: 1,
+        currentStreak: 0,
+        bestStreak: 0,
+        perfectDayCount: 0,
+        lastQualifiedDayKey: null,
+        projectionRevision: 1,
+        foldedThrough: null,
+        rebuildRequired: true,
+        earliestDirtyCursor: null,
+        projectionStatus: 'ready',
+        updatedAt: Date.now(),
+      };
+      const result = adaptGamificationSummary(summary, undefined, { lifetimeXP: 400 });
+      expect(result.isAvailable).toBe(true);
+      expect(result.xpTotal).toBe(420);
+      expect(result.level).toBe(1);
+    });
+
+    it('REQUIRED: ready summary xpTotal=420 is authoritative', () => {
+      const summary: GamificationSummaryV1 = {
+        schemaVersion: 1,
+        familyId: 'fam1',
+        childId: 'child1',
+        xpTotal: 420,
+        level: 1,
+        currentStreak: 0,
+        bestStreak: 0,
+        perfectDayCount: 0,
+        lastQualifiedDayKey: null,
+        projectionRevision: 1,
+        foldedThrough: null,
+        rebuildRequired: false,
+        earliestDirtyCursor: null,
+        projectionStatus: 'ready',
+        updatedAt: Date.now(),
+      };
+      const result = adaptGamificationSummary(summary, undefined, { lifetimeXP: 400 });
+      expect(result.isAvailable).toBe(true);
+      expect(result.xpTotal).toBe(420);
+    });
+
+    it('REQUIRED: missing summary with member.lifetimeXP=400 falls back to 400', () => {
+      const result = adaptGamificationSummary(null, undefined, { lifetimeXP: 400 });
+      expect(result.isAvailable).toBe(true);
+      expect(result.xpTotal).toBe(400);
+    });
+
+    it('REQUIRED: missing summary and no lifetimeXP renders unavailable', () => {
+      const result = adaptGamificationSummary(null, undefined, { lifetimeXP: undefined });
+      expect(result.isAvailable).toBe(false);
+      expect(result.xpTotal).toBe(0);
     });
   });
 

@@ -703,7 +703,15 @@ export class AdminGamificationRepository implements
         gamificationProcessedAt: timestamp(args.processingAt),
         ...(alreadyInvalid ? { gamificationRewardRevokedBy: reversalRef.id } : {}),
       })
-      if (nextPoints !== currentPoints) transaction.update(childRef, { rewardPoints: nextPoints, lastTaskCompletionId: args.completionId })
+      // Mirror the authoritative gamification_summaries.xpTotal into the
+      // users.lifetimeXP compatibility field, in the SAME transaction, so the
+      // legacy mirror can never drift from the projection.
+      const childUpdate: Record<string, unknown> = { lifetimeXP: summary.xpTotal }
+      if (nextPoints !== currentPoints) {
+        childUpdate.rewardPoints = nextPoints
+        childUpdate.lastTaskCompletionId = args.completionId
+      }
+      transaction.update(childRef, childUpdate)
       for (const document of plan.events) transaction.create(familyRef.collection('gamification_events').doc(document.id), eventToData(document.event))
       transaction.set(progressRef, progressToData(plan.progress, [...existingEvents, ...plan.events]))
       transaction.set(summaryRef, summaryToData(summary))
@@ -868,8 +876,10 @@ export class AdminGamificationRepository implements
       const progressRef = familyRef.collection('daily_progress').doc(`${childId}:${dayKey}`)
       const summaryRef = familyRef.collection('gamification_summaries').doc(childId)
       const checkpointRef = familyRef.collection('gamification_checkpoints').doc(childId)
-      const [eligibilityDocument, progressDocument, summaryDocument, checkpointDocument, tasks] = await Promise.all([
+      const childRef = this.db.doc(`users/${childId}`)
+      const [eligibilityDocument, progressDocument, summaryDocument, checkpointDocument, , tasks] = await Promise.all([
         transaction.get(eligibilityRef), transaction.get(progressRef), transaction.get(summaryRef), transaction.get(checkpointRef),
+        transaction.get(childRef),
         transaction.get(familyRef.collection('tasks')),
       ])
       const snapshot = eligibilityDocument.exists ? eligibilityFromData(eligibilityDocument.data()!) : buildDailyEligibilitySnapshot({
@@ -902,6 +912,10 @@ export class AdminGamificationRepository implements
       for (const document of events) transaction.create(familyRef.collection('gamification_events').doc(document.id), eventToData(document.event))
       transaction.set(progressRef, progressToData(progress, [...existingEvents, ...events]))
       transaction.set(summaryRef, summaryToData(summary))
+      // Mirror the authoritative gamification_summaries.xpTotal into the
+      // users.lifetimeXP compatibility field, in the SAME transaction, so the
+      // legacy mirror can never drift from the projection.
+      transaction.update(childRef, { lifetimeXP: summary.xpTotal })
       if (checkpointDocument.exists && checkpointDocument.data()!.dirty !== true) transaction.update(checkpointRef, { dirty: true })
       // V3 shadow writes for DAILY_GOAL_AWARDED and PERFECT_DAY_AWARDED events.
       // These are emitted when the corresponding V2 threshold qualification events

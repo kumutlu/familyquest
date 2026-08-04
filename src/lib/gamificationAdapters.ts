@@ -18,6 +18,14 @@ export interface GamificationSummaryView {
   readonly todayGoalReached: boolean | null
   readonly todayPerfectDay: boolean | null
   readonly isAvailable: boolean
+  /**
+   * True when a projection document is present but dirty/rebuilding. The card
+   * may show a quiet "updating" indicator, but the projection's own values are
+   * still displayed (never replaced by the legacy `users.lifetimeXP` mirror).
+   * Optional so callers/tests that build the view literally need not set it;
+   * `adaptGamificationSummary` always populates it.
+   */
+  readonly isUpdating?: boolean
 }
 
 /**
@@ -37,40 +45,78 @@ const XP_PER_LEVEL = GAMIFICATION_CONFIG_V1.xpPerLevel
 export function adaptGamificationSummary(
   summary: GamificationSummaryV1 | null | undefined,
   todayProgress: DailyProgressV1 | null | undefined,
+  member?: { lifetimeXP?: number | null } | null,
 ): GamificationSummaryView {
-  // Handle missing or rebuilding summary
-  if (!summary || summary.rebuildRequired || summary.projectionStatus === 'rebuilding') {
+  // Priority 1 & 2: a projection document that is present with valid numeric
+  // fields is authoritative — even when dirty or still rebuilding. We display
+  // its own xpTotal/level/progress and (optionally) flag it as updating, but we
+  // never replace its values with the legacy `users.lifetimeXP` mirror.
+  const summaryPresent =
+    !!summary &&
+    Number.isFinite(Number(summary.xpTotal)) &&
+    Number.isFinite(Number(summary.level))
+
+  if (summaryPresent) {
+    const xpTotal = Math.max(0, Math.floor(Number(summary!.xpTotal)))
+    const level = Math.max(1, Math.floor(Number(summary!.level)))
+    const xpProgressInLevel = xpTotal % XP_PER_LEVEL
+    const xpToNextLevel = XP_PER_LEVEL - xpProgressInLevel
+    const isUpdating =
+      !!summary!.rebuildRequired || summary!.projectionStatus === 'rebuilding'
     return {
-      xpTotal: 0,
-      level: 1,
-      xpToNextLevel: XP_PER_LEVEL,
-      xpProgressInLevel: 0,
-      currentStreak: 0,
-      bestStreak: 0,
-      perfectDayCount: 0,
-      todayProgress: null,
-      todayGoalReached: null,
-      todayPerfectDay: null,
-      isAvailable: false,
+      xpTotal,
+      level,
+      xpToNextLevel,
+      xpProgressInLevel,
+      currentStreak: nonNegativeInteger(summary!.currentStreak),
+      bestStreak: nonNegativeInteger(summary!.bestStreak),
+      perfectDayCount: nonNegativeInteger(summary!.perfectDayCount),
+      todayProgress: todayProgress?.progressPercentage ?? null,
+      todayGoalReached: todayProgress?.dailyGoalReached ?? null,
+      todayPerfectDay: todayProgress?.perfectDayReached ?? null,
+      isAvailable: true,
+      isUpdating,
     }
   }
 
-  // Compute level progress
-  const xpProgressInLevel = summary.xpTotal % XP_PER_LEVEL
-  const xpToNextLevel = XP_PER_LEVEL - xpProgressInLevel
+  // Priority 3: projection genuinely absent -> temporary `users.lifetimeXP`
+  // compatibility fallback (legacy mirror). Only used when there is no
+  // projection document at all AND a finite lifetimeXP is available.
+  const rawXp = Number(member?.lifetimeXP)
+  const hasFallback = member !== undefined && member !== null && Number.isFinite(rawXp)
+  if (hasFallback) {
+    const xpTotal = Math.max(0, Math.floor(rawXp))
+    const progress = levelProgressForXp(xpTotal, XP_PER_LEVEL)
+    return {
+      xpTotal,
+      level: progress.level,
+      xpToNextLevel: progress.xpToNextLevel,
+      xpProgressInLevel: progress.xpIntoLevel,
+      currentStreak: 0,
+      bestStreak: 0,
+      perfectDayCount: 0,
+      todayProgress: todayProgress?.progressPercentage ?? null,
+      todayGoalReached: todayProgress?.dailyGoalReached ?? null,
+      todayPerfectDay: todayProgress?.perfectDayReached ?? null,
+      isAvailable: true,
+      isUpdating: false,
+    }
+  }
 
+  // Priority 4: neither source available -> render unavailable/updating.
   return {
-    xpTotal: summary.xpTotal,
-    level: summary.level,
-    xpToNextLevel,
-    xpProgressInLevel,
-    currentStreak: summary.currentStreak,
-    bestStreak: summary.bestStreak,
-    perfectDayCount: summary.perfectDayCount,
-    todayProgress: todayProgress?.progressPercentage ?? null,
-    todayGoalReached: todayProgress?.dailyGoalReached ?? null,
-    todayPerfectDay: todayProgress?.perfectDayReached ?? null,
-    isAvailable: true,
+    xpTotal: 0,
+    level: 1,
+    xpToNextLevel: XP_PER_LEVEL,
+    xpProgressInLevel: 0,
+    currentStreak: 0,
+    bestStreak: 0,
+    perfectDayCount: 0,
+    todayProgress: null,
+    todayGoalReached: null,
+    todayPerfectDay: null,
+    isAvailable: false,
+    isUpdating: false,
   }
 }
 

@@ -108,7 +108,10 @@ export function ChildrenOverview() {
                   s.childId === child.id || s.id === child.id,
               ) ?? null;
               const todaysProgress = getTodaysProgress(dailyProgress, child.id, todayKey);
-              const gamificationView = adaptGamificationSummary(summaryDoc, todaysProgress);
+              // Priority: a present projection (even dirty/rebuilding) is
+              // authoritative; `child.lifetimeXP` is only a compatibility
+              // fallback when the projection document is genuinely absent.
+              const gamificationView = adaptGamificationSummary(summaryDoc, todaysProgress, child);
 
               return (
                 <ChildSummaryCard

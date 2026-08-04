@@ -145,7 +145,13 @@ export function ChildSummaryCard({ child, walletBalance, pendingTaskCount, gamif
             </div>
           )}
 
-          {/* Rebuilding/unavailable indicator */}
+          {/* Quiet "updating" indicator for a dirty/rebuilding projection whose
+              own values are still shown (never hidden). */}
+          {summary && summary.isUpdating && (
+            <p className="mt-2 text-xs text-gray-400">{t('childCard.rebuilding')}</p>
+          )}
+
+          {/* Unavailable indicator when no projection and no fallback. */}
           {!summary && (
             <p className="mt-2 text-xs text-gray-400">{t('childCard.rebuilding')}</p>
           )}

@@ -1,4 +1,4 @@
-import { render, screen } from '@testing-library/react';
+import { render, screen, within } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import i18n from '../../../i18n/config';
@@ -81,10 +81,10 @@ describe('ChildrenOverview', () => {
   });
 
   describe('missing summary', () => {
-    it('shows rebuilding state for child with no gamification summary', () => {
+    it('falls back to lifetimeXP so a missing projection never hides valid progression', () => {
       store.state = {
         familyMembers: [
-          { id: 'c-1', role: 'child', displayName: 'Alice', lifetimeXP: 500 },
+          { id: 'c-1', role: 'child', displayName: 'Alice', lifetimeXP: 2500 },
         ],
         childWallets: [{ id: 'c-1', balance: 1000 }],
         tasks: [],
@@ -96,16 +96,19 @@ describe('ChildrenOverview', () => {
 
       render(withRouter(<ChildrenOverview />));
 
+      // The child's valid progression (derived from lifetimeXP = 2500 -> Level 3)
+      // is shown instead of "Updating…".
       expect(screen.getByText('Alice')).toBeInTheDocument();
-      expect(screen.getByText('Updating…')).toBeInTheDocument();
+      expect(screen.queryByText('Updating…')).not.toBeInTheDocument();
+      expect(screen.getByText('Level 3')).toBeInTheDocument();
     });
   });
 
   describe('rebuilding/dirty state', () => {
-    it('shows rebuilding state for child with rebuildRequired summary', () => {
+    it('keeps the dirty projection own values (priority 2), never lifetimeXP', () => {
       store.state = {
         familyMembers: [
-          { id: 'c-1', role: 'child', displayName: 'Alice' },
+          { id: 'c-1', role: 'child', displayName: 'Alice', lifetimeXP: 4200 },
         ],
         childWallets: [{ id: 'c-1', balance: 1000 }],
         tasks: [],
@@ -135,8 +138,177 @@ describe('ChildrenOverview', () => {
 
       render(withRouter(<ChildrenOverview />));
 
+      // The dirty projection is authoritative: its own Level 2 (xpTotal 1000)
+      // is shown, NOT the lifetimeXP-derived Level 5 (4200).
       expect(screen.getByText('Alice')).toBeInTheDocument();
+      expect(screen.getByText('Level 2')).toBeInTheDocument();
+      expect(screen.queryByText('Level 5')).not.toBeInTheDocument();
+      // A quiet "updating" indicator is shown, but values are not hidden.
       expect(screen.getByText('Updating…')).toBeInTheDocument();
+    });
+
+    it('REQUIRED: dirty summary xpTotal=420 with lifetimeXP=400 shows 420 (not 400)', () => {
+      store.state = {
+        familyMembers: [
+          { id: 'c-1', role: 'child', displayName: 'Alice', lifetimeXP: 400 },
+        ],
+        childWallets: [{ id: 'c-1', balance: 1000 }],
+        tasks: [],
+        taskCompletions: [],
+        gamificationSummaries: [
+          {
+            schemaVersion: 1,
+            familyId: 'f-1',
+            childId: 'c-1',
+            xpTotal: 420,
+            level: 1,
+            currentStreak: 0,
+            bestStreak: 0,
+            perfectDayCount: 0,
+            lastQualifiedDayKey: null,
+            projectionRevision: 1,
+            foldedThrough: null,
+            rebuildRequired: true,
+            earliestDirtyCursor: null,
+            projectionStatus: 'ready',
+            updatedAt: Date.now(),
+          },
+        ],
+        dailyProgress: [],
+        bootstrapStatus: { wallets: 'ready', gamificationSummaries: 'ready' },
+      } as any;
+
+      render(withRouter(<ChildrenOverview />));
+
+      // xpTotal 420 -> "580 XP to Level 2". The lifetimeXP=400 would render
+      // "600 XP to Level 2", which must NOT appear.
+      expect(screen.getByText('Alice')).toBeInTheDocument();
+      expect(screen.getByText('580 XP to Level 2')).toBeInTheDocument();
+      expect(screen.queryByText('600 XP to Level 2')).not.toBeInTheDocument();
+    });
+  });
+
+  describe('fallback priority (required proofs)', () => {
+    it('REQUIRED: ready summary xpTotal=420 is authoritative (shows 420-derived progress)', () => {
+      store.state = {
+        familyMembers: [
+          { id: 'c-1', role: 'child', displayName: 'Alice', lifetimeXP: 400 },
+        ],
+        childWallets: [{ id: 'c-1', balance: 1000 }],
+        tasks: [],
+        taskCompletions: [],
+        gamificationSummaries: [
+          {
+            schemaVersion: 1,
+            familyId: 'f-1',
+            childId: 'c-1',
+            xpTotal: 420,
+            level: 1,
+            currentStreak: 0,
+            bestStreak: 0,
+            perfectDayCount: 0,
+            lastQualifiedDayKey: null,
+            projectionRevision: 1,
+            foldedThrough: null,
+            rebuildRequired: false,
+            earliestDirtyCursor: null,
+            projectionStatus: 'ready',
+            updatedAt: Date.now(),
+          },
+        ],
+        dailyProgress: [],
+        bootstrapStatus: { wallets: 'ready', gamificationSummaries: 'ready' },
+      } as any;
+
+      render(withRouter(<ChildrenOverview />));
+
+      // xpTotal 420 -> "580 XP to Level 2" (NOT the lifetimeXP=400 "600 XP to Level 2").
+      expect(screen.getByText('580 XP to Level 2')).toBeInTheDocument();
+      expect(screen.queryByText('600 XP to Level 2')).not.toBeInTheDocument();
+    });
+
+    it('REQUIRED: missing summary and no lifetimeXP renders unavailable', () => {
+      store.state = {
+        familyMembers: [
+          { id: 'c-1', role: 'child', displayName: 'Alice' },
+        ],
+        childWallets: [{ id: 'c-1', balance: 1000 }],
+        tasks: [],
+        taskCompletions: [],
+        gamificationSummaries: [], // no projection document
+        dailyProgress: [],
+        bootstrapStatus: { wallets: 'ready', gamificationSummaries: 'ready' },
+      } as any;
+
+      render(withRouter(<ChildrenOverview />));
+
+      // No projection AND no lifetimeXP -> genuinely unavailable.
+      expect(screen.getByText('Alice')).toBeInTheDocument();
+      expect(screen.getByText('Unavailable')).toBeInTheDocument();
+    });
+
+    it('REQUIRED: no child receives another child summary (per-card isolation)', () => {
+      store.state = {
+        familyMembers: [
+          { id: 'c-1', role: 'child', displayName: 'Alice' },
+          { id: 'c-2', role: 'child', displayName: 'Bob' },
+        ],
+        childWallets: [
+          { id: 'c-1', balance: 1000 },
+          { id: 'c-2', balance: 500 },
+        ],
+        tasks: [],
+        taskCompletions: [],
+        gamificationSummaries: [
+          {
+            schemaVersion: 1,
+            familyId: 'f-1',
+            childId: 'c-1',
+            xpTotal: 420,
+            level: 1,
+            currentStreak: 0,
+            bestStreak: 0,
+            perfectDayCount: 0,
+            lastQualifiedDayKey: null,
+            projectionRevision: 1,
+            foldedThrough: null,
+            rebuildRequired: false,
+            earliestDirtyCursor: null,
+            projectionStatus: 'ready',
+            updatedAt: Date.now(),
+          },
+          {
+            schemaVersion: 1,
+            familyId: 'f-1',
+            childId: 'c-2',
+            xpTotal: 2500,
+            level: 3,
+            currentStreak: 0,
+            bestStreak: 0,
+            perfectDayCount: 0,
+            lastQualifiedDayKey: null,
+            projectionRevision: 1,
+            foldedThrough: null,
+            rebuildRequired: false,
+            earliestDirtyCursor: null,
+            projectionStatus: 'ready',
+            updatedAt: Date.now(),
+          },
+        ],
+        dailyProgress: [],
+        bootstrapStatus: { wallets: 'ready', gamificationSummaries: 'ready' },
+      } as any;
+
+      render(withRouter(<ChildrenOverview />));
+
+      const aliceCard = screen.getByLabelText("View Alice's profile");
+      const bobCard = screen.getByLabelText("View Bob's profile");
+      // Alice's card shows her own Level 1 (xpTotal 420), never Bob's Level 3.
+      expect(within(aliceCard).getByText('Level 1')).toBeInTheDocument();
+      expect(within(aliceCard).queryByText('Level 3')).not.toBeInTheDocument();
+      // Bob's card shows his own Level 3 (xpTotal 2500), never Alice's Level 1.
+      expect(within(bobCard).getByText('Level 3')).toBeInTheDocument();
+      expect(within(bobCard).queryByText('Level 1')).not.toBeInTheDocument();
     });
   });
 
