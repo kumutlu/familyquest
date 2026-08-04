@@ -20,6 +20,10 @@ import {
   perfectDayRevocationEventId,
   planThresholdEvents,
 } from '../../src/domain/gamification/perfectDay'
+import { DEFAULT_WEEKLY_CONTEXT } from '../../src/domain/gamification/v3/weeklyWindow'
+import { BaselineMissingErrorV3, writeV3ShadowInTransaction } from './gamificationV3/integration'
+import { mapTaskApproval } from './gamificationV3/sourceMappers/taskMapper'
+import { mapDailyGoal, mapPerfectDay } from './gamificationV3/sourceMappers/dailyAwardMapper'
 import {
   finalizationSourceTransitionId,
   type DailyEligibilitySnapshotV1,
@@ -716,6 +720,38 @@ export class AdminGamificationRepository implements
         recipientIds: [childId], title: 'Task approved', body: `${taskDocument.data()!.title ?? 'Task'} was approved. +${effect.rewardPointsAward} points`,
         entityType: 'task_completion', entityId: args.completionId, actionUrl: '/tasks', dedupeKey: notificationId(logicalKey), createdAt: timestamp(args.processingAt),
       })
+      // V3 shadow write — atomic with the transaction.
+      // Duplicate processing is idempotent: writeV3ShadowInTransaction checks
+      // for an existing event and returns early if one exists.
+      // If the V3 baseline is missing, the shadow write is best-effort: the
+      // authoritative legacy write above is unaffected and the V3 projection
+      // can be repaired later.
+      try {
+        await writeV3ShadowInTransaction(transaction, (path) => this.db.doc(path), {
+          familyId: args.familyId,
+          memberId: childId,
+          event: mapTaskApproval({
+            familyId: args.familyId,
+            memberId: childId,
+            taskId,
+            logicalCompletionKey: logicalKey,
+            pointsReward: effect.rewardPointsAward,
+            xpAward: effect.xpAward,
+            approvedAt: new Date(approvedAt).toISOString(),
+            createdAt: new Date(args.processingAt).toISOString(),
+          }),
+          weeklyContext: DEFAULT_WEEKLY_CONTEXT,
+          asOf: new Date(args.processingAt).toISOString(),
+        })
+      } catch (error) {
+        if (error instanceof BaselineMissingErrorV3) {
+          console.warn('[gamification-v3-shadow-skipped]', JSON.stringify({
+            familyId: args.familyId, memberId: childId, processor: 'processApprovedCompletion',
+          }))
+        } else {
+          throw error
+        }
+      }
       return { status: 'processed', logicalCompletionKey: logicalKey }
     })
   }
@@ -867,6 +903,47 @@ export class AdminGamificationRepository implements
       transaction.set(progressRef, progressToData(progress, [...existingEvents, ...events]))
       transaction.set(summaryRef, summaryToData(summary))
       if (checkpointDocument.exists && checkpointDocument.data()!.dirty !== true) transaction.update(checkpointRef, { dirty: true })
+      // V3 shadow writes for DAILY_GOAL_AWARDED and PERFECT_DAY_AWARDED events.
+      // These are emitted when the corresponding V2 threshold qualification events
+      // are created with 'qualified' state, inside the same authoritative transaction.
+      for (const document of events) {
+        if (document.event.eventType === 'daily_goal_qualification_changed'
+          && document.event.qualificationState === 'qualified') {
+          await writeV3ShadowInTransaction(transaction, (path) => this.db.doc(path), {
+            familyId,
+            memberId: childId,
+            event: mapDailyGoal({
+              familyId,
+              memberId: childId,
+              dayKey,
+              xpAward: 25,
+              rewardPointsAward: 0,
+              weeklyPointsAward: 0,
+              awardedAt: new Date(processingAt).toISOString(),
+            }),
+            weeklyContext: DEFAULT_WEEKLY_CONTEXT,
+            asOf: new Date(processingAt).toISOString(),
+          })
+        }
+        if (document.event.eventType === 'perfect_day_qualification_changed'
+          && document.event.qualificationState === 'qualified') {
+          await writeV3ShadowInTransaction(transaction, (path) => this.db.doc(path), {
+            familyId,
+            memberId: childId,
+            event: mapPerfectDay({
+              familyId,
+              memberId: childId,
+              dayKey,
+              xpAward: 50,
+              rewardPointsAward: 0,
+              weeklyPointsAward: 0,
+              awardedAt: new Date(processingAt).toISOString(),
+            }),
+            weeklyContext: DEFAULT_WEEKLY_CONTEXT,
+            asOf: new Date(processingAt).toISOString(),
+          })
+        }
+      }
       return { snapshotCreated: !eligibilityDocument.exists, finalized: true }
     })
   }
