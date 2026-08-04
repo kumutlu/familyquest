@@ -310,19 +310,26 @@ describe('Golden shadow-parity integration test', () => {
     events = await eventRepo.readMemberEvents(FAMILY, MEMBER)
     expect(events.filter(e => e.eventType === 'BEHAVIOUR_POSITIVE')).toHaveLength(1)
 
-    // 5. Redeem reward
+    // 5. Log negative behaviour (deterministic ordering: earnings before spending)
+    const negBeh = makeBehaviourEvent('negative', 'neg-beh-1', -5)
+    const negResult = await writeShadowEvent({ eventRepo, projectionRepo, now: () => '2026-01-05T10:00:00.000Z', weeklyContext: weekly }, negBeh)
+    expect(negResult.status).toBe('written')
+    events = await eventRepo.readMemberEvents(FAMILY, MEMBER)
+    expect(events.filter(e => e.eventType === 'BEHAVIOUR_NEGATIVE')).toHaveLength(1)
+
+    // 6. Redeem reward
     const redemption = makeRedemptionEvent('redemption-1', 10)
     await writeShadowEvent({ eventRepo, projectionRepo, now: () => '2026-01-05T10:00:00.000Z', weeklyContext: weekly }, redemption)
     events = await eventRepo.readMemberEvents(FAMILY, MEMBER)
     expect(events.filter(e => e.eventType === 'REWARD_REDEEMED')).toHaveLength(1)
 
-    // 6. Unlock avatar
+    // 7. Unlock avatar
     const avatar = makeAvatarUnlockEvent('epic-dragon', 500)
     await writeShadowEvent({ eventRepo, projectionRepo, now: () => '2026-01-05T10:00:00.000Z', weeklyContext: weekly }, avatar)
     events = await eventRepo.readMemberEvents(FAMILY, MEMBER)
     expect(events.filter(e => e.eventType === 'AVATAR_UNLOCKED')).toHaveLength(1)
 
-    // 7. Award daily goal and perfect day
+    // 8. Award daily goal and perfect day
     const dailyGoal = makeDailyGoalEvent('2026-01-05', 25)
     await writeShadowEvent({ eventRepo, projectionRepo, now: () => '2026-01-05T10:00:00.000Z', weeklyContext: weekly }, dailyGoal)
     const perfectDay = makePerfectDayEvent('2026-01-05', 50)
@@ -331,13 +338,13 @@ describe('Golden shadow-parity integration test', () => {
     expect(events.filter(e => e.eventType === 'DAILY_GOAL_AWARDED')).toHaveLength(1)
     expect(events.filter(e => e.eventType === 'PERFECT_DAY_AWARDED')).toHaveLength(1)
 
-    // 8. Reverse a task approval
+    // 9. Reverse a task approval
     const reversal = makeReversalEvent(task1.eventId, 'rev-1', -10, -10, -10)
     await writeShadowEvent({ eventRepo, projectionRepo, now: () => '2026-01-05T11:00:00.000Z', weeklyContext: weekly }, reversal)
     events = await eventRepo.readMemberEvents(FAMILY, MEMBER)
     expect(events.filter(e => e.eventType === 'REVERSAL')).toHaveLength(1)
 
-    // 9. Duplicate delivery — writing the same event again returns duplicate
+    // 10. Duplicate delivery — writing the same event again returns duplicate
     const dupResult = await writeShadowEvent({ eventRepo, projectionRepo, now: () => '2026-01-05T10:00:00.000Z', weeklyContext: weekly }, task1)
     expect(dupResult.status).toBe('duplicate')
 
