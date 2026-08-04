@@ -22,6 +22,19 @@ import { reduceGamificationEventsV3, type ReducerContextV3 } from '../../../src/
 import { type WeeklyContextV3 } from '../../../src/domain/gamification/v3/weeklyWindow'
 
 /**
+ * Error thrown when a V3 baseline is required but missing.
+ */
+export class BaselineMissingErrorV3 extends Error {
+  constructor(
+    readonly familyId: string,
+    readonly memberId: string,
+  ) {
+    super(`V3 baseline missing for member ${memberId} in family ${familyId}`)
+    this.name = 'BaselineMissingErrorV3'
+  }
+}
+
+/**
  * Write a V3 shadow event inside an existing Firestore transaction.
  *
  * The event is written atomically with legacy writes. If the V3 write fails,
@@ -58,6 +71,14 @@ export async function writeV3ShadowInTransaction(
   // 2. Read existing V3 projection
   const stateRef = docRef(stateDocPath(familyId, memberId))
   const existingStateDoc = await transaction.get(stateRef)
+
+  // Baseline precondition: non-baseline events require an existing projection.
+  // If no projection exists and the event is not LEGACY_BASELINE, reject with
+  // BaselineMissingErrorV3 so the authoritative legacy write can be preserved
+  // by the caller (best-effort shadow), while all other errors propagate.
+  if (!existingStateDoc.exists && event.eventType !== 'LEGACY_BASELINE') {
+    throw new BaselineMissingErrorV3(familyId, memberId)
+  }
 
   // 3. Compute new state
   const { deserialiseStateV3 } = await import('../../../src/domain/gamification/v3/storage')
