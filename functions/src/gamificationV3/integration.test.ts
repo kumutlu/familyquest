@@ -4,10 +4,13 @@
  * Amendment 4: If the V3 event/projection write fails, the entire
  * authoritative transaction must fail. These tests prove that V3 shadow
  * writes are atomic with the transaction.
+ *
+ * Blocker 2: Non-baseline events require an existing V3 projection (baseline
+ * precondition). Tests verify this precondition is enforced.
  */
 import { describe, it, expect, beforeEach } from 'vitest'
 import { type Firestore, type Transaction, type DocumentReference } from 'firebase-admin/firestore'
-import { writeV3ShadowInTransaction } from './integration'
+import { writeV3ShadowInTransaction, BaselineMissingErrorV3 } from './integration'
 import { AdminV3EventRepository } from './eventRepository'
 import { AdminV3ProjectionRepository } from './projectionRepository'
 import {
@@ -18,6 +21,25 @@ import { DEFAULT_WEEKLY_CONTEXT } from '../../../src/domain/gamification/v3/week
 
 const FAMILY = 'test-family'
 const MEMBER = 'test-member'
+
+function makeBaselineEvent(): GamificationEventV3 {
+  return {
+    schemaVersion: GAMIFICATION_V3_SCHEMA_VERSION,
+    eventId: `legacy-baseline:${FAMILY}:${MEMBER}:v3`,
+    eventType: 'LEGACY_BASELINE',
+    familyId: FAMILY,
+    memberId: MEMBER,
+    sourceType: 'bootstrap',
+    sourceId: 'v3',
+    effectiveAt: '2026-01-01T00:00:00.000Z',
+    createdAt: '2026-01-01T00:00:00.000Z',
+    rewardPointsDelta: 600,
+    xpDelta: 600,
+    weeklyPointsDelta: 0,
+    idempotencyKey: `legacy-baseline:${FAMILY}:${MEMBER}:v3`,
+    metadata: {},
+  }
+}
 
 function makeTaskEvent(): GamificationEventV3 {
   return {
@@ -144,8 +166,8 @@ describe('writeV3ShadowInTransaction', () => {
     mock = createMockDb()
   })
 
-  it('writes V3 event and projection inside a transaction', async () => {
-    const event = makeTaskEvent()
+  it('writes V3 baseline event and projection inside a transaction', async () => {
+    const event = makeBaselineEvent()
     const docRef = (path: string) => ({ path } as unknown as DocumentReference)
 
     await mock.runTransaction(async (txn) => {
@@ -167,10 +189,73 @@ describe('writeV3ShadowInTransaction', () => {
     expect(mock.store.has(statePath)).toBe(true)
   })
 
-  it('is idempotent — writing the same event twice is a no-op', async () => {
+  it('writes V3 event and projection after baseline', async () => {
+    const docRef = (path: string) => ({ path } as unknown as DocumentReference)
+
+    // First write baseline
+    await mock.runTransaction(async (txn) => {
+      await writeV3ShadowInTransaction(txn, docRef, {
+        familyId: FAMILY,
+        memberId: MEMBER,
+        event: makeBaselineEvent(),
+        weeklyContext: DEFAULT_WEEKLY_CONTEXT,
+        asOf: '2026-01-05T10:00:00.000Z',
+      })
+    })
+
+    // Then write task event
+    const event = makeTaskEvent()
+    await mock.runTransaction(async (txn) => {
+      await writeV3ShadowInTransaction(txn, docRef, {
+        familyId: FAMILY,
+        memberId: MEMBER,
+        event,
+        weeklyContext: DEFAULT_WEEKLY_CONTEXT,
+        asOf: '2026-01-05T10:00:00.000Z',
+      })
+    })
+
+    // Verify the task event was written
+    const eventPath = `families/${FAMILY}/gamification_events_v3/${event.eventId}`
+    expect(mock.store.has(eventPath)).toBe(true)
+
+    // Verify projection still exists
+    const statePath = `families/${FAMILY}/gamification_state_v3/${MEMBER}`
+    expect(mock.store.has(statePath)).toBe(true)
+  })
+
+  it('rejects a non-baseline event without an existing projection (BaselineMissingErrorV3)', async () => {
     const event = makeTaskEvent()
     const docRef = (path: string) => ({ path } as unknown as DocumentReference)
 
+    await expect(
+      mock.runTransaction(async (txn) => {
+        await writeV3ShadowInTransaction(txn, docRef, {
+          familyId: FAMILY,
+          memberId: MEMBER,
+          event,
+          weeklyContext: DEFAULT_WEEKLY_CONTEXT,
+          asOf: '2026-01-05T10:00:00.000Z',
+        })
+      }),
+    ).rejects.toThrow(BaselineMissingErrorV3)
+  })
+
+  it('is idempotent — writing the same event twice is a no-op', async () => {
+    const docRef = (path: string) => ({ path } as unknown as DocumentReference)
+
+    // Write baseline first
+    await mock.runTransaction(async (txn) => {
+      await writeV3ShadowInTransaction(txn, docRef, {
+        familyId: FAMILY,
+        memberId: MEMBER,
+        event: makeBaselineEvent(),
+        weeklyContext: DEFAULT_WEEKLY_CONTEXT,
+        asOf: '2026-01-05T10:00:00.000Z',
+      })
+    })
+
+    const event = makeTaskEvent()
     await mock.runTransaction(async (txn) => {
       await writeV3ShadowInTransaction(txn, docRef, {
         familyId: FAMILY,
@@ -197,10 +282,20 @@ describe('writeV3ShadowInTransaction', () => {
   })
 
   it('fails the transaction when V3 write fails (Amendment 4)', async () => {
-    // Simulate a failure by throwing inside the transaction
-    const event = makeTaskEvent()
     const docRef = (path: string) => ({ path } as unknown as DocumentReference)
 
+    // Write baseline first
+    await mock.runTransaction(async (txn) => {
+      await writeV3ShadowInTransaction(txn, docRef, {
+        familyId: FAMILY,
+        memberId: MEMBER,
+        event: makeBaselineEvent(),
+        weeklyContext: DEFAULT_WEEKLY_CONTEXT,
+        asOf: '2026-01-05T10:00:00.000Z',
+      })
+    })
+
+    const event = makeTaskEvent()
     let transactionFailed = false
     try {
       await mock.runTransaction(async (txn) => {
