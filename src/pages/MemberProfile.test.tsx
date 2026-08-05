@@ -268,6 +268,66 @@ describe('MemberProfile gamification summary', () => {
     expect(screen.getByTestId('profile-level')).toHaveTextContent('Level 3');
   });
 
+  it('P0 REQUIRED: dirty summary (xpTotal=361) wins over member lifetimeXP=86 — renders 361/1/1', () => {
+    store.state = {
+      familyMembers: [{ id: 'child-1', role: 'child', displayName: 'Test Child', rewardPoints: 100, lifetimeXP: 86, currentStreak: 2, longestStreak: 2 }],
+      loading: false,
+      behaviourEvents: [],
+      gamificationSummaries: [{
+        schemaVersion: 1,
+        familyId: 'family-1',
+        childId: 'child-1',
+        xpTotal: 361,
+        level: 1,
+        currentStreak: 1,
+        bestStreak: 1,
+        perfectDayCount: 0,
+        lastQualifiedDayKey: null,
+        projectionRevision: 1,
+        foldedThrough: null,
+        rebuildRequired: true,
+        earliestDirtyCursor: null,
+        projectionStatus: 'ready',
+        updatedAt: Date.now(),
+      }],
+      dailyProgress: [],
+    };
+    render(
+      <MemoryRouter initialEntries={['/family/child-1']}>
+        <Routes>
+          <Route path="/family/:id" element={<MemberProfile />} />
+        </Routes>
+      </MemoryRouter>
+    );
+    // XP 361 from the summary, NOT the member's lifetimeXP=86.
+    expect(screen.getByTestId('profile-lifetime-xp')).toHaveTextContent('361');
+    // current streak 1 and best streak 1 from the summary, NOT member's 2/2.
+    expect(screen.getByTestId('profile-current-streak')).toHaveTextContent('1');
+    expect(screen.getByTestId('profile-best-streak')).toHaveTextContent('1');
+    // A present summary never shows "Updating…".
+    expect(screen.queryByText('Updating…')).not.toBeInTheDocument();
+  });
+
+  it('P0 REQUIRED: missing summary falls back to member values (86/2/2)', () => {
+    store.state = {
+      familyMembers: [{ id: 'child-1', role: 'child', displayName: 'Test Child', rewardPoints: 100, lifetimeXP: 86, currentStreak: 2, longestStreak: 2 }],
+      loading: false,
+      behaviourEvents: [],
+      gamificationSummaries: [],
+      dailyProgress: [],
+    };
+    render(
+      <MemoryRouter initialEntries={['/family/child-1']}>
+        <Routes>
+          <Route path="/family/:id" element={<MemberProfile />} />
+        </Routes>
+      </MemoryRouter>
+    );
+    expect(screen.getByTestId('profile-lifetime-xp')).toHaveTextContent('86');
+    expect(screen.getByTestId('profile-current-streak')).toHaveTextContent('2');
+    expect(screen.getByTestId('profile-best-streak')).toHaveTextContent('2');
+  });
+
   it('shows not found when member does not exist', () => {
     store.state = {
       familyMembers: [],

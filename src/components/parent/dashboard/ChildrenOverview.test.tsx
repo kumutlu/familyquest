@@ -143,8 +143,9 @@ describe('ChildrenOverview', () => {
       expect(screen.getByText('Alice')).toBeInTheDocument();
       expect(screen.getByText('Level 2')).toBeInTheDocument();
       expect(screen.queryByText('Level 5')).not.toBeInTheDocument();
-      // A quiet "updating" indicator is shown, but values are not hidden.
-      expect(screen.getByText('Updating…')).toBeInTheDocument();
+      // A present summary (even dirty) never shows "Updating…" — its own
+      // values are displayed.
+      expect(screen.queryByText('Updating…')).not.toBeInTheDocument();
     });
 
     it('REQUIRED: dirty summary xpTotal=420 with lifetimeXP=400 shows 420 (not 400)', () => {
@@ -575,6 +576,96 @@ describe('ChildrenOverview', () => {
 
       expect(container.innerHTML).toBe('');
     });
+  });
+});
+
+describe('P0 shared resolver consistency (ChildrenOverview card)', () => {
+  const makeSummary = (overrides: any = {}) => ({
+    schemaVersion: 1,
+    familyId: 'f-1',
+    childId: 'c-1',
+    xpTotal: 361,
+    level: 1,
+    currentStreak: 1,
+    bestStreak: 1,
+    perfectDayCount: 0,
+    lastQualifiedDayKey: null,
+    projectionRevision: 1,
+    foldedThrough: null,
+    rebuildRequired: true,
+    earliestDirtyCursor: null,
+    projectionStatus: 'ready',
+    updatedAt: Date.now(),
+    ...overrides,
+  });
+
+  it('REQUIRED: dirty summary (xpTotal=361) wins over member lifetimeXP=86 — no Updating…', () => {
+    store.state = {
+      familyMembers: [
+        { id: 'c-1', role: 'child', displayName: 'Alice', lifetimeXP: 86, currentStreak: 2, longestStreak: 2 },
+      ],
+      childWallets: [{ id: 'c-1', balance: 1000 }],
+      tasks: [],
+      taskCompletions: [],
+      gamificationSummaries: [makeSummary()],
+      dailyProgress: [],
+      bootstrapStatus: { wallets: 'ready', gamificationSummaries: 'ready' },
+    } as any;
+
+    render(withRouter(<ChildrenOverview />));
+
+    // xpTotal 361 -> "639 XP to Level 2". The member fallback (lifetimeXP=86)
+    // would render "914 XP to Level 2", which must NOT appear.
+    expect(screen.getByText('639 XP to Level 2')).toBeInTheDocument();
+    expect(screen.queryByText('914 XP to Level 2')).not.toBeInTheDocument();
+    // bestStreak comes from the summary (1), never the member's longestStreak (2).
+    expect(screen.queryByText('2')).not.toBeInTheDocument();
+    // A present summary never shows "Updating…".
+    expect(screen.queryByText('Updating…')).not.toBeInTheDocument();
+  });
+
+  it('REQUIRED: missing summary falls back to member values (lifetimeXP=86)', () => {
+    store.state = {
+      familyMembers: [
+        { id: 'c-1', role: 'child', displayName: 'Alice', lifetimeXP: 86, currentStreak: 2, longestStreak: 2 },
+      ],
+      childWallets: [{ id: 'c-1', balance: 1000 }],
+      tasks: [],
+      taskCompletions: [],
+      gamificationSummaries: [],
+      dailyProgress: [],
+      bootstrapStatus: { wallets: 'ready', gamificationSummaries: 'ready' },
+    } as any;
+
+    render(withRouter(<ChildrenOverview />));
+
+    // Fallback derives level from lifetimeXP=86 -> "914 XP to Level 2".
+    expect(screen.getByText('914 XP to Level 2')).toBeInTheDocument();
+    expect(screen.queryByText('639 XP to Level 2')).not.toBeInTheDocument();
+  });
+
+  it('REQUIRED: another child’s summary is never used for this child', () => {
+    store.state = {
+      familyMembers: [
+        { id: 'c-1', role: 'child', displayName: 'Alice', lifetimeXP: 86 },
+        { id: 'c-2', role: 'child', displayName: 'Bob', lifetimeXP: 50 },
+      ],
+      childWallets: [{ id: 'c-1', balance: 1000 }, { id: 'c-2', balance: 500 }],
+      tasks: [],
+      taskCompletions: [],
+      // Only c-2 has a summary; c-1 must NOT pick it up.
+      gamificationSummaries: [makeSummary({ childId: 'c-2', id: 'c-2', xpTotal: 9999, bestStreak: 9 })],
+      dailyProgress: [],
+      bootstrapStatus: { wallets: 'ready', gamificationSummaries: 'ready' },
+    } as any;
+
+    render(withRouter(<ChildrenOverview />));
+
+    // Alice (c-1) has no summary -> falls back to her lifetimeXP=86 ("914 XP to Level 2"),
+    // never Bob's 9999 summary.
+    const aliceCard = screen.getByText('Alice').closest('a') as HTMLElement;
+    expect(within(aliceCard).getByText('914 XP to Level 2')).toBeInTheDocument();
+    expect(within(aliceCard).queryByText('1 XP to Level 2')).not.toBeInTheDocument();
   });
 });
 

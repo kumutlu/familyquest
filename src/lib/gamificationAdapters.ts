@@ -236,3 +236,110 @@ export function levelFromXp(xpTotal: number): number {
 export function xpProgressInLevel(xpTotal: number): number {
   return xpTotal % XP_PER_LEVEL
 }
+
+/**
+ * Locates the gamification projection document for a specific member.
+ *
+ * Documents are keyed by member id; legacy/backfilled documents may omit the
+ * `childId` field, so the document id must be matched as well. This is the
+ * single, shared lookup used by BOTH ChildrenOverview and MemberProfile so the
+ * two screens can never drift into separate lookup rules.
+ *
+ * @param summaries  The gamification_summaries collection (parent view).
+ * @param ownSummary The signed-in member's own summary (child view), only ever
+ *                   valid for the member it belongs to.
+ * @param memberId   The id of the member being viewed.
+ */
+export function findMemberSummary(
+  summaries: (GamificationSummaryV1 & { id?: string })[] | undefined,
+  ownSummary: (GamificationSummaryV1 & { id?: string }) | null | undefined,
+  memberId: string,
+): GamificationSummaryV1 | null {
+  const fromCollection = (summaries ?? []).find(
+    (s) => s.childId === memberId || s.id === memberId,
+  )
+  if (fromCollection) return fromCollection
+  if (ownSummary && (ownSummary.childId === memberId || ownSummary.id === memberId)) {
+    return ownSummary
+  }
+  return null
+}
+
+/**
+ * Single shared resolver for a member's gamification view.
+ *
+ * This is the ONE source of truth for both ChildrenOverview (Dashboard card)
+ * and MemberProfile. It enforces the required consistency rule:
+ *
+ *  1. If a projection document exists with finite `xpTotal`/`level`, its values
+ *     are authoritative — INCLUDING when `rebuildRequired=true` or
+ *     `projectionStatus='rebuilding'`. We never substitute the legacy
+ *     `users.lifetimeXP` mirror while a document is present.
+ *  2. The legacy member counters (`lifetimeXP`/`currentStreak`/`longestStreak`)
+ *     are used ONLY when the projection document is genuinely absent.
+ *  3. `isUpdating` is never set, so a valid summary never renders "Updating…".
+ *
+ * @param summary       Gamification projection document (may be null/dirty/rebuilding).
+ * @param member        Member record providing the legacy fallback counters.
+ * @param todayProgress Optional current-day progress to merge into the view.
+ */
+export function resolveGamificationView(
+  summary: GamificationSummaryV1 | null | undefined,
+  member: {
+    lifetimeXP?: number | null
+    currentStreak?: number | null
+    longestStreak?: number | null
+  } | null | undefined,
+  todayProgress?: DailyProgressV1 | null,
+): GamificationSummaryView {
+  const summaryPresent =
+    !!summary &&
+    Number.isFinite(Number(summary.xpTotal)) &&
+    Number.isFinite(Number(summary.level))
+
+  // Rule 1: a present projection is authoritative, even when dirty/rebuilding.
+  if (summaryPresent) {
+    const xpTotal = Math.max(0, Math.floor(Number(summary!.xpTotal)))
+    const level = Math.max(1, Math.floor(Number(summary!.level)))
+    const xpProgressInLevel = xpTotal % XP_PER_LEVEL
+    return {
+      xpTotal,
+      level,
+      xpToNextLevel: XP_PER_LEVEL - xpProgressInLevel,
+      xpProgressInLevel,
+      currentStreak: nonNegativeInteger(summary!.currentStreak),
+      bestStreak: nonNegativeInteger(summary!.bestStreak),
+      perfectDayCount: nonNegativeInteger(summary!.perfectDayCount),
+      todayProgress: todayProgress?.progressPercentage ?? null,
+      todayGoalReached: todayProgress?.dailyGoalReached ?? null,
+      todayPerfectDay: todayProgress?.perfectDayReached ?? null,
+      isAvailable: true,
+      isUpdating: false,
+    }
+  }
+
+  // Rule 2: projection genuinely absent -> legacy member counters only.
+  // XP/level derive from `lifetimeXP` when present; streaks always fall back to
+  // the member's `currentStreak`/`longestStreak` counters (independent of
+  // `lifetimeXP`, matching the prior streak-only fallback behaviour).
+  const rawXp = Number(member?.lifetimeXP)
+  const hasXpFallback = member !== undefined && member !== null && Number.isFinite(rawXp)
+  const xpTotal = hasXpFallback ? Math.max(0, Math.floor(rawXp)) : 0
+  const progress = hasXpFallback
+    ? levelProgressForXp(xpTotal, XP_PER_LEVEL)
+    : { level: 1, xpToNextLevel: XP_PER_LEVEL, xpIntoLevel: 0 }
+  return {
+    xpTotal,
+    level: progress.level,
+    xpToNextLevel: progress.xpToNextLevel,
+    xpProgressInLevel: progress.xpIntoLevel,
+    currentStreak: nonNegativeInteger(member?.currentStreak),
+    bestStreak: nonNegativeInteger(member?.longestStreak),
+    perfectDayCount: 0,
+    todayProgress: todayProgress?.progressPercentage ?? null,
+    todayGoalReached: todayProgress?.dailyGoalReached ?? null,
+    todayPerfectDay: todayProgress?.perfectDayReached ?? null,
+    isAvailable: hasXpFallback,
+    isUpdating: false,
+  }
+}

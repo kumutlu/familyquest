@@ -10,7 +10,7 @@ import { ACHIEVEMENTS } from '../lib/achievements';
 import { cn } from '../lib/utils';
 import { formatDate } from '../i18n/format';
 import { HistoryActionControl } from '../components/reversals/HistoryActionControl';
-import { resolveProgression, resolveStreaks } from '../lib/gamificationAdapters';
+import { findMemberSummary, resolveGamificationView } from '../lib/gamificationAdapters';
 import type { GamificationSummaryV1 } from '../domain/gamification/types';
 
 export function MemberProfile() {
@@ -41,7 +41,9 @@ export function MemberProfile() {
     );
   }
 
-  // Get the gamification projection for the *viewed* member.
+  // Get the gamification projection for the *viewed* member via the SAME shared
+  // lookup used by ChildrenOverview (so the two screens can never drift into
+  // separate lookup rules).
   //
   // - Parents read the whole `gamification_summaries` collection. Documents are
   //   keyed by child id; the `childId` field is absent on legacy documents, so
@@ -52,21 +54,19 @@ export function MemberProfile() {
   //   it belongs to — never keyed off `currentUser` alone, which would leak the
   //   signed-in parent's XP into a child's profile.
   const ownSummary = myGamificationSummary as (GamificationSummaryV1 & { id?: string }) | null;
-  const summaryDoc: GamificationSummaryV1 | null =
-    (gamificationSummaries.find(
-      (s: GamificationSummaryV1 & { id?: string }) => s.childId === id || s.id === id,
-    ) ?? null) ||
-    (ownSummary && (ownSummary.childId === id || ownSummary.id === id) ? ownSummary : null);
-  // Always-complete progression: falls back to the member's lifetimeXP balance
-  // when the server projection is missing or rebuilding.
-  const progression = resolveProgression(summaryDoc, member);
-  // ONE resolved streak source drives both the displayed streaks and the
-  // streak-based achievements below. A ready projection wins even when it
-  // reports 0, so a badge can never be unlocked from a stale legacy
-  // `longestStreak` while the card displays 0.
-  const streaks = resolveStreaks(summaryDoc, member);
-  const currentStreak = streaks.currentStreak;
-  const bestStreak = streaks.bestStreak;
+  const summaryDoc = findMemberSummary(gamificationSummaries, ownSummary, id ?? '');
+  // ONE shared resolver drives both the displayed progression/streaks and the
+  // streak-based achievements below. A present projection is authoritative even
+  // when dirty/rebuilding; the legacy `lifetimeXP`/`currentStreak`/`longestStreak`
+  // counters are used only when the projection document is genuinely absent.
+  const view = resolveGamificationView(summaryDoc, member);
+  const progression = view;
+  const currentStreak = view.currentStreak;
+  const bestStreak = view.bestStreak;
+  const percentage =
+    view.xpProgressInLevel + view.xpToNextLevel > 0
+      ? Math.round((view.xpProgressInLevel / (view.xpProgressInLevel + view.xpToNextLevel)) * 100)
+      : 0;
 
   const userEvents = behaviourEvents.filter(e => e.userId === id).slice(0, 10);
 
@@ -103,18 +103,18 @@ export function MemberProfile() {
             <p data-testid="profile-level" className="text-sm font-bold uppercase tracking-wider">
               {t('profile:level', { level: progression.level })}
             </p>
-            <span className="text-sm font-medium text-primary-100">{progression.percentage}%</span>
+            <span className="text-sm font-medium text-primary-100">{percentage}%</span>
           </div>
 
           <div className="mt-3 h-2.5 w-full overflow-hidden rounded-full bg-primary-700">
             <div
               data-testid="profile-progress-bar"
               role="progressbar"
-              aria-valuenow={progression.percentage}
+              aria-valuenow={percentage}
               aria-valuemin={0}
               aria-valuemax={100}
               className="h-2.5 rounded-full bg-white transition-all duration-500 ease-out"
-              style={{ width: `${progression.percentage}%` }}
+              style={{ width: `${percentage}%` }}
             />
           </div>
 
@@ -141,7 +141,7 @@ export function MemberProfile() {
                 {t('profile:lifetimeXpLabel')}
               </p>
               <p data-testid="profile-lifetime-xp" className="font-bold text-white">
-                {progression.lifetimeXp}
+                {view.xpTotal}
               </p>
             </div>
             <div>
