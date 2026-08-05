@@ -81,3 +81,25 @@ the scan classifies them (write = mutation, read = consumption).
 
 
 <!-- END GENERATED: gamification-v4-freeze -->
+
+## 5. Freeze guard contract (Task 0.2)
+
+The CI guard [`scripts/gamification-freeze-guard.cjs`](scripts/gamification-freeze-guard.cjs:1)
+rejects any **new** legacy gamification writer that appears outside the approved
+V4 directories. It is wired into CI via `npm run ci:freeze` (and
+[`.github/workflows/ci.yml`](.github/workflows/ci.yml:1)).
+
+- **Allowed write directories (V4 system only):**
+  - `src/domain/gamification/v4`
+  - `functions/src/gamification/v4`
+- **Forbidden writer patterns** (`FORBIDDEN_WRITER_PATTERNS`): any new
+  occurrence outside the allowed directories of
+  - `rewardPoints` assignment / object-property write (`rewardPoints:` or `rewardPoints =`)
+  - `lifetimeXP` assignment / object-property write (`lifetimeXP:` or `lifetimeXP =`)
+- **Detection scope:** the working-tree diff (added/modified lines) and any
+  untracked files under `src/` and `functions/src/`. On a clean tree the guard
+  exits 0; adding a `rewardPoints` write in `src/lib/api.ts` makes it exit 1.
+- **Frozen legacy writers (must not gain new writers):** the entries enumerated
+  in section 1 (`src/lib/api.ts`, `src/lib/reversalApi.ts`, `src/lib/behaviour.ts`).
+- **Out of scope:** wallet documents, Firestore writes, and any runtime behaviour
+  change. The guard is read-only.
