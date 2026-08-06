@@ -500,6 +500,15 @@ function walletTitle(type: TransactionType, opts: TransactionAdapterOptions): st
   return translate(opts.t, key, fallback);
 }
 
+// Machine-generated transfer descriptions written by the send/receive flow.
+// These carry no extra information once the title shows "Sent £X to Y", so they
+// must never be echoed as the subtitle. A genuine user note is never matched here.
+const GENERATED_TRANSFER_DESCRIPTION = /^\s*(sent to|received from|transfer to|transfer from)\b/i;
+
+export function isGeneratedTransferDescription(description: string): boolean {
+  return GENERATED_TRANSFER_DESCRIPTION.test(description);
+}
+
 function normalizeWallet(
   record: WalletRecord,
   opts: TransactionAdapterOptions,
@@ -535,8 +544,17 @@ function normalizeWallet(
     );
   }
   let subtitle = stringValue(record.description) ?? '';
-  // Never repeat the title as the subtitle for transfer rows.
+  // Never repeat the title as the subtitle for transfer rows, and never echo the
+  // machine-generated "Sent to X" / "Received from X" description: the amount-bearing
+  // title already carries that information. Genuine user notes are preserved.
   if (subtitle && subtitle === title) subtitle = '';
+  if (
+    subtitle
+    && (type === 'transfer_in' || type === 'transfer_out')
+    && isGeneratedTransferDescription(subtitle)
+  ) {
+    subtitle = '';
+  }
   if (!subtitle) {
     if (type === 'deposit') subtitle = actorName
       ? translate(opts.t, 'tx.depositFrom', actorName, { actor: actorName })

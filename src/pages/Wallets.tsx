@@ -9,7 +9,7 @@ import { isChildRole, isParentRole } from '../lib/roles';
 import { Navigate } from 'react-router-dom';
 import { useState } from 'react';
 import { AddMoneyModal } from '../components/wallet/AddMoneyModal';
-import { signedTransactionAmount } from '../lib/walletPresentation';
+import { transactionPresentation } from '../lib/walletPresentation';
 import { formatPence, formatDate as i18nFormatDate, resolveFamilyCurrencyCode } from '../i18n/format';
 
 export function Wallets() {
@@ -46,22 +46,12 @@ export function Wallets() {
     return formatPence(amountPence, currencyCode);
   };
 
-  const formatTransactionLabel = (tx: any) => {
-    if (tx.description) return tx.description;
-    const amountPence = signedTransactionAmount(tx);
-    const abs = formatAmount(amountPence);
-    if (tx.type === 'deposit') return t('allowance.added', { amount: abs });
-    if (tx.type === 'allowance') return t('allowance.allowance', { amount: abs });
-    if (tx.type === 'transfer_out') return t('allowance.transferSent', { amount: abs });
-    if (tx.type === 'transfer_in') return t('allowance.transferReceived', { amount: abs });
-    if (tx.type === 'behaviour_penalty') return t('allowance.behaviourPenalty', { amount: abs });
-    if (tx.type === 'fund_contribution') return t('allowance.fundDonation', { amount: abs });
-    if (tx.type === 'withdrawal') return t('allowance.withdrawal', { amount: abs });
+  // Single source of truth for activity labels: walletPresentation.transactionPresentation
+  // (which delegates transfer rows to transferTitle). No local ad-hoc formatting here.
+  const nameResolver = (id: string) => familyMembers.find(m => m.id === id)?.displayName;
 
-    // Fallbacks
-    if (amountPence > 0) return t('allowance.added', { amount: abs });
-    return t('allowance.deducted', { amount: abs });
-  };
+  const formatTransactionLabel = (tx: any) =>
+    transactionPresentation(tx, { nameResolver, t }).title;
 
   return (
     <div className="space-y-6 animate-in fade-in duration-300 pb-8">
