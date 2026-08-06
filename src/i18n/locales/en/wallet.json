@@ -108,6 +108,8 @@
     "withdrawn": "Money withdrawn",
     "withdrawnBy": "By {{actor}}",
     "received": "Received",
+    "sentAmountTo": "Sent {{amount}} to {{name}}",
+    "receivedAmountFrom": "Received {{amount}} from {{name}}",
     "sent": "Sent",
     "approved": "Approved",
     "moneyReceived": "Money received",

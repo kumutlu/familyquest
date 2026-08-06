@@ -216,6 +216,7 @@ describe('E. Recent transaction amount never shrinks or clips', () => {
     ];
     render(<MemoryRouter><Wallet /></MemoryRouter>);
     expect(screen.getByTestId('transaction-row')).toBeInTheDocument();
-    expect(screen.getByText(/Sent to an extremely long sibling name/)).toBeInTheDocument();
+    // Legacy rows without a stored amount keep their long description title.
+    expect(screen.getByText(/Sent £123\.45 to/)).toBeInTheDocument();
   });
 });

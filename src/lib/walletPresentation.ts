@@ -115,6 +115,28 @@ export interface TxPresentation {
   iconBg: string;
 }
 
+// Transfer rows must show the real transaction amount inline, e.g.
+// "Sent £10.00 to Mnalium" / "Received £10.00 from Mnalium".
+// The amount comes strictly from the stored signed pence on the transaction;
+// legacy rows with no amount fall back to the stored description.
+function transferTitle(
+  kind: 'in' | 'out',
+  signedAmountPence: number,
+  name: string,
+  tx: any,
+  t?: TFunction<'wallet'>,
+): string {
+  const hasAmount = Number.isFinite(signedAmountPence) && signedAmountPence !== 0;
+  if (!hasAmount) {
+    return tx?.description || (t ? t(kind === 'in' ? 'tx.received' : 'tx.sent') : kind === 'in' ? 'Received' : 'Sent');
+  }
+  const money = formatMoney(Math.abs(signedAmountPence));
+  if (kind === 'in') {
+    return t ? t('tx.receivedAmountFrom', { amount: money, name }) : `Received ${money} from ${name}`;
+  }
+  return t ? t('tx.sentAmountTo', { amount: money, name }) : `Sent ${money} to ${name}`;
+}
+
 function capitalize(value: string): string {
   if (!value) return value;
   return value.charAt(0).toUpperCase() + value.slice(1);
@@ -167,7 +189,7 @@ export function transactionPresentation(tx: any, opts: PresentationOptions = {})
     }
     case 'transfer_in': {
       const name = nameResolver?.(tx?.counterpartyChildId) || anotherChild;
-      title = tx?.description || (t ? t('tx.received') : 'Received');
+      title = transferTitle('in', amount, name, tx, t);
       subtitle = status === 'completed'
         ? (t ? t('tx.approved') : 'Approved')
         : statusLabel || (t ? t('tx.from', { name }) : `From ${name}`);
@@ -177,7 +199,7 @@ export function transactionPresentation(tx: any, opts: PresentationOptions = {})
     }
     case 'transfer_out': {
       const name = nameResolver?.(tx?.counterpartyChildId) || anotherChild;
-      title = tx?.description || (t ? t('tx.sent') : 'Sent');
+      title = transferTitle('out', amount, name, tx, t);
       subtitle = status === 'completed'
         ? (t ? t('tx.approved') : 'Approved')
         : statusLabel || (t ? t('tx.to', { name }) : `To ${name}`);

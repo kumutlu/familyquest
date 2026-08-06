@@ -328,8 +328,10 @@ describe('18 & 19. Incoming shows +, outgoing shows -', () => {
       </MemoryRouter>,
     );
     const rows = screen.getAllByTestId('transaction-row');
-    const inRow = rows.find(r => r.textContent?.includes('Received from Alin'))!;
-    const outRow = rows.find(r => r.textContent?.includes('Sent to Osman'))!;
+    // Transfer rows now render the amount inline in the title
+    // ("Received £2.00 from …" / "Sent £5.00 to …").
+    const inRow = rows.find(r => r.textContent?.includes('Received £2.00'))!;
+    const outRow = rows.find(r => r.textContent?.includes('Sent £5.00'))!;
     expect(inRow.textContent).toContain('+£2.00');
     expect(outRow.textContent).toContain('-£5.00');
   });

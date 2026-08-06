@@ -108,6 +108,8 @@
     "withdrawn": "Para çekildi",
     "withdrawnBy": "{{actor}} tarafından",
     "received": "Alındı",
+    "sentAmountTo": "{{name}} kişisine {{amount}} gönderildi",
+    "receivedAmountFrom": "{{name}} kişisinden {{amount}} alındı",
     "sent": "Gönderildi",
     "approved": "Onaylandı",
     "moneyReceived": "Para alındı",
