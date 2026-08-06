@@ -11,9 +11,6 @@
  */
 
 import { describe, it, expect } from 'vitest'
-import { readFileSync } from 'node:fs'
-import { fileURLToPath } from 'node:url'
-import { dirname, join } from 'node:path'
 import {
   readTaskCompletions,
   readBehaviours,
@@ -26,9 +23,9 @@ import {
   type LegacyFamily,
 } from './sources'
 
-// Static read of the implementation to enforce guarantees that cannot be
-// expressed as runtime behaviour tests.
-const SRC = readFileSync(join(dirname(fileURLToPath(import.meta.url)), 'sources.ts'), 'utf8')
+// Static source-inspection guarantees (no wallet / firebase / reducer imports)
+// live in tools/architecture/v4-replay-import-hygiene.test.ts because they
+// require Node APIs unavailable under the browser-oriented src tsconfig.
 
 const base: LegacyFamily = {
   familyId: 'family-1',
@@ -172,25 +169,10 @@ describe('determinism', () => {
 })
 
 describe('read-only guarantee', () => {
-  it('never imports wallet modules', () => {
-    expect(SRC).not.toMatch(/from\s+['"][^'"]*wallet[^'"]*['"]/)
-  })
-
-  it('never imports firebase (no Firestore writes)', () => {
-    expect(SRC).not.toMatch(/from\s+['"]firebase/)
-  })
-
   it('does not mutate the input family', () => {
     const doc = { id: 'tc-1', taskId: 't1', childId: 'c1', awardedPoints: 10, approvedAt: '2026-01-01T00:00:00.000Z', createdAt: '2026-01-01T00:00:00.000Z' }
     const f = fam({ taskCompletions: [doc] })
     readTaskCompletions(f)
     expect(f.taskCompletions[0]).toBe(doc)
-  })
-})
-
-describe('reducer not duplicated', () => {
-  it('does not import or re-implement the projection reducer', () => {
-    expect(SRC).not.toMatch(/from\s+['"]\.\/reducer['"]/)
-    expect(SRC).not.toMatch(/reduceGamificationEventsV4|foldEvent/)
   })
 })

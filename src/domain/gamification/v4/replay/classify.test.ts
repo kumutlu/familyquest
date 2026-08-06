@@ -9,8 +9,6 @@
  */
 
 import { describe, it, expect } from 'vitest'
-import { readFileSync } from 'node:fs'
-import { resolve } from 'node:path'
 
 import {
   classify,
@@ -20,8 +18,9 @@ import {
 } from './classify'
 import { SOURCE_TYPE, type SourceTypeV4 } from '../types'
 import type { ReplaySourceRecord } from './sources'
+// Static no-wallet / no-Firestore import checks live in
+// tools/architecture/v4-replay-import-hygiene.test.ts (Node-only APIs).
 
-const CLASSIFY_SRC = resolve(process.cwd(), 'src/domain/gamification/v4/replay/classify.ts')
 
 function rec(partial: Partial<ReplaySourceRecord> & { sourceType: SourceTypeV4; sourceId: string }): ReplaySourceRecord {
   return {
@@ -172,22 +171,7 @@ describe('no guessing behaviour', () => {
   })
 })
 
-describe('hard constraints — no wallet / no Firestore', () => {
-  const src = readFileSync(CLASSIFY_SRC, 'utf8')
-
-  it('does not import any wallet module', () => {
-    // Only flag actual import/require statements on a single line, not doc comments.
-    expect(src).not.toMatch(/import\s+[^;;\n]*wallet/i)
-    expect(src).not.toMatch(/require\([^)\n]*wallet/i)
-  })
-
-  it('does not import firebase / firestore (no writes)', () => {
-    expect(src).not.toMatch(/import\s+[^;;\n]*firebase/i)
-    expect(src).not.toMatch(/import\s+[^;;\n]*firestore/i)
-    expect(src).not.toMatch(/require\([^)\n]*firebase/i)
-    expect(src).not.toMatch(/require\([^)\n]*firestore/i)
-  })
-
+describe('hard constraints — no mutation', () => {
   it('does not mutate the input record array', () => {
     const records = [taskCompletion('tc-8', { awardedPoints: 5, taskId: 't' })]
     const before = JSON.stringify(records)

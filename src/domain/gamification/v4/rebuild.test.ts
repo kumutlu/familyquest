@@ -18,8 +18,8 @@
 
 import { describe, expect, it } from 'vitest'
 
-import { GAMIFICATION_V4_SCHEMA_VERSION, businessFields } from './types'
-import { type GamificationEventV4, type GamificationStateV4 } from './event'
+import { GAMIFICATION_V4_SCHEMA_VERSION, businessFields, type GamificationStateV4 } from './types'
+import { type GamificationEventV4 } from './event'
 import { eventIdFor } from './ids'
 import { ValidationErrorV4 } from './validators'
 import { reduceGamificationEventsV4, type ReduceContextV4 } from './reducer'

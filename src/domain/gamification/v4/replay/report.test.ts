@@ -12,8 +12,6 @@
  */
 
 import { describe, it, expect } from 'vitest'
-import { readFileSync } from 'node:fs'
-import { resolve } from 'node:path'
 
 import {
   buildReportRows,
@@ -23,8 +21,9 @@ import {
 import { SOURCE_TYPE, type SourceTypeV4 } from '../types'
 import type { ReplaySourceRecord } from './sources'
 import type { ClassificationResultV4, ClassificationCategoryV4 } from './classify'
+// Static import-hygiene checks live in
+// tools/architecture/v4-replay-import-hygiene.test.ts (Node-only APIs).
 
-const REPORT_SRC = resolve(process.cwd(), 'src/domain/gamification/v4/replay/report.ts')
 
 function rec(
   partial: Partial<ReplaySourceRecord> & { sourceType: SourceTypeV4; sourceId: string },
@@ -192,17 +191,5 @@ describe('emitReport — read-only behaviour', () => {
     const snapshot = JSON.stringify(rows)
     emitReport(rows)
     expect(JSON.stringify(rows)).toBe(snapshot)
-  })
-})
-
-describe('report implementation — import hygiene', () => {
-  const src = readFileSync(REPORT_SRC, 'utf8')
-
-  it('never imports wallet code', () => {
-    expect(src.toLowerCase().includes('wallet')).toBe(false)
-  })
-
-  it('never imports Firestore', () => {
-    expect(/firestore|admin-firestore|@firebase\/firestore/i.test(src)).toBe(false)
   })
 })

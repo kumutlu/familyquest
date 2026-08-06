@@ -19,7 +19,8 @@
  * See docs/gamification-v4-design.md §2.4 and plan Task 1.9.
  */
 
-import type { GamificationEventV4, GamificationStateV4 } from './event'
+import type { GamificationEventV4 } from './event'
+import type { GamificationStateV4 } from './types'
 import { canonicalOrder } from './ordering'
 import { levelForXp } from './level'
 import { computeStreak, dayKeyFor } from './streak'

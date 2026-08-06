@@ -169,7 +169,15 @@ export function buildReportRows(
 }
 
 function emptyCategoryMap(): Record<ClassificationCategoryV4, string[]> {
-  return { exact: [], estimated: [], malformed: [], ambiguous: [], skipped: [] }
+  const map = {} as Record<ClassificationCategoryV4, string[]>
+  for (const key of CATEGORY_KEYS) map[key] = []
+  return map
+}
+
+function emptyCounts(): Record<ClassificationCategoryV4, number> {
+  const counts = {} as Record<ClassificationCategoryV4, number>
+  for (const key of CATEGORY_KEYS) counts[key] = 0
+  return counts
 }
 
 /**
@@ -186,13 +194,7 @@ export function emitReport(rowsInput: readonly ReplayReportRow[]): ReplayReport 
     return 0
   })
 
-  const counts: ReplayReportCounts = {
-    exact: 0,
-    estimated: 0,
-    malformed: 0,
-    ambiguous: 0,
-    skipped: 0,
-  }
+  const counts = emptyCounts()
   const reasons = emptyCategoryMap()
   const evidence = emptyCategoryMap()
 

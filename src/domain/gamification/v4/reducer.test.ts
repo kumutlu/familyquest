@@ -10,8 +10,8 @@
 
 import { describe, expect, it } from 'vitest'
 
-import { GAMIFICATION_V4_SCHEMA_VERSION } from './types'
-import { type GamificationEventV4, type GamificationStateV4 } from './event'
+import { GAMIFICATION_V4_SCHEMA_VERSION, type GamificationStateV4 } from './types'
+import { type GamificationEventV4 } from './event'
 import { canonicalOrder } from './ordering'
 import { levelForXp } from './level'
 import { computeStreak } from './streak'
@@ -206,14 +206,15 @@ describe('reduceGamificationEventsV4 — derived fields come only from helpers',
   })
 
   it('streak comes only from computeStreak()', () => {
-    const ctx: ReduceContextV4 = { ...CTX, asOfDayKey: '2026-01-05' }
+    const asOfDayKey = '2026-01-05'
+    const ctx: ReduceContextV4 = { ...CTX, asOfDayKey }
     const events = [
       makeEvent({ eventType: 'DAILY_GOAL_AWARDED', sourceId: 'd1', rewardPointsDelta: 1, xpDelta: 1, effectiveAt: '2026-01-03T00:00:00.000Z' }),
       makeEvent({ eventType: 'DAILY_GOAL_AWARDED', sourceId: 'd2', rewardPointsDelta: 1, xpDelta: 1, effectiveAt: '2026-01-04T00:00:00.000Z' }),
       makeEvent({ eventType: 'DAILY_GOAL_AWARDED', sourceId: 'd3', rewardPointsDelta: 1, xpDelta: 1, effectiveAt: '2026-01-05T00:00:00.000Z' }),
     ]
     const state = reduceGamificationEventsV4(events, ctx)
-    const expected = computeStreak(canonicalOrder(events), ctx.asOfDayKey, ctx.timezone)
+    const expected = computeStreak(canonicalOrder(events), asOfDayKey, ctx.timezone)
     expect(state.currentStreak).toBe(expected.currentStreak)
     expect(state.bestStreak).toBe(expected.bestStreak)
     expect(state.lastQualifiedDayKey).toBe(expected.lastQualifiedDayKey)

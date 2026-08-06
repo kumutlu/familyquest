@@ -7,10 +7,10 @@
 
 import { describe, expect, it } from 'vitest'
 import {
-  type GamificationEventV4,
   GAMIFICATION_V4_SCHEMA_VERSION,
   SOURCE_TYPE,
 } from './types'
+import type { GamificationEventV4 } from './event'
 import { assertValidEventV4 } from './validators'
 import { buildReversalEvent, isReversalOf } from './reversal'
 

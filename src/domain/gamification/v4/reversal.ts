@@ -10,9 +10,9 @@
 import {
   GAMIFICATION_V4_SCHEMA_VERSION,
   SOURCE_TYPE,
-  type GamificationEventV4,
   type GamificationEventTypeV4,
 } from './types'
+import type { GamificationEventV4 } from './event'
 import { reversalEventId } from './ids'
 
 /** Reversal kinds: REV reverses a task approval; REFUND reverses a redemption. */

@@ -5,7 +5,7 @@ import { isTaskDoneThisPeriod } from '../../../lib/taskRecurrence';
 import { useRecurrenceClock } from '../../../lib/useRecurrenceClock';
 import { ChildSummaryCard } from './ChildSummaryCard';
 import { findMemberSummary, resolveGamificationView } from '../../../lib/gamificationAdapters';
-import type { GamificationSummaryV1, DailyProgressV1 } from '../../../domain/gamification/types';
+import type { DailyProgressV1 } from '../../../domain/gamification/types';
 
 function ChildCardSkeleton() {
   return (

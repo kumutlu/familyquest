@@ -19,7 +19,8 @@
  * See docs/gamification-v4-design.md §2.4 and plan Task 1.10.
  */
 
-import type { GamificationEventV4, GamificationStateV4 } from './event'
+import type { GamificationEventV4 } from './event'
+import type { GamificationStateV4 } from './types'
 import { reduceGamificationEventsV4, type ReduceContextV4 } from './reducer'
 import { assertValidEventV4 } from './validators'
 

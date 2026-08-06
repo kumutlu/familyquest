@@ -98,13 +98,14 @@ export interface ReplaySourceRecord {
 
 /** Thrown when a legacy document is missing a field required for replay. */
 export class MalformedSourceError extends Error {
-  constructor(
-    public readonly sourceType: string,
-    public readonly sourceId: string,
-    reason: string,
-  ) {
+  readonly sourceType: string
+  readonly sourceId: string
+
+  constructor(sourceType: string, sourceId: string, reason: string) {
     super(`malformed ${sourceType} source ${sourceId}: ${reason}`)
     this.name = 'MalformedSourceError'
+    this.sourceType = sourceType
+    this.sourceId = sourceId
   }
 }
 
