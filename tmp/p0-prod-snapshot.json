@@ -1,0 +1,605 @@
+{
+  "capturedAt": "2026-08-06T14:24:36.248Z",
+  "projectId": "familyquest-beta-402cb",
+  "familyId": "5s4Npeu55wPphLCsGAMP",
+  "family": {
+    "createdAt": {
+      "__timestamp": "2026-07-11T11:35:11.229Z"
+    },
+    "gamificationConfig": {
+      "dailyGoalPercentage": 50,
+      "schemaVersion": 1
+    },
+    "gamificationMigration": {
+      "baselineCompletedAt": {
+        "__timestamp": "2026-08-03T19:27:57.015Z"
+      },
+      "cutoverAt": {
+        "__timestamp": "2026-08-03T16:46:25.104Z"
+      },
+      "schemaVersion": 1,
+      "status": "baseline_complete"
+    },
+    "inviteCode": "7ZXWRZ",
+    "name": "Umutlu",
+    "setup": {
+      "completedAt": {
+        "__timestamp": "2026-07-29T07:26:41.600Z"
+      },
+      "completedBy": "bTEDZNNEQvZf67Y96bF2yxGNAry1",
+      "welcomePromptCompleted": true
+    }
+  },
+  "users": {
+    "2OOwJPIs19PxyCyJbakVSNU1Zyv1": {
+      "avatarId": "starter-cat",
+      "avatarUrl": "https://api.dicebear.com/7.x/avataaars/svg?seed=starter-cat",
+      "currentStreak": 0,
+      "displayName": "Bilge MUM",
+      "familyId": "5s4Npeu55wPphLCsGAMP",
+      "lastActiveDate": {
+        "__timestamp": "2026-07-11T12:43:47.722Z"
+      },
+      "lifetimeXP": 0,
+      "longestStreak": 0,
+      "rewardPoints": 0,
+      "role": "parent",
+      "uid": "2OOwJPIs19PxyCyJbakVSNU1Zyv1",
+      "walletBalance": 0
+    },
+    "NuyIJDP9fDNP2LiKynlsEyzur5N2": {
+      "avatarId": "starter-panda",
+      "avatarUrl": "https://api.dicebear.com/7.x/avataaars/svg?seed=starter-panda",
+      "currentStreak": 3,
+      "displayName": "Alisya",
+      "familyId": "5s4Npeu55wPphLCsGAMP",
+      "lastActiveDate": {
+        "__timestamp": "2026-08-05T19:40:33.595Z"
+      },
+      "lastBehaviourEventId": "KFzyYIU5v9LOKKJid2eW",
+      "lastFundTxId": "1o4nNmUNdmDShHB05u4r",
+      "lastRedemptionId": "fRmhzvBoFgieegiIjVJ3",
+      "lastReversalId": "task_completion__2u1FviBavipsQTPLBuQp",
+      "lastTaskCompletionId": "NuyIJDP9fDNP2LiKynlsEyzur5N2__W8EVEBwG8LvMBhBFjGK3__2026-08-04",
+      "lifetimeXP": 361,
+      "longestStreak": 3,
+      "rewardPoints": 271,
+      "role": "child",
+      "uid": "NuyIJDP9fDNP2LiKynlsEyzur5N2",
+      "walletBalance": 25800
+    },
+    "T7ZsdaN8ixUOnzRAX9jNQqUDZE13": {
+      "avatarId": "starter-unicorn",
+      "avatarUrl": "https://api.dicebear.com/7.x/avataaars/svg?seed=starter-unicorn",
+      "currentStreak": 1,
+      "displayName": "Mostium",
+      "familyId": "5s4Npeu55wPphLCsGAMP",
+      "lastActiveDate": {
+        "__timestamp": "2026-08-04T10:17:03.102Z"
+      },
+      "lastBehaviourEventId": "tHorUeKeQfCQjkWF2wQI",
+      "lastFundTxId": "Tc9robpEGhnI1TAYQgsN",
+      "lastRedemptionId": "4wY0FP4x8G34D3lW27YD",
+      "lastTaskCompletionId": "T7ZsdaN8ixUOnzRAX9jNQqUDZE13__QhCM9J5qbWYa1QGfQnYx__2026-08-04",
+      "lifetimeXP": 95,
+      "longestStreak": 1,
+      "rewardPoints": 80,
+      "role": "child",
+      "uid": "T7ZsdaN8ixUOnzRAX9jNQqUDZE13",
+      "walletBalance": 2120
+    },
+    "bTEDZNNEQvZf67Y96bF2yxGNAry1": {
+      "avatarId": "starter-bunny",
+      "avatarUrl": "https://api.dicebear.com/7.x/avataaars/svg?seed=starter-bunny",
+      "currentStreak": 0,
+      "displayName": "Kemal",
+      "familyId": "5s4Npeu55wPphLCsGAMP",
+      "language": "en",
+      "lastActiveDate": {
+        "__timestamp": "2026-07-11T11:35:11.229Z"
+      },
+      "lifetimeXP": 0,
+      "longestStreak": 0,
+      "rewardPoints": 0,
+      "role": "owner",
+      "uid": "bTEDZNNEQvZf67Y96bF2yxGNAry1",
+      "walletBalance": 0
+    },
+    "vc0iyHVfAcXnXQQbmFkr5HfJEkp2": {
+      "avatarUrl": "https://api.dicebear.com/7.x/bottts/svg?seed=Mnalium",
+      "currentStreak": 4,
+      "displayName": "Mnalium",
+      "familyId": "5s4Npeu55wPphLCsGAMP",
+      "lastActiveDate": {
+        "__timestamp": "2026-08-05T08:09:26.369Z"
+      },
+      "lastBehaviourEventId": "SXkg6R4vxWTJowdJXdLA",
+      "lastFundTxId": "R7tlzcDQz5g2uqx1s2sG",
+      "lastTaskCompletionId": "vc0iyHVfAcXnXQQbmFkr5HfJEkp2__xzSLSQeo0izEncCprMe8__2026-08-04",
+      "lifetimeXP": 430,
+      "longestStreak": 4,
+      "rewardPoints": 400,
+      "role": "child",
+      "uid": "vc0iyHVfAcXnXQQbmFkr5HfJEkp2",
+      "walletBalance": 63900
+    }
+  },
+  "identities": {
+    "2OOwJPIs19PxyCyJbakVSNU1Zyv1": {
+      "uid": "2OOwJPIs19PxyCyJbakVSNU1Zyv1",
+      "email": "ayasbilge@gmail.com",
+      "customClaims": {},
+      "disabled": false,
+      "lastSignInTime": "Thu, 30 Jul 2026 09:43:05 GMT"
+    },
+    "NuyIJDP9fDNP2LiKynlsEyzur5N2": {
+      "uid": "NuyIJDP9fDNP2LiKynlsEyzur5N2",
+      "email": "alinasyaumutlu@gmail.com",
+      "customClaims": {},
+      "disabled": false,
+      "lastSignInTime": "Thu, 30 Jul 2026 09:28:51 GMT"
+    },
+    "T7ZsdaN8ixUOnzRAX9jNQqUDZE13": {
+      "uid": "T7ZsdaN8ixUOnzRAX9jNQqUDZE13",
+      "email": "mostium1001@gmail.com",
+      "customClaims": {},
+      "disabled": false,
+      "lastSignInTime": "Mon, 03 Aug 2026 13:22:12 GMT"
+    },
+    "bTEDZNNEQvZf67Y96bF2yxGNAry1": {
+      "uid": "bTEDZNNEQvZf67Y96bF2yxGNAry1",
+      "email": "oumutlu85@gmail.com",
+      "customClaims": {},
+      "disabled": false,
+      "lastSignInTime": "Mon, 03 Aug 2026 13:21:40 GMT"
+    },
+    "vc0iyHVfAcXnXQQbmFkr5HfJEkp2": {
+      "uid": "vc0iyHVfAcXnXQQbmFkr5HfJEkp2",
+      "email": "maliumutlu@icloud.com",
+      "customClaims": {},
+      "disabled": false,
+      "lastSignInTime": "Sat, 01 Aug 2026 11:42:25 GMT"
+    }
+  },
+  "subcollections": {
+    "rewards": {
+      "LtjbSEmcdnyuFaemAxQ2": {
+        "cost": 5,
+        "createdAt": {
+          "__timestamp": "2026-07-30T09:25:20.388Z"
+        },
+        "description": "",
+        "icon": "Pizza",
+        "inventory": null,
+        "isActive": false,
+        "title": "Öpücük"
+      },
+      "SxiWLBzVmAW8SUJfyNQa": {
+        "cost": 750,
+        "createdAt": {
+          "__timestamp": "2026-07-14T20:44:19.547Z"
+        },
+        "description": "",
+        "icon": "Ticket",
+        "inventory": null,
+        "isActive": true,
+        "title": "Carboot Sunday"
+      },
+      "YLS0jZ9XFglQJfUlngic": {
+        "cost": 200,
+        "createdAt": {
+          "__timestamp": "2026-07-31T21:04:35.898Z"
+        },
+        "description": "",
+        "icon": "Gamepad2",
+        "inventory": null,
+        "isActive": true,
+        "title": "1 hour screen time"
+      },
+      "ZKgwty46Txdk5PCyJdAi": {
+        "cost": 1000,
+        "createdAt": {
+          "__timestamp": "2026-07-14T20:45:49.611Z"
+        },
+        "icon": "Ticket",
+        "inventory": null,
+        "isActive": true,
+        "title": "Carboot Saturday"
+      },
+      "ZiPvbL6p7DeIld9VFvXe": {
+        "cost": 50,
+        "createdAt": {
+          "__timestamp": "2026-07-31T21:04:24.986Z"
+        },
+        "description": "",
+        "icon": "Gamepad2",
+        "inventory": null,
+        "isActive": true,
+        "title": "15 mins screen time"
+      },
+      "fqblF0AooJ364G6j8ytt": {
+        "cost": 5,
+        "createdAt": {
+          "__timestamp": "2026-07-30T09:25:33.788Z"
+        },
+        "description": "",
+        "icon": "Gift",
+        "inventory": null,
+        "isActive": false,
+        "title": "Sarılma"
+      },
+      "gNHywng7X1lwrJkzeZeL": {
+        "cost": 500,
+        "createdAt": {
+          "__timestamp": "2026-08-01T11:24:33.794Z"
+        },
+        "description": "",
+        "icon": "Gift",
+        "inventory": 4,
+        "isActive": true,
+        "title": "Right to buy Skittles "
+      },
+      "jmCIPTCyCZGFmP53mpxx": {
+        "cost": 5000,
+        "createdAt": {
+          "__timestamp": "2026-07-31T21:07:12.284Z"
+        },
+        "description": "Such as London, Oxford or York",
+        "icon": "Gift",
+        "inventory": null,
+        "isActive": true,
+        "title": "Daily Holiday"
+      },
+      "pGLiIXTUuUv1w7rTCxtm": {
+        "cost": 3000,
+        "createdAt": {
+          "__timestamp": "2026-07-31T21:08:34.215Z"
+        },
+        "description": "",
+        "icon": "Gift",
+        "inventory": null,
+        "isActive": true,
+        "title": "Road trip up to 50 miles"
+      },
+      "ykvSDaYNRB64xVCSyhBk": {
+        "cost": 1000,
+        "createdAt": {
+          "__timestamp": "2026-07-31T21:05:03.373Z"
+        },
+        "description": "",
+        "icon": "Ticket",
+        "inventory": null,
+        "isActive": true,
+        "title": "Family outing"
+      }
+    },
+    "wallets": {
+      "NuyIJDP9fDNP2LiKynlsEyzur5N2": {
+        "balance": 23248,
+        "createdAt": {
+          "__timestamp": "2026-07-12T21:00:19.970Z"
+        },
+        "lastManualTxId": "IrFcbWVZzAjvnPkMvt5Y",
+        "lastTransferReqId": "1s9wNWwyO5kRfgeYvw6d",
+        "lastTransferTxId": "vMHHQgyPjNo942sndGJY_out",
+        "migratedFromLegacy": true
+      },
+      "T7ZsdaN8ixUOnzRAX9jNQqUDZE13": {
+        "balance": 2524,
+        "createdAt": {
+          "__timestamp": "2026-07-12T21:00:24.301Z"
+        },
+        "lastManualTxId": "IKOKhfrilyLQ6okmT0Pu",
+        "lastPenaltyTxId": "2AdXHIDQBiiOGzmXVrXv",
+        "lastTransferReqId": "SA2gWz5GTyfZ9EXr20Li",
+        "lastTransferTxId": "GMS2qdayHRNHZavFtQda_in",
+        "migratedFromLegacy": true
+      },
+      "vc0iyHVfAcXnXQQbmFkr5HfJEkp2": {
+        "balance": 68000,
+        "createdAt": {
+          "__timestamp": "2026-07-14T08:49:43.880Z"
+        },
+        "lastManualTxId": "1wZRFk116r0sUSOG5iNa",
+        "lastPenaltyTxId": "rwMWjMvLfH2MATLWpFHB",
+        "lastReversalId": "wallet_transaction__lPT36HMFGT17b39H3kWu",
+        "lastTransferReqId": "SA2gWz5GTyfZ9EXr20Li",
+        "lastTransferTxId": "GMS2qdayHRNHZavFtQda_out",
+        "migratedFromLegacy": true
+      }
+    },
+    "tasks": {
+      "5Q06KOokplCzcSYW7bS0": {
+        "assigneeId": null,
+        "createdAt": {
+          "__timestamp": "2026-07-31T20:58:18.289Z"
+        },
+        "isActive": true,
+        "pointsReward": 50,
+        "requiresApproval": true,
+        "title": "Washing Dishes",
+        "type": "daily"
+      },
+      "9lnm3d6AsCjv0gfEblIz": {
+        "assigneeId": null,
+        "createdAt": {
+          "__timestamp": "2026-07-14T19:53:38.276Z"
+        },
+        "customDays": [],
+        "description": "",
+        "isActive": false,
+        "pointsReward": 10,
+        "requiresApproval": true,
+        "title": "Brush teeth morning",
+        "type": "daily"
+      },
+      "B0b2snC88SYiZGnMPvJa": {
+        "assigneeId": null,
+        "createdAt": {
+          "__timestamp": "2026-07-31T20:57:53.814Z"
+        },
+        "isActive": true,
+        "pointsReward": 40,
+        "requiresApproval": true,
+        "title": "House Vacuum",
+        "type": "daily"
+      },
+      "EZOSKPjjpajL9e6P73x3": {
+        "assigneeId": null,
+        "createdAt": {
+          "__timestamp": "2026-07-29T21:06:09.754Z"
+        },
+        "isActive": false,
+        "pointsReward": 10,
+        "requiresApproval": true,
+        "title": "Test",
+        "type": "one-time"
+      },
+      "GZugeZ6bYPQbKvUOjLiS": {
+        "assigneeId": null,
+        "createdAt": {
+          "__timestamp": "2026-07-31T20:58:39.575Z"
+        },
+        "isActive": true,
+        "pointsReward": 30,
+        "requiresApproval": true,
+        "title": "Loading or Unloading Dishwasher",
+        "type": "daily"
+      },
+      "QhCM9J5qbWYa1QGfQnYx": {
+        "assigneeId": null,
+        "createdAt": {
+          "__timestamp": "2026-07-31T20:59:20.634Z"
+        },
+        "isActive": true,
+        "pointsReward": 5,
+        "requiresApproval": true,
+        "title": "Cat food reloading",
+        "type": "daily"
+      },
+      "ReAhuv5kgxveZRcDAGUO": {
+        "assigneeId": "NuyIJDP9fDNP2LiKynlsEyzur5N2",
+        "createdAt": {
+          "__timestamp": "2026-07-23T20:38:39.256Z"
+        },
+        "customDays": [],
+        "description": "",
+        "isActive": true,
+        "pointsReward": 10,
+        "requiresApproval": true,
+        "title": "Duo lingo",
+        "type": "daily"
+      },
+      "UKDbDI9oLVlNOV1l2kEK": {
+        "assigneeId": null,
+        "createdAt": {
+          "__timestamp": "2026-07-14T20:08:43.699Z"
+        },
+        "customDays": [],
+        "description": "",
+        "isActive": true,
+        "pointsReward": 10,
+        "requiresApproval": true,
+        "title": "Brush teeth evening",
+        "type": "daily"
+      },
+      "W8EVEBwG8LvMBhBFjGK3": {
+        "assigneeId": null,
+        "createdAt": {
+          "__timestamp": "2026-07-31T21:01:16.227Z"
+        },
+        "isActive": true,
+        "pointsReward": 30,
+        "requiresApproval": true,
+        "title": "Reading Book 30 minutes ",
+        "type": "daily"
+      },
+      "WaA9AawMH5zNQtDLZ0lR": {
+        "assigneeId": null,
+        "createdAt": {
+          "__timestamp": "2026-07-31T21:02:29.766Z"
+        },
+        "customDays": [],
+        "description": "",
+        "isActive": true,
+        "pointsReward": 25,
+        "requiresApproval": true,
+        "title": "Help sibling",
+        "type": "daily"
+      },
+      "WaqYEdCUHEd7oUtzwUqc": {
+        "assigneeId": "T7ZsdaN8ixUOnzRAX9jNQqUDZE13",
+        "createdAt": {
+          "__timestamp": "2026-07-16T23:50:26.127Z"
+        },
+        "customDays": [],
+        "description": "",
+        "isActive": false,
+        "pointsReward": 1,
+        "requiresApproval": true,
+        "title": "test",
+        "type": "one-time"
+      },
+      "bkkuAXvMY8abMmZzikjX": {
+        "assigneeId": null,
+        "createdAt": {
+          "__timestamp": "2026-07-31T21:02:10.154Z"
+        },
+        "customDays": [],
+        "description": "",
+        "isActive": true,
+        "pointsReward": 30,
+        "requiresApproval": true,
+        "title": "Tidy bedroom",
+        "type": "daily"
+      },
+      "c3WmeyXGkvhwVe7mWTiq": {
+        "assigneeId": null,
+        "createdAt": {
+          "__timestamp": "2026-07-31T20:57:14.719Z"
+        },
+        "isActive": true,
+        "pointsReward": 20,
+        "requiresApproval": true,
+        "title": "Riding bike 30 miny",
+        "type": "daily"
+      },
+      "fKCwPUjioqe8MwXlluQL": {
+        "createdAt": {
+          "__timestamp": "2026-07-22T06:40:46.780Z"
+        },
+        "isActive": true,
+        "pointsReward": 20,
+        "requiresApproval": true,
+        "title": "Make the bed",
+        "type": "daily"
+      },
+      "fdCddt2CN5JdTqoVXTUF": {
+        "assigneeId": null,
+        "createdAt": {
+          "__timestamp": "2026-07-14T20:13:20.334Z"
+        },
+        "customDays": [],
+        "description": "",
+        "isActive": true,
+        "pointsReward": 20,
+        "requiresApproval": true,
+        "title": "Shower",
+        "type": "weekly"
+      },
+      "luEDwa1sTDnKVS0iIZ9o": {
+        "createdAt": {
+          "__timestamp": "2026-07-22T06:42:27.542Z"
+        },
+        "isActive": true,
+        "pointsReward": 10,
+        "requiresApproval": true,
+        "title": "Put the dirty clothes away",
+        "type": "daily"
+      },
+      "nJybubHDICMMJ1LuFMxN": {
+        "assigneeId": null,
+        "createdAt": {
+          "__timestamp": "2026-07-31T21:00:34.601Z"
+        },
+        "isActive": true,
+        "pointsReward": 5,
+        "requiresApproval": true,
+        "title": "Taking Laundry Upstairs",
+        "type": "daily"
+      },
+      "ndminwSLSA16Hg710WqM": {
+        "assigneeId": null,
+        "createdAt": {
+          "__timestamp": "2026-07-31T21:00:10.141Z"
+        },
+        "isActive": true,
+        "pointsReward": 25,
+        "requiresApproval": true,
+        "title": "Folding Laundry",
+        "type": "daily"
+      },
+      "sfAP6TwowxEoTksH4DeW": {
+        "assigneeId": null,
+        "createdAt": {
+          "__timestamp": "2026-08-03T21:24:00.692Z"
+        },
+        "isActive": true,
+        "pointsReward": 20,
+        "requiresApproval": true,
+        "title": "Ai coding ",
+        "type": "daily"
+      },
+      "u1KJkDnLHxBJCoLJyNEN": {
+        "assigneeId": null,
+        "createdAt": {
+          "__timestamp": "2026-07-31T21:02:38.396Z"
+        },
+        "customDays": [],
+        "description": "",
+        "isActive": true,
+        "pointsReward": 25,
+        "requiresApproval": true,
+        "title": "Help parent",
+        "type": "daily"
+      },
+      "vwTyJHofSG1IfLiJuMDc": {
+        "createdAt": {
+          "__timestamp": "2026-07-22T06:42:04.455Z"
+        },
+        "isActive": true,
+        "pointsReward": 10,
+        "requiresApproval": true,
+        "title": "Put pajamas in the drawer",
+        "type": "daily"
+      },
+      "wMoDwTOoUAkgqpjBtL6U": {
+        "assigneeId": null,
+        "createdAt": {
+          "__timestamp": "2026-07-14T16:55:59.157Z"
+        },
+        "customDays": [],
+        "description": "",
+        "isActive": true,
+        "pointsReward": 10,
+        "requiresApproval": true,
+        "title": "Brush teeth morning",
+        "type": "daily"
+      },
+      "xzSLSQeo0izEncCprMe8": {
+        "createdAt": {
+          "__timestamp": "2026-07-22T06:37:49.311Z"
+        },
+        "isActive": true,
+        "pointsReward": 10,
+        "requiresApproval": true,
+        "title": "Change your pajamas",
+        "type": "daily"
+      },
+      "yyHPdvBxtJAZi6hlOJSs": {
+        "assigneeId": null,
+        "createdAt": {
+          "__timestamp": "2026-07-31T21:01:02.016Z"
+        },
+        "isActive": true,
+        "pointsReward": 30,
+        "requiresApproval": true,
+        "title": "Study 30 minutes",
+        "type": "daily"
+      },
+      "zPEj00ySEkfhi4KffkGs": {
+        "assigneeId": "NuyIJDP9fDNP2LiKynlsEyzur5N2",
+        "createdAt": {
+          "__timestamp": "2026-07-17T11:35:08.995Z"
+        },
+        "customDays": [],
+        "description": "",
+        "isActive": false,
+        "pointsReward": 1,
+        "requiresApproval": true,
+        "title": "Test",
+        "type": "daily"
+      }
+    }
+  }
+}

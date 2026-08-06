@@ -3851,32 +3851,75 @@ export const rejectMoneyRequest = async (familyId: string, requestId: string, re
 
 /**
  * Maps a thrown approval/rejection error to a friendly, user-safe message.
- * Raw Firebase error codes (e.g. `permission-denied`) and server messages must
- * never be rendered to end users in production. The original error is preserved
- * on the returned object for development-only logging.
+ *
+ * ERROR POLICY (P0):
+ *  - stale / already processed      -> "This request has already been handled."
+ *  - signed-out / expired session   -> "Your session has expired. Please sign in again."
+ *  - anything else (including a
+ *    genuine authorization denial)  -> "This request could not be updated. Please try again."
+ *
+ * No raw Firebase code or server message may ever reach the UI, and we never
+ * accuse a same-family parent/owner of lacking permission: a denial in their own
+ * family is a bug on our side, so it is logged with full technical context and
+ * shown as a neutral retry message.
  */
-export type MappedApprovalError = { message: string; code?: string; raw?: unknown };
+export type MappedApprovalError = {
+  message: string;
+  code?: string;
+  /** True when the request was already handled (approved/rejected/cancelled/expired/deleted). */
+  stale?: boolean;
+  raw?: unknown;
+};
 
-export const mapApprovalError = (err: unknown): MappedApprovalError => {
+/** Technical context attached to developer logs for approval failures. */
+export type ApprovalErrorContext = {
+  requestPath?: string;
+  actorId?: string;
+  actorRole?: string;
+  actorFamilyId?: string;
+  requestFamilyId?: string;
+  requestStatus?: string;
+  operation?: string;
+};
+
+export const APPROVAL_ERROR_MESSAGES = {
+  stale: 'This request has already been handled.',
+  session: 'Your session has expired. Please sign in again.',
+  generic: 'This request could not be updated. Please try again.',
+  reasonRequired: 'Please provide a reason for rejecting this request.',
+} as const;
+
+const logApprovalFailure = (err: unknown, code: string | undefined, context?: ApprovalErrorContext) => {
+  // Developer-only diagnostics. Never surfaced to the user.
+  console.error('[approval] operation failed', {
+    ...context,
+    firebaseErrorCode: code ?? (err as any)?.code,
+    failingWritePath: (err as any)?.failingWritePath ?? context?.requestPath,
+    message: (err as any)?.message,
+  });
+};
+
+export const mapApprovalError = (err: unknown, context?: ApprovalErrorContext): MappedApprovalError => {
   const code = (err as any)?.code;
   const message: string = (err as any)?.message || '';
 
-  if (code === 'permission-denied' || /permission-denied|Missing or insufficient permissions/i.test(message)) {
-    return { message: "You no longer have permission to manage this request.", code: 'permission-denied', raw: err };
+  // Stale card: the request is no longer actionable. This is NOT a permission
+  // problem and must never be reported as one.
+  if (/not pending approval|Request cannot|Request is not pending|Request not valid|Request not found|already (approved|rejected|cancelled|handled|decided)/i.test(message)) {
+    return { message: APPROVAL_ERROR_MESSAGES.stale, code: code ?? 'stale', stale: true, raw: err };
   }
-  if (/not pending approval|Request cannot|Request is not pending/i.test(message)) {
-    return { message: "This request has already been decided.", code, raw: err };
-  }
-  if (/Request not found/i.test(message)) {
-    return { message: "The request changed while you were reviewing it. Please refresh and try again.", code, raw: err };
-  }
-  if (/Unauthorized/i.test(message)) {
-    return { message: "You no longer have permission to manage this request.", code, raw: err };
+  if (code === 'unauthenticated' || /Not authenticated|unauthenticated/i.test(message)) {
+    return { message: APPROVAL_ERROR_MESSAGES.session, code: code ?? 'unauthenticated', raw: err };
   }
   if (/Rejection reason is required/i.test(message)) {
-    return { message: "Please provide a reason for rejecting this request.", code, raw: err };
+    return { message: APPROVAL_ERROR_MESSAGES.reasonRequired, code, raw: err };
   }
-  return { message: "We couldn’t reject this request. Please try again.", code, raw: err };
+  if (code === 'permission-denied' || /permission-denied|Missing or insufficient permissions|Unauthorized/i.test(message)) {
+    logApprovalFailure(err, 'permission-denied', context);
+    return { message: APPROVAL_ERROR_MESSAGES.generic, code: 'permission-denied', raw: err };
+  }
+  logApprovalFailure(err, code, context);
+  return { message: APPROVAL_ERROR_MESSAGES.generic, code, raw: err };
 };
 
 export type PendingApprovalKind = 'task' | 'transfer' | 'money_request' | 'petbox' | 'goal' | 'profile_update';

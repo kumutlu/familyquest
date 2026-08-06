@@ -367,26 +367,47 @@ describe('profile_update request authorization', () => {
 })
 
 describe('mapApprovalError', () => {
-  it('never surfaces raw Firebase permission-denied text', () => {
+  it('never surfaces raw Firebase permission-denied text, and never blames the actor', () => {
     const mapped = mapApprovalError({ code: 'permission-denied', message: 'Missing or insufficient permissions.' })
     expect(mapped.message).not.toContain('permission-denied')
     expect(mapped.message).not.toContain('Missing or insufficient permissions')
-    expect(mapped.message).toBe('You no longer have permission to manage this request.')
+    expect(mapped.message).not.toContain('You no longer have permission')
+    expect(mapped.message).toBe('This request could not be updated. Please try again.')
     expect(mapped.code).toBe('permission-denied')
   })
 
-  it('maps already-decided requests to a friendly message', () => {
-    const mapped = mapApprovalError(new Error('Request is not pending approval'))
-    expect(mapped.message).toBe('This request has already been decided.')
+  it('logs full technical context for a genuine authorization failure', () => {
+    const spy = vi.spyOn(console, 'error').mockImplementation(() => {})
+    mapApprovalError({ code: 'permission-denied', message: 'Missing or insufficient permissions.' }, {
+      requestPath: 'families/family-1/transfer_requests/req-1',
+      actorId: 'parent-1', actorRole: 'parent', actorFamilyId: 'family-1',
+      requestFamilyId: 'family-1', requestStatus: 'pending', operation: 'approve',
+    })
+    expect(spy).toHaveBeenCalledWith('[approval] operation failed', expect.objectContaining({
+      requestPath: 'families/family-1/transfer_requests/req-1',
+      actorId: 'parent-1', actorRole: 'parent', actorFamilyId: 'family-1',
+      requestFamilyId: 'family-1', requestStatus: 'pending', operation: 'approve',
+      firebaseErrorCode: 'permission-denied',
+    }))
+    spy.mockRestore()
   })
 
-  it('maps missing requests to a refresh prompt', () => {
-    const mapped = mapApprovalError(new Error('Request not found'))
-    expect(mapped.message).toBe('The request changed while you were reviewing it. Please refresh and try again.')
+  it('maps an already-handled request to the stale message (not a permission error)', () => {
+    for (const message of ['Request is not pending approval', 'Request not found', 'Request not valid']) {
+      const mapped = mapApprovalError(new Error(message))
+      expect(mapped.message).toBe('This request has already been handled.')
+      expect(mapped.stale).toBe(true)
+    }
   })
 
-  it('falls back to a generic message for unknown errors', () => {
+  it('maps a lost session to a sign-in prompt', () => {
+    expect(mapApprovalError(new Error('Not authenticated')).message).toBe('Your session has expired. Please sign in again.')
+  })
+
+  it('falls back to a neutral retry message for unknown errors', () => {
+    vi.spyOn(console, 'error').mockImplementation(() => {})
     const mapped = mapApprovalError(new Error('boom'))
-    expect(mapped.message).toBe('We couldn’t reject this request. Please try again.')
+    expect(mapped.message).toBe('This request could not be updated. Please try again.')
+    expect(mapped.stale).toBeFalsy()
   })
 })

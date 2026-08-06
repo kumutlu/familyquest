@@ -126,6 +126,30 @@ export function ApprovalCenter() {
     });
   }, [timeline]);
 
+  /**
+   * Technical context attached to developer logs for any approval failure.
+   * Never rendered to the user.
+   */
+  const errorContext = (item: any, operation: string) => ({
+    requestPath: `families/${currentUser?.familyId}/${item.category}/${item.id}`,
+    actorId: currentUser?.id,
+    actorRole: currentUser?.role,
+    actorFamilyId: currentUser?.familyId,
+    requestFamilyId: item.familyId ?? currentUser?.familyId,
+    requestStatus: item.status,
+    operation,
+  });
+
+  /**
+   * A stale card (already approved/rejected/cancelled/expired/deleted) is simply
+   * dropped from Pending with a neutral message — never a permission error.
+   */
+  const handleActionError = (err: unknown, item: any, key: string, operation: string) => {
+    const mapped = mapApprovalError(err, errorContext(item, operation));
+    if (mapped.stale) setOptimisticallyRemovedIds(prev => new Set(prev).add(key));
+    setError(mapped.message);
+  };
+
   const handleApprove = async (item: any) => {
     if (!currentUser) return;
     const key = itemKey(item);
@@ -145,7 +169,7 @@ export function ApprovalCenter() {
       }
       setOptimisticallyRemovedIds(prev => new Set(prev).add(key));
     } catch (err: unknown) {
-      setError(mapApprovalError(err).message);
+      handleActionError(err, item, key, 'approve');
     } finally {
       inFlightKeys.current.delete(key);
       setProcessing(previous => { const next = { ...previous }; delete next[key]; return next; });
@@ -170,7 +194,7 @@ export function ApprovalCenter() {
       }
       setOptimisticallyRemovedIds(prev => new Set(prev).add(key));
     } catch (err: unknown) {
-      setError(mapApprovalError(err).message);
+      handleActionError(err, item, key, 'reject');
     } finally {
       inFlightKeys.current.delete(key);
       setProcessing(previous => { const next = { ...previous }; delete next[key]; return next; });
@@ -188,7 +212,7 @@ export function ApprovalCenter() {
       await getRequestActions('money_request').accept?.(currentUser.familyId, item.id);
       setOptimisticallyRemovedIds(previous => new Set(previous).add(key));
     } catch (err: unknown) {
-      setError(mapApprovalError(err).message);
+      handleActionError(err, item, key, 'accept');
     } finally {
       inFlightKeys.current.delete(key);
       setProcessing(previous => { const next = { ...previous }; delete next[key]; return next; });

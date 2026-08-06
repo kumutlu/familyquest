@@ -9,25 +9,23 @@ const api = vi.hoisted(() => ({
   approvePetBoxDonation: vi.fn(), rejectPetBoxDonation: vi.fn(),
   approveProfileUpdateRequest: vi.fn(), rejectProfileUpdateRequest: vi.fn(),
   cancelPendingApproval: vi.fn(),
+  // Mirror of the production mapApprovalError contract (src/lib/api.ts).
   mapApprovalError: (err: any) => {
     const code = err?.code
     const message: string = err?.message || ''
-    if (code === 'permission-denied' || /permission-denied|Missing or insufficient permissions/i.test(message)) {
-      return { message: "You no longer have permission to manage this request.", code: 'permission-denied', raw: err }
+    if (/not pending approval|Request cannot|Request is not pending|Request not valid|Request not found|already (approved|rejected|cancelled|handled|decided)/i.test(message)) {
+      return { message: 'This request has already been handled.', code: code ?? 'stale', stale: true, raw: err }
     }
-    if (/not pending approval|Request cannot|Request is not pending/i.test(message)) {
-      return { message: "This request has already been decided.", code, raw: err }
-    }
-    if (/Request not found/i.test(message)) {
-      return { message: "The request changed while you were reviewing it. Please refresh and try again.", code, raw: err }
-    }
-    if (/Unauthorized/i.test(message)) {
-      return { message: "You no longer have permission to manage this request.", code, raw: err }
+    if (code === 'unauthenticated' || /Not authenticated|unauthenticated/i.test(message)) {
+      return { message: 'Your session has expired. Please sign in again.', code, raw: err }
     }
     if (/Rejection reason is required/i.test(message)) {
-      return { message: "Please provide a reason for rejecting this request.", code, raw: err }
+      return { message: 'Please provide a reason for rejecting this request.', code, raw: err }
     }
-    return { message: "We couldn’t reject this request. Please try again.", code, raw: err }
+    if (code === 'permission-denied' || /permission-denied|Missing or insufficient permissions|Unauthorized/i.test(message)) {
+      return { message: 'This request could not be updated. Please try again.', code: 'permission-denied', raw: err }
+    }
+    return { message: 'This request could not be updated. Please try again.', code, raw: err }
   },
 }))
 
@@ -105,17 +103,53 @@ describe('ApprovalCenter interaction contract', () => {
     taskPending.resolve(); transferPending.resolve()
   })
 
-  it('keeps the card and exposes the exact Firebase code and message when rejection fails', async () => {
+  it('keeps the card and shows a neutral retry message when rejection is denied', async () => {
     api.rejectTaskCompletion.mockRejectedValue(Object.assign(new Error('Missing permissions'), { code: 'permission-denied' }))
     renderApprovalCenter()
 
     fireEvent.click(screen.getAllByRole('button', { name: 'Reject' })[0])
 
-    expect(await screen.findByText('You no longer have permission to manage this request.')).toBeInTheDocument()
+    expect(await screen.findByText('This request could not be updated. Please try again.')).toBeInTheDocument()
     expect(screen.queryByText(/permission-denied/)).not.toBeInTheDocument()
     expect(screen.queryByText(/Missing permissions/)).not.toBeInTheDocument()
+    expect(screen.queryByText(/no longer have permission/i)).not.toBeInTheDocument()
     expect(screen.getByText(/Tidy room/)).toBeInTheDocument()
     expect(api.rejectTaskCompletion).toHaveBeenCalledWith('family-1', 'same-id', 'Rejected')
+  })
+
+  it('a stale transfer card is removed from Pending with "already been handled", never a permission error', async () => {
+    api.approveTransferRequest.mockRejectedValue(new Error('Request is not pending'))
+    renderApprovalCenter()
+
+    const transferCard = screen.getByText(/wants to send money/)
+    expect(transferCard).toBeInTheDocument()
+    fireEvent.click(screen.getAllByRole('button', { name: 'Approve' })[1])
+
+    expect(await screen.findByText('This request has already been handled.')).toBeInTheDocument()
+    expect(screen.queryByText(/no longer have permission/i)).not.toBeInTheDocument()
+    expect(screen.queryByText(/Missing or insufficient permissions/i)).not.toBeInTheDocument()
+    await waitFor(() => expect(screen.queryByText(/wants to send money/)).not.toBeInTheDocument())
+  })
+
+  it('a successful owner approval removes the card and never shows a permission error', async () => {
+    api.approveTransferRequest.mockResolvedValue(undefined)
+    renderApprovalCenter()
+
+    fireEvent.click(screen.getAllByRole('button', { name: 'Approve' })[1])
+
+    await waitFor(() => expect(screen.queryByText(/wants to send money/)).not.toBeInTheDocument())
+    expect(screen.queryByText(/no longer have permission/i)).not.toBeInTheDocument()
+  })
+
+  it('a same-family PARENT follows identical authorization semantics to the owner', async () => {
+    state.current = { ...state.current, currentUser: { id: 'parent-1', familyId: 'family-1', role: 'parent' } }
+    api.approveTransferRequest.mockResolvedValue(undefined)
+    renderApprovalCenter()
+
+    fireEvent.click(screen.getAllByRole('button', { name: 'Approve' })[1])
+
+    await waitFor(() => expect(api.approveTransferRequest).toHaveBeenCalledWith('family-1', 'same-id'))
+    expect(screen.queryByText(/no longer have permission/i)).not.toBeInTheDocument()
   })
 
   it('renders a Profile Update Request card and approves it through the shared flow', async () => {

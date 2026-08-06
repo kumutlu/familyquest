@@ -1,0 +1,646 @@
+<!doctype html>
+<html lang="en"><head><script>window["__codeletBootstrap__"]=JSON.parse('{"A":"A","B":"20260806-05-839f1a0","C":{"Abril Fatface":"YACgEZbkUVE,0","Alfa Slab One":"YACgEYS9sJU,0","Anton":"YACgEcYqQ-A,0","Archivo":"YAHO2-t-jNE,0","Arial":"YAGyDvJ_4Ts,0","Bebas Neue":"YACgESME5ew,0","Bricolage Grotesque":"YAFyMcdwzpc,0","Canva Sans":"YAFLd8sKbwc,2","Caveat":"YALBs2ploWQ,0","Comic Sans MS":"YAHO2VMiyZo,0","Cormorant Garamond":"YAFdJhX-538,0","Courier New":"YAGzXiGs0_8,0","DM Sans":"YAD1aU3sLnI,0","DM Serif Display":"YAD1aYG82rc,0","Forum":"YACgEcnnqB4,0","Fraunces":"YAEul-FRQw4,0","Georgia":"YAGzXkO0pEM,0","Helvetica Neue":"YAFcf6CtJfI,0","Impact":"YAFcfnjI7Vk,0","Inter":"YAFdJvSyp_k,3","Iowan Old Style":"YAGNIFa8j9o,0","Jacques Francois":"YAHO2a5g66Q,0","JetBrains Mono":"YAFdJksXcAk,0","Libre Baskerville":"YACgEUFdPdA,0","Manrope":"YAHO2b2feC4,0","Merriweather":"YACgEXvHxxs,0","Montserrat":"YADLjI9qxTA,0","Nunito":"YACgEX8C5Gg,0","Oleo Script":"YACgEQQ14jI,0","Phantom Sans":"YAHO2E8Pb88,0","Playfair Display":"YACgEYmuCJE,0","Poppins":"YAFdJjbTu24,1","Press Start 2P":"YAFyGr-8pmQ,0","Quicksand":"YADWjpfPmdk,0","Raleway":"YACgEVg3xZg,0","Segoe UI":"YAHNdRD1Klw,0","Source Sans 3":"YAG4lO1Mj10,0","Spectral":"YAHO2rVUHIM,0","Times New Roman":"YAGzXW3gftg,0","Times":"YAGzXW3gftg,0","Ubuntu":"YACgERDU--Q,0","Work Sans":"YAGXhLOKv44,0","Yellowtail":"YACgEYG4kG4,0","ui-monospace":"YADlN8CFZ8Q,0","ui-sans-serif":"YACkoN-xg4g,0"}}');</script><script src="/_sdk/7949ff62d67710d5.telemetry_sdk.js" integrity="sha512-KIvXA82Di44YY/RH9/63A9MuTuavYgDFG8PfErJn7Wli4K0LAOk+coo/aPXk3+ZNL96nHh9VYD4PE+fLes+laQ=="></script>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Reward Redemption Celebration</title>
+  <script src="https://cdn.tailwindcss.com/3.4.17"></script>
+  <script src="https://cdn.jsdelivr.net/npm/lucide@0.263.0/dist/umd/lucide.min.js"></script>
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700;800&amp;family=Fraunces:opsz,wght@9..144,700;9..144,800&amp;display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --ink: #18233f;
+      --navy: #132041;
+      --cream: #fffaf0;
+      --coral: #ff6b54;
+      --gold: #ffc84a;
+      --mint: #32d1a0;
+      --sky: #75d7ff;
+    }
+
+    * { box-sizing: border-box; }
+
+    body {
+      width: 100%;
+      min-height: 100%;
+      margin: 0;
+      font-family: "DM Sans", sans-serif;
+      color: var(--ink);
+      overflow-x: hidden;
+    }
+
+    button, input { font: inherit; }
+
+    button:focus-visible {
+      outline: 4px solid rgba(19, 32, 65, .28);
+      outline-offset: 4px;
+    }
+
+    .reward-shell {
+      width: 100%;
+      min-height: calc(100 * min(var(--vh, 1vh), 1vh));
+      display: grid;
+      place-items: center;
+      padding: 28px;
+      position: relative;
+      overflow: hidden;
+      background:
+        radial-gradient(circle at 15% 15%, rgba(255, 255, 255, .8) 0 2px, transparent 3px),
+        radial-gradient(circle at 83% 18%, rgba(255, 255, 255, .75) 0 3px, transparent 4px),
+        linear-gradient(145deg, #e8f8ff 0%, #fff8de 48%, #ffe8df 100%);
+      background-size: 44px 44px, 67px 67px, auto;
+    }
+
+    .reward-shell::before,
+    .reward-shell::after {
+      content: "";
+      position: absolute;
+      border-radius: 999px;
+      filter: blur(3px);
+      opacity: .75;
+    }
+
+    .reward-shell::before {
+      width: 250px; height: 250px;
+      background: rgba(117, 215, 255, .45);
+      top: -90px; right: -50px;
+    }
+
+    .reward-shell::after {
+      width: 190px; height: 190px;
+      background: rgba(255, 200, 74, .36);
+      bottom: -64px; left: -50px;
+    }
+
+    .reward-main {
+      width: min(100%, 590px);
+      position: relative;
+      z-index: 1;
+    }
+
+    .reward-card {
+      border: 5px solid rgba(24, 35, 63, .96);
+      border-radius: 32px;
+      box-shadow: 0 15px 0 rgba(24, 35, 63, .95), 0 28px 55px rgba(24, 35, 63, .16);
+      padding: clamp(24px, 5vw, 42px);
+      text-align: center;
+      animation: card-enter .58s cubic-bezier(.2,.82,.25,1) both;
+    }
+
+    .tiny-kicker {
+      letter-spacing: .14em;
+      text-transform: uppercase;
+      font-size: .73rem;
+      font-weight: 800;
+      color: #62708b;
+      margin: 0 0 11px;
+    }
+
+    .reward-card h1 {
+      margin: 0;
+      font-family: "Fraunces", serif;
+      line-height: 1.1;
+    }
+
+    .balance-pill {
+      margin: 24px auto 28px;
+      display: inline-flex;
+      align-items: center;
+      gap: 9px;
+      padding: 9px 14px;
+      border: 2px solid #d8e2ef;
+      border-radius: 999px;
+      background: #f7fbff;
+      color: #53617b;
+      font-size: .9rem;
+      font-weight: 700;
+    }
+
+    .coin {
+      width: 22px; height: 22px;
+      border-radius: 50%;
+      display: grid;
+      place-items: center;
+      background: var(--gold);
+      border: 2px solid #e09c16;
+      color: #7c4d00;
+      font-size: .72rem;
+      font-weight: 800;
+    }
+
+    .reward-icon-wrap {
+      width: 128px; height: 128px;
+      border-radius: 34px;
+      display: grid;
+      place-items: center;
+      margin: 0 auto 22px;
+      border: 4px solid var(--navy);
+      box-shadow: 0 9px 0 var(--navy);
+      color: var(--navy);
+    }
+
+    .reward-icon-wrap svg { width: 66px; height: 66px; stroke-width: 2.4; }
+
+    .reward-cost {
+      display: inline-flex;
+      align-items: center;
+      gap: 7px;
+      margin: 15px 0 25px;
+      padding: 9px 14px;
+      border-radius: 12px;
+      background: #fff4ca;
+      color: #815500;
+      font-weight: 800;
+    }
+
+    .redeem-button {
+      width: 100%;
+      min-height: 61px;
+      border: 0;
+      border-bottom: 6px solid #c94436;
+      border-radius: 18px;
+      cursor: pointer;
+      font-weight: 800;
+      font-size: 1.08rem;
+      transition: transform .18s ease, filter .18s ease, border-bottom-width .18s ease;
+    }
+
+    .redeem-button:hover:not(:disabled) { filter: brightness(1.04); transform: translateY(-2px); }
+    .redeem-button:active:not(:disabled) { transform: translateY(4px); border-bottom-width: 2px; }
+    .redeem-button:disabled { cursor: wait; filter: saturate(.72); opacity: .82; }
+
+    .button-label-loading { display: none; align-items: center; justify-content: center; gap: 9px; }
+    .is-loading .button-label-normal { display: none; }
+    .is-loading .button-label-loading { display: inline-flex; }
+
+    .spinner {
+      width: 17px; height: 17px;
+      border: 2px solid rgba(255,255,255,.45);
+      border-top-color: #fff;
+      border-radius: 50%;
+      animation: spin .72s linear infinite;
+    }
+
+    .error-message {
+      display: none;
+      margin: 20px 0 0;
+      font-size: .9rem;
+      font-weight: 700;
+    }
+
+    .error-message.is-visible { display: block; animation: gentle-in .2s ease both; }
+
+    .celebration-overlay {
+      position: fixed;
+      inset: 0;
+      z-index: 20;
+      display: grid;
+      place-items: center;
+      padding: 20px;
+      background: rgba(8, 19, 50, .58);
+      backdrop-filter: blur(7px);
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity .24s ease;
+    }
+
+    .celebration-overlay.is-open { opacity: 1; pointer-events: auto; }
+
+    .confetti-canvas {
+      position: absolute;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+      pointer-events: none;
+    }
+
+    .celebration-panel {
+      width: min(100%, 620px);
+      min-height: min(720px, calc(100 * min(var(--vh, 1vh), 1vh) - 40px));
+      position: relative;
+      overflow: hidden;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      padding: clamp(28px, 6vw, 52px);
+      border: 5px solid #162242;
+      border-radius: 36px;
+      box-shadow: 0 18px 0 #162242, 0 35px 75px rgba(0,0,0,.32);
+      text-align: center;
+      transform: scale(.88) translateY(25px);
+      transition: transform .42s cubic-bezier(.16,1,.3,1);
+      isolation: isolate;
+    }
+
+    .celebration-panel::before,
+    .celebration-panel::after {
+      content: "";
+      position: absolute;
+      border-radius: 50%;
+      z-index: -1;
+      opacity: .42;
+    }
+
+    .celebration-panel::before {
+      width: 240px; height: 240px;
+      background: #ffe48a;
+      top: -112px; left: -96px;
+    }
+
+    .celebration-panel::after {
+      width: 200px; height: 200px;
+      background: #a8e8ff;
+      bottom: -100px; right: -80px;
+    }
+
+    .celebration-overlay.is-open .celebration-panel { transform: scale(1) translateY(0); }
+
+    .gift-stage {
+      width: 170px; height: 155px;
+      position: relative;
+      margin: 0 auto 22px;
+      animation: gift-arrive .6s cubic-bezier(.2,1.3,.3,1) .15s both;
+    }
+
+    .gift-box {
+      width: 142px; height: 106px;
+      position: absolute;
+      left: 14px; bottom: 0;
+      border: 4px solid #172446;
+      border-radius: 12px 12px 21px 21px;
+      background: #ff705a;
+      box-shadow: inset 0 -11px rgba(195, 60, 50, .28), 0 8px 0 #172446;
+    }
+
+    .gift-box::before {
+      content: "";
+      position: absolute;
+      width: 27px; top: 0; bottom: 0; left: 54px;
+      background: #ffd155;
+      border-left: 4px solid #172446;
+      border-right: 4px solid #172446;
+    }
+
+    .gift-lid {
+      width: 164px; height: 44px;
+      position: absolute;
+      top: 25px; left: 3px;
+      border: 4px solid #172446;
+      border-radius: 13px;
+      background: #ff8a6e;
+      box-shadow: 0 6px 0 #172446;
+      transform-origin: 18px 38px;
+    }
+
+    .gift-lid::after {
+      content: "";
+      position: absolute;
+      width: 29px; top: -4px; bottom: -4px; left: 62px;
+      background: #ffd155;
+      border-left: 4px solid #172446;
+      border-right: 4px solid #172446;
+    }
+
+    .gift-bow {
+      position: absolute;
+      width: 59px; height: 30px;
+      top: 4px; left: 55px;
+      z-index: 2;
+    }
+
+    .gift-bow::before, .gift-bow::after {
+      content: "";
+      position: absolute;
+      width: 34px; height: 25px;
+      border: 4px solid #172446;
+      background: #ffd155;
+      border-radius: 70% 42% 70% 42%;
+    }
+
+    .gift-bow::before { left: -1px; transform: rotate(23deg); }
+    .gift-bow::after { right: -1px; transform: scaleX(-1) rotate(23deg); }
+
+    .celebration-overlay.is-revealed .gift-lid {
+      animation: lid-open .62s cubic-bezier(.2,.9,.25,1) forwards;
+    }
+
+    .celebration-overlay.is-revealed .gift-bow { animation: bow-fly .57s .06s ease-out forwards; }
+
+    .reveal-area {
+      opacity: 0;
+      transform: translateY(18px) scale(.8);
+      transition: opacity .4s ease, transform .5s cubic-bezier(.2,1.45,.35,1);
+    }
+
+    .celebration-overlay.is-revealed .reveal-area {
+      opacity: 1;
+      transform: translateY(0) scale(1);
+      transition-delay: .3s;
+    }
+
+    .celebration-reward-icon {
+      width: 72px; height: 72px;
+      display: grid;
+      place-items: center;
+      margin: 0 auto 10px;
+      border: 3px solid #172446;
+      border-radius: 22px;
+      color: #172446;
+      box-shadow: 0 5px 0 #172446;
+    }
+
+    .celebration-reward-icon svg { width: 38px; height: 38px; }
+
+    .celebration-panel h2 {
+      margin: 22px 0 8px;
+      font-family: "Fraunces", serif;
+      line-height: 1.05;
+    }
+
+    .celebration-panel p { margin: 0; }
+
+    .point-change {
+      display: inline-flex;
+      align-items: center;
+      gap: 12px;
+      margin: 23px 0;
+      padding: 12px 17px;
+      border: 2px solid #d8e0ec;
+      border-radius: 16px;
+      background: rgba(255,255,255,.75);
+      color: #56647e;
+      font-weight: 800;
+      font-variant-numeric: tabular-nums;
+    }
+
+    .point-change strong { color: #1a2949; font-size: 1.15rem; }
+    .point-change svg { color: #35b684; width: 20px; }
+
+    .awesome-button {
+      width: min(100%, 360px);
+      min-height: 60px;
+      margin-top: 25px;
+      border: 0;
+      border-bottom: 6px solid #138b68;
+      border-radius: 18px;
+      cursor: pointer;
+      font-size: 1.1rem;
+      font-weight: 800;
+      opacity: 0;
+      transform: translateY(14px);
+      transition: transform .18s ease, filter .18s ease, border-bottom-width .18s ease, opacity .3s ease .55s;
+    }
+
+    .celebration-overlay.is-ready .awesome-button { opacity: 1; transform: translateY(0); }
+    .awesome-button:hover { filter: brightness(1.04); transform: translateY(-2px); }
+    .awesome-button:active { transform: translateY(4px); border-bottom-width: 2px; }
+
+    @keyframes card-enter { from { opacity: 0; transform: translateY(20px) scale(.98); } to { opacity: 1; transform: none; } }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    @keyframes gentle-in { from { opacity: 0; transform: translateY(-4px); } to { opacity: 1; transform: none; } }
+    @keyframes gift-arrive { from { opacity: 0; transform: scale(.45) rotate(-13deg); } to { opacity: 1; transform: scale(1) rotate(0); } }
+    @keyframes lid-open { 0% { transform: rotate(0); } 60% { transform: translate(-18px,-59px) rotate(-28deg); } 100% { transform: translate(-24px,-67px) rotate(-33deg); opacity: 0; } }
+    @keyframes bow-fly { to { transform: translateY(-69px) rotate(22deg); opacity: 0; } }
+
+    @media (max-width: 520px) {
+      .reward-shell { padding: 20px; }
+      .reward-card { border-radius: 27px; }
+      .celebration-panel { min-height: 0; border-radius: 29px; }
+      .gift-stage { transform: scale(.88); margin-bottom: 10px; }
+      .point-change { margin: 17px 0; }
+      .awesome-button { margin-top: 20px; }
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      *, *::before, *::after { animation-duration: .01ms !important; animation-iteration-count: 1 !important; transition-duration: .01ms !important; }
+    }
+  </style>
+  <script src="/_sdk/0e8d3a91e1c6f495.data_sdk.js" type="text/javascript" integrity="sha512-c00oDoGjsMgluCLLEyVl3suwEkgjOGGplVFbsilUoBg4aMKNmsL3mwsc9r0dPn95qiSZyjBousQXgROkAW7p/w=="></script>
+  <script src="/_sdk/04cc6185e046f597.resizing_sdk.js" type="text/javascript" integrity="sha512-CiE/G92aQF0nxneFg1kdOvXih8sQ1Z2a2QI3+r/WvzJwQqH6+IyB3iL07OkJmpm3ABAaf07+FnqWny98f5sR6w=="></script>
+ </head>
+ <body data-template-id="__page-root" style="background: linear-gradient(145deg, rgb(232, 248, 255), rgb(255, 232, 223));">
+  <div class="reward-shell">
+   <main class="reward-main" aria-labelledby="reward-title">
+    <section data-template-id="reward-card" class="reward-card canva-card" style="background: rgb(255, 255, 255);">
+     <p class="tiny-kicker">Reward shop</p>
+     <h1 data-template-id="reward-title" class="canva-text" style="color: rgb(24, 35, 63); font-weight: 800; font-style: normal; font-size: 32px;">Weekend game time</h1>
+     <div class="balance-pill" aria-label="Current points balance"><span class="coin" aria-hidden="true">★</span> <span id="current-points">250 points</span>
+     </div>
+     <div data-template-id="reward-icon" class="reward-icon-wrap canva-panel" aria-hidden="true" style="background: rgb(168, 232, 255);"><i data-lucide="gamepad-2"></i>
+     </div>
+     <div data-template-id="reward-cost-label" class="reward-cost canva-tag" style="background: rgb(255, 244, 202); color: rgb(129, 85, 0); font-weight: 800; font-style: normal; font-size: 16px;">25 points</div><button id="redeem-button" data-template-id="redeem-button" class="redeem-button canva-button" type="button" style="background: rgb(255, 107, 84); color: rgb(255, 255, 255); font-weight: 800;"> <span data-template-id="redeem-label" class="button-label-normal canva-text" style="color: rgb(255, 255, 255); font-weight: 800; font-style: normal; font-size: 16px;">Redeem reward</span> <span data-template-id="redeem-loading-label" class="button-label-loading canva-text" style="color: rgb(255, 255, 255); font-weight: 800; font-style: normal; font-size: 16px;">Requesting reward…</span> </button>
+     <p id="error-message" data-template-id="error-message" class="error-message canva-text" role="alert" style="color: rgb(195, 61, 66); font-weight: 700; font-style: normal; font-size: 16px;">Something went wrong. Please try again.</p>
+    </section>
+   </main>
+  </div>
+  <aside id="celebration-overlay" class="celebration-overlay" aria-hidden="true" aria-labelledby="celebration-title" aria-modal="true" role="dialog">
+   <canvas id="confetti-canvas" class="confetti-canvas" aria-hidden="true"></canvas>
+   <section data-template-id="celebration-panel" class="celebration-panel canva-panel" style="background: rgb(255, 253, 248);">
+    <div class="gift-stage" aria-hidden="true">
+     <div class="gift-bow"></div>
+     <div class="gift-lid"></div>
+     <div class="gift-box"></div>
+    </div>
+    <div class="reveal-area">
+     <div data-template-id="celebration-reward-icon" class="celebration-reward-icon canva-panel" aria-hidden="true" style="background: rgb(168, 232, 255);"><i data-lucide="gamepad-2"></i>
+     </div>
+     <p data-template-id="celebration-reward-title" class="canva-text" style="color: rgb(53, 68, 99); font-weight: 800; font-style: normal; font-size: 18px;">Weekend game time</p>
+    </div>
+    <h2 id="celebration-title" data-template-id="celebration-title" class="canva-text" style="color: rgb(24, 35, 63); font-weight: 800; font-style: normal; font-size: 24px;">Reward Requested!</h2>
+    <p data-template-id="celebration-eyebrow" class="tiny-kicker canva-text" style="color: rgb(98, 112, 139); font-weight: 800; font-style: normal; font-size: 16px;">Nice choice!</p>
+    <div class="point-change" aria-label="Points changed from 250 to 225"><strong id="points-before">250</strong> <i data-lucide="arrow-right" aria-hidden="true"></i> <strong id="points-after">225</strong>
+    </div>
+    <p data-template-id="celebration-message" class="canva-text" style="color: rgb(83, 97, 123); font-weight: 600; font-style: normal; font-size: 17px;">Your parent has been notified.</p><button id="awesome-button" data-template-id="awesome-button" class="awesome-button canva-button" type="button" style="background: rgb(50, 209, 160); color: rgb(16, 59, 49); font-weight: 800; font-style: normal; font-size: 16px;">Awesome!</button>
+   </section>
+  </aside>
+  <script src="/_sdk/fef09cb5f5b2424b.editing_sdk.js" integrity="sha512-PbmCvZWt+xecnQll4ofK5HTtTS+pGwwY1xn9+p49qHgEHml+uvyc0o1f2Eltkd4t324iwgnf7acUjfnKHkik1w=="></script>
+  <script>
+    const redeemButton = document.getElementById('redeem-button');
+    const errorMessage = document.getElementById('error-message');
+    const overlay = document.getElementById('celebration-overlay');
+    const awesomeButton = document.getElementById('awesome-button');
+    const pointsBefore = document.getElementById('points-before');
+    const pointsAfter = document.getElementById('points-after');
+    const currentPoints = document.getElementById('current-points');
+    const canvas = document.getElementById('confetti-canvas');
+    const context = canvas.getContext('2d');
+    let activeElementBeforeOverlay = null;
+    let animationFrame = null;
+    let particles = [];
+
+    /*
+      Replace only this promise call with the existing redemption request.
+      CelebrationOverlay.open() is intentionally called only after a successful resolution.
+    */
+    function requestRedemption() {
+      return new Promise((resolve) => {
+        window.setTimeout(resolve, 850);
+      });
+    }
+
+    const CelebrationOverlay = {
+      open({ beforePoints, afterPoints }) {
+        activeElementBeforeOverlay = document.activeElement;
+        pointsBefore.textContent = String(beforePoints);
+        pointsAfter.textContent = String(afterPoints);
+
+        overlay.classList.remove('is-revealed', 'is-ready');
+        overlay.classList.add('is-open');
+        overlay.setAttribute('aria-hidden', 'false');
+        startConfetti();
+        playSuccessSound();
+
+        window.setTimeout(() => overlay.classList.add('is-revealed'), 420);
+        window.setTimeout(() => {
+          overlay.classList.add('is-ready');
+          awesomeButton.focus();
+        }, 2350);
+      },
+
+      close() {
+        overlay.classList.remove('is-open', 'is-revealed', 'is-ready');
+        overlay.setAttribute('aria-hidden', 'true');
+        stopConfetti();
+        if (activeElementBeforeOverlay) activeElementBeforeOverlay.focus();
+      }
+    };
+
+    redeemButton.addEventListener('click', async () => {
+      const beforePoints = 250;
+      const afterPoints = 225;
+
+      errorMessage.classList.remove('is-visible');
+      redeemButton.disabled = true;
+      redeemButton.classList.add('is-loading');
+
+      try {
+        await requestRedemption();
+        currentPoints.textContent = afterPoints + ' points';
+        CelebrationOverlay.open({ beforePoints, afterPoints });
+      } catch (error) {
+        errorMessage.classList.add('is-visible');
+      } finally {
+        redeemButton.disabled = false;
+        redeemButton.classList.remove('is-loading');
+      }
+    });
+
+    awesomeButton.addEventListener('click', () => CelebrationOverlay.close());
+
+    document.addEventListener('keydown', (event) => {
+      if (!overlay.classList.contains('is-open')) return;
+
+      if (event.key === 'Escape') {
+        event.preventDefault();
+        CelebrationOverlay.close();
+        return;
+      }
+
+      if (event.key === 'Tab') {
+        event.preventDefault();
+        awesomeButton.focus();
+      }
+    });
+
+    function resizeCanvas() {
+      const ratio = window.devicePixelRatio || 1;
+      canvas.width = window.innerWidth * ratio;
+      canvas.height = window.innerHeight * ratio;
+      canvas.style.width = window.innerWidth + 'px';
+      canvas.style.height = window.innerHeight + 'px';
+      context.setTransform(ratio, 0, 0, ratio, 0, 0);
+    }
+
+    function startConfetti() {
+      resizeCanvas();
+      const colors = ['#ff6b54', '#ffc84a', '#32d1a0', '#75d7ff', '#ffffff', '#a983ff'];
+      particles = Array.from({ length: 170 }, (_, index) => ({
+        x: Math.random() * window.innerWidth,
+        y: -30 - Math.random() * window.innerHeight * .45,
+        size: 6 + Math.random() * 8,
+        color: colors[index % colors.length],
+        vx: -2.5 + Math.random() * 5,
+        vy: 2.4 + Math.random() * 4.6,
+        rotation: Math.random() * Math.PI,
+        rotationSpeed: -.16 + Math.random() * .32,
+        gravity: .075 + Math.random() * .07,
+        shape: Math.random() > .22 ? 'rect' : 'circle'
+      }));
+      cancelAnimationFrame(animationFrame);
+      animateConfetti();
+    }
+
+    function animateConfetti() {
+      context.clearRect(0, 0, window.innerWidth, window.innerHeight);
+      particles.forEach((particle) => {
+        particle.x += particle.vx;
+        particle.y += particle.vy;
+        particle.vy += particle.gravity;
+        particle.rotation += particle.rotationSpeed;
+
+        context.save();
+        context.translate(particle.x, particle.y);
+        context.rotate(particle.rotation);
+        context.fillStyle = particle.color;
+
+        if (particle.shape === 'circle') {
+          context.beginPath();
+          context.arc(0, 0, particle.size * .55, 0, Math.PI * 2);
+          context.fill();
+        } else {
+          context.fillRect(-particle.size / 2, -particle.size * .3, particle.size, particle.size * .6);
+        }
+        context.restore();
+      });
+
+      particles = particles.filter((particle) => particle.y < window.innerHeight + 36);
+      if (particles.length) animationFrame = requestAnimationFrame(animateConfetti);
+    }
+
+    function stopConfetti() {
+      cancelAnimationFrame(animationFrame);
+      particles = [];
+      context.clearRect(0, 0, window.innerWidth, window.innerHeight);
+    }
+
+    function playSuccessSound() {
+      try {
+        const AudioContextClass = window.AudioContext || window.webkitAudioContext;
+        if (!AudioContextClass) return;
+
+        const audioContext = new AudioContextClass();
+        const now = audioContext.currentTime;
+        const notes = [
+          { frequency: 523.25, time: now, duration: .11 },
+          { frequency: 659.25, time: now + .11, duration: .12 },
+          { frequency: 783.99, time: now + .23, duration: .24 }
+        ];
+
+        notes.forEach((note) => {
+          const oscillator = audioContext.createOscillator();
+          const gain = audioContext.createGain();
+          oscillator.type = 'sine';
+          oscillator.frequency.setValueAtTime(note.frequency, note.time);
+          gain.gain.setValueAtTime(.0001, note.time);
+          gain.gain.exponentialRampToValueAtTime(.12, note.time + .02);
+          gain.gain.exponentialRampToValueAtTime(.0001, note.time + note.duration);
+          oscillator.connect(gain);
+          gain.connect(audioContext.destination);
+          oscillator.start(note.time);
+          oscillator.stop(note.time + note.duration + .03);
+        });
+
+        window.setTimeout(() => audioContext.close(), 900);
+      } catch (_) {
+        /* Sound is an enhancement; the visual celebration remains fully functional. */
+      }
+    }
+
+    window.addEventListener('resize', () => {
+      if (overlay.classList.contains('is-open')) resizeCanvas();
+    });
+
+    lucide.createIcons();
+  </script>
+ 
+</body></html>
