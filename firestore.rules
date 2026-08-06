@@ -75,9 +75,13 @@ service cloud.firestore {
     // allow-statement level instead of once per validator.
     function isParentRaw(familyId) {
       let userDoc = get(/databases/$(database)/documents/users/$(authProfileId()));
+      // Single role read + single `in` membership test. The previous
+      // `role == 'parent' || role == 'owner'` form read and compared the role
+      // twice on every call, which is charged against the shared 1000-expression
+      // budget once per wallet validator per document in an atomic commit.
       return userDoc != null
         && userDoc.data.get('familyId', 'null') == familyId
-        && (userDoc.data.get('role', 'null') == 'parent' || userDoc.data.get('role', 'null') == 'owner');
+        && userDoc.data.get('role', 'null') in ['parent', 'owner'];
     }
 
     function isParent(familyId) {
@@ -1824,30 +1828,61 @@ service cloud.firestore {
       match /wallets/{childId} {
         allow read: if isParent(familyId) || (isAuthenticated() && authProfileId() == childId);
         allow create: if isValidWalletCreate(familyId, childId);
-        // 8-function chain (matches previously-deployed d7a75cf) preserves the
-        // per-type wallet-balance authorization guarantees. The goal_return case
-        // (lastGoalTxId, parent credits child) is added as a lean branch so the
-        // Goals return transaction stays within the 1000-expression budget.
-        // The behaviour-penalty deduction is ISOLATED into its own allow statement
-        // (regression fix): it is now read-free (see isValidBehaviourPenalty-
-        // Deduction), so a second allow statement adds only a cheap evaluation
-        // and keeps the parent penalty log under Firestore's 1000-expression
-        // budget. The client must supply lastPenaltyTxId (fixed in api.ts
-        // addBehaviourEvent).
-        allow update: if familyIsActive(familyId) && (
-          isValidDepositCredit(familyId, childId)
-          || isValidReversalWalletUpdate(familyId, childId)
-          || isValidWithdrawalDeduction(familyId, childId)
-          || isValidParentTransferDeduction(familyId, childId)
-          || isValidParentTransferCredit(familyId, childId)
-          || isValidPetBoxDonationDeduction(familyId, childId)
-          || (isParentRaw(familyId) && isValidLedgerSync(familyId, childId))
-          || (isParentRaw(familyId) && 'lastGoalTxId' in request.resource.data
-              && request.resource.data.balance is int
-              && request.resource.data.keys().hasOnly(['balance', 'lastGoalTxId'])));
-        // Isolated, read-free penalty deduction (lean) so the parent penalty
-        // log transaction stays within the 1000-expression budget.
-        allow update: if familyIsActive(familyId) && isValidBehaviourPenaltyDeduction(familyId, childId);
+        // WALLET UPDATE DISPATCH (expression-budget fix).
+        //
+        // Firestore evaluates every document of an atomic commit under ONE shared
+        // 1000-expression budget. The previous single allow statement OR'd eight
+        // validators, so EVERY wallet write paid for all eight validator bodies
+        // (each with its own get(users/...) + getAfter(...)). For the production
+        // penalty transaction (wallet + behaviour_event + wallet_transaction +
+        // feed + notification) that overflowed the budget and denied the whole
+        // commit — reproducibly for an `owner` actor.
+        //
+        // The chain is now replaced by CHEAP DISPATCH on the operation marker
+        // written by the client (lastPenaltyTxId / lastReversalId / lastGoalTxId /
+        // lastManualTxId / lastTransferTxId). Exactly ONE branch is evaluated per
+        // wallet write; the markers are mutually exclusive and every validator
+        // still enforces its full pre-existing invariants (actor is a same-family
+        // parent/owner, family active, child in family, balance delta equals the
+        // linked ledger amount, no duplicate ledger id). Statement order puts the
+        // penalty branch first so the production penalty commit grants before any
+        // other branch is charged.
+        //
+        // Penalty branch: read-free apart from the single getAfter() on the
+        // deterministically-addressed ledger leg (see
+        // isValidBehaviourPenaltyDeduction, which is the trust boundary).
+        allow update: if 'lastPenaltyTxId' in request.resource.data
+          && familyIsActive(familyId)
+          && isValidBehaviourPenaltyDeduction(familyId, childId);
+        // Reversal branch (lastReversalId).
+        allow update: if 'lastReversalId' in request.resource.data
+          && familyIsActive(familyId)
+          && isValidReversalWalletUpdate(familyId, childId);
+        // Goals branch (lastGoalTxId): lean by design so the Goals
+        // contribution/return transaction stays inside the budget.
+        allow update: if 'lastGoalTxId' in request.resource.data
+          && familyIsActive(familyId)
+          && isParentRaw(familyId)
+          && request.resource.data.balance is int
+          && request.resource.data.keys().hasOnly(['balance', 'lastGoalTxId']);
+        // Parent manual money movements (lastManualTxId): deposit / withdrawal /
+        // parent-initiated transfer legs. All four share the same marker, so this
+        // is the only branch that still needs a small OR.
+        allow update: if 'lastManualTxId' in request.resource.data
+          && familyIsActive(familyId)
+          && (
+            isValidDepositCredit(familyId, childId)
+            || isValidWithdrawalDeduction(familyId, childId)
+            || isValidParentTransferDeduction(familyId, childId)
+            || isValidParentTransferCredit(familyId, childId)
+          );
+        // Approved transfer / money-request / pet-box legs (lastTransferTxId).
+        allow update: if 'lastTransferTxId' in request.resource.data
+          && familyIsActive(familyId)
+          && (
+            isValidPetBoxDonationDeduction(familyId, childId)
+            || (isParentRaw(familyId) && isValidLedgerSync(familyId, childId))
+          );
       }
 
       match /wallet_transactions/{txId} {
@@ -1858,7 +1893,10 @@ service cloud.firestore {
         // Firestore's 1000-expression budget. The goal_return transaction also
         // updates the child wallet with lastGoalTxId (validated by isValidWalletUpdate
         // on the wallets doc), so keeping this statement lean is essential.
-        allow create: if familyIsActive(familyId)
+        // Cheap type dispatch FIRST (no document reads) so a ledger leg of a
+        // different type never pays for familyIsActive() or the Goals validators.
+        allow create: if request.resource.data.type in ['goal_contribution', 'goal_return']
+          && familyIsActive(familyId)
           && ((request.resource.data.type == 'goal_contribution' && isValidGoalWalletLedger(familyId, txId))
           || (request.resource.data.type == 'goal_return' && isValidGoalReturnWalletLedger(familyId, txId)));
         // Reversal + non-Goals writes require a behaviour manager (parent/owner) and
@@ -1872,8 +1910,15 @@ service cloud.firestore {
         // behaviour event and reads it many times, and OR'ing it inside this heavy
         // isBehaviourManager chain pushed the per-request evaluation over Firestore's
         // 1000-expression limit, denying every parent penalty log.
-        allow create: if familyIsActive(familyId) && (request.resource.data.type == 'financial_penalty' && isValidFinancialPenalty(familyId));
-        allow create: if familyIsActive(familyId) && ((request.resource.data.type == 'reversal' && isValidReversalWalletLedger(familyId, txId)) || (isBehaviourManager(familyId) && (
+        // Penalty ledger: cheap type check first, then the lean validator.
+        allow create: if request.resource.data.type == 'financial_penalty'
+          && familyIsActive(familyId)
+          && isValidFinancialPenalty(familyId);
+        // Heavy per-type chain. A `financial_penalty` leg is handled by the
+        // dedicated statement above and must NOT be charged for this chain's
+        // isBehaviourManager() read and per-type branches — that shared cost was
+        // part of the penalty commit's 1000-expression overflow.
+        allow create: if request.resource.data.type != 'financial_penalty' && familyIsActive(familyId) && ((request.resource.data.type == 'reversal' && isValidReversalWalletLedger(familyId, txId)) || (isBehaviourManager(familyId) && (
             (request.resource.data.type == 'deposit' && request.resource.data.amount > 0 && request.resource.data.amount is int && isChildInFamily(familyId, request.resource.data.childId) && request.resource.data.parentRef == authProfileId() && request.resource.data.createdAt == request.time) ||
             (request.resource.data.type == 'withdrawal' && request.resource.data.amount > 0 && request.resource.data.amount is int && isChildInFamily(familyId, request.resource.data.childId) && request.resource.data.parentRef == authProfileId() && request.resource.data.createdAt == request.time) ||
             (request.resource.data.type == 'transfer' && request.resource.data.amount > 0 && request.resource.data.amount is int && isChildInFamily(familyId, request.resource.data.childId) && isChildInFamily(familyId, request.resource.data.fromChildId) && request.resource.data.parentRef == authProfileId() && request.resource.data.createdAt == request.time) ||
