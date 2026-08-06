@@ -242,9 +242,80 @@ function writeManifest(dir, manifest) {
   fs.writeFileSync(file, JSON.stringify(manifest, null, 2) + '\n')
   return file
 }
+// Controlled CLI error — never a raw TypeError. Carries a clear message and is
+// rendered together with usage by the top-level handler.
+class CliError extends Error {
+  constructor(message) {
+    super(message)
+    this.name = 'CliError'
+  }
+}
+
+function printUsage(out) {
+  const w = out || process.stdout
+  w.write(
+    'wallet-snapshot — read-only SHA-256 snapshot of protected wallet documents\n' +
+    '\n' +
+    'Usage:\n' +
+    '  node scripts/wallet-snapshot.cjs [options]\n' +
+    '\n' +
+    'Options:\n' +
+    '  --help, -h           Show this help and exit 0 (no Firebase, no writes)\n' +
+    '  --dry-run            Print the plan (collections/fields) and exit 0\n' +
+    '  --check              Run the wallet-snapshot self-tests\n' +
+    '  --output <dir>       Write the manifest to <dir>\n' +
+    '                       (default: backups/wallet-snapshots/<timestamp>/)\n' +
+    '  --verify <manifest>  Verify current wallet state against <manifest>\n' +
+    '\n' +
+    'This tool is read-only: it never writes to Firestore and never reads\n' +
+    'gamification collections.\n'
+  )
+}
+
+// Parse CLI arguments. Performs NO Firebase/Admin SDK initialization and NO
+// filesystem writes. Throws CliError for missing values or unknown flags.
+function parseArgs(args) {
+  const opts = { help: false, dryRun: false, check: false, output: null, verify: null }
+  for (let i = 0; i < args.length; i++) {
+    const a = args[i]
+    if (a === '--help' || a === '-h') {
+      opts.help = true
+      continue
+    }
+    if (a === '--dry-run') {
+      opts.dryRun = true
+      continue
+    }
+    if (a === '--check') {
+      opts.check = true
+      continue
+    }
+    if (a === '--output' || a === '--verify') {
+      const val = args[i + 1]
+      if (val === undefined || val.charAt(0) === '-') {
+        const kind = a === '--output' ? 'directory' : 'manifest'
+        throw new CliError(
+          'Missing required value for ' + a + '.\n' +
+          'Expected: ' + a + ' <' + kind + '>'
+        )
+      }
+      if (a === '--output') opts.output = val
+      else opts.verify = val
+      i++
+      continue
+    }
+    throw new CliError('Unknown argument: ' + a + '\nRun with --help for usage.')
+  }
+  return opts
+}
+
 async function main() {
-  const args = process.argv.slice(2)
-  if (args.includes('--check')) {
+  const opts = parseArgs(process.argv.slice(2))
+  if (opts.help) {
+    printUsage()
+    return
+  }
+  if (opts.check) {
     try {
       execFileSync(process.execPath, [path.join(__dirname, 'wallet-snapshot.test.cjs')], { stdio: 'inherit' })
     } catch (e) {
@@ -253,15 +324,15 @@ async function main() {
     return
   }
   assertNoGamificationImport()
-  if (args.includes('--dry-run')) {
+  if (opts.dryRun) {
     dryRunPlan()
     return
   }
   const admin = require('firebase-admin')
   if (!admin.apps.length) admin.initializeApp({ credential: admin.credential.applicationDefault() })
   const ro = new ReadOnlyFirestore(admin.firestore())
-  if (args.includes('--verify')) {
-    const m = JSON.parse(fs.readFileSync(args[args.indexOf('--verify') + 1], 'utf8'))
+  if (opts.verify) {
+    const m = JSON.parse(fs.readFileSync(opts.verify, 'utf8'))
     const r = verifyManifest(m, await collectEntries(ro))
     if (!r.ok) {
       console.error('WALLET VERIFY FAILED:\n' + formatReport(r.mismatches))
@@ -274,13 +345,17 @@ async function main() {
   const projectId = (admin.apps[0] && admin.apps[0].options && admin.apps[0].options.projectId) || null
   const manifest = buildManifest(entries, { projectId })
   const ts = new Date().toISOString().replace(/[:.]/g, '-')
-  const i = args.indexOf('--output')
-  const outDir = i !== -1 ? args[i + 1] : path.join(ROOT, 'backups', 'wallet-snapshots', ts)
+  const outDir = opts.output || path.join(ROOT, 'backups', 'wallet-snapshots', ts)
   console.log('Wrote wallet snapshot: ' + writeManifest(outDir, manifest))
   console.log('Global SHA-256: ' + manifest.globalSha256 + '  Docs: ' + manifest.totalCount)
 }
 if (require.main === module) {
   main().catch((err) => {
+    if (err instanceof CliError) {
+      console.error(err.message)
+      printUsage(process.stderr)
+      process.exit(2)
+    }
     console.error('wallet-snapshot failed: ' + err.message)
     process.exit(1)
   })

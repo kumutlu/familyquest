@@ -134,10 +134,71 @@ async function runRealBackup() {
   console.log('Backup complete: ' + outDir)
 }
 
+// Controlled CLI error — never a raw TypeError. Carries a clear message and is
+// rendered together with usage by the top-level handler.
+class CliError extends Error {
+  constructor(message) {
+    super(message)
+    this.name = 'CliError'
+  }
+}
+
+function printUsage(out) {
+  const w = out || process.stdout
+  w.write(
+    'backup-gamification-collections — read-only backup of gamification collections\n' +
+    '\n' +
+    'Usage:\n' +
+    '  node scripts/backup-gamification-collections.cjs [options]\n' +
+    '\n' +
+    'Options:\n' +
+    '  --help, -h     Show this help and exit 0 (no Firebase, no writes)\n' +
+    '  --dry-run      Print the backup plan and exit 0 (no reads/writes)\n' +
+    '\n' +
+    'With no options, performs a real read-only backup (requires firebase-admin\n' +
+    'and application default credentials). This tool NEVER touches wallet\n' +
+    'collections and performs no writes in --dry-run mode.\n'
+  )
+}
+
+// Parse CLI arguments. Performs NO Firebase/Admin SDK initialization and NO
+// filesystem writes. Throws CliError for unknown flags.
+function parseArgs(args) {
+  const opts = { help: false, dryRun: false }
+  for (let i = 0; i < args.length; i++) {
+    const a = args[i]
+    if (a === '--help' || a === '-h') {
+      opts.help = true
+      continue
+    }
+    if (a === '--dry-run') {
+      opts.dryRun = true
+      continue
+    }
+    throw new CliError('Unknown argument: ' + a + '\nRun with --help for usage.')
+  }
+  return opts
+}
+
 function main() {
-  const args = process.argv.slice(2)
-  if (args.includes('--dry-run')) {
+  let opts
+  try {
+    opts = parseArgs(process.argv.slice(2))
+  } catch (err) {
+    if (err instanceof CliError) {
+      console.error(err.message)
+      printUsage(process.stderr)
+      process.exit(2)
+    }
+    throw err
+  }
+  if (opts.help) {
+    printUsage()
+    return
+  }
+  if (opts.dryRun) {
     dryRun()
+    return
   }
   runRealBackup().catch((err) => {
     console.error('Backup failed: ' + err.message)
