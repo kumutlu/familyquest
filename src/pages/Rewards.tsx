@@ -9,6 +9,8 @@ import { Button } from '../components/ui/Button';
 import { Gift, Gamepad2, Pizza, Ticket, Plus, Edit, Trash2 } from 'lucide-react';
 import { useStore } from '../store/useStore';
 import { redeemReward, createReward, updateReward } from '../lib/api';
+import { mapTransactionError } from '../lib/transactionErrors';
+import { RewardCelebrationOverlay } from '../components/rewards/RewardCelebrationOverlay';
 import { cn } from '../lib/utils';
 import { isParentRole } from '../lib/roles';
 import { formatNumber, formatRelativeTime } from '../i18n/format';
@@ -34,6 +36,12 @@ export function Rewards() {
   const [formData, setFormData] = useState<any>({ title: '', cost: 50, icon: 'Gift', inventory: '' });
 
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [celebration, setCelebration] = useState<{
+    rewardTitle: string;
+    rewardIcon: React.ReactNode;
+    beforePoints: number;
+    afterPoints: number;
+  } | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [successMsg, setSuccessMsg] = useState<string | null>(null);
 
@@ -42,6 +50,9 @@ export function Rewards() {
   const activeRewards = rewards.filter(r => r.isActive !== false);
 
   const handleRedeem = async () => {
+    // Guard: a pending request must never be issued twice (no double deduction).
+    if (isSubmitting) return;
+
     if (currentUser.rewardPoints < selectedReward.cost) {
       setError(t('rewards:details.notEnoughPoints'));
       return;
@@ -54,18 +65,30 @@ export function Rewards() {
 
     setIsSubmitting(true);
     setError(null);
+
+    // Balance as it stood before the request; the confirmed resulting balance
+    // comes back from the redemption itself.
+    const beforePoints = currentUser.rewardPoints || 0;
+    const rewardTitle = selectedReward.title;
+    const rewardIcon = getIcon(selectedReward.icon);
+
     try {
       // Inventory is decremented atomically inside redeemReward's Firestore
       // transaction; the client must never write reward stock itself.
-      await redeemReward(currentUser.familyId, currentUser.id, selectedReward.id);
+      const result = await redeemReward(currentUser.familyId, currentUser.id, selectedReward.id);
 
-      setTimeout(() => {
-        setSelectedReward(null);
-        setIsSubmitting(false);
-      }, 1500);
+      // Only a confirmed, successful redemption opens the celebration.
+      setSelectedReward(null);
+      setCelebration({
+        rewardTitle: result.rewardTitle || rewardTitle,
+        rewardIcon,
+        beforePoints,
+        afterPoints: result.pointsAfter,
+      });
     } catch (e: any) {
-      console.error(e);
-      setError(e.message || t('errors:redeemFailed'));
+      // Never surface raw Firebase text to a child.
+      setError(mapTransactionError(e, { operation: 'redeemReward' }) || t('errors:redeemFailed'));
+    } finally {
       setIsSubmitting(false);
     }
   };
@@ -316,6 +339,17 @@ export function Rewards() {
           </div>
         </div>
       )}
+
+      {/* Success-only celebration: opened after a confirmed redemption. */}
+      <RewardCelebrationOverlay
+        open={celebration !== null}
+        rewardTitle={celebration?.rewardTitle ?? ''}
+        rewardIcon={celebration?.rewardIcon}
+        beforePoints={celebration?.beforePoints ?? 0}
+        afterPoints={celebration?.afterPoints ?? 0}
+        parentNotificationSent
+        onClose={() => setCelebration(null)}
+      />
     </div>
   );
 }

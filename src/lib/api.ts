@@ -1001,7 +1001,24 @@ export const claimChallenge = async (familyId: string, challengeId: string, rewa
 // 5. REWARDS & REDEMPTIONS
 // ---------------------------
 
-export const redeemReward = async (familyId: string, userId: string, rewardId: string) => {
+/**
+ * Result of a confirmed redemption. Returned so the UI can celebrate using the
+ * authoritative cost and the confirmed resulting balance rather than guessing.
+ * Business logic, permissions and the notification flow are unchanged.
+ */
+export interface RedeemRewardResult {
+  redemptionId: string;
+  rewardTitle: string;
+  costPaid: number;
+  pointsBefore: number;
+  pointsAfter: number;
+}
+
+export const redeemReward = async (
+  familyId: string,
+  userId: string,
+  rewardId: string,
+): Promise<RedeemRewardResult> => {
   if (!auth.currentUser?.uid) throw new Error('Not authenticated');
   const actorId = await getEffectiveActorId();
   if (actorId !== userId) throw new Error('Cannot redeem a reward for another user');
@@ -1010,6 +1027,8 @@ export const redeemReward = async (familyId: string, userId: string, rewardId: s
   const redemptionRef = doc(collection(db, `families/${familyId}/redemptions`));
   const feedRef = doc(collection(db, `families/${familyId}/feed`));
   const approverIds = await getApproverIds(familyId);
+
+  let outcome: RedeemRewardResult | null = null;
 
   await runTransaction(db, async (transaction) => {
     const [rewardDoc, userDoc] = await Promise.all([
@@ -1082,7 +1101,18 @@ export const redeemReward = async (familyId: string, userId: string, rewardId: s
 
     // Write stage performs ZERO reads.
     applyNotificationWrites(transaction, notifPlan);
+
+    outcome = {
+      redemptionId: redemptionRef.id,
+      rewardTitle: rewardDoc.data().title,
+      costPaid: cost,
+      pointsBefore: currentPoints,
+      pointsAfter: currentPoints - cost,
+    };
   });
+
+  if (!outcome) throw new Error('Redemption did not complete');
+  return outcome;
 };
 
 // Helper for awarding points safely outside of task approval

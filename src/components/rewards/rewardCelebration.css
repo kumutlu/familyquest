@@ -1,0 +1,357 @@
+/*
+ * Reward celebration overlay styles.
+ *
+ * Local, self-contained CSS recreated from the Canva visual reference.
+ * No Canva SDK, no CDN, no external fonts. Colour tokens fall back to the
+ * app's existing palette values so the overlay matches the rest of Queki.
+ */
+
+.rc-overlay {
+  --rc-navy: #162242;
+  --rc-ink: #18233f;
+  --rc-coral: #ff6b54;
+  --rc-gold: #ffc84a;
+  --rc-mint: #32d1a0;
+  --rc-sky: #75d7ff;
+
+  position: fixed;
+  inset: 0;
+  z-index: 60;
+  display: grid;
+  place-items: center;
+  padding: 20px;
+  background: rgba(8, 19, 50, 0.58);
+  backdrop-filter: blur(7px);
+  transition: opacity 0.24s ease;
+}
+
+.rc-canvas {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+}
+
+.rc-panel {
+  width: min(100%, 620px);
+  position: relative;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: clamp(24px, 6vw, 48px);
+  background: #fffdf8;
+  border: 5px solid var(--rc-navy);
+  border-radius: 36px;
+  box-shadow: 0 18px 0 var(--rc-navy), 0 35px 75px rgba(0, 0, 0, 0.32);
+  text-align: center;
+  color: var(--rc-ink);
+  transform: scale(0.88) translateY(25px);
+  transition: transform 0.42s cubic-bezier(0.16, 1, 0.3, 1);
+  isolation: isolate;
+}
+
+.rc-overlay.is-open .rc-panel {
+  transform: scale(1) translateY(0);
+}
+
+.rc-panel::before,
+.rc-panel::after {
+  content: "";
+  position: absolute;
+  border-radius: 50%;
+  z-index: -1;
+  opacity: 0.42;
+}
+
+.rc-panel::before {
+  width: 240px;
+  height: 240px;
+  background: #ffe48a;
+  top: -112px;
+  left: -96px;
+}
+
+.rc-panel::after {
+  width: 200px;
+  height: 200px;
+  background: #a8e8ff;
+  bottom: -100px;
+  right: -80px;
+}
+
+/* ---------------------------------------------------------------- gift box */
+
+.rc-gift {
+  width: 170px;
+  height: 155px;
+  position: relative;
+  margin: 0 auto 22px;
+  animation: rc-gift-arrive 0.6s cubic-bezier(0.2, 1.3, 0.3, 1) 0.15s both;
+}
+
+.rc-gift-box {
+  width: 142px;
+  height: 106px;
+  position: absolute;
+  left: 14px;
+  bottom: 0;
+  border: 4px solid var(--rc-navy);
+  border-radius: 12px 12px 21px 21px;
+  background: #ff705a;
+  box-shadow: inset 0 -11px rgba(195, 60, 50, 0.28), 0 8px 0 var(--rc-navy);
+}
+
+.rc-gift-box::before {
+  content: "";
+  position: absolute;
+  width: 27px;
+  top: 0;
+  bottom: 0;
+  left: 54px;
+  background: #ffd155;
+  border-left: 4px solid var(--rc-navy);
+  border-right: 4px solid var(--rc-navy);
+}
+
+.rc-gift-lid {
+  width: 164px;
+  height: 44px;
+  position: absolute;
+  top: 25px;
+  left: 3px;
+  border: 4px solid var(--rc-navy);
+  border-radius: 13px;
+  background: #ff8a6e;
+  box-shadow: 0 6px 0 var(--rc-navy);
+  transform-origin: 18px 38px;
+}
+
+.rc-gift-lid::after {
+  content: "";
+  position: absolute;
+  width: 29px;
+  top: -4px;
+  bottom: -4px;
+  left: 62px;
+  background: #ffd155;
+  border-left: 4px solid var(--rc-navy);
+  border-right: 4px solid var(--rc-navy);
+}
+
+.rc-gift-bow {
+  position: absolute;
+  width: 59px;
+  height: 30px;
+  top: 4px;
+  left: 55px;
+  z-index: 2;
+}
+
+.rc-gift-bow::before,
+.rc-gift-bow::after {
+  content: "";
+  position: absolute;
+  width: 34px;
+  height: 25px;
+  border: 4px solid var(--rc-navy);
+  background: #ffd155;
+  border-radius: 70% 42% 70% 42%;
+}
+
+.rc-gift-bow::before {
+  left: -1px;
+  transform: rotate(23deg);
+}
+
+.rc-gift-bow::after {
+  right: -1px;
+  transform: scaleX(-1) rotate(23deg);
+}
+
+.rc-overlay.is-revealed .rc-gift-lid {
+  animation: rc-lid-open 0.62s cubic-bezier(0.2, 0.9, 0.25, 1) forwards;
+}
+
+.rc-overlay.is-revealed .rc-gift-bow {
+  animation: rc-bow-fly 0.57s 0.06s ease-out forwards;
+}
+
+/* ------------------------------------------------------------ reward reveal */
+
+.rc-reveal {
+  opacity: 0;
+  transform: translateY(18px) scale(0.8);
+  transition: opacity 0.4s ease, transform 0.5s cubic-bezier(0.2, 1.45, 0.35, 1);
+}
+
+.rc-overlay.is-revealed .rc-reveal {
+  opacity: 1;
+  transform: translateY(0) scale(1);
+  transition-delay: 0.3s;
+}
+
+.rc-reward-icon {
+  width: 72px;
+  height: 72px;
+  display: grid;
+  place-items: center;
+  margin: 0 auto 10px;
+  background: #a8e8ff;
+  border: 3px solid var(--rc-navy);
+  border-radius: 22px;
+  color: var(--rc-navy);
+  box-shadow: 0 5px 0 var(--rc-navy);
+}
+
+.rc-reward-title {
+  margin: 0;
+  color: #354463;
+  font-weight: 800;
+  font-size: 1.125rem;
+}
+
+.rc-title {
+  margin: 22px 0 8px;
+  font-size: 1.5rem;
+  font-weight: 800;
+  line-height: 1.05;
+  color: var(--rc-ink);
+}
+
+.rc-kicker {
+  margin: 0 0 11px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  font-size: 0.75rem;
+  font-weight: 800;
+  color: #62708b;
+}
+
+.rc-message {
+  margin: 0;
+  color: #53617b;
+  font-weight: 600;
+}
+
+.rc-points {
+  display: inline-flex;
+  align-items: center;
+  gap: 12px;
+  margin: 23px 0;
+  padding: 12px 17px;
+  border: 2px solid #d8e0ec;
+  border-radius: 16px;
+  background: rgba(255, 255, 255, 0.75);
+  color: #56647e;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+}
+
+.rc-points strong {
+  color: #1a2949;
+  font-size: 1.15rem;
+}
+
+.rc-points svg {
+  color: #35b684;
+}
+
+.rc-button {
+  width: min(100%, 360px);
+  min-height: 60px;
+  margin-top: 25px;
+  border: 0;
+  border-bottom: 6px solid #138b68;
+  border-radius: 18px;
+  background: var(--rc-mint);
+  color: #103b31;
+  cursor: pointer;
+  font: inherit;
+  font-size: 1.05rem;
+  font-weight: 800;
+  opacity: 0;
+  transform: translateY(14px);
+  transition: transform 0.18s ease, filter 0.18s ease, border-bottom-width 0.18s ease,
+    opacity 0.3s ease 0.55s;
+}
+
+.rc-overlay.is-ready .rc-button {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+.rc-button:hover {
+  filter: brightness(1.04);
+  transform: translateY(-2px);
+}
+
+.rc-button:active {
+  transform: translateY(4px);
+  border-bottom-width: 2px;
+}
+
+.rc-button:focus-visible {
+  outline: 4px solid rgba(19, 32, 65, 0.28);
+  outline-offset: 4px;
+}
+
+@keyframes rc-gift-arrive {
+  from {
+    opacity: 0;
+    transform: scale(0.45) rotate(-13deg);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1) rotate(0);
+  }
+}
+
+@keyframes rc-lid-open {
+  0% {
+    transform: rotate(0);
+  }
+  60% {
+    transform: translate(-18px, -59px) rotate(-28deg);
+  }
+  100% {
+    transform: translate(-24px, -67px) rotate(-33deg);
+    opacity: 0;
+  }
+}
+
+@keyframes rc-bow-fly {
+  to {
+    transform: translateY(-69px) rotate(22deg);
+    opacity: 0;
+  }
+}
+
+@media (max-width: 520px) {
+  .rc-panel {
+    border-radius: 29px;
+  }
+  .rc-gift {
+    transform: scale(0.88);
+    margin-bottom: 10px;
+  }
+  .rc-points {
+    margin: 17px 0;
+  }
+  .rc-button {
+    margin-top: 20px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .rc-overlay,
+  .rc-overlay *,
+  .rc-overlay *::before,
+  .rc-overlay *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}

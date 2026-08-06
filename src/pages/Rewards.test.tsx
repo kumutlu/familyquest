@@ -207,3 +207,107 @@ describe('Rewards page — redemption history', () => {
     expect(screen.queryByText('Redemption history')).not.toBeInTheDocument();
   });
 });
+
+describe('Rewards page — celebration overlay integration', () => {
+  const childStore = () => makeStore({
+    currentUser: { id: 'u1', familyId: 'fam', role: 'child', rewardPoints: 100 },
+  });
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    useStoreMock.mockReturnValue(childStore());
+  });
+
+  function openRedeem() {
+    render(<Rewards />);
+    fireEvent.click(screen.getByText('Extra Screen Time'));
+    return screen.getByRole('button', { name: 'Redeem Reward' });
+  }
+
+  it('does not open the overlay before the redemption resolves', async () => {
+    let resolve!: (v: any) => void;
+    api.redeemReward.mockReturnValue(new Promise((r) => { resolve = r; }));
+
+    const button = openRedeem();
+    fireEvent.click(button);
+
+    expect(screen.queryByTestId('reward-celebration-overlay')).toBeNull();
+
+    resolve({ redemptionId: 'x', rewardTitle: 'Extra Screen Time', costPaid: 50, pointsBefore: 100, pointsAfter: 50 });
+    await waitFor(() => expect(screen.getByTestId('reward-celebration-overlay')).toBeInTheDocument());
+  });
+
+  it('opens with the real reward title and the actual before/after points', async () => {
+    api.redeemReward.mockResolvedValue({
+      redemptionId: 'x', rewardTitle: 'Extra Screen Time', costPaid: 50, pointsBefore: 100, pointsAfter: 50,
+    });
+
+    fireEvent.click(openRedeem());
+
+    await waitFor(() => expect(screen.getByTestId('reward-celebration-overlay')).toBeInTheDocument());
+    expect(screen.getByTestId('reward-celebration-reward-title')).toHaveTextContent('Extra Screen Time');
+    expect(screen.getByTestId('reward-celebration-points-before')).toHaveTextContent('100');
+    expect(screen.getByTestId('reward-celebration-points-after')).toHaveTextContent('50');
+  });
+
+  it('reuses the same component for a different reward', async () => {
+    useStoreMock.mockReturnValue(makeStore({
+      currentUser: { id: 'u1', familyId: 'fam', role: 'child', rewardPoints: 640 },
+      rewards: [{ id: 'r9', title: 'Cinema trip', cost: 140, icon: 'Ticket', isActive: true, inventory: null }],
+    }));
+    api.redeemReward.mockResolvedValue({
+      redemptionId: 'y', rewardTitle: 'Cinema trip', costPaid: 140, pointsBefore: 640, pointsAfter: 500,
+    });
+
+    render(<Rewards />);
+    fireEvent.click(screen.getByText('Cinema trip'));
+    fireEvent.click(screen.getByRole('button', { name: 'Redeem Reward' }));
+
+    await waitFor(() => expect(screen.getByTestId('reward-celebration-reward-title')).toHaveTextContent('Cinema trip'));
+    expect(screen.getByTestId('reward-celebration-points-before')).toHaveTextContent('640');
+    expect(screen.getByTestId('reward-celebration-points-after')).toHaveTextContent('500');
+  });
+
+  it('never opens the overlay when the redemption fails, and shows no raw Firebase text', async () => {
+    api.redeemReward.mockRejectedValue({
+      code: 'permission-denied',
+      message: 'Missing or insufficient permissions.',
+    });
+
+    fireEvent.click(openRedeem());
+
+    await waitFor(() => expect(api.redeemReward).toHaveBeenCalled());
+    expect(screen.queryByTestId('reward-celebration-overlay')).toBeNull();
+    expect(document.body.textContent).not.toContain('permission-denied');
+    expect(document.body.textContent).not.toContain('Missing or insufficient permissions');
+  });
+
+  it('disables the redeem button while the request is pending and never deducts twice', async () => {
+    let resolve!: (v: any) => void;
+    api.redeemReward.mockReturnValue(new Promise((r) => { resolve = r; }));
+
+    const button = openRedeem();
+    fireEvent.click(button);
+
+    await waitFor(() => expect(button).toBeDisabled());
+    fireEvent.click(button);
+    fireEvent.click(button);
+    expect(api.redeemReward).toHaveBeenCalledTimes(1);
+
+    resolve({ redemptionId: 'x', rewardTitle: 'Extra Screen Time', costPaid: 50, pointsBefore: 100, pointsAfter: 50 });
+    await waitFor(() => expect(screen.getByTestId('reward-celebration-overlay')).toBeInTheDocument());
+    expect(api.redeemReward).toHaveBeenCalledTimes(1);
+  });
+
+  it('dismissing the overlay leaves no overlay behind', async () => {
+    api.redeemReward.mockResolvedValue({
+      redemptionId: 'x', rewardTitle: 'Extra Screen Time', costPaid: 50, pointsBefore: 100, pointsAfter: 50,
+    });
+
+    fireEvent.click(openRedeem());
+    await waitFor(() => expect(screen.getByTestId('reward-celebration-overlay')).toBeInTheDocument());
+
+    fireEvent.click(screen.getByTestId('reward-celebration-awesome'));
+    await waitFor(() => expect(screen.queryByTestId('reward-celebration-overlay')).toBeNull());
+  });
+});
