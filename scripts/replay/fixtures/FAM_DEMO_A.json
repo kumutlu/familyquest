@@ -1,0 +1,33 @@
+{
+  "familyId": "FAM_DEMO_A",
+  "taskCompletions": [
+    { "id": "t1", "taskId": "ta", "childId": "m1", "awardedPoints": 20, "approvedAt": "2026-01-01T10:00:00.000Z", "createdAt": "2026-01-01T10:00:00.000Z" },
+    { "id": "est1", "taskId": "tb", "childId": "m1", "approvedAt": "2026-01-02T10:00:00.000Z", "createdAt": "2026-01-02T10:00:00.000Z" }
+  ],
+  "behaviours": [
+    { "id": "b1", "childId": "m1", "behaviourType": "positive", "pointsDelta": 20, "createdAt": "2026-01-03T10:00:00.000Z" },
+    { "id": "b2", "childId": "m2", "behaviourType": "negative", "pointsDelta": -5, "createdAt": "2026-01-04T10:00:00.000Z" }
+  ],
+  "dailyProgress": [
+    { "id": "d1", "childId": "m1", "dayKey": "2026-01-05", "perfectDay": true, "rewardPointsAward": 10, "createdAt": "2026-01-05T20:00:00.000Z" }
+  ],
+  "redemptions": [
+    { "id": "r1", "childId": "m1", "rewardId": "rw1", "cost": 10, "createdAt": "2026-01-06T10:00:00.000Z" }
+  ],
+  "reversals": [
+    { "id": "rev1", "childId": "m1", "kind": "REV", "originalSourceId": "t1", "rewardPointsDelta": -20, "createdAt": "2026-01-07T10:00:00.000Z" }
+  ],
+  "avatarUnlocks": [
+    { "id": "a1", "childId": "m1", "avatarId": "av1", "costPoints": 5, "createdAt": "2026-01-08T10:00:00.000Z" }
+  ],
+  "manualAdjustments": [
+    { "id": "man1", "childId": "m2", "rpDelta": 3, "xpDelta": 0, "reason": "correction", "createdAt": "2026-01-09T10:00:00.000Z" }
+  ],
+  "tasks": {
+    "tb": 12
+  },
+  "displayed": {
+    "m1": { "rewardPoints": 50, "xpTotal": 40, "level": 2, "currentStreak": 1, "bestStreak": 3, "unlockedAchievementIds": [], "unlockedAvatarIds": [] },
+    "m2": { "rewardPoints": 0, "xpTotal": 0, "level": 1, "currentStreak": 0, "bestStreak": 0, "unlockedAchievementIds": [], "unlockedAvatarIds": [] }
+  }
+}
