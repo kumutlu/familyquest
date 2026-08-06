@@ -1026,6 +1026,14 @@ export const redeemReward = async (familyId: string, userId: string, rewardId: s
       throw new Error("Not enough points");
     }
 
+    // Limited-stock rewards carry a numeric `inventory` = remaining stock.
+    // null/undefined means unlimited and must never be written.
+    const rawInventory = rewardDoc.data().inventory;
+    const hasInventory = typeof rawInventory === 'number' && Number.isFinite(rawInventory);
+    if (hasInventory && rawInventory <= 0) {
+      throw new Error('Out of stock');
+    }
+
     // Resolve the notification dedupe read up-front (reads-before-writes).
     let notifPlan = { ref: null, data: null } as Awaited<
       ReturnType<typeof loadNotificationRecipientsInTransaction>
@@ -1043,6 +1051,11 @@ export const redeemReward = async (familyId: string, userId: string, rewardId: s
         dedupeKey: rewardRequestedKey(redemptionRef.id),
       });
     }
+    if (hasInventory) {
+      // Atomic, read-verified decrement. Never allow negative stock.
+      transaction.update(rewardRef, { inventory: Math.max(0, rawInventory - 1) });
+    }
+
     transaction.update(userRef, {
       rewardPoints: currentPoints - cost,
       lastRedemptionId: redemptionRef.id

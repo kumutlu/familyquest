@@ -55,14 +55,9 @@ export function Rewards() {
     setIsSubmitting(true);
     setError(null);
     try {
+      // Inventory is decremented atomically inside redeemReward's Firestore
+      // transaction; the client must never write reward stock itself.
       await redeemReward(currentUser.familyId, currentUser.id, selectedReward.id);
-
-      // Also decrement inventory if applicable
-      if (selectedReward.inventory !== undefined && selectedReward.inventory !== null && selectedReward.inventory !== '') {
-        await updateReward(currentUser.familyId, selectedReward.id, {
-          inventory: selectedReward.inventory - 1
-        });
-      }
 
       setTimeout(() => {
         setSelectedReward(null);

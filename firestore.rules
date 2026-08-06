@@ -1805,6 +1805,15 @@ service cloud.firestore {
       match /rewards/{rewardId} {
         allow read: if isFamilyMember(familyId);
         allow write: if isParent(familyId);
+        // A child may ONLY decrement remaining stock by exactly one, and only
+        // on a reward that already has numeric inventory > 0. No other field
+        // may change, and stock can never go negative.
+        allow update: if isFamilyMember(familyId)
+          && familyIsActive(familyId)
+          && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['inventory'])
+          && resource.data.get('inventory', null) is int
+          && resource.data.inventory > 0
+          && request.resource.data.inventory == resource.data.inventory - 1;
       }
 
       match /redemptions/{redemptionId} {
