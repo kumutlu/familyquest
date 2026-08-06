@@ -20,6 +20,7 @@ import {
   type TransactionType,
   type TransactionUnit,
 } from './transactionModel';
+import { transferTitle } from './walletPresentation';
 
 export type { NormalizedTransaction } from './transactionModel';
 
@@ -518,7 +519,24 @@ function normalizeWallet(
   const fromName = fromChildId ? opts.nameResolver?.(fromChildId) : undefined;
   const goalName = goalId ? opts.goalResolver?.(goalId)?.title : undefined;
   const fundName = stringValue(record.fundName) ?? (fundId ? opts.fundResolver?.(fundId)?.name : undefined);
+  // Transfer rows must show the amount inline (single source of truth:
+  // walletPresentation.transferTitle). Legacy rows without an amount keep the
+  // stored description / plain "Sent" / "Received" fallback.
+  let title = walletTitle(type, opts);
+  if (type === 'transfer_in' || type === 'transfer_out') {
+    const name = counterpartyName
+      ?? translate(opts.t, 'tx.anotherChild', 'another child');
+    title = transferTitle(
+      type === 'transfer_in' ? 'in' : 'out',
+      amountPence,
+      name,
+      record,
+      opts.t as unknown as TFunction<'wallet'> | undefined,
+    );
+  }
   let subtitle = stringValue(record.description) ?? '';
+  // Never repeat the title as the subtitle for transfer rows.
+  if (subtitle && subtitle === title) subtitle = '';
   if (!subtitle) {
     if (type === 'deposit') subtitle = actorName
       ? translate(opts.t, 'tx.depositFrom', actorName, { actor: actorName })
@@ -563,7 +581,7 @@ function normalizeWallet(
     amountPence,
     direction,
     status: statusFrom(record.status),
-    title: walletTitle(type, opts),
+    title,
     subtitle,
     source: 'wallet_transaction',
     sourceId,

@@ -119,7 +119,7 @@ export interface TxPresentation {
 // "Sent £10.00 to Mnalium" / "Received £10.00 from Mnalium".
 // The amount comes strictly from the stored signed pence on the transaction;
 // legacy rows with no amount fall back to the stored description.
-function transferTitle(
+export function transferTitle(
   kind: 'in' | 'out',
   signedAmountPence: number,
   name: string,
