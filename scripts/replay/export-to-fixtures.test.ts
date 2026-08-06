@@ -340,8 +340,17 @@ describeInit('firebase-admin initializer (modular API)', () => {
     // Sanity: applicationDefault is still referenced somewhere (production path).
     expectInit(/applicationDefault/.test(src)).toBe(true)
     const { initFirestore } = require('../firebase-admin-init.cjs')
-    const db = initFirestore({ emulator: true })
-    expectInit(db).toBeTruthy()
+    // The initializer refuses emulator mode unless the host is set; provide a
+    // local host for the duration of this assertion (never a production host).
+    const previousHost = process.env.FIRESTORE_EMULATOR_HOST
+    process.env.FIRESTORE_EMULATOR_HOST = previousHost ?? '127.0.0.1:8080'
+    try {
+      const db = initFirestore({ emulator: true })
+      expectInit(db).toBeTruthy()
+    } finally {
+      if (previousHost === undefined) delete process.env.FIRESTORE_EMULATOR_HOST
+      else process.env.FIRESTORE_EMULATOR_HOST = previousHost
+    }
   })
 
   itInit('source uses modular API and never references the legacy namespace', () => {

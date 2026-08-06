@@ -1,0 +1,644 @@
+{
+  "total": 71,
+  "records": [
+    {
+      "familyId": "5s4Npeu55wPphLCsGAMP",
+      "sourceId": "NuyIJDP9fDNP2LiKynlsEyzur5N2:2026-08-02",
+      "sourceField": "dailyProgress",
+      "stage": "reader",
+      "reason": "daily_progress row is not a perfect day (perfectDay !== true): it is a display aggregate, not a reward award, and readDailyPerfectDay intentionally excludes it",
+      "evidence": "familyId=5s4Npeu55wPphLCsGAMP field=dailyProgress id=NuyIJDP9fDNP2LiKynlsEyzur5N2:2026-08-02",
+      "intentional": true
+    },
+    {
+      "familyId": "5s4Npeu55wPphLCsGAMP",
+      "sourceId": "NuyIJDP9fDNP2LiKynlsEyzur5N2:2026-08-04",
+      "sourceField": "dailyProgress",
+      "stage": "reader",
+      "reason": "daily_progress row is not a perfect day (perfectDay !== true): it is a display aggregate, not a reward award, and readDailyPerfectDay intentionally excludes it",
+      "evidence": "familyId=5s4Npeu55wPphLCsGAMP field=dailyProgress id=NuyIJDP9fDNP2LiKynlsEyzur5N2:2026-08-04",
+      "intentional": true
+    },
+    {
+      "familyId": "5s4Npeu55wPphLCsGAMP",
+      "sourceId": "NuyIJDP9fDNP2LiKynlsEyzur5N2:2026-08-05",
+      "sourceField": "dailyProgress",
+      "stage": "reader",
+      "reason": "daily_progress row is not a perfect day (perfectDay !== true): it is a display aggregate, not a reward award, and readDailyPerfectDay intentionally excludes it",
+      "evidence": "familyId=5s4Npeu55wPphLCsGAMP field=dailyProgress id=NuyIJDP9fDNP2LiKynlsEyzur5N2:2026-08-05",
+      "intentional": true
+    },
+    {
+      "familyId": "5s4Npeu55wPphLCsGAMP",
+      "sourceId": "T7ZsdaN8ixUOnzRAX9jNQqUDZE13:2026-08-02",
+      "sourceField": "dailyProgress",
+      "stage": "reader",
+      "reason": "daily_progress row is not a perfect day (perfectDay !== true): it is a display aggregate, not a reward award, and readDailyPerfectDay intentionally excludes it",
+      "evidence": "familyId=5s4Npeu55wPphLCsGAMP field=dailyProgress id=T7ZsdaN8ixUOnzRAX9jNQqUDZE13:2026-08-02",
+      "intentional": true
+    },
+    {
+      "familyId": "5s4Npeu55wPphLCsGAMP",
+      "sourceId": "T7ZsdaN8ixUOnzRAX9jNQqUDZE13:2026-08-03",
+      "sourceField": "dailyProgress",
+      "stage": "reader",
+      "reason": "daily_progress row is not a perfect day (perfectDay !== true): it is a display aggregate, not a reward award, and readDailyPerfectDay intentionally excludes it",
+      "evidence": "familyId=5s4Npeu55wPphLCsGAMP field=dailyProgress id=T7ZsdaN8ixUOnzRAX9jNQqUDZE13:2026-08-03",
+      "intentional": true
+    },
+    {
+      "familyId": "5s4Npeu55wPphLCsGAMP",
+      "sourceId": "T7ZsdaN8ixUOnzRAX9jNQqUDZE13:2026-08-04",
+      "sourceField": "dailyProgress",
+      "stage": "reader",
+      "reason": "daily_progress row is not a perfect day (perfectDay !== true): it is a display aggregate, not a reward award, and readDailyPerfectDay intentionally excludes it",
+      "evidence": "familyId=5s4Npeu55wPphLCsGAMP field=dailyProgress id=T7ZsdaN8ixUOnzRAX9jNQqUDZE13:2026-08-04",
+      "intentional": true
+    },
+    {
+      "familyId": "5s4Npeu55wPphLCsGAMP",
+      "sourceId": "T7ZsdaN8ixUOnzRAX9jNQqUDZE13:2026-08-05",
+      "sourceField": "dailyProgress",
+      "stage": "reader",
+      "reason": "daily_progress row is not a perfect day (perfectDay !== true): it is a display aggregate, not a reward award, and readDailyPerfectDay intentionally excludes it",
+      "evidence": "familyId=5s4Npeu55wPphLCsGAMP field=dailyProgress id=T7ZsdaN8ixUOnzRAX9jNQqUDZE13:2026-08-05",
+      "intentional": true
+    },
+    {
+      "familyId": "5s4Npeu55wPphLCsGAMP",
+      "sourceId": "vc0iyHVfAcXnXQQbmFkr5HfJEkp2:2026-08-02",
+      "sourceField": "dailyProgress",
+      "stage": "reader",
+      "reason": "daily_progress row is not a perfect day (perfectDay !== true): it is a display aggregate, not a reward award, and readDailyPerfectDay intentionally excludes it",
+      "evidence": "familyId=5s4Npeu55wPphLCsGAMP field=dailyProgress id=vc0iyHVfAcXnXQQbmFkr5HfJEkp2:2026-08-02",
+      "intentional": true
+    },
+    {
+      "familyId": "5s4Npeu55wPphLCsGAMP",
+      "sourceId": "vc0iyHVfAcXnXQQbmFkr5HfJEkp2:2026-08-03",
+      "sourceField": "dailyProgress",
+      "stage": "reader",
+      "reason": "daily_progress row is not a perfect day (perfectDay !== true): it is a display aggregate, not a reward award, and readDailyPerfectDay intentionally excludes it",
+      "evidence": "familyId=5s4Npeu55wPphLCsGAMP field=dailyProgress id=vc0iyHVfAcXnXQQbmFkr5HfJEkp2:2026-08-03",
+      "intentional": true
+    },
+    {
+      "familyId": "5s4Npeu55wPphLCsGAMP",
+      "sourceId": "vc0iyHVfAcXnXQQbmFkr5HfJEkp2:2026-08-04",
+      "sourceField": "dailyProgress",
+      "stage": "reader",
+      "reason": "daily_progress row is not a perfect day (perfectDay !== true): it is a display aggregate, not a reward award, and readDailyPerfectDay intentionally excludes it",
+      "evidence": "familyId=5s4Npeu55wPphLCsGAMP field=dailyProgress id=vc0iyHVfAcXnXQQbmFkr5HfJEkp2:2026-08-04",
+      "intentional": true
+    },
+    {
+      "familyId": "5s4Npeu55wPphLCsGAMP",
+      "sourceId": "vc0iyHVfAcXnXQQbmFkr5HfJEkp2:2026-08-05",
+      "sourceField": "dailyProgress",
+      "stage": "reader",
+      "reason": "daily_progress row is not a perfect day (perfectDay !== true): it is a display aggregate, not a reward award, and readDailyPerfectDay intentionally excludes it",
+      "evidence": "familyId=5s4Npeu55wPphLCsGAMP field=dailyProgress id=vc0iyHVfAcXnXQQbmFkr5HfJEkp2:2026-08-05",
+      "intentional": true
+    },
+    {
+      "familyId": "FhEuO8E0YUzeTdxBfEHs",
+      "sourceId": "aa45x0f6gJsRa0bD7jqC:2026-08-02",
+      "sourceField": "dailyProgress",
+      "stage": "reader",
+      "reason": "daily_progress row is not a perfect day (perfectDay !== true): it is a display aggregate, not a reward award, and readDailyPerfectDay intentionally excludes it",
+      "evidence": "familyId=FhEuO8E0YUzeTdxBfEHs field=dailyProgress id=aa45x0f6gJsRa0bD7jqC:2026-08-02",
+      "intentional": true
+    },
+    {
+      "familyId": "FhEuO8E0YUzeTdxBfEHs",
+      "sourceId": "aa45x0f6gJsRa0bD7jqC:2026-08-03",
+      "sourceField": "dailyProgress",
+      "stage": "reader",
+      "reason": "daily_progress row is not a perfect day (perfectDay !== true): it is a display aggregate, not a reward award, and readDailyPerfectDay intentionally excludes it",
+      "evidence": "familyId=FhEuO8E0YUzeTdxBfEHs field=dailyProgress id=aa45x0f6gJsRa0bD7jqC:2026-08-03",
+      "intentional": true
+    },
+    {
+      "familyId": "FhEuO8E0YUzeTdxBfEHs",
+      "sourceId": "aa45x0f6gJsRa0bD7jqC:2026-08-04",
+      "sourceField": "dailyProgress",
+      "stage": "reader",
+      "reason": "daily_progress row is not a perfect day (perfectDay !== true): it is a display aggregate, not a reward award, and readDailyPerfectDay intentionally excludes it",
+      "evidence": "familyId=FhEuO8E0YUzeTdxBfEHs field=dailyProgress id=aa45x0f6gJsRa0bD7jqC:2026-08-04",
+      "intentional": true
+    },
+    {
+      "familyId": "FhEuO8E0YUzeTdxBfEHs",
+      "sourceId": "aa45x0f6gJsRa0bD7jqC:2026-08-05",
+      "sourceField": "dailyProgress",
+      "stage": "reader",
+      "reason": "daily_progress row is not a perfect day (perfectDay !== true): it is a display aggregate, not a reward award, and readDailyPerfectDay intentionally excludes it",
+      "evidence": "familyId=FhEuO8E0YUzeTdxBfEHs field=dailyProgress id=aa45x0f6gJsRa0bD7jqC:2026-08-05",
+      "intentional": true
+    },
+    {
+      "familyId": "FhEuO8E0YUzeTdxBfEHs",
+      "sourceId": "KMXK1viSpCeg5ZcmDsn8:2026-08-02",
+      "sourceField": "dailyProgress",
+      "stage": "reader",
+      "reason": "daily_progress row is not a perfect day (perfectDay !== true): it is a display aggregate, not a reward award, and readDailyPerfectDay intentionally excludes it",
+      "evidence": "familyId=FhEuO8E0YUzeTdxBfEHs field=dailyProgress id=KMXK1viSpCeg5ZcmDsn8:2026-08-02",
+      "intentional": true
+    },
+    {
+      "familyId": "FhEuO8E0YUzeTdxBfEHs",
+      "sourceId": "KMXK1viSpCeg5ZcmDsn8:2026-08-03",
+      "sourceField": "dailyProgress",
+      "stage": "reader",
+      "reason": "daily_progress row is not a perfect day (perfectDay !== true): it is a display aggregate, not a reward award, and readDailyPerfectDay intentionally excludes it",
+      "evidence": "familyId=FhEuO8E0YUzeTdxBfEHs field=dailyProgress id=KMXK1viSpCeg5ZcmDsn8:2026-08-03",
+      "intentional": true
+    },
+    {
+      "familyId": "FhEuO8E0YUzeTdxBfEHs",
+      "sourceId": "KMXK1viSpCeg5ZcmDsn8:2026-08-04",
+      "sourceField": "dailyProgress",
+      "stage": "reader",
+      "reason": "daily_progress row is not a perfect day (perfectDay !== true): it is a display aggregate, not a reward award, and readDailyPerfectDay intentionally excludes it",
+      "evidence": "familyId=FhEuO8E0YUzeTdxBfEHs field=dailyProgress id=KMXK1viSpCeg5ZcmDsn8:2026-08-04",
+      "intentional": true
+    },
+    {
+      "familyId": "FhEuO8E0YUzeTdxBfEHs",
+      "sourceId": "KMXK1viSpCeg5ZcmDsn8:2026-08-05",
+      "sourceField": "dailyProgress",
+      "stage": "reader",
+      "reason": "daily_progress row is not a perfect day (perfectDay !== true): it is a display aggregate, not a reward award, and readDailyPerfectDay intentionally excludes it",
+      "evidence": "familyId=FhEuO8E0YUzeTdxBfEHs field=dailyProgress id=KMXK1viSpCeg5ZcmDsn8:2026-08-05",
+      "intentional": true
+    },
+    {
+      "familyId": "HlKg7BVK7djQQnQNPWpd",
+      "sourceId": "fgWJ33EPVSM0yq2laTZk:2026-08-02",
+      "sourceField": "dailyProgress",
+      "stage": "reader",
+      "reason": "daily_progress row is not a perfect day (perfectDay !== true): it is a display aggregate, not a reward award, and readDailyPerfectDay intentionally excludes it",
+      "evidence": "familyId=HlKg7BVK7djQQnQNPWpd field=dailyProgress id=fgWJ33EPVSM0yq2laTZk:2026-08-02",
+      "intentional": true
+    },
+    {
+      "familyId": "HlKg7BVK7djQQnQNPWpd",
+      "sourceId": "fgWJ33EPVSM0yq2laTZk:2026-08-03",
+      "sourceField": "dailyProgress",
+      "stage": "reader",
+      "reason": "daily_progress row is not a perfect day (perfectDay !== true): it is a display aggregate, not a reward award, and readDailyPerfectDay intentionally excludes it",
+      "evidence": "familyId=HlKg7BVK7djQQnQNPWpd field=dailyProgress id=fgWJ33EPVSM0yq2laTZk:2026-08-03",
+      "intentional": true
+    },
+    {
+      "familyId": "HlKg7BVK7djQQnQNPWpd",
+      "sourceId": "fgWJ33EPVSM0yq2laTZk:2026-08-04",
+      "sourceField": "dailyProgress",
+      "stage": "reader",
+      "reason": "daily_progress row is not a perfect day (perfectDay !== true): it is a display aggregate, not a reward award, and readDailyPerfectDay intentionally excludes it",
+      "evidence": "familyId=HlKg7BVK7djQQnQNPWpd field=dailyProgress id=fgWJ33EPVSM0yq2laTZk:2026-08-04",
+      "intentional": true
+    },
+    {
+      "familyId": "HlKg7BVK7djQQnQNPWpd",
+      "sourceId": "fgWJ33EPVSM0yq2laTZk:2026-08-05",
+      "sourceField": "dailyProgress",
+      "stage": "reader",
+      "reason": "daily_progress row is not a perfect day (perfectDay !== true): it is a display aggregate, not a reward award, and readDailyPerfectDay intentionally excludes it",
+      "evidence": "familyId=HlKg7BVK7djQQnQNPWpd field=dailyProgress id=fgWJ33EPVSM0yq2laTZk:2026-08-05",
+      "intentional": true
+    },
+    {
+      "familyId": "HlKg7BVK7djQQnQNPWpd",
+      "sourceId": "iIKOgH6tUpd5GTD3NzxM:2026-08-02",
+      "sourceField": "dailyProgress",
+      "stage": "reader",
+      "reason": "daily_progress row is not a perfect day (perfectDay !== true): it is a display aggregate, not a reward award, and readDailyPerfectDay intentionally excludes it",
+      "evidence": "familyId=HlKg7BVK7djQQnQNPWpd field=dailyProgress id=iIKOgH6tUpd5GTD3NzxM:2026-08-02",
+      "intentional": true
+    },
+    {
+      "familyId": "HlKg7BVK7djQQnQNPWpd",
+      "sourceId": "iIKOgH6tUpd5GTD3NzxM:2026-08-03",
+      "sourceField": "dailyProgress",
+      "stage": "reader",
+      "reason": "daily_progress row is not a perfect day (perfectDay !== true): it is a display aggregate, not a reward award, and readDailyPerfectDay intentionally excludes it",
+      "evidence": "familyId=HlKg7BVK7djQQnQNPWpd field=dailyProgress id=iIKOgH6tUpd5GTD3NzxM:2026-08-03",
+      "intentional": true
+    },
+    {
+      "familyId": "HlKg7BVK7djQQnQNPWpd",
+      "sourceId": "iIKOgH6tUpd5GTD3NzxM:2026-08-04",
+      "sourceField": "dailyProgress",
+      "stage": "reader",
+      "reason": "daily_progress row is not a perfect day (perfectDay !== true): it is a display aggregate, not a reward award, and readDailyPerfectDay intentionally excludes it",
+      "evidence": "familyId=HlKg7BVK7djQQnQNPWpd field=dailyProgress id=iIKOgH6tUpd5GTD3NzxM:2026-08-04",
+      "intentional": true
+    },
+    {
+      "familyId": "HlKg7BVK7djQQnQNPWpd",
+      "sourceId": "iIKOgH6tUpd5GTD3NzxM:2026-08-05",
+      "sourceField": "dailyProgress",
+      "stage": "reader",
+      "reason": "daily_progress row is not a perfect day (perfectDay !== true): it is a display aggregate, not a reward award, and readDailyPerfectDay intentionally excludes it",
+      "evidence": "familyId=HlKg7BVK7djQQnQNPWpd field=dailyProgress id=iIKOgH6tUpd5GTD3NzxM:2026-08-05",
+      "intentional": true
+    },
+    {
+      "familyId": "HlKg7BVK7djQQnQNPWpd",
+      "sourceId": "mmbJxsvvEmDSY50w1zGh:2026-08-02",
+      "sourceField": "dailyProgress",
+      "stage": "reader",
+      "reason": "daily_progress row is not a perfect day (perfectDay !== true): it is a display aggregate, not a reward award, and readDailyPerfectDay intentionally excludes it",
+      "evidence": "familyId=HlKg7BVK7djQQnQNPWpd field=dailyProgress id=mmbJxsvvEmDSY50w1zGh:2026-08-02",
+      "intentional": true
+    },
+    {
+      "familyId": "HlKg7BVK7djQQnQNPWpd",
+      "sourceId": "mmbJxsvvEmDSY50w1zGh:2026-08-03",
+      "sourceField": "dailyProgress",
+      "stage": "reader",
+      "reason": "daily_progress row is not a perfect day (perfectDay !== true): it is a display aggregate, not a reward award, and readDailyPerfectDay intentionally excludes it",
+      "evidence": "familyId=HlKg7BVK7djQQnQNPWpd field=dailyProgress id=mmbJxsvvEmDSY50w1zGh:2026-08-03",
+      "intentional": true
+    },
+    {
+      "familyId": "HlKg7BVK7djQQnQNPWpd",
+      "sourceId": "mmbJxsvvEmDSY50w1zGh:2026-08-04",
+      "sourceField": "dailyProgress",
+      "stage": "reader",
+      "reason": "daily_progress row is not a perfect day (perfectDay !== true): it is a display aggregate, not a reward award, and readDailyPerfectDay intentionally excludes it",
+      "evidence": "familyId=HlKg7BVK7djQQnQNPWpd field=dailyProgress id=mmbJxsvvEmDSY50w1zGh:2026-08-04",
+      "intentional": true
+    },
+    {
+      "familyId": "HlKg7BVK7djQQnQNPWpd",
+      "sourceId": "mmbJxsvvEmDSY50w1zGh:2026-08-05",
+      "sourceField": "dailyProgress",
+      "stage": "reader",
+      "reason": "daily_progress row is not a perfect day (perfectDay !== true): it is a display aggregate, not a reward award, and readDailyPerfectDay intentionally excludes it",
+      "evidence": "familyId=HlKg7BVK7djQQnQNPWpd field=dailyProgress id=mmbJxsvvEmDSY50w1zGh:2026-08-05",
+      "intentional": true
+    },
+    {
+      "familyId": "IF4oiPOkEVOJWctVJPRe",
+      "sourceId": "UTGmrbQqQtAKjL1iOzrb:2026-08-02",
+      "sourceField": "dailyProgress",
+      "stage": "reader",
+      "reason": "daily_progress row is not a perfect day (perfectDay !== true): it is a display aggregate, not a reward award, and readDailyPerfectDay intentionally excludes it",
+      "evidence": "familyId=IF4oiPOkEVOJWctVJPRe field=dailyProgress id=UTGmrbQqQtAKjL1iOzrb:2026-08-02",
+      "intentional": true
+    },
+    {
+      "familyId": "IF4oiPOkEVOJWctVJPRe",
+      "sourceId": "UTGmrbQqQtAKjL1iOzrb:2026-08-03",
+      "sourceField": "dailyProgress",
+      "stage": "reader",
+      "reason": "daily_progress row is not a perfect day (perfectDay !== true): it is a display aggregate, not a reward award, and readDailyPerfectDay intentionally excludes it",
+      "evidence": "familyId=IF4oiPOkEVOJWctVJPRe field=dailyProgress id=UTGmrbQqQtAKjL1iOzrb:2026-08-03",
+      "intentional": true
+    },
+    {
+      "familyId": "IF4oiPOkEVOJWctVJPRe",
+      "sourceId": "UTGmrbQqQtAKjL1iOzrb:2026-08-04",
+      "sourceField": "dailyProgress",
+      "stage": "reader",
+      "reason": "daily_progress row is not a perfect day (perfectDay !== true): it is a display aggregate, not a reward award, and readDailyPerfectDay intentionally excludes it",
+      "evidence": "familyId=IF4oiPOkEVOJWctVJPRe field=dailyProgress id=UTGmrbQqQtAKjL1iOzrb:2026-08-04",
+      "intentional": true
+    },
+    {
+      "familyId": "IF4oiPOkEVOJWctVJPRe",
+      "sourceId": "UTGmrbQqQtAKjL1iOzrb:2026-08-05",
+      "sourceField": "dailyProgress",
+      "stage": "reader",
+      "reason": "daily_progress row is not a perfect day (perfectDay !== true): it is a display aggregate, not a reward award, and readDailyPerfectDay intentionally excludes it",
+      "evidence": "familyId=IF4oiPOkEVOJWctVJPRe field=dailyProgress id=UTGmrbQqQtAKjL1iOzrb:2026-08-05",
+      "intentional": true
+    },
+    {
+      "familyId": "JB6YBuJPX4XLdjlT6AxL",
+      "sourceId": "hLuOXoun9SHxZCqdXPGr:2026-08-02",
+      "sourceField": "dailyProgress",
+      "stage": "reader",
+      "reason": "daily_progress row is not a perfect day (perfectDay !== true): it is a display aggregate, not a reward award, and readDailyPerfectDay intentionally excludes it",
+      "evidence": "familyId=JB6YBuJPX4XLdjlT6AxL field=dailyProgress id=hLuOXoun9SHxZCqdXPGr:2026-08-02",
+      "intentional": true
+    },
+    {
+      "familyId": "JB6YBuJPX4XLdjlT6AxL",
+      "sourceId": "hLuOXoun9SHxZCqdXPGr:2026-08-03",
+      "sourceField": "dailyProgress",
+      "stage": "reader",
+      "reason": "daily_progress row is not a perfect day (perfectDay !== true): it is a display aggregate, not a reward award, and readDailyPerfectDay intentionally excludes it",
+      "evidence": "familyId=JB6YBuJPX4XLdjlT6AxL field=dailyProgress id=hLuOXoun9SHxZCqdXPGr:2026-08-03",
+      "intentional": true
+    },
+    {
+      "familyId": "JB6YBuJPX4XLdjlT6AxL",
+      "sourceId": "hLuOXoun9SHxZCqdXPGr:2026-08-04",
+      "sourceField": "dailyProgress",
+      "stage": "reader",
+      "reason": "daily_progress row is not a perfect day (perfectDay !== true): it is a display aggregate, not a reward award, and readDailyPerfectDay intentionally excludes it",
+      "evidence": "familyId=JB6YBuJPX4XLdjlT6AxL field=dailyProgress id=hLuOXoun9SHxZCqdXPGr:2026-08-04",
+      "intentional": true
+    },
+    {
+      "familyId": "JB6YBuJPX4XLdjlT6AxL",
+      "sourceId": "hLuOXoun9SHxZCqdXPGr:2026-08-05",
+      "sourceField": "dailyProgress",
+      "stage": "reader",
+      "reason": "daily_progress row is not a perfect day (perfectDay !== true): it is a display aggregate, not a reward award, and readDailyPerfectDay intentionally excludes it",
+      "evidence": "familyId=JB6YBuJPX4XLdjlT6AxL field=dailyProgress id=hLuOXoun9SHxZCqdXPGr:2026-08-05",
+      "intentional": true
+    },
+    {
+      "familyId": "JB6YBuJPX4XLdjlT6AxL",
+      "sourceId": "X0DShC7vPXVryJJacRo9:2026-08-02",
+      "sourceField": "dailyProgress",
+      "stage": "reader",
+      "reason": "daily_progress row is not a perfect day (perfectDay !== true): it is a display aggregate, not a reward award, and readDailyPerfectDay intentionally excludes it",
+      "evidence": "familyId=JB6YBuJPX4XLdjlT6AxL field=dailyProgress id=X0DShC7vPXVryJJacRo9:2026-08-02",
+      "intentional": true
+    },
+    {
+      "familyId": "JB6YBuJPX4XLdjlT6AxL",
+      "sourceId": "X0DShC7vPXVryJJacRo9:2026-08-03",
+      "sourceField": "dailyProgress",
+      "stage": "reader",
+      "reason": "daily_progress row is not a perfect day (perfectDay !== true): it is a display aggregate, not a reward award, and readDailyPerfectDay intentionally excludes it",
+      "evidence": "familyId=JB6YBuJPX4XLdjlT6AxL field=dailyProgress id=X0DShC7vPXVryJJacRo9:2026-08-03",
+      "intentional": true
+    },
+    {
+      "familyId": "JB6YBuJPX4XLdjlT6AxL",
+      "sourceId": "X0DShC7vPXVryJJacRo9:2026-08-04",
+      "sourceField": "dailyProgress",
+      "stage": "reader",
+      "reason": "daily_progress row is not a perfect day (perfectDay !== true): it is a display aggregate, not a reward award, and readDailyPerfectDay intentionally excludes it",
+      "evidence": "familyId=JB6YBuJPX4XLdjlT6AxL field=dailyProgress id=X0DShC7vPXVryJJacRo9:2026-08-04",
+      "intentional": true
+    },
+    {
+      "familyId": "JB6YBuJPX4XLdjlT6AxL",
+      "sourceId": "X0DShC7vPXVryJJacRo9:2026-08-05",
+      "sourceField": "dailyProgress",
+      "stage": "reader",
+      "reason": "daily_progress row is not a perfect day (perfectDay !== true): it is a display aggregate, not a reward award, and readDailyPerfectDay intentionally excludes it",
+      "evidence": "familyId=JB6YBuJPX4XLdjlT6AxL field=dailyProgress id=X0DShC7vPXVryJJacRo9:2026-08-05",
+      "intentional": true
+    },
+    {
+      "familyId": "Qnq9pEyhGqbzXGE65aDY",
+      "sourceId": "97Jxj62Ar4WeFiChRcHM:2026-08-02",
+      "sourceField": "dailyProgress",
+      "stage": "reader",
+      "reason": "daily_progress row is not a perfect day (perfectDay !== true): it is a display aggregate, not a reward award, and readDailyPerfectDay intentionally excludes it",
+      "evidence": "familyId=Qnq9pEyhGqbzXGE65aDY field=dailyProgress id=97Jxj62Ar4WeFiChRcHM:2026-08-02",
+      "intentional": true
+    },
+    {
+      "familyId": "Qnq9pEyhGqbzXGE65aDY",
+      "sourceId": "97Jxj62Ar4WeFiChRcHM:2026-08-03",
+      "sourceField": "dailyProgress",
+      "stage": "reader",
+      "reason": "daily_progress row is not a perfect day (perfectDay !== true): it is a display aggregate, not a reward award, and readDailyPerfectDay intentionally excludes it",
+      "evidence": "familyId=Qnq9pEyhGqbzXGE65aDY field=dailyProgress id=97Jxj62Ar4WeFiChRcHM:2026-08-03",
+      "intentional": true
+    },
+    {
+      "familyId": "Qnq9pEyhGqbzXGE65aDY",
+      "sourceId": "97Jxj62Ar4WeFiChRcHM:2026-08-04",
+      "sourceField": "dailyProgress",
+      "stage": "reader",
+      "reason": "daily_progress row is not a perfect day (perfectDay !== true): it is a display aggregate, not a reward award, and readDailyPerfectDay intentionally excludes it",
+      "evidence": "familyId=Qnq9pEyhGqbzXGE65aDY field=dailyProgress id=97Jxj62Ar4WeFiChRcHM:2026-08-04",
+      "intentional": true
+    },
+    {
+      "familyId": "Qnq9pEyhGqbzXGE65aDY",
+      "sourceId": "97Jxj62Ar4WeFiChRcHM:2026-08-05",
+      "sourceField": "dailyProgress",
+      "stage": "reader",
+      "reason": "daily_progress row is not a perfect day (perfectDay !== true): it is a display aggregate, not a reward award, and readDailyPerfectDay intentionally excludes it",
+      "evidence": "familyId=Qnq9pEyhGqbzXGE65aDY field=dailyProgress id=97Jxj62Ar4WeFiChRcHM:2026-08-05",
+      "intentional": true
+    },
+    {
+      "familyId": "izrLLHmyfzPmnH064Ltq",
+      "sourceId": "HVxYm8PQAAaBwlx8uNllaV6Lzc52:2026-08-02",
+      "sourceField": "dailyProgress",
+      "stage": "reader",
+      "reason": "daily_progress row is not a perfect day (perfectDay !== true): it is a display aggregate, not a reward award, and readDailyPerfectDay intentionally excludes it",
+      "evidence": "familyId=izrLLHmyfzPmnH064Ltq field=dailyProgress id=HVxYm8PQAAaBwlx8uNllaV6Lzc52:2026-08-02",
+      "intentional": true
+    },
+    {
+      "familyId": "izrLLHmyfzPmnH064Ltq",
+      "sourceId": "HVxYm8PQAAaBwlx8uNllaV6Lzc52:2026-08-03",
+      "sourceField": "dailyProgress",
+      "stage": "reader",
+      "reason": "daily_progress row is not a perfect day (perfectDay !== true): it is a display aggregate, not a reward award, and readDailyPerfectDay intentionally excludes it",
+      "evidence": "familyId=izrLLHmyfzPmnH064Ltq field=dailyProgress id=HVxYm8PQAAaBwlx8uNllaV6Lzc52:2026-08-03",
+      "intentional": true
+    },
+    {
+      "familyId": "izrLLHmyfzPmnH064Ltq",
+      "sourceId": "HVxYm8PQAAaBwlx8uNllaV6Lzc52:2026-08-04",
+      "sourceField": "dailyProgress",
+      "stage": "reader",
+      "reason": "daily_progress row is not a perfect day (perfectDay !== true): it is a display aggregate, not a reward award, and readDailyPerfectDay intentionally excludes it",
+      "evidence": "familyId=izrLLHmyfzPmnH064Ltq field=dailyProgress id=HVxYm8PQAAaBwlx8uNllaV6Lzc52:2026-08-04",
+      "intentional": true
+    },
+    {
+      "familyId": "izrLLHmyfzPmnH064Ltq",
+      "sourceId": "HVxYm8PQAAaBwlx8uNllaV6Lzc52:2026-08-05",
+      "sourceField": "dailyProgress",
+      "stage": "reader",
+      "reason": "daily_progress row is not a perfect day (perfectDay !== true): it is a display aggregate, not a reward award, and readDailyPerfectDay intentionally excludes it",
+      "evidence": "familyId=izrLLHmyfzPmnH064Ltq field=dailyProgress id=HVxYm8PQAAaBwlx8uNllaV6Lzc52:2026-08-05",
+      "intentional": true
+    },
+    {
+      "familyId": "izrLLHmyfzPmnH064Ltq",
+      "sourceId": "MtKRMC7bXwQXDKcOMwDeccMzYcZ2:2026-08-02",
+      "sourceField": "dailyProgress",
+      "stage": "reader",
+      "reason": "daily_progress row is not a perfect day (perfectDay !== true): it is a display aggregate, not a reward award, and readDailyPerfectDay intentionally excludes it",
+      "evidence": "familyId=izrLLHmyfzPmnH064Ltq field=dailyProgress id=MtKRMC7bXwQXDKcOMwDeccMzYcZ2:2026-08-02",
+      "intentional": true
+    },
+    {
+      "familyId": "izrLLHmyfzPmnH064Ltq",
+      "sourceId": "MtKRMC7bXwQXDKcOMwDeccMzYcZ2:2026-08-03",
+      "sourceField": "dailyProgress",
+      "stage": "reader",
+      "reason": "daily_progress row is not a perfect day (perfectDay !== true): it is a display aggregate, not a reward award, and readDailyPerfectDay intentionally excludes it",
+      "evidence": "familyId=izrLLHmyfzPmnH064Ltq field=dailyProgress id=MtKRMC7bXwQXDKcOMwDeccMzYcZ2:2026-08-03",
+      "intentional": true
+    },
+    {
+      "familyId": "izrLLHmyfzPmnH064Ltq",
+      "sourceId": "MtKRMC7bXwQXDKcOMwDeccMzYcZ2:2026-08-04",
+      "sourceField": "dailyProgress",
+      "stage": "reader",
+      "reason": "daily_progress row is not a perfect day (perfectDay !== true): it is a display aggregate, not a reward award, and readDailyPerfectDay intentionally excludes it",
+      "evidence": "familyId=izrLLHmyfzPmnH064Ltq field=dailyProgress id=MtKRMC7bXwQXDKcOMwDeccMzYcZ2:2026-08-04",
+      "intentional": true
+    },
+    {
+      "familyId": "izrLLHmyfzPmnH064Ltq",
+      "sourceId": "MtKRMC7bXwQXDKcOMwDeccMzYcZ2:2026-08-05",
+      "sourceField": "dailyProgress",
+      "stage": "reader",
+      "reason": "daily_progress row is not a perfect day (perfectDay !== true): it is a display aggregate, not a reward award, and readDailyPerfectDay intentionally excludes it",
+      "evidence": "familyId=izrLLHmyfzPmnH064Ltq field=dailyProgress id=MtKRMC7bXwQXDKcOMwDeccMzYcZ2:2026-08-05",
+      "intentional": true
+    },
+    {
+      "familyId": "kpBzG2V9yo1Q7Au4gZkV",
+      "sourceId": "EboJuAuBaLfhRqlY0Psa:2026-08-02",
+      "sourceField": "dailyProgress",
+      "stage": "reader",
+      "reason": "daily_progress row is not a perfect day (perfectDay !== true): it is a display aggregate, not a reward award, and readDailyPerfectDay intentionally excludes it",
+      "evidence": "familyId=kpBzG2V9yo1Q7Au4gZkV field=dailyProgress id=EboJuAuBaLfhRqlY0Psa:2026-08-02",
+      "intentional": true
+    },
+    {
+      "familyId": "kpBzG2V9yo1Q7Au4gZkV",
+      "sourceId": "EboJuAuBaLfhRqlY0Psa:2026-08-03",
+      "sourceField": "dailyProgress",
+      "stage": "reader",
+      "reason": "daily_progress row is not a perfect day (perfectDay !== true): it is a display aggregate, not a reward award, and readDailyPerfectDay intentionally excludes it",
+      "evidence": "familyId=kpBzG2V9yo1Q7Au4gZkV field=dailyProgress id=EboJuAuBaLfhRqlY0Psa:2026-08-03",
+      "intentional": true
+    },
+    {
+      "familyId": "kpBzG2V9yo1Q7Au4gZkV",
+      "sourceId": "EboJuAuBaLfhRqlY0Psa:2026-08-04",
+      "sourceField": "dailyProgress",
+      "stage": "reader",
+      "reason": "daily_progress row is not a perfect day (perfectDay !== true): it is a display aggregate, not a reward award, and readDailyPerfectDay intentionally excludes it",
+      "evidence": "familyId=kpBzG2V9yo1Q7Au4gZkV field=dailyProgress id=EboJuAuBaLfhRqlY0Psa:2026-08-04",
+      "intentional": true
+    },
+    {
+      "familyId": "kpBzG2V9yo1Q7Au4gZkV",
+      "sourceId": "EboJuAuBaLfhRqlY0Psa:2026-08-05",
+      "sourceField": "dailyProgress",
+      "stage": "reader",
+      "reason": "daily_progress row is not a perfect day (perfectDay !== true): it is a display aggregate, not a reward award, and readDailyPerfectDay intentionally excludes it",
+      "evidence": "familyId=kpBzG2V9yo1Q7Au4gZkV field=dailyProgress id=EboJuAuBaLfhRqlY0Psa:2026-08-05",
+      "intentional": true
+    },
+    {
+      "familyId": "qnLAZFCcPSFVrhWa8ikt",
+      "sourceId": "ETn7odHZ0HNjryC7ON2yT4RZJi13:2026-08-02",
+      "sourceField": "dailyProgress",
+      "stage": "reader",
+      "reason": "daily_progress row is not a perfect day (perfectDay !== true): it is a display aggregate, not a reward award, and readDailyPerfectDay intentionally excludes it",
+      "evidence": "familyId=qnLAZFCcPSFVrhWa8ikt field=dailyProgress id=ETn7odHZ0HNjryC7ON2yT4RZJi13:2026-08-02",
+      "intentional": true
+    },
+    {
+      "familyId": "qnLAZFCcPSFVrhWa8ikt",
+      "sourceId": "ETn7odHZ0HNjryC7ON2yT4RZJi13:2026-08-03",
+      "sourceField": "dailyProgress",
+      "stage": "reader",
+      "reason": "daily_progress row is not a perfect day (perfectDay !== true): it is a display aggregate, not a reward award, and readDailyPerfectDay intentionally excludes it",
+      "evidence": "familyId=qnLAZFCcPSFVrhWa8ikt field=dailyProgress id=ETn7odHZ0HNjryC7ON2yT4RZJi13:2026-08-03",
+      "intentional": true
+    },
+    {
+      "familyId": "qnLAZFCcPSFVrhWa8ikt",
+      "sourceId": "ETn7odHZ0HNjryC7ON2yT4RZJi13:2026-08-04",
+      "sourceField": "dailyProgress",
+      "stage": "reader",
+      "reason": "daily_progress row is not a perfect day (perfectDay !== true): it is a display aggregate, not a reward award, and readDailyPerfectDay intentionally excludes it",
+      "evidence": "familyId=qnLAZFCcPSFVrhWa8ikt field=dailyProgress id=ETn7odHZ0HNjryC7ON2yT4RZJi13:2026-08-04",
+      "intentional": true
+    },
+    {
+      "familyId": "qnLAZFCcPSFVrhWa8ikt",
+      "sourceId": "ETn7odHZ0HNjryC7ON2yT4RZJi13:2026-08-05",
+      "sourceField": "dailyProgress",
+      "stage": "reader",
+      "reason": "daily_progress row is not a perfect day (perfectDay !== true): it is a display aggregate, not a reward award, and readDailyPerfectDay intentionally excludes it",
+      "evidence": "familyId=qnLAZFCcPSFVrhWa8ikt field=dailyProgress id=ETn7odHZ0HNjryC7ON2yT4RZJi13:2026-08-05",
+      "intentional": true
+    },
+    {
+      "familyId": "qnLAZFCcPSFVrhWa8ikt",
+      "sourceId": "WecYa8xnv5WH4OAGi0i30iYeW4g1:2026-08-02",
+      "sourceField": "dailyProgress",
+      "stage": "reader",
+      "reason": "daily_progress row is not a perfect day (perfectDay !== true): it is a display aggregate, not a reward award, and readDailyPerfectDay intentionally excludes it",
+      "evidence": "familyId=qnLAZFCcPSFVrhWa8ikt field=dailyProgress id=WecYa8xnv5WH4OAGi0i30iYeW4g1:2026-08-02",
+      "intentional": true
+    },
+    {
+      "familyId": "qnLAZFCcPSFVrhWa8ikt",
+      "sourceId": "WecYa8xnv5WH4OAGi0i30iYeW4g1:2026-08-03",
+      "sourceField": "dailyProgress",
+      "stage": "reader",
+      "reason": "daily_progress row is not a perfect day (perfectDay !== true): it is a display aggregate, not a reward award, and readDailyPerfectDay intentionally excludes it",
+      "evidence": "familyId=qnLAZFCcPSFVrhWa8ikt field=dailyProgress id=WecYa8xnv5WH4OAGi0i30iYeW4g1:2026-08-03",
+      "intentional": true
+    },
+    {
+      "familyId": "qnLAZFCcPSFVrhWa8ikt",
+      "sourceId": "WecYa8xnv5WH4OAGi0i30iYeW4g1:2026-08-04",
+      "sourceField": "dailyProgress",
+      "stage": "reader",
+      "reason": "daily_progress row is not a perfect day (perfectDay !== true): it is a display aggregate, not a reward award, and readDailyPerfectDay intentionally excludes it",
+      "evidence": "familyId=qnLAZFCcPSFVrhWa8ikt field=dailyProgress id=WecYa8xnv5WH4OAGi0i30iYeW4g1:2026-08-04",
+      "intentional": true
+    },
+    {
+      "familyId": "qnLAZFCcPSFVrhWa8ikt",
+      "sourceId": "WecYa8xnv5WH4OAGi0i30iYeW4g1:2026-08-05",
+      "sourceField": "dailyProgress",
+      "stage": "reader",
+      "reason": "daily_progress row is not a perfect day (perfectDay !== true): it is a display aggregate, not a reward award, and readDailyPerfectDay intentionally excludes it",
+      "evidence": "familyId=qnLAZFCcPSFVrhWa8ikt field=dailyProgress id=WecYa8xnv5WH4OAGi0i30iYeW4g1:2026-08-05",
+      "intentional": true
+    },
+    {
+      "familyId": "uTnrixcB4uvrZ5Xf44NV",
+      "sourceId": "nfeRa675XkdqoReRmU4c:2026-08-02",
+      "sourceField": "dailyProgress",
+      "stage": "reader",
+      "reason": "daily_progress row is not a perfect day (perfectDay !== true): it is a display aggregate, not a reward award, and readDailyPerfectDay intentionally excludes it",
+      "evidence": "familyId=uTnrixcB4uvrZ5Xf44NV field=dailyProgress id=nfeRa675XkdqoReRmU4c:2026-08-02",
+      "intentional": true
+    },
+    {
+      "familyId": "uTnrixcB4uvrZ5Xf44NV",
+      "sourceId": "nfeRa675XkdqoReRmU4c:2026-08-03",
+      "sourceField": "dailyProgress",
+      "stage": "reader",
+      "reason": "daily_progress row is not a perfect day (perfectDay !== true): it is a display aggregate, not a reward award, and readDailyPerfectDay intentionally excludes it",
+      "evidence": "familyId=uTnrixcB4uvrZ5Xf44NV field=dailyProgress id=nfeRa675XkdqoReRmU4c:2026-08-03",
+      "intentional": true
+    },
+    {
+      "familyId": "uTnrixcB4uvrZ5Xf44NV",
+      "sourceId": "nfeRa675XkdqoReRmU4c:2026-08-04",
+      "sourceField": "dailyProgress",
+      "stage": "reader",
+      "reason": "daily_progress row is not a perfect day (perfectDay !== true): it is a display aggregate, not a reward award, and readDailyPerfectDay intentionally excludes it",
+      "evidence": "familyId=uTnrixcB4uvrZ5Xf44NV field=dailyProgress id=nfeRa675XkdqoReRmU4c:2026-08-04",
+      "intentional": true
+    },
+    {
+      "familyId": "uTnrixcB4uvrZ5Xf44NV",
+      "sourceId": "nfeRa675XkdqoReRmU4c:2026-08-05",
+      "sourceField": "dailyProgress",
+      "stage": "reader",
+      "reason": "daily_progress row is not a perfect day (perfectDay !== true): it is a display aggregate, not a reward award, and readDailyPerfectDay intentionally excludes it",
+      "evidence": "familyId=uTnrixcB4uvrZ5Xf44NV field=dailyProgress id=nfeRa675XkdqoReRmU4c:2026-08-05",
+      "intentional": true
+    }
+  ]
+}

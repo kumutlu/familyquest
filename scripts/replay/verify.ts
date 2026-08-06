@@ -226,3 +226,106 @@ export function verifyReplay(family: LegacyFamily, ctx: ReplayDryRunContext): Re
     events: result.events,
   }
 }
+
+// ---------------------------------------------------------------------------
+// Gate 1 hard assertions (no silent loss)
+// ---------------------------------------------------------------------------
+
+/** One explicitly filtered (dropped) source and why it was dropped. */
+export interface Gate1FilteredRecord {
+  readonly sourceId: string
+  readonly reason: string
+  readonly evidence: string
+}
+
+/** Everything Gate 1 needs to prove that no source disappeared silently. */
+export interface Gate1ReconciliationInput {
+  readonly totalFamilies: number
+  /** Total source documents present in the export/fixtures. */
+  readonly exportedSources: number
+  /** Total sources the replay pipeline actually processed. */
+  readonly reportedSources: number
+  readonly counts: {
+    readonly exact: number
+    readonly estimated: number
+    readonly malformed: number
+    readonly ambiguous: number
+    readonly skipped: number
+  }
+  /** Every source intentionally filtered before classification, with a reason. */
+  readonly filtered: readonly Gate1FilteredRecord[]
+}
+
+/**
+ * Gate 1 invariants. Pure: returns one named check per invariant.
+ *
+ *  1. families > 0 && sources == 0 => the mapping is broken.
+ *  2. exported == exact + estimated + malformed + ambiguous + skipped + filtered.
+ *  3. every filtered row carries a non-empty reason AND evidence.
+ *  4. classified total == reported sources (no source vanished mid-pipeline).
+ */
+export function gate1ReconciliationChecks(
+  input: Gate1ReconciliationInput,
+): ReplayVerificationCheck[] {
+  const c = input.counts
+  const classified = c.exact + c.estimated + c.malformed + c.ambiguous + c.skipped
+  const filtered = input.filtered.length
+  const accounted = classified + filtered
+
+  const checks: ReplayVerificationCheck[] = []
+
+  checks.push(
+    check(
+      'familiesWithoutSources',
+      !(input.totalFamilies > 0 && input.reportedSources === 0),
+      input.totalFamilies > 0 && input.reportedSources === 0
+        ? `${input.totalFamilies} families produced 0 replay sources: fixture mapping is invalid`
+        : `${input.totalFamilies} families produced ${input.reportedSources} sources`,
+    ),
+  )
+
+  checks.push(
+    check(
+      'exportedSourcesFullyAccounted',
+      input.exportedSources === accounted,
+      input.exportedSources === accounted
+        ? `exported ${input.exportedSources} == classified ${classified} + explicitly filtered ${filtered}`
+        : `UNEXPLAINED COUNT MISMATCH: exported ${input.exportedSources} != classified ${classified} + filtered ${filtered} (${accounted})`,
+    ),
+  )
+
+  checks.push(
+    check(
+      'reportedSourcesMatchClassified',
+      input.reportedSources === classified,
+      input.reportedSources === classified
+        ? `reported ${input.reportedSources} == classified ${classified}`
+        : `reported ${input.reportedSources} != classified ${classified}`,
+    ),
+  )
+
+  const unexplained = input.filtered.filter(
+    (f) => f.reason.trim().length === 0 || f.evidence.trim().length === 0,
+  )
+  checks.push(
+    check(
+      'everyDroppedRecordHasEvidence',
+      unexplained.length === 0,
+      unexplained.length === 0
+        ? `all ${filtered} filtered source(s) carry a reason and evidence`
+        : `${unexplained.length} dropped record(s) lack a reason/evidence: ${unexplained
+            .map((f) => f.sourceId)
+            .join(',')}`,
+    ),
+  )
+
+  return checks
+}
+
+/** Throw (fail closed) when any Gate 1 reconciliation invariant is violated. */
+export function assertGate1Reconciliation(input: Gate1ReconciliationInput): void {
+  const failures = gate1ReconciliationChecks(input).filter((c) => !c.passed)
+  if (failures.length > 0) {
+    throw new Error(failures.map((f) => `${f.name}: ${f.detail}`).join(' | '))
+  }
+}

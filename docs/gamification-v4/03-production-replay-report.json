@@ -2,112 +2,821 @@
   "generatedAt": "1970-01-01T00:00:00.000Z",
   "schemaVersion": 4,
   "gate": "GATE_1_REACHED",
-  "totalFamilies": 2,
-  "totalSources": 12,
-  "totalEventsBuilt": 9,
+  "totalFamilies": 42,
+  "totalSources": 127,
+  "totalEventsBuilt": 127,
   "counts": {
-    "exact": 8,
-    "estimated": 1,
-    "malformed": 1,
-    "ambiguous": 2,
+    "exact": 61,
+    "estimated": 66,
+    "malformed": 0,
+    "ambiguous": 0,
     "skipped": 0
   },
   "families": [
     {
-      "familyId": "FAM_DEMO_A",
-      "totalSources": 9,
+      "familyId": "46yKb1AFBqWheIviNIHY",
+      "totalSources": 0,
       "counts": {
-        "exact": 8,
-        "estimated": 1,
+        "exact": 0,
+        "estimated": 0,
         "malformed": 0,
         "ambiguous": 0,
         "skipped": 0
       },
-      "eventsBuilt": 9,
+      "eventsBuilt": 0,
+      "members": {},
+      "displayedProvided": false
+    },
+    {
+      "familyId": "5s4Npeu55wPphLCsGAMP",
+      "totalSources": 101,
+      "counts": {
+        "exact": 49,
+        "estimated": 52,
+        "malformed": 0,
+        "ambiguous": 0,
+        "skipped": 0
+      },
+      "eventsBuilt": 101,
       "members": {
-        "m1": {
-          "memberId": "m1",
+        "NuyIJDP9fDNP2LiKynlsEyzur5N2": {
+          "memberId": "NuyIJDP9fDNP2LiKynlsEyzur5N2",
           "replayed": {
-            "rewardPoints": 27,
-            "xpTotal": 62,
+            "rewardPoints": 521,
+            "xpTotal": 546,
             "level": 1,
-            "xpProgressInLevel": 62,
-            "xpToNextLevel": 938,
-            "levelProgressPercentage": 6,
+            "xpProgressInLevel": 546,
+            "xpToNextLevel": 454,
+            "levelProgressPercentage": 54,
             "currentStreak": 0,
             "bestStreak": 1,
-            "lastQualifiedDayKey": "2026-01-05",
+            "lastQualifiedDayKey": "2026-08-04",
             "unlockedAchievementIds": [
               "first_steps"
             ],
             "unlockedAvatarIds": [],
             "projectionVersion": 1,
-            "foldedThroughEventId": "FAM_DEMO_A::m1::AVATAR_UNLOCKED::a1",
-            "updatedAt": "1970-01-01T00:00:00.000Z"
-          },
-          "displayed": {
-            "rewardPoints": 50,
-            "xpTotal": 40,
-            "level": 2,
-            "currentStreak": 1,
-            "bestStreak": 3,
-            "unlockedAchievementIds": [],
-            "unlockedAvatarIds": []
-          },
-          "diff": {
-            "rewardPoints": -23,
-            "xpTotal": 22,
-            "level": -1,
-            "currentStreak": -1,
-            "bestStreak": -2
-          }
-        },
-        "m2": {
-          "memberId": "m2",
-          "replayed": {
-            "rewardPoints": 3,
-            "xpTotal": 0,
-            "level": 1,
-            "xpProgressInLevel": 0,
-            "xpToNextLevel": 1000,
-            "levelProgressPercentage": 0,
-            "currentStreak": 0,
-            "bestStreak": 0,
-            "lastQualifiedDayKey": null,
-            "unlockedAchievementIds": [],
-            "unlockedAvatarIds": [],
-            "projectionVersion": 1,
-            "foldedThroughEventId": "FAM_DEMO_A::m2::MANUAL_ADJUSTMENT::man1",
+            "foldedThroughEventId": "5s4Npeu55wPphLCsGAMP::NuyIJDP9fDNP2LiKynlsEyzur5N2::TASK_APPROVED::NuyIJDP9fDNP2LiKynlsEyzur5N2__c3WmeyXGkvhwVe7mWTiq__2026-08-05",
             "updatedAt": "1970-01-01T00:00:00.000Z"
           },
           "displayed": {
             "rewardPoints": 0,
-            "xpTotal": 0,
-            "level": 1,
-            "currentStreak": 0,
-            "bestStreak": 0,
-            "unlockedAchievementIds": [],
-            "unlockedAvatarIds": []
+            "xpTotal": 361,
+            "level": 1
           },
           "diff": {
-            "rewardPoints": 3,
-            "xpTotal": 0,
+            "rewardPoints": 521,
+            "xpTotal": 185,
             "level": 0,
+            "currentStreak": null,
+            "bestStreak": null
+          }
+        },
+        "T7ZsdaN8ixUOnzRAX9jNQqUDZE13": {
+          "memberId": "T7ZsdaN8ixUOnzRAX9jNQqUDZE13",
+          "replayed": {
+            "rewardPoints": 81,
+            "xpTotal": 96,
+            "level": 1,
+            "xpProgressInLevel": 96,
+            "xpToNextLevel": 904,
+            "levelProgressPercentage": 9,
             "currentStreak": 0,
-            "bestStreak": 0
+            "bestStreak": 0,
+            "lastQualifiedDayKey": null,
+            "unlockedAchievementIds": [
+              "first_steps"
+            ],
+            "unlockedAvatarIds": [],
+            "projectionVersion": 1,
+            "foldedThroughEventId": "5s4Npeu55wPphLCsGAMP::T7ZsdaN8ixUOnzRAX9jNQqUDZE13::TASK_APPROVED::T7ZsdaN8ixUOnzRAX9jNQqUDZE13__QhCM9J5qbWYa1QGfQnYx__2026-08-04",
+            "updatedAt": "1970-01-01T00:00:00.000Z"
+          },
+          "displayed": {
+            "rewardPoints": 0,
+            "xpTotal": 95,
+            "level": 1
+          },
+          "diff": {
+            "rewardPoints": 81,
+            "xpTotal": 1,
+            "level": 0,
+            "currentStreak": null,
+            "bestStreak": null
+          }
+        },
+        "vc0iyHVfAcXnXQQbmFkr5HfJEkp2": {
+          "memberId": "vc0iyHVfAcXnXQQbmFkr5HfJEkp2",
+          "replayed": {
+            "rewardPoints": 615,
+            "xpTotal": 645,
+            "level": 1,
+            "xpProgressInLevel": 645,
+            "xpToNextLevel": 355,
+            "levelProgressPercentage": 64,
+            "currentStreak": 0,
+            "bestStreak": 0,
+            "lastQualifiedDayKey": null,
+            "unlockedAchievementIds": [
+              "first_steps"
+            ],
+            "unlockedAvatarIds": [],
+            "projectionVersion": 1,
+            "foldedThroughEventId": "5s4Npeu55wPphLCsGAMP::vc0iyHVfAcXnXQQbmFkr5HfJEkp2::TASK_APPROVED::vc0iyHVfAcXnXQQbmFkr5HfJEkp2__c3WmeyXGkvhwVe7mWTiq__2026-08-05",
+            "updatedAt": "1970-01-01T00:00:00.000Z"
+          },
+          "displayed": {
+            "rewardPoints": 0,
+            "xpTotal": 430,
+            "level": 1
+          },
+          "diff": {
+            "rewardPoints": 615,
+            "xpTotal": 215,
+            "level": 0,
+            "currentStreak": null,
+            "bestStreak": null
           }
         }
       },
       "displayedProvided": true
     },
     {
-      "familyId": "FAM_DEMO_B",
-      "totalSources": 3,
+      "familyId": "7spcPglRvDXG1UtaKE0M",
+      "totalSources": 0,
       "counts": {
         "exact": 0,
         "estimated": 0,
-        "malformed": 1,
-        "ambiguous": 2,
+        "malformed": 0,
+        "ambiguous": 0,
+        "skipped": 0
+      },
+      "eventsBuilt": 0,
+      "members": {},
+      "displayedProvided": false
+    },
+    {
+      "familyId": "ELYIRvZr8Pnvvezw8hBy",
+      "totalSources": 0,
+      "counts": {
+        "exact": 0,
+        "estimated": 0,
+        "malformed": 0,
+        "ambiguous": 0,
+        "skipped": 0
+      },
+      "eventsBuilt": 0,
+      "members": {},
+      "displayedProvided": false
+    },
+    {
+      "familyId": "FhEuO8E0YUzeTdxBfEHs",
+      "totalSources": 0,
+      "counts": {
+        "exact": 0,
+        "estimated": 0,
+        "malformed": 0,
+        "ambiguous": 0,
+        "skipped": 0
+      },
+      "eventsBuilt": 0,
+      "members": {},
+      "displayedProvided": true
+    },
+    {
+      "familyId": "GXQujlq0sYhFbEI8odp9",
+      "totalSources": 0,
+      "counts": {
+        "exact": 0,
+        "estimated": 0,
+        "malformed": 0,
+        "ambiguous": 0,
+        "skipped": 0
+      },
+      "eventsBuilt": 0,
+      "members": {},
+      "displayedProvided": false
+    },
+    {
+      "familyId": "HlKg7BVK7djQQnQNPWpd",
+      "totalSources": 0,
+      "counts": {
+        "exact": 0,
+        "estimated": 0,
+        "malformed": 0,
+        "ambiguous": 0,
+        "skipped": 0
+      },
+      "eventsBuilt": 0,
+      "members": {},
+      "displayedProvided": true
+    },
+    {
+      "familyId": "IF4oiPOkEVOJWctVJPRe",
+      "totalSources": 0,
+      "counts": {
+        "exact": 0,
+        "estimated": 0,
+        "malformed": 0,
+        "ambiguous": 0,
+        "skipped": 0
+      },
+      "eventsBuilt": 0,
+      "members": {},
+      "displayedProvided": true
+    },
+    {
+      "familyId": "IRPZaPiyW0KIBPwMvsT8",
+      "totalSources": 0,
+      "counts": {
+        "exact": 0,
+        "estimated": 0,
+        "malformed": 0,
+        "ambiguous": 0,
+        "skipped": 0
+      },
+      "eventsBuilt": 0,
+      "members": {},
+      "displayedProvided": false
+    },
+    {
+      "familyId": "IrWzctCcBsh5MKqjRuz5",
+      "totalSources": 0,
+      "counts": {
+        "exact": 0,
+        "estimated": 0,
+        "malformed": 0,
+        "ambiguous": 0,
+        "skipped": 0
+      },
+      "eventsBuilt": 0,
+      "members": {},
+      "displayedProvided": false
+    },
+    {
+      "familyId": "JB6YBuJPX4XLdjlT6AxL",
+      "totalSources": 0,
+      "counts": {
+        "exact": 0,
+        "estimated": 0,
+        "malformed": 0,
+        "ambiguous": 0,
+        "skipped": 0
+      },
+      "eventsBuilt": 0,
+      "members": {},
+      "displayedProvided": true
+    },
+    {
+      "familyId": "N6DzL13v58JRclX0OMa8",
+      "totalSources": 0,
+      "counts": {
+        "exact": 0,
+        "estimated": 0,
+        "malformed": 0,
+        "ambiguous": 0,
+        "skipped": 0
+      },
+      "eventsBuilt": 0,
+      "members": {},
+      "displayedProvided": false
+    },
+    {
+      "familyId": "OOw4Z7nYF6u9Xi0fXe2Y",
+      "totalSources": 0,
+      "counts": {
+        "exact": 0,
+        "estimated": 0,
+        "malformed": 0,
+        "ambiguous": 0,
+        "skipped": 0
+      },
+      "eventsBuilt": 0,
+      "members": {},
+      "displayedProvided": false
+    },
+    {
+      "familyId": "OsIj1GEcVXHslvxzw9ET",
+      "totalSources": 0,
+      "counts": {
+        "exact": 0,
+        "estimated": 0,
+        "malformed": 0,
+        "ambiguous": 0,
+        "skipped": 0
+      },
+      "eventsBuilt": 0,
+      "members": {},
+      "displayedProvided": false
+    },
+    {
+      "familyId": "Pcgp9qxzyk5u2gGcE4BV",
+      "totalSources": 0,
+      "counts": {
+        "exact": 0,
+        "estimated": 0,
+        "malformed": 0,
+        "ambiguous": 0,
+        "skipped": 0
+      },
+      "eventsBuilt": 0,
+      "members": {},
+      "displayedProvided": false
+    },
+    {
+      "familyId": "Qnq9pEyhGqbzXGE65aDY",
+      "totalSources": 0,
+      "counts": {
+        "exact": 0,
+        "estimated": 0,
+        "malformed": 0,
+        "ambiguous": 0,
+        "skipped": 0
+      },
+      "eventsBuilt": 0,
+      "members": {},
+      "displayedProvided": true
+    },
+    {
+      "familyId": "RVQCd0i97xlwDWX9uZFj",
+      "totalSources": 0,
+      "counts": {
+        "exact": 0,
+        "estimated": 0,
+        "malformed": 0,
+        "ambiguous": 0,
+        "skipped": 0
+      },
+      "eventsBuilt": 0,
+      "members": {},
+      "displayedProvided": false
+    },
+    {
+      "familyId": "S6lROwMPX0XWTgaG2Guy",
+      "totalSources": 0,
+      "counts": {
+        "exact": 0,
+        "estimated": 0,
+        "malformed": 0,
+        "ambiguous": 0,
+        "skipped": 0
+      },
+      "eventsBuilt": 0,
+      "members": {},
+      "displayedProvided": false
+    },
+    {
+      "familyId": "UoajLo3d1onq4tXblk9U",
+      "totalSources": 5,
+      "counts": {
+        "exact": 3,
+        "estimated": 2,
+        "malformed": 0,
+        "ambiguous": 0,
+        "skipped": 0
+      },
+      "eventsBuilt": 5,
+      "members": {
+        "3hOmu5ViawUiRZGKfT8k": {
+          "memberId": "3hOmu5ViawUiRZGKfT8k",
+          "replayed": {
+            "rewardPoints": 0,
+            "xpTotal": 20,
+            "level": 1,
+            "xpProgressInLevel": 20,
+            "xpToNextLevel": 980,
+            "levelProgressPercentage": 2,
+            "currentStreak": 0,
+            "bestStreak": 0,
+            "lastQualifiedDayKey": null,
+            "unlockedAchievementIds": [],
+            "unlockedAvatarIds": [],
+            "projectionVersion": 1,
+            "foldedThroughEventId": "UoajLo3d1onq4tXblk9U::3hOmu5ViawUiRZGKfT8k::REWARD_REDEEMED::KA0eqmkR4xsuAQEFpISN",
+            "updatedAt": "1970-01-01T00:00:00.000Z"
+          }
+        }
+      },
+      "displayedProvided": false
+    },
+    {
+      "familyId": "UqnxZqPZNNaJkzU4ZBM0",
+      "totalSources": 0,
+      "counts": {
+        "exact": 0,
+        "estimated": 0,
+        "malformed": 0,
+        "ambiguous": 0,
+        "skipped": 0
+      },
+      "eventsBuilt": 0,
+      "members": {},
+      "displayedProvided": false
+    },
+    {
+      "familyId": "VBqFoCIm5MGUovWIXOxW",
+      "totalSources": 0,
+      "counts": {
+        "exact": 0,
+        "estimated": 0,
+        "malformed": 0,
+        "ambiguous": 0,
+        "skipped": 0
+      },
+      "eventsBuilt": 0,
+      "members": {},
+      "displayedProvided": false
+    },
+    {
+      "familyId": "Y0amWnQmfqfPJTxXOrWR",
+      "totalSources": 0,
+      "counts": {
+        "exact": 0,
+        "estimated": 0,
+        "malformed": 0,
+        "ambiguous": 0,
+        "skipped": 0
+      },
+      "eventsBuilt": 0,
+      "members": {},
+      "displayedProvided": false
+    },
+    {
+      "familyId": "aB1ZVilje0ZkzafCqIhp",
+      "totalSources": 0,
+      "counts": {
+        "exact": 0,
+        "estimated": 0,
+        "malformed": 0,
+        "ambiguous": 0,
+        "skipped": 0
+      },
+      "eventsBuilt": 0,
+      "members": {},
+      "displayedProvided": false
+    },
+    {
+      "familyId": "dComLauq7vAVxLVp5pcJ",
+      "totalSources": 0,
+      "counts": {
+        "exact": 0,
+        "estimated": 0,
+        "malformed": 0,
+        "ambiguous": 0,
+        "skipped": 0
+      },
+      "eventsBuilt": 0,
+      "members": {},
+      "displayedProvided": false
+    },
+    {
+      "familyId": "eG81ARcg4rlZz5uXIRXO",
+      "totalSources": 0,
+      "counts": {
+        "exact": 0,
+        "estimated": 0,
+        "malformed": 0,
+        "ambiguous": 0,
+        "skipped": 0
+      },
+      "eventsBuilt": 0,
+      "members": {},
+      "displayedProvided": false
+    },
+    {
+      "familyId": "hkNdKdMqSb2ahiXYgBTL",
+      "totalSources": 0,
+      "counts": {
+        "exact": 0,
+        "estimated": 0,
+        "malformed": 0,
+        "ambiguous": 0,
+        "skipped": 0
+      },
+      "eventsBuilt": 0,
+      "members": {},
+      "displayedProvided": false
+    },
+    {
+      "familyId": "iIpfFGqCd3HiHCLZ4ekf",
+      "totalSources": 0,
+      "counts": {
+        "exact": 0,
+        "estimated": 0,
+        "malformed": 0,
+        "ambiguous": 0,
+        "skipped": 0
+      },
+      "eventsBuilt": 0,
+      "members": {},
+      "displayedProvided": false
+    },
+    {
+      "familyId": "irivakqDTqjwaAZgm1p0",
+      "totalSources": 0,
+      "counts": {
+        "exact": 0,
+        "estimated": 0,
+        "malformed": 0,
+        "ambiguous": 0,
+        "skipped": 0
+      },
+      "eventsBuilt": 0,
+      "members": {},
+      "displayedProvided": false
+    },
+    {
+      "familyId": "izrLLHmyfzPmnH064Ltq",
+      "totalSources": 1,
+      "counts": {
+        "exact": 0,
+        "estimated": 1,
+        "malformed": 0,
+        "ambiguous": 0,
+        "skipped": 0
+      },
+      "eventsBuilt": 1,
+      "members": {
+        "MtKRMC7bXwQXDKcOMwDeccMzYcZ2": {
+          "memberId": "MtKRMC7bXwQXDKcOMwDeccMzYcZ2",
+          "replayed": {
+            "rewardPoints": 50,
+            "xpTotal": 50,
+            "level": 1,
+            "xpProgressInLevel": 50,
+            "xpToNextLevel": 950,
+            "levelProgressPercentage": 5,
+            "currentStreak": 0,
+            "bestStreak": 0,
+            "lastQualifiedDayKey": null,
+            "unlockedAchievementIds": [
+              "first_steps"
+            ],
+            "unlockedAvatarIds": [],
+            "projectionVersion": 1,
+            "foldedThroughEventId": "izrLLHmyfzPmnH064Ltq::MtKRMC7bXwQXDKcOMwDeccMzYcZ2::TASK_APPROVED::UHu2XGpywbk4uxTeCDaw",
+            "updatedAt": "1970-01-01T00:00:00.000Z"
+          },
+          "displayed": {
+            "rewardPoints": 0,
+            "xpTotal": 50,
+            "level": 1
+          },
+          "diff": {
+            "rewardPoints": 50,
+            "xpTotal": 0,
+            "level": 0,
+            "currentStreak": null,
+            "bestStreak": null
+          }
+        }
+      },
+      "displayedProvided": true
+    },
+    {
+      "familyId": "jLR8EytyAhmrE9wSHSBY",
+      "totalSources": 0,
+      "counts": {
+        "exact": 0,
+        "estimated": 0,
+        "malformed": 0,
+        "ambiguous": 0,
+        "skipped": 0
+      },
+      "eventsBuilt": 0,
+      "members": {},
+      "displayedProvided": false
+    },
+    {
+      "familyId": "kpBzG2V9yo1Q7Au4gZkV",
+      "totalSources": 0,
+      "counts": {
+        "exact": 0,
+        "estimated": 0,
+        "malformed": 0,
+        "ambiguous": 0,
+        "skipped": 0
+      },
+      "eventsBuilt": 0,
+      "members": {},
+      "displayedProvided": true
+    },
+    {
+      "familyId": "naN57eQVoa2hCvl6qPmj",
+      "totalSources": 0,
+      "counts": {
+        "exact": 0,
+        "estimated": 0,
+        "malformed": 0,
+        "ambiguous": 0,
+        "skipped": 0
+      },
+      "eventsBuilt": 0,
+      "members": {},
+      "displayedProvided": false
+    },
+    {
+      "familyId": "priSnH4hYbAtn5SXHFty",
+      "totalSources": 0,
+      "counts": {
+        "exact": 0,
+        "estimated": 0,
+        "malformed": 0,
+        "ambiguous": 0,
+        "skipped": 0
+      },
+      "eventsBuilt": 0,
+      "members": {},
+      "displayedProvided": false
+    },
+    {
+      "familyId": "qnLAZFCcPSFVrhWa8ikt",
+      "totalSources": 1,
+      "counts": {
+        "exact": 0,
+        "estimated": 1,
+        "malformed": 0,
+        "ambiguous": 0,
+        "skipped": 0
+      },
+      "eventsBuilt": 1,
+      "members": {
+        "ETn7odHZ0HNjryC7ON2yT4RZJi13": {
+          "memberId": "ETn7odHZ0HNjryC7ON2yT4RZJi13",
+          "replayed": {
+            "rewardPoints": 50,
+            "xpTotal": 50,
+            "level": 1,
+            "xpProgressInLevel": 50,
+            "xpToNextLevel": 950,
+            "levelProgressPercentage": 5,
+            "currentStreak": 0,
+            "bestStreak": 0,
+            "lastQualifiedDayKey": null,
+            "unlockedAchievementIds": [
+              "first_steps"
+            ],
+            "unlockedAvatarIds": [],
+            "projectionVersion": 1,
+            "foldedThroughEventId": "qnLAZFCcPSFVrhWa8ikt::ETn7odHZ0HNjryC7ON2yT4RZJi13::TASK_APPROVED::80Y1awmKAcFqdUf9UVNY",
+            "updatedAt": "1970-01-01T00:00:00.000Z"
+          },
+          "displayed": {
+            "rewardPoints": 0,
+            "xpTotal": 0,
+            "level": 1
+          },
+          "diff": {
+            "rewardPoints": 50,
+            "xpTotal": 50,
+            "level": 0,
+            "currentStreak": null,
+            "bestStreak": null
+          }
+        }
+      },
+      "displayedProvided": true
+    },
+    {
+      "familyId": "u2epmuvtKadZvLG9lPp7",
+      "totalSources": 0,
+      "counts": {
+        "exact": 0,
+        "estimated": 0,
+        "malformed": 0,
+        "ambiguous": 0,
+        "skipped": 0
+      },
+      "eventsBuilt": 0,
+      "members": {},
+      "displayedProvided": false
+    },
+    {
+      "familyId": "uTnrixcB4uvrZ5Xf44NV",
+      "totalSources": 19,
+      "counts": {
+        "exact": 9,
+        "estimated": 10,
+        "malformed": 0,
+        "ambiguous": 0,
+        "skipped": 0
+      },
+      "eventsBuilt": 19,
+      "members": {
+        "nfeRa675XkdqoReRmU4c": {
+          "memberId": "nfeRa675XkdqoReRmU4c",
+          "replayed": {
+            "rewardPoints": 140,
+            "xpTotal": 140,
+            "level": 1,
+            "xpProgressInLevel": 140,
+            "xpToNextLevel": 860,
+            "levelProgressPercentage": 14,
+            "currentStreak": 0,
+            "bestStreak": 0,
+            "lastQualifiedDayKey": null,
+            "unlockedAchievementIds": [
+              "first_steps"
+            ],
+            "unlockedAvatarIds": [],
+            "projectionVersion": 1,
+            "foldedThroughEventId": "uTnrixcB4uvrZ5Xf44NV::nfeRa675XkdqoReRmU4c::TASK_APPROVED::nfeRa675XkdqoReRmU4c__lP4Y0dWwFl6yEJj5vZMq__2026-08-05",
+            "updatedAt": "1970-01-01T00:00:00.000Z"
+          },
+          "displayed": {
+            "rewardPoints": 0,
+            "xpTotal": 45,
+            "level": 1
+          },
+          "diff": {
+            "rewardPoints": 140,
+            "xpTotal": 95,
+            "level": 0,
+            "currentStreak": null,
+            "bestStreak": null
+          }
+        }
+      },
+      "displayedProvided": true
+    },
+    {
+      "familyId": "wrQXaMmFidQxz9jmgmLN",
+      "totalSources": 0,
+      "counts": {
+        "exact": 0,
+        "estimated": 0,
+        "malformed": 0,
+        "ambiguous": 0,
+        "skipped": 0
+      },
+      "eventsBuilt": 0,
+      "members": {},
+      "displayedProvided": false
+    },
+    {
+      "familyId": "xxnldFIveiGLSOUpAREk",
+      "totalSources": 0,
+      "counts": {
+        "exact": 0,
+        "estimated": 0,
+        "malformed": 0,
+        "ambiguous": 0,
+        "skipped": 0
+      },
+      "eventsBuilt": 0,
+      "members": {},
+      "displayedProvided": false
+    },
+    {
+      "familyId": "yVhGc92fW4TwFXaNnLWB",
+      "totalSources": 0,
+      "counts": {
+        "exact": 0,
+        "estimated": 0,
+        "malformed": 0,
+        "ambiguous": 0,
+        "skipped": 0
+      },
+      "eventsBuilt": 0,
+      "members": {},
+      "displayedProvided": false
+    },
+    {
+      "familyId": "ye0biqxNXBLYc4g9eRVK",
+      "totalSources": 0,
+      "counts": {
+        "exact": 0,
+        "estimated": 0,
+        "malformed": 0,
+        "ambiguous": 0,
+        "skipped": 0
+      },
+      "eventsBuilt": 0,
+      "members": {},
+      "displayedProvided": false
+    },
+    {
+      "familyId": "zfZ73vn8ZF4qFUldp2BV",
+      "totalSources": 0,
+      "counts": {
+        "exact": 0,
+        "estimated": 0,
+        "malformed": 0,
+        "ambiguous": 0,
+        "skipped": 0
+      },
+      "eventsBuilt": 0,
+      "members": {},
+      "displayedProvided": false
+    },
+    {
+      "familyId": "zfbOBIfsIioDJFQclWWU",
+      "totalSources": 0,
+      "counts": {
+        "exact": 0,
+        "estimated": 0,
+        "malformed": 0,
+        "ambiguous": 0,
         "skipped": 0
       },
       "eventsBuilt": 0,
