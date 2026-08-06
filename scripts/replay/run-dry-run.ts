@@ -49,6 +49,8 @@ export interface ReplayDryRunContext {
 export interface ReplayDryRunResult extends ReplayReport {
   readonly replayedMembers: Readonly<Record<string, GamificationStateV4>>
   readonly eventsBuilt: number
+  /** The deterministic V4 events actually folded into replay state (exact + estimated only). */
+  readonly events: readonly GamificationEventV4[]
 }
 
 function memberIdFor(source: ReplaySourceRecord): string {
@@ -178,7 +180,7 @@ export function runReplayDryRun(family: LegacyFamily, ctx: ReplayDryRunContext):
   const rows: ReplayReportRow[] = buildReportRows(ctx.familyId, sources, classifications)
   const report = emitReport(rows)
 
-  return { ...report, replayedMembers, eventsBuilt: events.length }
+  return { ...report, replayedMembers, eventsBuilt: events.length, events: [...events] }
 }
 
 interface CliArgs {
