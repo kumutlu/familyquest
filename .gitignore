@@ -67,3 +67,7 @@ test-results/
 
 # Wallet snapshot artifacts (Task 0.4) — git-ignored local backup directory.
 backups/wallet-snapshots/
+
+# Gate 1 / replay generated artifacts (local emulator only, never production).
+backups/gate1/
+backups/exports/

@@ -198,21 +198,35 @@ function assertNoGamificationImport() {
     }
   }
 }
+// Defensive snapshot unwrap. A missing/undefined `docs` array is the cause of
+// the historical "Cannot read properties of undefined (reading 'length')"
+// crash in real mode; fail with an actionable message instead.
+function snapshotDocs(snap, pathLabel) {
+  if (!snap || !Array.isArray(snap.docs)) {
+    throw new Error(
+      'WALLET-SNAPSHOT: unexpected snapshot for "' + pathLabel + '" ' +
+      '(no docs array). Check credentials / FIRESTORE_EMULATOR_HOST.'
+    )
+  }
+  return snap.docs
+}
+
 async function collectEntries(ro) {
   const entries = []
   const famSnap = await ro.collection('families').get()
-  for (const fam of famSnap.docs) {
+  for (const fam of snapshotDocs(famSnap, 'families')) {
     const fid = fam.id
     for (const coll of PROTECTED_FAMILY_COLLECTIONS) {
       const snap = await ro.collection('families').doc(fid).collection(coll).get()
-      for (const d of snap.docs) {
+      const collDocs = snapshotDocs(snap, 'families/' + fid + '/' + coll)
+      for (const d of collDocs) {
         entries.push({ collectionPath: `families/${fid}/${coll}`, docPath: `families/${fid}/${coll}/${d.id}`, data: d.data() })
       }
       if (coll === 'savings_goals') {
-        for (const goal of snap.docs) {
+        for (const goal of collDocs) {
           for (const sub of SAVINGS_GOAL_SUBCOLLECTIONS) {
             const subSnap = await ro.collection('families').doc(fid).collection('savings_goals').doc(goal.id).collection(sub).get()
-            for (const sd of subSnap.docs) {
+            for (const sd of snapshotDocs(subSnap, 'families/' + fid + '/savings_goals/' + goal.id + '/' + sub)) {
               entries.push({ collectionPath: `families/${fid}/savings_goals/${goal.id}/${sub}`, docPath: `families/${fid}/savings_goals/${goal.id}/${sub}/${sd.id}`, data: sd.data() })
             }
           }
@@ -221,7 +235,7 @@ async function collectEntries(ro) {
     }
   }
   const uSnap = await ro.collection('users').get()
-  for (const u of uSnap.docs) entries.push({ collectionPath: 'users', docPath: `users/${u.id}`, data: projectUserWalletFields(u.data()) })
+  for (const u of snapshotDocs(uSnap, 'users')) entries.push({ collectionPath: 'users', docPath: `users/${u.id}`, data: projectUserWalletFields(u.data()) })
   return entries
 }
 function dryRunPlan() {
@@ -263,6 +277,8 @@ function printUsage(out) {
     '  --help, -h           Show this help and exit 0 (no Firebase, no writes)\n' +
     '  --dry-run            Print the plan (collections/fields) and exit 0\n' +
     '  --check              Run the wallet-snapshot self-tests\n' +
+    '  --emulator           Read from the local Firestore emulator only\n' +
+    '                       (requires FIRESTORE_EMULATOR_HOST; no prod creds)\n' +
     '  --output <dir>       Write the manifest to <dir>\n' +
     '                       (default: backups/wallet-snapshots/<timestamp>/)\n' +
     '  --verify <manifest>  Verify current wallet state against <manifest>\n' +
@@ -275,7 +291,7 @@ function printUsage(out) {
 // Parse CLI arguments. Performs NO Firebase/Admin SDK initialization and NO
 // filesystem writes. Throws CliError for missing values or unknown flags.
 function parseArgs(args) {
-  const opts = { help: false, dryRun: false, check: false, output: null, verify: null }
+  const opts = { help: false, dryRun: false, check: false, emulator: false, output: null, verify: null }
   for (let i = 0; i < args.length; i++) {
     const a = args[i]
     if (a === '--help' || a === '-h') {
@@ -288,6 +304,10 @@ function parseArgs(args) {
     }
     if (a === '--check') {
       opts.check = true
+      continue
+    }
+    if (a === '--emulator') {
+      opts.emulator = true
       continue
     }
     if (a === '--output' || a === '--verify') {
@@ -328,9 +348,8 @@ async function main() {
     dryRunPlan()
     return
   }
-  const admin = require('firebase-admin')
-  if (!admin.apps.length) admin.initializeApp({ credential: admin.credential.applicationDefault() })
-  const ro = new ReadOnlyFirestore(admin.firestore())
+  const { initFirestore, getProjectId } = require('./firebase-admin-init.cjs')
+  const ro = new ReadOnlyFirestore(initFirestore({ emulator: opts.emulator }))
   if (opts.verify) {
     const m = JSON.parse(fs.readFileSync(opts.verify, 'utf8'))
     const r = verifyManifest(m, await collectEntries(ro))
@@ -342,7 +361,7 @@ async function main() {
     return
   }
   const entries = await collectEntries(ro)
-  const projectId = (admin.apps[0] && admin.apps[0].options && admin.apps[0].options.projectId) || null
+  const projectId = getProjectId()
   const manifest = buildManifest(entries, { projectId })
   const ts = new Date().toISOString().replace(/[:.]/g, '-')
   const outDir = opts.output || path.join(ROOT, 'backups', 'wallet-snapshots', ts)

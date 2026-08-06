@@ -22,6 +22,10 @@ const path = require('path')
 
 const ROOT = path.resolve(__dirname, '..')
 
+// Shared, safe Firebase Admin initializer (modular app API). Replaces the
+// legacy namespace access that is not exposed by the installed module shape.
+const { initFirestore: initAdminFirestore } = require('./firebase-admin-init.cjs')
+
 // Gamification collections to back up. These are the ONLY collections this
 // script is allowed to read. Wallet collections are explicitly OUT OF SCOPE.
 const GAMIFICATION_COLLECTIONS = [
@@ -95,27 +99,26 @@ function dryRun() {
   process.exit(0)
 }
 
-async function runRealBackup() {
-  // Lazily require firebase-admin so --dry-run never needs credentials or the
-  // dependency to be present.
-  let admin
-  try {
-    admin = require('firebase-admin')
-  } catch (err) {
-    console.error('Real export requires firebase-admin. Run in --dry-run or install it.')
-    process.exit(2)
-  }
+/**
+ * Resolve the Firestore handle. In --emulator mode no application default
+ * credentials are used, so production can never be reached. Delegates to the
+ * shared modular initializer.
+ */
+function initFirestore(opts) {
+  return initAdminFirestore(opts)
+}
 
-  if (!admin.apps.length) {
-    admin.initializeApp({
-      credential: admin.credential.applicationDefault(),
-    })
-  }
-  const db = admin.firestore()
+async function runRealBackup(opts) {
+  const db = initFirestore(opts)
 
   const familiesSnap = await db.collection('families').get()
+  if (!familiesSnap || !Array.isArray(familiesSnap.docs)) {
+    throw new CliError('Unexpected empty snapshot for collection "families".')
+  }
   const timestamp = new Date().toISOString().replace(/[:.]/g, '-')
-  const outDir = path.join(ROOT, 'backups', 'gamification', timestamp)
+  const outDir = opts.output
+    ? path.resolve(opts.output)
+    : path.join(ROOT, 'backups', 'gamification', timestamp)
   fs.mkdirSync(outDir, { recursive: true })
 
   const entries = []
@@ -154,6 +157,10 @@ function printUsage(out) {
     'Options:\n' +
     '  --help, -h     Show this help and exit 0 (no Firebase, no writes)\n' +
     '  --dry-run      Print the backup plan and exit 0 (no reads/writes)\n' +
+    '  --output <dir> Write the backup into <dir> instead of\n' +
+    '                 backups/gamification/<timestamp>/\n' +
+    '  --emulator     Read from the local Firestore emulator only\n' +
+    '                 (requires FIRESTORE_EMULATOR_HOST; never uses prod creds)\n' +
     '\n' +
     'With no options, performs a real read-only backup (requires firebase-admin\n' +
     'and application default credentials). This tool NEVER touches wallet\n' +
@@ -164,7 +171,7 @@ function printUsage(out) {
 // Parse CLI arguments. Performs NO Firebase/Admin SDK initialization and NO
 // filesystem writes. Throws CliError for unknown flags.
 function parseArgs(args) {
-  const opts = { help: false, dryRun: false }
+  const opts = { help: false, dryRun: false, output: null, emulator: false }
   for (let i = 0; i < args.length; i++) {
     const a = args[i]
     if (a === '--help' || a === '-h') {
@@ -173,6 +180,19 @@ function parseArgs(args) {
     }
     if (a === '--dry-run') {
       opts.dryRun = true
+      continue
+    }
+    if (a === '--emulator') {
+      opts.emulator = true
+      continue
+    }
+    if (a === '--output') {
+      const val = args[i + 1]
+      if (val === undefined || val.charAt(0) === '-') {
+        throw new CliError('Missing required value for --output.\nExpected: --output <directory>')
+      }
+      opts.output = val
+      i++
       continue
     }
     throw new CliError('Unknown argument: ' + a + '\nRun with --help for usage.')
@@ -200,7 +220,7 @@ function main() {
     dryRun()
     return
   }
-  runRealBackup().catch((err) => {
+  runRealBackup(opts).catch((err) => {
     console.error('Backup failed: ' + err.message)
     process.exit(1)
   })

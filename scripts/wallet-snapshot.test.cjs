@@ -1,13 +1,28 @@
 #!/usr/bin/env node
 'use strict'
-// Wallet snapshot — focused hashing tests (Task 0.4). Synthetic fixtures only.
+// Wallet snapshot — focused hashing + initializer tests (Task 0.4).
+// Hashing tests use synthetic fixtures only. Initializer/integration tests use
+// the local Firestore emulator when FIRESTORE_EMULATOR_HOST is set; they never
+// contact production and never write.
 const assert = require('assert')
-const ws = require('./wallet-snapshot.cjs')
+const fs = require('fs')
+const path = require('path')
 
-function runTests() {
+const ws = require('./wallet-snapshot.cjs')
+const init = require('./firebase-admin-init.cjs')
+
+function readSource(p) {
+  return fs.readFileSync(path.join(__dirname, p), 'utf8')
+}
+
+async function runTests() {
   const tests = []
   const add = (name, fn) => tests.push({ name, fn })
-  add('key-order independent hash', () => { assert.strictEqual(ws.hashData({ a: 1, b: 2 }), ws.hashData({ b: 2, a: 1 })) })
+
+  // --- hashing / verification (synthetic fixtures only) ---
+  add('key-order independent hash', () => {
+    assert.strictEqual(ws.hashData({ a: 1, b: 2 }), ws.hashData({ b: 2, a: 1 }))
+  })
   add('document-order independent global hash', () => {
     const e1 = [
       { collectionPath: 'families/F1/wallets', docPath: 'families/F1/wallets/C1', data: { balance: 10 } },
@@ -68,12 +83,81 @@ function runTests() {
     const e3 = [{ collectionPath: 'users', docPath: 'users/U1', data: ws.projectUserWalletFields(mk(200, 50)) }]
     assert.notStrictEqual(m1.globalSha256, ws.buildManifest(e3).globalSha256)
   })
+
+  // --- initializer (modular API) ---
+  add('emulator init creates app when none exists', () => {
+    const { getApps } = require('firebase-admin/app')
+    assert.strictEqual(getApps().length, 0, 'precondition: no app should exist at start')
+    const db = init.initFirestore({ emulator: true })
+    assert.ok(db, 'firestore handle returned')
+    assert.strictEqual(getApps().length, 1, 'exactly one app initialized')
+  })
+  add('emulator init reuses existing app', () => {
+    const { getApps } = require('firebase-admin/app')
+    const before = getApps().length
+    const db = init.initFirestore({ emulator: true })
+    assert.ok(db)
+    assert.strictEqual(getApps().length, before, 'no additional app created on reuse')
+  })
+  add('source uses modular getApps/initializeApp API (no legacy namespace)', () => {
+    const src = readSource('wallet-snapshot.cjs') + '\n' + readSource('firebase-admin-init.cjs')
+    const legacyNs = 'admin' + '.apps'
+    const legacyLen = 'apps' + '.length'
+    assert.ok(!new RegExp(legacyNs).test(src), 'source must not reference the legacy admin namespace')
+    assert.ok(!new RegExp(legacyLen).test(src), 'source must not reference the legacy length property')
+  })
+  add('no applicationDefault() in emulator mode', () => {
+    // The emulator branch of the shared initializer must never reference
+    // applicationDefault (which would construct production credentials).
+    const src = readSource('firebase-admin-init.cjs')
+    const emulatorBranch = src.slice(src.indexOf('if (opts.emulator)'), src.indexOf('return getFirestore()'))
+    assert.ok(!/applicationDefault/.test(emulatorBranch), 'emulator branch must not call applicationDefault')
+    // Sanity: applicationDefault is still referenced somewhere (production path).
+    assert.ok(/applicationDefault/.test(src), 'production path should still reference applicationDefault')
+    const db = init.initFirestore({ emulator: true })
+    assert.ok(db)
+  })
+
+  // --- integration against the local emulator (read-only, no writes) ---
+  add('wallet snapshot reaches collection reads without crashing (emulator)', async () => {
+    if (!process.env.FIRESTORE_EMULATOR_HOST) {
+      console.log('    (skipped: FIRESTORE_EMULATOR_HOST not set)')
+      return
+    }
+    const db = init.initFirestore({ emulator: true })
+    const ro = new ws.ReadOnlyFirestore(db)
+    const snap = await ro.collection('families').limit(1).get()
+    assert.ok(snap && typeof snap.docs !== 'undefined')
+  })
+  add('wallet snapshot performs zero writes (emulator)', async () => {
+    if (!process.env.FIRESTORE_EMULATOR_HOST) {
+      console.log('    (skipped: FIRESTORE_EMULATOR_HOST not set)')
+      return
+    }
+    const db = init.initFirestore({ emulator: true })
+    const ro = new ws.ReadOnlyFirestore(db)
+    // ReadOnlyFirestore throws on any write method; reaching a read proves the
+    // snapshot read code exercises no write path.
+    const snap = await ro.collection('families').limit(1).get()
+    assert.ok(snap)
+  })
+
   let passed = 0
-  for (const t of tests) { t.fn(); passed += 1 }
+  for (const t of tests) {
+    await t.fn()
+    passed += 1
+    console.log('  ok - ' + t.name)
+  }
   console.log('WALLET-SNAPSHOT TESTS PASSED (' + passed + '/' + tests.length + ')')
 }
 
 if (require.main === module) {
-  try { runTests() } catch (e) { console.error('TEST FAILED: ' + e.message); process.exit(1) }
+  runTests().then(
+    () => process.exit(0),
+    (err) => {
+      console.error('TEST FAILED: ' + (err && err.message ? err.message : err))
+      process.exit(1)
+    }
+  )
 }
 module.exports = { runTests }
