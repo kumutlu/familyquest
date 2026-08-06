@@ -2,10 +2,15 @@ import { describe, expect, it } from 'vitest'
 
 import {
   FORBIDDEN_COLLECTIONS,
+  KNOWN_PRODUCTION_FAMILY,
   LEGACY_COLLECTION_MAP,
   ProductionAccessError,
   assertEmulator,
+  assertReadCollectionsSafe,
   buildFixture,
+  countFixtureSources,
+  decideExportExitCode,
+  mapLegacyDoc,
   normalizeDoc,
   parseArgs,
   readFamily,
@@ -81,6 +86,157 @@ describe('buildFixture', () => {
     for (const forbidden of FORBIDDEN_COLLECTIONS) {
       expect(fixture[forbidden]).toBeUndefined()
     }
+  })
+})
+
+describe('mapLegacyDoc (Gate 1 field-name mapping)', () => {
+  it('maps task_completions assigneeId/completedAt -> childId/createdAt', () => {
+    const out = mapLegacyDoc('task_completions', {
+      id: 't1',
+      taskId: 'ta',
+      assigneeId: 'm1',
+      awardedPoints: 1,
+      completedAt: '2026-01-01T00:00:00.000Z',
+      approvedAt: '2026-01-02T00:00:00.000Z',
+    })!
+    expect(out.childId).toBe('m1')
+    expect(out.createdAt).toBe('2026-01-01T00:00:00.000Z')
+    // reader-expected name wins when both are present
+    expect(mapLegacyDoc('task_completions', { id: 't2', childId: 'x', createdAt: 'c' })!.childId).toBe('x')
+  })
+
+  it('maps behaviour_events type -> behaviourType', () => {
+    const out = mapLegacyDoc('behaviour_events', {
+      id: 'b1',
+      childId: 'm1',
+      type: 'positive',
+      pointsDelta: 5,
+      createdAt: '2026-01-03T00:00:00.000Z',
+    })!
+    expect(out.behaviourType).toBe('positive')
+  })
+
+  it('maps daily_progress perfectDayReached/approvedPoints/calculatedAt', () => {
+    const out = mapLegacyDoc('daily_progress', {
+      id: 'd1',
+      childId: 'm1',
+      dayKey: '2026-01-01',
+      perfectDayReached: true,
+      approvedPoints: 10,
+      calculatedAt: '2026-01-01T12:00:00.000Z',
+    })!
+    expect(out.perfectDay).toBe(true)
+    expect(out.rewardPointsAward).toBe(10)
+    expect(out.createdAt).toBe('2026-01-01T12:00:00.000Z')
+  })
+
+  it('maps redemptions userId/costPaid -> childId/cost', () => {
+    const out = mapLegacyDoc('redemptions', {
+      id: 'r1',
+      userId: 'm1',
+      rewardId: 'rw',
+      costPaid: 5,
+      createdAt: '2026-01-04T00:00:00.000Z',
+    })!
+    expect(out.childId).toBe('m1')
+    expect(out.cost).toBe(5)
+  })
+
+  it('maps gamification reversals and drops wallet/fund reversals', () => {
+    const taskRev = mapLegacyDoc('reversals', {
+      id: 'rv1',
+      sourceKind: 'task_completion',
+      sourceId: 'src1',
+      completedAt: '2026-01-05T00:00:00.000Z',
+      inverseEffectSnapshot: { childId: 'm1', pointsDelta: -1 },
+    })!
+    expect(taskRev.kind).toBe('REV')
+    expect(taskRev.originalSourceId).toBe('src1')
+    expect(taskRev.childId).toBe('m1')
+    expect(taskRev.rewardPointsDelta).toBe(-1)
+
+    // Wallet/fund reversals are NOT gamification replay sources.
+    expect(
+      mapLegacyDoc('reversals', {
+        id: 'rv2',
+        sourceKind: 'wallet_transaction',
+        sourceId: 'w1',
+        inverseEffectSnapshot: { walletDeltaPence: 100 },
+      }),
+    ).toBeNull()
+    expect(
+      mapLegacyDoc('reversals', {
+        id: 'rv3',
+        sourceKind: 'fund_transaction',
+        sourceId: 'f1',
+        inverseEffectSnapshot: { fundDeltaPence: 100 },
+      }),
+    ).toBeNull()
+  })
+
+  it('buildFixture applies the mapping so readers no longer throw', () => {
+    const fixture = buildFixture('FAM_1', {
+      task_completions: [
+        { id: 't1', data: { assigneeId: 'm1', taskId: 'ta', completedAt: '2026-01-01T00:00:00.000Z', approvedAt: '2026-01-02T00:00:00.000Z' } },
+      ],
+      behaviour_events: [{ id: 'b1', data: { type: 'positive', childId: 'm1', pointsDelta: 3, createdAt: '2026-01-03T00:00:00.000Z' } }],
+      daily_progress: [
+        { id: 'd1', data: { childId: 'm1', dayKey: '2026-01-01', perfectDayReached: true, approvedPoints: 7, calculatedAt: '2026-01-01T12:00:00.000Z' } },
+      ],
+      redemptions: [{ id: 'r1', data: { userId: 'm1', rewardId: 'rw', costPaid: 4, createdAt: '2026-01-04T00:00:00.000Z' } }],
+      reversals: [
+        { id: 'rv1', data: { sourceKind: 'task_completion', sourceId: 's1', completedAt: '2026-01-05T00:00:00.000Z', inverseEffectSnapshot: { childId: 'm1', pointsDelta: -1 } } },
+      ],
+    })
+    expect(fixture.taskCompletions[0].childId).toBe('m1')
+    expect(fixture.behaviours[0].behaviourType).toBe('positive')
+    expect(fixture.dailyProgress[0].perfectDay).toBe(true)
+    expect(fixture.redemptions[0].childId).toBe('m1')
+    expect(fixture.reversals[0].kind).toBe('REV')
+  })
+})
+
+describe('countFixtureSources', () => {
+  it('sums every legacy source collection', () => {
+    const fixture = buildFixture('FAM_1', {
+      task_completions: [{ id: 't1', data: { childId: 'm1', taskId: 'ta', createdAt: 'c' } }],
+      behaviour_events: [{ id: 'b1', data: { childId: 'm1', behaviourType: 'positive', createdAt: 'c' } }],
+    })
+    expect(countFixtureSources(fixture)).toBe(2)
+  })
+})
+
+describe('decideExportExitCode (Gate 1 hard failure)', () => {
+  it('fails when families present but zero sources', () => {
+    expect(decideExportExitCode({ familyCount: 42, totalSources: 0 })).toBe(1)
+  })
+  it('fails when the known production family has zero sources', () => {
+    expect(
+      decideExportExitCode({ familyCount: 1, totalSources: 5, knownFamilySources: 0 }),
+    ).toBe(1)
+  })
+  it('passes with a non-zero source count', () => {
+    expect(decideExportExitCode({ familyCount: 42, totalSources: 127 })).toBe(0)
+    expect(
+      decideExportExitCode({ familyCount: 1, totalSources: 5, knownFamilySources: 3 }),
+    ).toBe(0)
+  })
+})
+
+describe('assertReadCollectionsSafe', () => {
+  it('throws if a forbidden (wallet) collection would be read', () => {
+    expect(() => assertReadCollectionsSafe(['task_completions', 'wallets'])).toThrow(/forbidden/)
+  })
+  it('allows the legacy gamification collections', () => {
+    expect(() =>
+      assertReadCollectionsSafe([...Object.keys(LEGACY_COLLECTION_MAP), 'gamification_summaries', 'tasks']),
+    ).not.toThrow()
+  })
+})
+
+describe('KNOWN_PRODUCTION_FAMILY', () => {
+  it('is the documented Gate 1 anchor family', () => {
+    expect(KNOWN_PRODUCTION_FAMILY).toBe('5s4Npeu55wPphLCsGAMP')
   })
 })
 

@@ -386,6 +386,38 @@ function parseArgs(argv: string[]): CliArgs {
   return { fixtures, walletSnapshot, outDir, markdown, json }
 }
 
+/** Sum the replay-source documents of a parsed fixture (excludes `displayed`). */
+export function sumSourceArrays(family: LegacyFamily): number {
+  return (
+    (family.taskCompletions?.length ?? 0) +
+    (family.behaviours?.length ?? 0) +
+    (family.dailyProgress?.length ?? 0) +
+    (family.redemptions?.length ?? 0) +
+    (family.reversals?.length ?? 0) +
+    (family.avatarUnlocks?.length ?? 0) +
+    (family.manualAdjustments?.length ?? 0)
+  )
+}
+
+/**
+ * Decide the production-report CLI exit code from Gate 1 invariants.
+ * Hard failure: families present but zero replay sources => invalid mapping.
+ * Sanity: displayed gamification summaries must NOT be counted as sources.
+ * The independently summed source arrays are an UPPER BOUND on the reported
+ * total (readers legitimately filter non-perfect days and skip malformed
+ * docs), so the only invalid case is when MORE sources are reported than exist
+ * in the fixtures — that would mean summaries/other data leaked in.
+ */
+export function decideReportExitCode(opts: {
+  totalFamilies: number
+  totalSources: number
+  expectedSources: number
+}): number {
+  if (opts.totalFamilies > 0 && opts.totalSources === 0) return 1
+  if (opts.expectedSources < opts.totalSources) return 1
+  return 0
+}
+
 export function runCli(argv: string[]): number {
   let args: CliArgs
   try {
@@ -450,6 +482,21 @@ export function runCli(argv: string[]): number {
     familyTasks[familyId]?.[taskId] ?? null
 
   const report = runProductionReplay(families, { walletSnapshot, taskPointsLookup })
+
+  // Sanity: displayed gamification summaries must NOT be counted as sources.
+  // Independently sum the source arrays of every parsed fixture and compare.
+  const expectedSources = families.reduce((sum, f) => sum + sumSourceArrays(f.family), 0)
+
+  const exitCode = decideReportExitCode({
+    totalFamilies: report.totalFamilies,
+    totalSources: report.totalSources,
+    expectedSources,
+  })
+  if (exitCode !== 0) {
+    console.error('production-report: No replay sources found; fixture mapping is invalid.')
+    return exitCode
+  }
+
   const markdownOut = emitProductionReportMarkdown(report)
   const jsonOut = emitProductionReportJson(report)
 

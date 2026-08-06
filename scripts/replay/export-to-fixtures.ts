@@ -14,7 +14,7 @@
  *    module only maps raw documents into the existing LegacyFamily shape.
  */
 
-import { mkdirSync, writeFileSync } from 'node:fs'
+import { mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { createRequire } from 'node:module'
 import { join, resolve } from 'node:path'
 import { pathToFileURL } from 'node:url'
@@ -96,6 +96,125 @@ export function normalizeDoc(id: string, data: Record<string, unknown>): Record<
   return out
 }
 
+/**
+ * Known production family used as a minimum-sanity anchor: Gate 1 must always
+ * find at least one replay source for it. Empty => the fixture mapping is broken.
+ */
+export const KNOWN_PRODUCTION_FAMILY = '5s4Npeu55wPphLCsGAMP'
+
+/**
+ * Production gamification `reversals` is a generic reversal log that also covers
+ * wallet/fund reversals. Only gamification-source reversals are replay sources;
+ * the rest are dropped (never counted, never read as wallet data).
+ */
+const REVERSAL_GAMIFICATION_SOURCE_KINDS = new Set(['task_completion', 'reward_redemption'])
+
+/**
+ * Translate a raw, normalized legacy document into the field shape the Stage 2
+ * readers (src/domain/gamification/v4/replay/sources.ts) expect.
+ *
+ * ROOT CAUSE OF GATE 1 "ZERO SOURCES": the production export uses DIFFERENT
+ * field names than the readers assume. e.g. `task_completions` store the member
+ * under `assigneeId` (and `effectSnapshot.childId`), not `childId`, and carry
+ * `completedAt` rather than `createdAt`. The readers threw `MalformedSourceError`
+ * on the missing fields, which aborted the whole family's replay → 0 sources.
+ *
+ * This is a pure FIELD-NAME mapping. We never invent or estimate values: every
+ * mapped field falls back to the reader-expected name first, then to the
+ * production name. Documents that are not gamification replay sources (e.g.
+ * wallet/fund reversals) are returned as `null` and dropped by the caller.
+ */
+export function mapLegacyDoc(
+  collection: string,
+  doc: Record<string, unknown>,
+): Record<string, unknown> | null {
+  const effect = (doc.inverseEffectSnapshot ?? doc.originalEffectSnapshot) as
+    | Record<string, unknown>
+    | undefined
+  switch (collection) {
+    case 'task_completions': {
+      const childId = doc.childId ?? doc.assigneeId ?? (doc.effectSnapshot as Record<string, unknown> | undefined)?.childId
+      const createdAt = doc.createdAt ?? doc.completedAt ?? doc.approvedAt
+      return { ...doc, childId, createdAt }
+    }
+    case 'behaviour_events': {
+      // Reader expects `behaviourType`; production stores it as `type`.
+      return { ...doc, behaviourType: doc.behaviourType ?? doc.type }
+    }
+    case 'daily_progress': {
+      // Reader expects `perfectDay` (boolean) + `rewardPointsAward`; production
+      // stores `perfectDayReached` + `approvedPoints`. `createdAt` is `calculatedAt`.
+      const createdAt = doc.createdAt ?? doc.calculatedAt ?? doc.finalized
+      return {
+        ...doc,
+        perfectDay: doc.perfectDay ?? doc.perfectDayReached,
+        rewardPointsAward: doc.rewardPointsAward ?? doc.approvedPoints,
+        createdAt,
+      }
+    }
+    case 'redemptions': {
+      const childId = doc.childId ?? doc.userId ?? (doc.effectSnapshot as Record<string, unknown> | undefined)?.childId
+      return { ...doc, childId, cost: doc.cost ?? doc.costPaid }
+    }
+    case 'reversals': {
+      const sourceKind = doc.sourceKind
+      if (typeof sourceKind !== 'string' || !REVERSAL_GAMIFICATION_SOURCE_KINDS.has(sourceKind)) {
+        return null // wallet/fund reversals are not gamification replay sources
+      }
+      const childId = effect?.childId
+      if (typeof childId !== 'string' || childId.length === 0) return null
+      const kind: 'REV' | 'REFUND' = sourceKind === 'reward_redemption' ? 'REFUND' : 'REV'
+      return {
+        ...doc,
+        kind,
+        originalSourceId: doc.originalSourceId ?? doc.sourceId,
+        childId,
+        createdAt: doc.createdAt ?? doc.completedAt,
+        rewardPointsDelta: doc.rewardPointsDelta ?? effect?.pointsDelta ?? null,
+      }
+    }
+    default:
+      return doc
+  }
+}
+
+/** Sum the replay-source documents across every legacy collection. */
+export function countFixtureSources(fixture: FamilyFixture): number {
+  return (
+    fixture.taskCompletions.length +
+    fixture.behaviours.length +
+    fixture.dailyProgress.length +
+    fixture.redemptions.length +
+    fixture.reversals.length +
+    fixture.avatarUnlocks.length +
+    fixture.manualAdjustments.length
+  )
+}
+
+/**
+ * Decide the export CLI exit code from Gate 1 invariants.
+ * Hard failure: families present but zero replay sources => invalid mapping.
+ * Sanity: the known production family must yield at least one source.
+ */
+export function decideExportExitCode(opts: {
+  familyCount: number
+  totalSources: number
+  knownFamilySources?: number
+}): number {
+  if (opts.familyCount > 0 && opts.totalSources === 0) return 1
+  if (opts.knownFamilySources !== undefined && opts.knownFamilySources === 0) return 1
+  return 0
+}
+
+/** Fail closed if any read collection is a forbidden (wallet) collection. */
+export function assertReadCollectionsSafe(readCollections: readonly string[]): void {
+  for (const c of readCollections) {
+    if ((FORBIDDEN_COLLECTIONS as readonly string[]).includes(c)) {
+      throw new Error(`export-to-fixtures: attempted to read forbidden collection "${c}"`)
+    }
+  }
+}
+
 /** Build a deterministic fixture from already-read raw collections. */
 export function buildFixture(
   familyId: string,
@@ -110,7 +229,8 @@ export function buildFixture(
   for (const [collection, field] of Object.entries(LEGACY_COLLECTION_MAP)) {
     const docs = raw[collection] ?? []
     fixture[field] = docs
-      .map((d) => normalizeDoc(d.id, d.data))
+      .map((d) => mapLegacyDoc(collection, normalizeDoc(d.id, d.data)))
+      .filter((d): d is Record<string, unknown> => d !== null)
       .sort((a, b) => String(a.id).localeCompare(String(b.id)))
   }
 
@@ -125,7 +245,8 @@ export function buildFixture(
 
   const taskPoints: Record<string, number> = {}
   for (const t of [...tasks].sort((a, b) => a.id.localeCompare(b.id))) {
-    const points = t.data.points ?? t.data.rewardPoints ?? t.data.pointsValue
+    // Production `tasks` store the reward under `pointsReward`.
+    const points = t.data.points ?? t.data.rewardPoints ?? t.data.pointsValue ?? t.data.pointsReward
     if (typeof points === 'number') taskPoints[t.id] = points
   }
 
@@ -177,6 +298,12 @@ function toEntries(snap: MinimalSnapshot | undefined, path: string) {
 
 /** Read one family's legacy gamification collections (read-only). */
 export async function readFamily(db: MinimalDb, familyId: string): Promise<FamilyFixture> {
+  // Sanity: never read a wallet/forbidden collection.
+  assertReadCollectionsSafe([
+    ...Object.keys(LEGACY_COLLECTION_MAP),
+    'gamification_summaries',
+    'tasks',
+  ])
   const famRef = db.collection('families').doc(familyId)
   const raw: Record<string, Array<{ id: string; data: Record<string, unknown> }>> = {}
   for (const collection of Object.keys(LEGACY_COLLECTION_MAP)) {
@@ -240,7 +367,30 @@ export async function runCli(argv: readonly string[]): Promise<number> {
     writeFileSync(join(outDir, `${familyId}.json`), JSON.stringify(fixture, null, 2) + '\n')
     console.log(`export-to-fixtures: wrote ${familyId}.json`)
   }
-  console.log(`export-to-fixtures: ${familyIds.length} families → ${outDir}`)
+
+  // --- Gate 1 invariants: count sources and fail closed if invalid. ---
+  let totalSources = 0
+  let knownFamilySources: number | undefined
+  for (const familyId of familyIds) {
+    const fixture = JSON.parse(readFileSync(join(outDir, `${familyId}.json`), 'utf8')) as FamilyFixture
+    const n = countFixtureSources(fixture)
+    totalSources += n
+    if (familyId === KNOWN_PRODUCTION_FAMILY) knownFamilySources = n
+  }
+
+  const exitCode = decideExportExitCode({
+    familyCount: familyIds.length,
+    totalSources,
+    knownFamilySources,
+  })
+  if (exitCode !== 0) {
+    console.error('export-to-fixtures: No replay sources found; fixture mapping is invalid.')
+    return exitCode
+  }
+
+  console.log(
+    `export-to-fixtures: ${familyIds.length} families → ${outDir} (totalSources=${totalSources})`,
+  )
   return 0
 }
 

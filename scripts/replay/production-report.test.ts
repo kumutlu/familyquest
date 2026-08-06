@@ -6,6 +6,8 @@ import {
   emitProductionReportMarkdown,
   emitProductionReportJson,
   summarizeWalletSnapshot,
+  sumSourceArrays,
+  decideReportExitCode,
   type ProductionFamilyInput,
   type DisplayedMemberState,
   type WalletSnapshotManifest,
@@ -273,5 +275,28 @@ describe('Task 3.1 — no write methods / no production mutation path', () => {
     const snapshot = JSON.stringify(families)
     runProductionReplay(families, RICH_OPTS)
     expect(JSON.stringify(families)).toBe(snapshot)
+  })
+})
+
+describe('sumSourceArrays (displayed summaries are NOT sources)', () => {
+  it('counts only the seven legacy source collections, never displayed', () => {
+    const family = makeFamily('FAM_1', {
+      taskCompletions: [{ id: 't1' } as never, { id: 't2' } as never],
+      behaviours: [{ id: 'b1' } as never],
+    })
+    expect(sumSourceArrays(family)).toBe(3)
+  })
+})
+
+describe('decideReportExitCode (Gate 1 hard failure)', () => {
+  it('fails when families present but zero sources', () => {
+    expect(decideReportExitCode({ totalFamilies: 42, totalSources: 0, expectedSources: 0 })).toBe(1)
+  })
+  it('fails when more sources are reported than exist in the fixtures (leak)', () => {
+    // e.g. displayed gamification summaries accidentally counted as sources
+    expect(decideReportExitCode({ totalFamilies: 42, totalSources: 200, expectedSources: 198 })).toBe(1)
+  })
+  it('passes for a valid non-zero replay with no leak', () => {
+    expect(decideReportExitCode({ totalFamilies: 42, totalSources: 127, expectedSources: 198 })).toBe(0)
   })
 })
