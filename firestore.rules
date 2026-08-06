@@ -1962,7 +1962,7 @@ service cloud.firestore {
       match /feed/{feedId} {
         allow read: if isFamilyMember(familyId);
         allow create: if isFamilyMember(familyId)
-          && request.resource.data.keys().hasOnly(['actorId', 'actorName', 'type', 'behaviourType', 'reason', 'pointsDelta', 'walletDelta', 'childId', 'text', 'visibleTo', 'createdAt', 'timestamp'])
+          && request.resource.data.keys().hasOnly(['actorId', 'actorName', 'type', 'behaviourType', 'reason', 'pointsDelta', 'walletDelta', 'childId', 'text', 'entityType', 'entityId', 'visibleTo', 'createdAt', 'timestamp'])
           && request.resource.data.actorId == authProfileId()
           && (
             !('visibleTo' in request.resource.data) ||
@@ -2166,7 +2166,8 @@ service cloud.firestore {
         allow read: if isParent(familyId) || (isAuthenticated() && (resource.data.requesterId == authProfileId() || resource.data.requestedFromId == authProfileId()));
         allow create: if isFamilyMember(familyId)
           && request.resource.data.status in ['pending', 'pending_acceptance']
-          && request.resource.data.createdAt == request.time;
+          && request.resource.data.createdAt == request.time
+          && get(/databases/$(database)/documents/users/$(request.resource.data.requestedFromId)).data.familyId == familyId;
         allow update: if (isParent(familyId) && resource.data.status in ['pending', 'pending_acceptance']
           && request.resource.data.status in ['approved', 'rejected']
           && request.resource.data.reviewedBy == authProfileId()
