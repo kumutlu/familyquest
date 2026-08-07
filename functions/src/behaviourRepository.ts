@@ -6,7 +6,7 @@ import {
   type BehaviourEventType,
 } from './behaviourProcessor'
 import { DEFAULT_WEEKLY_CONTEXT } from '../../src/domain/gamification/v3/weeklyWindow'
-import { BaselineMissingErrorV3, writeV3ShadowInTransaction } from './gamificationV3/integration'
+import { applyV3Shadow, BaselineMissingErrorV3, readV3ShadowState, type PreparedV3Shadow } from './gamificationV3/integration'
 import { mapBehaviour } from './gamificationV3/sourceMappers/behaviourMapper'
 
 export interface ProcessBehaviourEventArgs {
@@ -90,6 +90,39 @@ export class AdminBehaviourRepository {
       })
       if (plan.status === 'duplicate') return { status: 'duplicate' }
 
+      // ---- V3 shadow READ PHASE ----
+      // Firestore aborts the entire transaction when a read follows a write,
+      // which would silently discard the authoritative rewardPoints/summary
+      // writes below. All shadow reads therefore happen before the first write;
+      // the shadow itself is applied afterwards via applyV3Shadow so it stays
+      // atomic with the authoritative writes (Amendment 4).
+      let preparedShadow: PreparedV3Shadow | undefined
+      try {
+        preparedShadow = await readV3ShadowState(transaction, (path) => this.db.doc(path), {
+          familyId: args.familyId,
+          memberId: childId,
+          event: mapBehaviour({
+            familyId: args.familyId,
+            memberId: childId,
+            behaviourEventId: args.behaviourEventId,
+            type: type as 'positive' | 'negative' | 'financial',
+            pointsDelta: plan.rewardPointsDelta,
+            effectiveAt: new Date(plan.event.effectiveAt).toISOString(),
+            createdAt: new Date(args.processingAt).toISOString(),
+          }),
+          weeklyContext: DEFAULT_WEEKLY_CONTEXT,
+          asOf: new Date(args.processingAt).toISOString(),
+        })
+      } catch (error) {
+        if (error instanceof BaselineMissingErrorV3) {
+          console.warn('[gamification-v3-shadow-skipped]', JSON.stringify({
+            familyId: args.familyId, memberId: childId, processor: 'processBehaviourEvent',
+          }))
+        } else {
+          throw error
+        }
+      }
+
       if (plan.rewardPointsDelta !== 0 || plan.xpDelta !== 0) {
         transaction.update(childRef, {
           rewardPoints: plan.nextRewardPoints,
@@ -126,37 +159,11 @@ export class AdminBehaviourRepository {
           level: plan.level,
         },
       })
-      // V3 shadow write — atomic with the transaction.
-      // Duplicate processing is idempotent: writeV3ShadowInTransaction checks
-      // for an existing event and returns early if one exists.
-      // If the V3 baseline is missing, the shadow write is best-effort: the
-      // authoritative legacy write above is unaffected and the V3 projection
-      // can be repaired later.
-      try {
-        await writeV3ShadowInTransaction(transaction, (path) => this.db.doc(path), {
-          familyId: args.familyId,
-          memberId: childId,
-          event: mapBehaviour({
-            familyId: args.familyId,
-            memberId: childId,
-            behaviourEventId: args.behaviourEventId,
-            type: type as 'positive' | 'negative' | 'financial',
-            pointsDelta: plan.rewardPointsDelta,
-            effectiveAt: new Date(plan.event.effectiveAt).toISOString(),
-            createdAt: new Date(args.processingAt).toISOString(),
-          }),
-          weeklyContext: DEFAULT_WEEKLY_CONTEXT,
-          asOf: new Date(args.processingAt).toISOString(),
-        })
-      } catch (error) {
-        if (error instanceof BaselineMissingErrorV3) {
-          console.warn('[gamification-v3-shadow-skipped]', JSON.stringify({
-            familyId: args.familyId, memberId: childId, processor: 'processBehaviourEvent',
-          }))
-        } else {
-          throw error
-        }
-      }
+      // ---- V3 shadow WRITE PHASE ----
+      // Pure write, no reads: atomic with the authoritative writes above.
+      // Duplicate processing is idempotent — readV3ShadowState returns
+      // undefined when the event already exists, and applyV3Shadow no-ops.
+      applyV3Shadow(transaction, preparedShadow)
       return { status: 'processed' }
     })
   }

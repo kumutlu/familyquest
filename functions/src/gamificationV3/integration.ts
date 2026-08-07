@@ -35,20 +35,34 @@ export class BaselineMissingErrorV3 extends Error {
 }
 
 /**
- * Write a V3 shadow event inside an existing Firestore transaction.
+ * A fully-computed V3 shadow write, ready to be applied with no further reads.
  *
- * The event is written atomically with legacy writes. If the V3 write fails,
- * the entire transaction fails (Amendment 4 atomicity guarantee).
- *
- * The projection is written as a simple incremental update: apply the event's
- * deltas to the current stored projection. If no projection exists, the next
- * shadow write or reconciliation process will rebuild from the full ledger.
- *
- * @param transaction - The active Firestore transaction
- * @param db - Firestore instance (for creating document references)
- * @param input - V3 shadow write input
+ * Produced by {@link readV3ShadowState} during the transaction READ phase and
+ * consumed by {@link applyV3Shadow} during the WRITE phase.
  */
-export async function writeV3ShadowInTransaction(
+export interface PreparedV3Shadow {
+  readonly eventRef: DocumentReference
+  readonly stateRef: DocumentReference
+  readonly event: GamificationEventV3
+  readonly state: GamificationStateV3
+}
+
+/**
+ * READ PHASE — read every V3 shadow document and compute the resulting
+ * projection, WITHOUT issuing any write.
+ *
+ * Firestore requires all reads in a transaction to precede all writes; issuing
+ * a `transaction.get()` after a write aborts the ENTIRE transaction with
+ * "Firestore transactions require all reads to be executed before all writes."
+ * That previously discarded the authoritative rewardPoints/summary writes while
+ * the completion still looked approved, so callers MUST invoke this before
+ * queueing any write and then call {@link applyV3Shadow} afterwards.
+ *
+ * @returns the prepared shadow write, or `undefined` when the event already
+ *          exists (idempotent duplicate — nothing to write).
+ * @throws BaselineMissingErrorV3 when a non-baseline event has no projection.
+ */
+export async function readV3ShadowState(
   transaction: Transaction,
   docRef: (path: string) => DocumentReference,
   input: {
@@ -57,35 +71,46 @@ export async function writeV3ShadowInTransaction(
     readonly event: GamificationEventV3
     readonly weeklyContext: WeeklyContextV3
     readonly asOf: string
+    /**
+     * Fold this event onto an already-prepared projection instead of the stored
+     * one. Required when a single transaction prepares several shadow events for
+     * the same member: `transaction.get()` never observes the transaction's own
+     * pending writes, so without chaining the second event would be folded onto
+     * a stale projection and overwrite the first one's deltas.
+     */
+    readonly baseState?: GamificationStateV3
   },
-): Promise<void> {
-  const { familyId, memberId, event, weeklyContext, asOf } = input
+): Promise<PreparedV3Shadow | undefined> {
+  const { familyId, memberId, event, weeklyContext, asOf, baseState } = input
 
   // 1. Check idempotency: read existing V3 event
   const eventRef = docRef(eventDocPath(familyId, event.eventId))
   const existingEventDoc = await transaction.get(eventRef)
   if (existingEventDoc.exists) {
-    return // Duplicate — no-op inside transaction
+    return undefined // Duplicate — no-op inside transaction
   }
 
-  // 2. Read existing V3 projection
+  // 2. Resolve the projection to fold onto: a chained in-transaction state when
+  //    supplied, otherwise the stored one.
   const stateRef = docRef(stateDocPath(familyId, memberId))
-  const existingStateDoc = await transaction.get(stateRef)
+  const { deserialiseStateV3 } = await import('../../../src/domain/gamification/v3/storage')
+  let existingState: GamificationStateV3 | undefined = baseState
+  if (existingState === undefined) {
+    const existingStateDoc = await transaction.get(stateRef)
+    existingState = existingStateDoc.exists ? deserialiseStateV3(existingStateDoc.data()!) : undefined
+  }
 
   // Baseline precondition: non-baseline events require an existing projection.
   // If no projection exists and the event is not LEGACY_BASELINE, reject with
   // BaselineMissingErrorV3 so the authoritative legacy write can be preserved
   // by the caller (best-effort shadow), while all other errors propagate.
-  if (!existingStateDoc.exists && event.eventType !== 'LEGACY_BASELINE') {
+  if (existingState === undefined && event.eventType !== 'LEGACY_BASELINE') {
     throw new BaselineMissingErrorV3(familyId, memberId)
   }
 
   // 3. Compute new state
-  const { deserialiseStateV3 } = await import('../../../src/domain/gamification/v3/storage')
   let newState: GamificationStateV3
-  if (existingStateDoc.exists) {
-    // Read existing events plus this new one, rebuild
-    const existingState = deserialiseStateV3(existingStateDoc.data()!)
+  if (existingState !== undefined) {
     newState = reduceGamificationEventsV3([event], {
       weekly: weeklyContext,
       asOf,
@@ -121,7 +146,40 @@ export async function writeV3ShadowInTransaction(
     })
   }
 
-  // 4. Write event and projection atomically
-  transaction.set(eventRef, serialiseEventV3(event))
-  transaction.set(stateRef, serialiseStateV3(newState))
+  return { eventRef, stateRef, event, state: newState }
+}
+
+/**
+ * WRITE PHASE — apply a prepared V3 shadow write. Performs no reads, so it is
+ * safe to call after authoritative writes have been queued.
+ *
+ * Amendment 4: these writes are queued on the SAME transaction as the
+ * authoritative writes, so if either fails the whole transaction fails.
+ */
+export function applyV3Shadow(transaction: Transaction, prepared: PreparedV3Shadow | undefined): void {
+  if (prepared === undefined) return // Idempotent duplicate — nothing to write
+  transaction.set(prepared.eventRef, serialiseEventV3(prepared.event))
+  transaction.set(prepared.stateRef, serialiseStateV3(prepared.state))
+}
+
+/**
+ * Convenience read-then-write helper.
+ *
+ * WARNING: this issues reads, so it is only safe when NO write has yet been
+ * queued on the transaction. Any flow that writes authoritative data first must
+ * instead call {@link readV3ShadowState} up-front and {@link applyV3Shadow}
+ * later; see the P0 regression in readAfterWrite.regression.test.ts.
+ */
+export async function writeV3ShadowInTransaction(
+  transaction: Transaction,
+  docRef: (path: string) => DocumentReference,
+  input: {
+    readonly familyId: string
+    readonly memberId: string
+    readonly event: GamificationEventV3
+    readonly weeklyContext: WeeklyContextV3
+    readonly asOf: string
+  },
+): Promise<void> {
+  applyV3Shadow(transaction, await readV3ShadowState(transaction, docRef, input))
 }

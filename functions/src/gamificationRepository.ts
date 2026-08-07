@@ -21,7 +21,7 @@ import {
   planThresholdEvents,
 } from '../../src/domain/gamification/perfectDay'
 import { DEFAULT_WEEKLY_CONTEXT } from '../../src/domain/gamification/v3/weeklyWindow'
-import { BaselineMissingErrorV3, writeV3ShadowInTransaction } from './gamificationV3/integration'
+import { applyV3Shadow, BaselineMissingErrorV3, readV3ShadowState, type PreparedV3Shadow } from './gamificationV3/integration'
 import { mapTaskApproval } from './gamificationV3/sourceMappers/taskMapper'
 import { mapDailyGoal, mapPerfectDay } from './gamificationV3/sourceMappers/dailyAwardMapper'
 import {
@@ -686,6 +686,42 @@ export class AdminGamificationRepository implements
       const nextPoints = alreadyInvalid ? currentPoints : currentPoints + effect.rewardPointsAward
       if (!Number.isSafeInteger(nextPoints)) throw new Error('Child rewardPoints would exceed the safe integer range')
 
+      // ---- V3 shadow READ PHASE ----
+      // Firestore aborts the whole transaction if a read follows a write, which
+      // previously discarded every authoritative write below while the
+      // completion still looked approved. All shadow reads therefore happen
+      // here, before the first write; the shadow is applied after the
+      // authoritative writes via applyV3Shadow (Amendment 4 atomicity).
+      // If the V3 baseline is missing, the shadow is best-effort: the
+      // authoritative writes proceed and the projection can be repaired later.
+      let preparedShadow: PreparedV3Shadow | undefined
+      try {
+        preparedShadow = await readV3ShadowState(transaction, (path) => this.db.doc(path), {
+          familyId: args.familyId,
+          memberId: childId,
+          event: mapTaskApproval({
+            familyId: args.familyId,
+            memberId: childId,
+            taskId,
+            logicalCompletionKey: logicalKey,
+            pointsReward: effect.rewardPointsAward,
+            xpAward: effect.xpAward,
+            approvedAt: new Date(approvedAt).toISOString(),
+            createdAt: new Date(args.processingAt).toISOString(),
+          }),
+          weeklyContext: DEFAULT_WEEKLY_CONTEXT,
+          asOf: new Date(args.processingAt).toISOString(),
+        })
+      } catch (error) {
+        if (error instanceof BaselineMissingErrorV3) {
+          console.warn('[gamification-v3-shadow-skipped]', JSON.stringify({
+            familyId: args.familyId, memberId: childId, processor: 'processApprovedCompletion',
+          }))
+        } else {
+          throw error
+        }
+      }
+
       if (!eligibilityDocument.exists) transaction.create(eligibilityRef, eligibilityToData(snapshot))
       transaction.create(occurrenceRef, {
         schemaVersion: 1, familyId: args.familyId, childId, taskId, logicalCompletionKey: logicalKey, periodKey,
@@ -728,38 +764,11 @@ export class AdminGamificationRepository implements
         recipientIds: [childId], title: 'Task approved', body: `${taskDocument.data()!.title ?? 'Task'} was approved. +${effect.rewardPointsAward} points`,
         entityType: 'task_completion', entityId: args.completionId, actionUrl: '/tasks', dedupeKey: notificationId(logicalKey), createdAt: timestamp(args.processingAt),
       })
-      // V3 shadow write — atomic with the transaction.
-      // Duplicate processing is idempotent: writeV3ShadowInTransaction checks
-      // for an existing event and returns early if one exists.
-      // If the V3 baseline is missing, the shadow write is best-effort: the
-      // authoritative legacy write above is unaffected and the V3 projection
-      // can be repaired later.
-      try {
-        await writeV3ShadowInTransaction(transaction, (path) => this.db.doc(path), {
-          familyId: args.familyId,
-          memberId: childId,
-          event: mapTaskApproval({
-            familyId: args.familyId,
-            memberId: childId,
-            taskId,
-            logicalCompletionKey: logicalKey,
-            pointsReward: effect.rewardPointsAward,
-            xpAward: effect.xpAward,
-            approvedAt: new Date(approvedAt).toISOString(),
-            createdAt: new Date(args.processingAt).toISOString(),
-          }),
-          weeklyContext: DEFAULT_WEEKLY_CONTEXT,
-          asOf: new Date(args.processingAt).toISOString(),
-        })
-      } catch (error) {
-        if (error instanceof BaselineMissingErrorV3) {
-          console.warn('[gamification-v3-shadow-skipped]', JSON.stringify({
-            familyId: args.familyId, memberId: childId, processor: 'processApprovedCompletion',
-          }))
-        } else {
-          throw error
-        }
-      }
+      // ---- V3 shadow WRITE PHASE ----
+      // Pure write, no reads: atomic with the authoritative writes above.
+      // Duplicate processing is idempotent — readV3ShadowState returns
+      // undefined when the event already exists, and applyV3Shadow no-ops.
+      applyV3Shadow(transaction, preparedShadow)
       return { status: 'processed', logicalCompletionKey: logicalKey }
     })
   }
@@ -908,6 +917,48 @@ export class AdminGamificationRepository implements
           effectiveAt: snapshot.effectiveAt, causalGroupId: snapshot.causalGroupId,
           transitionRank: snapshot.transitionRank, documentId: eligibilityRef.id,
         }])
+      // ---- V3 shadow READ PHASE ----
+      // All shadow reads must precede the writes below; Firestore aborts the
+      // whole transaction otherwise. Threshold shadows are chained so the
+      // perfect-day event folds onto the daily-goal result rather than the
+      // stale stored projection.
+      const preparedShadows: PreparedV3Shadow[] = []
+      try {
+        for (const document of events) {
+          const qualified = document.event.qualificationState === 'qualified'
+          const shadowEvent = qualified && document.event.eventType === 'daily_goal_qualification_changed'
+            ? mapDailyGoal({
+              familyId, memberId: childId, dayKey, xpAward: 25, rewardPointsAward: 0,
+              weeklyPointsAward: 0, awardedAt: new Date(processingAt).toISOString(),
+            })
+            : qualified && document.event.eventType === 'perfect_day_qualification_changed'
+              ? mapPerfectDay({
+                familyId, memberId: childId, dayKey, xpAward: 50, rewardPointsAward: 0,
+                weeklyPointsAward: 0, awardedAt: new Date(processingAt).toISOString(),
+              })
+              : undefined
+          if (shadowEvent === undefined) continue
+          const prepared = await readV3ShadowState(transaction, (path) => this.db.doc(path), {
+            familyId,
+            memberId: childId,
+            event: shadowEvent,
+            weeklyContext: DEFAULT_WEEKLY_CONTEXT,
+            asOf: new Date(processingAt).toISOString(),
+            baseState: preparedShadows.at(-1)?.state,
+          })
+          if (prepared !== undefined) preparedShadows.push(prepared)
+        }
+      } catch (error) {
+        if (error instanceof BaselineMissingErrorV3) {
+          console.warn('[gamification-v3-shadow-skipped]', JSON.stringify({
+            familyId, memberId: childId, processor: 'finalizeChildDay',
+          }))
+          preparedShadows.length = 0
+        } else {
+          throw error
+        }
+      }
+
       if (!eligibilityDocument.exists) transaction.create(eligibilityRef, eligibilityToData(snapshot))
       for (const document of events) transaction.create(familyRef.collection('gamification_events').doc(document.id), eventToData(document.event))
       transaction.set(progressRef, progressToData(progress, [...existingEvents, ...events]))
@@ -917,47 +968,10 @@ export class AdminGamificationRepository implements
       // legacy mirror can never drift from the projection.
       transaction.update(childRef, { lifetimeXP: summary.xpTotal })
       if (checkpointDocument.exists && checkpointDocument.data()!.dirty !== true) transaction.update(checkpointRef, { dirty: true })
-      // V3 shadow writes for DAILY_GOAL_AWARDED and PERFECT_DAY_AWARDED events.
-      // These are emitted when the corresponding V2 threshold qualification events
-      // are created with 'qualified' state, inside the same authoritative transaction.
-      for (const document of events) {
-        if (document.event.eventType === 'daily_goal_qualification_changed'
-          && document.event.qualificationState === 'qualified') {
-          await writeV3ShadowInTransaction(transaction, (path) => this.db.doc(path), {
-            familyId,
-            memberId: childId,
-            event: mapDailyGoal({
-              familyId,
-              memberId: childId,
-              dayKey,
-              xpAward: 25,
-              rewardPointsAward: 0,
-              weeklyPointsAward: 0,
-              awardedAt: new Date(processingAt).toISOString(),
-            }),
-            weeklyContext: DEFAULT_WEEKLY_CONTEXT,
-            asOf: new Date(processingAt).toISOString(),
-          })
-        }
-        if (document.event.eventType === 'perfect_day_qualification_changed'
-          && document.event.qualificationState === 'qualified') {
-          await writeV3ShadowInTransaction(transaction, (path) => this.db.doc(path), {
-            familyId,
-            memberId: childId,
-            event: mapPerfectDay({
-              familyId,
-              memberId: childId,
-              dayKey,
-              xpAward: 50,
-              rewardPointsAward: 0,
-              weeklyPointsAward: 0,
-              awardedAt: new Date(processingAt).toISOString(),
-            }),
-            weeklyContext: DEFAULT_WEEKLY_CONTEXT,
-            asOf: new Date(processingAt).toISOString(),
-          })
-        }
-      }
+      // ---- V3 shadow WRITE PHASE ----
+      // DAILY_GOAL_AWARDED / PERFECT_DAY_AWARDED shadows, atomic with the
+      // authoritative writes above. Pure writes, no reads.
+      for (const prepared of preparedShadows) applyV3Shadow(transaction, prepared)
       return { snapshotCreated: !eligibilityDocument.exists, finalized: true }
     })
   }
