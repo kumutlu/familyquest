@@ -23,6 +23,13 @@ import type { GamificationEventV4 } from '../../../../src/domain/gamification/v4
 import type { GamificationStateV4 } from '../../../../src/domain/gamification/v4/types'
 import { assertValidEventV4 } from '../../../../src/domain/gamification/v4/validators'
 import { eventIdFor } from '../../../../src/domain/gamification/v4/ids'
+import {
+  EVENTS_V4_COLLECTION_ID,
+  FAMILIES_COLLECTION_ID,
+  STATE_V4_COLLECTION_ID,
+  eventDocPath,
+  stateDocPath,
+} from '../../../../src/domain/gamification/v4/storage'
 
 const LOCAL_EMULATOR_HOSTS = new Set(['localhost', '127.0.0.1', '::1'])
 
@@ -82,10 +89,33 @@ function assertNonEmptyString(value: unknown, label: string): asserts value is s
 }
 
 /**
- * Write a V4 event idempotently. The document id is the deterministic event id,
- * so a duplicate delivery overwrites the same document (no double award). The
- * write is atomic: if the transaction fails, no partial state is left behind.
- * Malformed events and cross-family events are rejected before any write.
+ * Resolve the canonical `families/{familyId}/gamification_events` collection.
+ * Path segments come from the canonical helper module so the repository, the
+ * Firestore rules and the read model can never drift apart.
+ */
+function eventCollectionRef(db: Firestore, familyId: string) {
+  return db
+    .collection(FAMILIES_COLLECTION_ID)
+    .doc(familyId)
+    .collection(EVENTS_V4_COLLECTION_ID)
+}
+
+/** Resolve the canonical `families/{familyId}/gamification_state` collection. */
+function stateCollectionRef(db: Firestore, familyId: string) {
+  return db
+    .collection(FAMILIES_COLLECTION_ID)
+    .doc(familyId)
+    .collection(STATE_V4_COLLECTION_ID)
+}
+
+/**
+ * Write a V4 event idempotently to the canonical path
+ * `families/{familyId}/gamification_events/{eventId}`.
+ *
+ * The document id is the deterministic event id, so a duplicate delivery
+ * overwrites the same document (no double award). The write is atomic: if the
+ * transaction fails, no partial state is left behind. Malformed events and
+ * cross-family events are rejected before any write.
  */
 export async function writeEventIdempotent(
   db: Firestore,
@@ -95,11 +125,10 @@ export async function writeEventIdempotent(
   assertValidEventV4(event)
   rejectCrossFamily(event)
 
-  const ref = db
-    .collection('families')
-    .doc(event.familyId)
-    .collection('gamification_events')
-    .doc(event.eventId)
+  // Validates both segments and documents the canonical target path.
+  eventDocPath(event.familyId, event.eventId)
+
+  const ref = eventCollectionRef(db, event.familyId).doc(event.eventId)
 
   await db.runTransaction(async (tx) => {
     tx.set(ref, { ...event })
@@ -109,38 +138,67 @@ export async function writeEventIdempotent(
 }
 
 /**
- * Read the full V4 event ledger for a family. Only events stored under the
- * family partition are returned (family/member isolation).
+ * Read the full V4 event ledger for a family from the canonical path
+ * `families/{familyId}/gamification_events`. Only events stored under the
+ * family partition are returned (family/member isolation is structural).
  */
 export async function readLedger(db: Firestore, familyId: string): Promise<GamificationEventV4[]> {
   assertEmulatorOnly('readLedger')
   assertNonEmptyString(familyId, 'familyId')
 
-  const snap = await db
-    .collection('families')
-    .doc(familyId)
-    .collection('gamification_events')
-    .get()
+  const snap = await eventCollectionRef(db, familyId).get()
 
   return snap.docs.map((d) => d.data() as GamificationEventV4)
 }
 
 /**
- * Write a member's V4 projection state. The document id is the member id
- * (globally unique). The write is atomic; a transaction failure leaves no
- * partial state. No wallet field is ever written.
+ * Write a member's V4 projection state to the canonical path
+ * `families/{familyId}/gamification_state/{memberId}`
+ * (docs/gamification-v4-design.md §2.4).
+ *
+ * State is family-scoped: `familyId` is a required partition key, so the same
+ * member id in two families addresses two distinct documents and no state can
+ * ever leak across a family boundary. There is exactly one V4 state document
+ * per member — no root-level copy, no alias, no V2/V3 compatibility write.
+ *
+ * The write is atomic; a transaction failure leaves no partial state. No
+ * wallet field is ever written.
  */
 export async function writeState(
   db: Firestore,
+  familyId: string,
   memberId: string,
   state: GamificationStateV4,
 ): Promise<GamificationStateV4> {
   assertEmulatorOnly('writeState')
+  assertNonEmptyString(familyId, 'familyId')
   assertNonEmptyString(memberId, 'memberId')
 
-  const ref = db.collection('gamification_state').doc(memberId)
+  // Validates both segments and documents the canonical target path.
+  stateDocPath(familyId, memberId)
+
+  const ref = stateCollectionRef(db, familyId).doc(memberId)
   await db.runTransaction(async (tx) => {
     tx.set(ref, { ...state })
   })
   return state
+}
+
+/**
+ * Read a member's V4 projection state from the canonical path. Reads and
+ * rebuild writes therefore use exactly the same path derivation.
+ */
+export async function readState(
+  db: Firestore,
+  familyId: string,
+  memberId: string,
+): Promise<GamificationStateV4 | null> {
+  assertEmulatorOnly('readState')
+  assertNonEmptyString(familyId, 'familyId')
+  assertNonEmptyString(memberId, 'memberId')
+
+  stateDocPath(familyId, memberId)
+
+  const snap = await stateCollectionRef(db, familyId).doc(memberId).get()
+  return snap.exists ? (snap.data() as GamificationStateV4) : null
 }

@@ -19,6 +19,7 @@ import {
   writeState,
 } from './repository'
 import { eventIdFor, type GamificationEventTypeV4 } from '../../../../src/domain/gamification/v4/ids'
+import { eventDocPath, stateDocPath } from '../../../../src/domain/gamification/v4/storage'
 import { rebuildStateFromLedger } from '../../../../src/domain/gamification/v4/rebuild'
 import { businessFields } from '../../../../src/domain/gamification/v4/types'
 import type { GamificationEventV4, GamificationStateV4 } from '../../../../src/domain/gamification/v4/event'
@@ -235,26 +236,58 @@ describe('readLedger', () => {
 })
 
 describe('writeState', () => {
-  it('first write creates the expected V4 state', async () => {
+  it('writes to the canonical family-scoped state path', async () => {
     const { db, store } = createMockFirestore()
     const state = makeState()
-    expect(await writeState(db, 'mem-1', state)).toBe(state)
-    const stored = store.read('gamification_state/mem-1') as GamificationStateV4
+    expect(await writeState(db, 'fam-A', 'mem-1', state)).toBe(state)
+    const stored = store.read(stateDocPath('fam-A', 'mem-1')) as GamificationStateV4
     expect(stored).toEqual(state)
     expect(stored.rewardPoints).toBe(20)
   })
 
+  it('never writes a root-level gamification_state document', async () => {
+    const { db, store } = createMockFirestore()
+    await writeState(db, 'fam-A', 'mem-1', makeState())
+    expect(store.read('gamification_state/mem-1')).toBeUndefined()
+  })
+
+  it('produces exactly one V4 state document and no duplicate elsewhere', async () => {
+    const { db, store } = createMockFirestore()
+    await writeState(db, 'fam-A', 'mem-1', makeState())
+    const statePaths = store
+      .entries()
+      .map(([p]) => p)
+      .filter((p) => p.includes('gamification_state'))
+    expect(statePaths).toEqual(['families/fam-A/gamification_state/mem-1'])
+  })
+
   it('transaction rollback on projection failure leaves no partial state', async () => {
     const state = makeState()
-    await expect(writeState(new FailingStore() as unknown as Firestore, 'mem-1', state)).rejects.toThrow()
+    await expect(
+      writeState(new FailingStore() as unknown as Firestore, 'fam-A', 'mem-1', state),
+    ).rejects.toThrow()
   })
 
   it('keeps members isolated (separate docs per member)', async () => {
     const { db, store } = createMockFirestore()
-    await writeState(db, 'mem-1', makeState({ rewardPoints: 20 }))
-    await writeState(db, 'mem-2', makeState({ rewardPoints: 99 }))
-    expect((store.read('gamification_state/mem-1') as GamificationStateV4).rewardPoints).toBe(20)
-    expect((store.read('gamification_state/mem-2') as GamificationStateV4).rewardPoints).toBe(99)
+    await writeState(db, 'fam-A', 'mem-1', makeState({ rewardPoints: 20 }))
+    await writeState(db, 'fam-A', 'mem-2', makeState({ rewardPoints: 99 }))
+    expect((store.read(stateDocPath('fam-A', 'mem-1')) as GamificationStateV4).rewardPoints).toBe(20)
+    expect((store.read(stateDocPath('fam-A', 'mem-2')) as GamificationStateV4).rewardPoints).toBe(99)
+  })
+
+  it('keeps families isolated: same memberId in two families are distinct docs', async () => {
+    const { db, store } = createMockFirestore()
+    await writeState(db, 'fam-A', 'mem-1', makeState({ rewardPoints: 20 }))
+    await writeState(db, 'fam-B', 'mem-1', makeState({ rewardPoints: 99 }))
+    expect((store.read(stateDocPath('fam-A', 'mem-1')) as GamificationStateV4).rewardPoints).toBe(20)
+    expect((store.read(stateDocPath('fam-B', 'mem-1')) as GamificationStateV4).rewardPoints).toBe(99)
+  })
+
+  it('rejects an empty familyId (no unpartitioned write)', async () => {
+    const { db, store } = createMockFirestore()
+    await expect(writeState(db, '', 'mem-1', makeState())).rejects.toThrow()
+    expect(store.entries()).toHaveLength(0)
   })
 })
 
@@ -271,8 +304,8 @@ describe('projection equality', () => {
       updatedAt: '2026-01-05T10:00:00.000Z',
       projectionVersion: 1,
     })
-    await writeState(db, 'mem-1', rebuilt)
-    const stored = store.read('gamification_state/mem-1') as GamificationStateV4
+    await writeState(db, 'fam-A', 'mem-1', rebuilt)
+    const stored = store.read(stateDocPath('fam-A', 'mem-1')) as GamificationStateV4
     expect(businessFields(stored)).toEqual(businessFields(rebuilt))
     expect(stored.rewardPoints).toBe(30) // 20 + 20 - 10
     expect(stored.xpTotal).toBe(40) // 20 + 20
@@ -283,7 +316,7 @@ describe('wallet safety', () => {
   it('never accesses a wallet collection', async () => {
     const { db, store } = createMockFirestore()
     await writeEventIdempotent(db, makeEvent())
-    await writeState(db, 'mem-1', makeState())
+    await writeState(db, 'fam-A', 'mem-1', makeState())
     await readLedger(db, 'fam-A')
     expect(store.collectionCalls.every((c) => !/wallet/i.test(c))).toBe(true)
     expect(store.collectionCalls).toEqual(
@@ -294,9 +327,9 @@ describe('wallet safety', () => {
     const { db, store } = createMockFirestore()
     const event = makeEvent()
     await writeEventIdempotent(db, event)
-    await writeState(db, 'mem-1', makeState())
-    expect(hasWalletKey(store.read(`families/fam-A/gamification_events/${event.eventId}`))).toBe(false)
-    expect(hasWalletKey(store.read('gamification_state/mem-1'))).toBe(false)
+    await writeState(db, 'fam-A', 'mem-1', makeState())
+    expect(hasWalletKey(store.read(eventDocPath('fam-A', event.eventId)))).toBe(false)
+    expect(hasWalletKey(store.read(stateDocPath('fam-A', 'mem-1')))).toBe(false)
   })
 })
 
@@ -304,7 +337,7 @@ describe('no production credential initialization', () => {
   it('never calls getFirestore / applicationDefault', async () => {
     const { db } = createMockFirestore()
     await writeEventIdempotent(db, makeEvent())
-    await writeState(db, 'mem-1', makeState())
+    await writeState(db, 'fam-A', 'mem-1', makeState())
     expect(hoisted.getFirestore).not.toHaveBeenCalled()
   })
 })
