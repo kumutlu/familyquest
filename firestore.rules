@@ -2427,8 +2427,22 @@ service cloud.firestore {
         allow read, write: if false;
       }
 
+      // GAMIFICATION V4 — server-owned event ledger.
+      // Written ONLY by the trusted backend (Admin SDK) via
+      // functions/src/gamification/v4/repository.ts. Family members may READ
+      // (replay is displayed client-side); clients may NEVER write. Wallet is
+      // out of scope and is never referenced here.
       match /gamification_events/{eventId} {
-        allow read, write: if false;
+        allow read: if isFamilyMember(familyId);
+        allow write: if false;
+      }
+
+      // GAMIFICATION V4 — server-owned projection / rebuilt state.
+      // Written ONLY by the trusted backend (Admin SDK). Family members may
+      // READ; clients may NEVER write.
+      match /gamification_state/{memberId} {
+        allow read: if isFamilyMember(familyId);
+        allow write: if false;
       }
 
       match /daily_eligibility/{eligibilityId} {
