@@ -268,13 +268,11 @@ describe('P0 — V3 shadow reads must precede transaction writes', () => {
     // advanced its version, proving the second transaction committed too.
     expect(db.store[statePath]).toMatchObject({ xpTotal: 20, projectionVersion: 3 })
 
-    // KNOWN PRE-EXISTING DEFECT (out of scope for this P0, tracked separately):
-    // integration.ts folds `rewardPoints` from the single event rather than
-    // `existing + delta` like xpTotal/weeklyPoints, so the shadow's
-    // rewardPoints reflects only the last event. The AUTHORITATIVE value in
-    // users.rewardPoints (asserted above) is correct and is what gates
-    // spending, so this does not affect the child's balance.
-    expect(db.store[statePath][RP]).toBe(10)
+    // P0 FIX (gamification-v3): the shadow now accumulates rewardPoints as
+    // `existing + delta`, exactly like xpTotal/weeklyPoints, so both approvals
+    // fold into the shadow balance. The AUTHORITATIVE users.rewardPoints (above)
+    // and the shadow now agree.
+    expect(db.store[statePath][RP]).toBe(20)
   })
 
   it('retry of the same approval does not double-award', async () => {

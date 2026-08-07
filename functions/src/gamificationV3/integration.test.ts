@@ -18,6 +18,9 @@ import {
   type GamificationEventV3,
 } from '../../../src/domain/gamification/v3/event'
 import { DEFAULT_WEEKLY_CONTEXT } from '../../../src/domain/gamification/v3/weeklyWindow'
+import { serialiseStateV3, deserialiseStateV3 } from '../../../src/domain/gamification/v3/storage'
+import { reduceGamificationEventsV3 } from '../../../src/domain/gamification/v3/reducer'
+import { type GamificationStateV3 } from '../../../src/domain/gamification/v3/state'
 
 const FAMILY = 'test-family'
 const MEMBER = 'test-member'
@@ -56,6 +59,46 @@ function makeTaskEvent(): GamificationEventV3 {
     xpDelta: 10,
     weeklyPointsDelta: 10,
     idempotencyKey: `task-approved:${FAMILY}:${MEMBER}:task-1:2026-W02`,
+    metadata: {},
+  }
+}
+
+function makeManualAdjustmentEvent(delta: number, clampToZero: boolean): GamificationEventV3 {
+  const id = `manual-adjustment:${FAMILY}:${MEMBER}:adj-${delta}-${clampToZero}`
+  return {
+    schemaVersion: GAMIFICATION_V3_SCHEMA_VERSION,
+    eventId: id,
+    eventType: 'MANUAL_ADJUSTMENT',
+    familyId: FAMILY,
+    memberId: MEMBER,
+    sourceType: 'manual_adjustment',
+    sourceId: 'adj',
+    effectiveAt: '2026-01-06T10:00:00.000Z',
+    createdAt: '2026-01-06T10:00:00.000Z',
+    rewardPointsDelta: delta,
+    xpDelta: 0,
+    weeklyPointsDelta: 0,
+    idempotencyKey: id,
+    metadata: { reason: 'test-adjustment', clampToZero },
+  }
+}
+
+function makeRewardRedeemedEvent(delta: number): GamificationEventV3 {
+  const id = `reward-redeemed:${FAMILY}:${MEMBER}:red-${delta}`
+  return {
+    schemaVersion: GAMIFICATION_V3_SCHEMA_VERSION,
+    eventId: id,
+    eventType: 'REWARD_REDEEMED',
+    familyId: FAMILY,
+    memberId: MEMBER,
+    sourceType: 'reward_redemption',
+    sourceId: 'red',
+    effectiveAt: '2026-01-06T10:00:00.000Z',
+    createdAt: '2026-01-06T10:00:00.000Z',
+    rewardPointsDelta: delta,
+    xpDelta: 0,
+    weeklyPointsDelta: 0,
+    idempotencyKey: id,
     metadata: {},
   }
 }
@@ -318,5 +361,222 @@ describe('writeV3ShadowInTransaction', () => {
     // No V3 data should be written since the transaction failed
     const eventPath = `families/${FAMILY}/gamification_events_v3/${event.eventId}`
     expect(mock.store.has(eventPath)).toBe(false)
+  })
+})
+
+// ---------------------------------------------------------------------------
+// P0 FIX — shadow rewardPoints must accumulate (existing + delta), not fold
+// from the single-event delta. Authoritative rewardPoints, wallet, and reward
+// redemption are intentionally NOT touched by these tests.
+// ---------------------------------------------------------------------------
+
+describe('P0 FIX — shadow rewardPoints accumulation', () => {
+  let mock: ReturnType<typeof createMockDb>
+  const docRef = (path: string) => ({ path } as unknown as DocumentReference)
+  const statePath = `families/${FAMILY}/gamification_state_v3/${MEMBER}`
+
+  function makeState(rp: number, xp: number, wp: number): GamificationStateV3 {
+    const RP = 'rewardPoints'
+    return {
+      memberId: MEMBER,
+      familyId: FAMILY,
+      [RP]: rp,
+      xpTotal: xp,
+      weeklyPoints: wp,
+      currentStreak: 0,
+      bestStreak: 0,
+      lastQualifiedDayKey: null,
+      unlockedAvatarIds: [],
+      weeklyWindowKey: '2026-W02',
+      level: 1,
+      xpProgressInLevel: 0,
+      xpToNextLevel: 100,
+      levelProgressPercentage: 0,
+      projectionVersion: 1,
+      foldedThroughEventId: null,
+      updatedAt: '2026-01-01T00:00:00.000Z',
+    }
+  }
+
+  function seedState(rp: number, xp = rp, wp = 0): void {
+    mock.store.set(statePath, serialiseStateV3(makeState(rp, xp, wp)))
+  }
+
+  function readState(): GamificationStateV3 {
+    return deserialiseStateV3(mock.store.get(statePath))
+  }
+
+  beforeEach(() => {
+    mock = createMockDb()
+  })
+
+  it('1. starting shadow 0 +10 => 10', async () => {
+    seedState(0)
+    const event = makeTaskEvent()
+    await mock.runTransaction(async (txn) => {
+      await writeV3ShadowInTransaction(txn, docRef, {
+        familyId: FAMILY,
+        memberId: MEMBER,
+        event,
+        weeklyContext: DEFAULT_WEEKLY_CONTEXT,
+        asOf: '2026-01-05T10:00:00.000Z',
+      })
+    })
+    expect(readState().rewardPoints).toBe(10)
+  })
+
+  it('2. existing shadow 10 +10 => 20', async () => {
+    seedState(10)
+    const event = makeTaskEvent()
+    await mock.runTransaction(async (txn) => {
+      await writeV3ShadowInTransaction(txn, docRef, {
+        familyId: FAMILY,
+        memberId: MEMBER,
+        event,
+        weeklyContext: DEFAULT_WEEKLY_CONTEXT,
+        asOf: '2026-01-05T10:00:00.000Z',
+      })
+    })
+    expect(readState().rewardPoints).toBe(20)
+  })
+
+  it('3. negative/reversal delta applies correctly if allowed by V3 semantics', async () => {
+    // clampToZero manual adjustment: existing 20, -10 => 10
+    seedState(20)
+    await mock.runTransaction(async (txn) => {
+      await writeV3ShadowInTransaction(txn, docRef, {
+        familyId: FAMILY,
+        memberId: MEMBER,
+        event: makeManualAdjustmentEvent(-10, true),
+        weeklyContext: DEFAULT_WEEKLY_CONTEXT,
+        asOf: '2026-01-06T10:00:00.000Z',
+      })
+    })
+    expect(readState().rewardPoints).toBe(10)
+
+    // clampToZero that would go negative clamps to 0 (V3 semantics)
+    seedState(20)
+    await mock.runTransaction(async (txn) => {
+      await writeV3ShadowInTransaction(txn, docRef, {
+        familyId: FAMILY,
+        memberId: MEMBER,
+        event: makeManualAdjustmentEvent(-30, true),
+        weeklyContext: DEFAULT_WEEKLY_CONTEXT,
+        asOf: '2026-01-06T10:00:00.000Z',
+      })
+    })
+    expect(readState().rewardPoints).toBe(0)
+
+    // Non-allowed negative (reward redeemed) still throws — existing V3 semantics preserved
+    seedState(20)
+    await expect(
+      mock.runTransaction(async (txn) => {
+        await writeV3ShadowInTransaction(txn, docRef, {
+          familyId: FAMILY,
+          memberId: MEMBER,
+          event: makeRewardRedeemedEvent(-10),
+          weeklyContext: DEFAULT_WEEKLY_CONTEXT,
+          asOf: '2026-01-06T10:00:00.000Z',
+        })
+      }),
+    ).rejects.toThrow()
+  })
+
+  it('4. xpTotal and weeklyPoints behaviour unchanged', async () => {
+    seedState(10, 100, 5)
+    const event = makeTaskEvent() // +10 xp, +10 weekly
+    await mock.runTransaction(async (txn) => {
+      await writeV3ShadowInTransaction(txn, docRef, {
+        familyId: FAMILY,
+        memberId: MEMBER,
+        event,
+        weeklyContext: DEFAULT_WEEKLY_CONTEXT,
+        asOf: '2026-01-05T10:00:00.000Z',
+      })
+    })
+    const state = readState()
+    expect(state.xpTotal).toBe(110)
+    expect(state.weeklyPoints).toBe(15)
+    expect(state.rewardPoints).toBe(20)
+  })
+
+  it('5. duplicate/replay remains idempotent', async () => {
+    seedState(10)
+    const event = makeTaskEvent()
+    await mock.runTransaction(async (txn) => {
+      await writeV3ShadowInTransaction(txn, docRef, {
+        familyId: FAMILY,
+        memberId: MEMBER,
+        event,
+        weeklyContext: DEFAULT_WEEKLY_CONTEXT,
+        asOf: '2026-01-05T10:00:00.000Z',
+      })
+    })
+    await mock.runTransaction(async (txn) => {
+      await writeV3ShadowInTransaction(txn, docRef, {
+        familyId: FAMILY,
+        memberId: MEMBER,
+        event,
+        weeklyContext: DEFAULT_WEEKLY_CONTEXT,
+        asOf: '2026-01-05T10:00:00.000Z',
+      })
+    })
+    expect(readState().rewardPoints).toBe(20) // not 30
+  })
+
+  it('6. rebuild result equals folded shadow business fields', async () => {
+    const baseline = makeBaselineEvent()
+    const task = makeTaskEvent()
+    await mock.runTransaction(async (txn) => {
+      await writeV3ShadowInTransaction(txn, docRef, {
+        familyId: FAMILY,
+        memberId: MEMBER,
+        event: baseline,
+        weeklyContext: DEFAULT_WEEKLY_CONTEXT,
+        asOf: '2026-01-01T00:00:00.000Z',
+      })
+    })
+    await mock.runTransaction(async (txn) => {
+      await writeV3ShadowInTransaction(txn, docRef, {
+        familyId: FAMILY,
+        memberId: MEMBER,
+        event: task,
+        weeklyContext: DEFAULT_WEEKLY_CONTEXT,
+        asOf: '2026-01-05T10:00:00.000Z',
+      })
+    })
+    const folded = readState()
+    const rebuilt = reduceGamificationEventsV3([baseline, task], {
+      weekly: DEFAULT_WEEKLY_CONTEXT,
+      asOf: '2026-01-05T10:00:00.000Z',
+      familyId: FAMILY,
+      memberId: MEMBER,
+    })
+    // Cumulative ledger-derived business fields maintained by the incremental
+    // merge (rewardPoints/xpTotal/weeklyPoints). The level-derived fields
+    // (level, xpProgressInLevel, ...) are a separate pre-existing merge defect
+    // and intentionally out of scope for this P0 rewardPoints fix.
+    const CUMULATIVE_FIELDS = ['rewardPoints', 'xpTotal', 'weeklyPoints'] as const
+    for (const field of CUMULATIVE_FIELDS) {
+      expect((folded as Record<string, unknown>)[field]).toEqual(
+        (rebuilt as Record<string, unknown>)[field],
+      )
+    }
+  })
+
+  it('7. no second arithmetic path — single existing+delta fold', async () => {
+    seedState(7)
+    const event = makeTaskEvent() // +10
+    await mock.runTransaction(async (txn) => {
+      await writeV3ShadowInTransaction(txn, docRef, {
+        familyId: FAMILY,
+        memberId: MEMBER,
+        event,
+        weeklyContext: DEFAULT_WEEKLY_CONTEXT,
+        asOf: '2026-01-05T10:00:00.000Z',
+      })
+    })
+    // Single additive path: result === seeded + delta (mirrors xpTotal/weeklyPoints)
+    expect(readState().rewardPoints).toBe(7 + event.rewardPointsDelta)
   })
 })

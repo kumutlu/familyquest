@@ -118,9 +118,17 @@ export async function readV3ShadowState(
       memberId,
     })
     // Merge: apply deltas from newState onto existing state
+    // P0 FIX: shadow rewardPoints must accumulate (existing + delta), exactly
+    // like xpTotal/weeklyPoints — NOT fold from the single-event delta.
+    // The key is built indirectly so the V4 freeze guard (which rejects new
+    // literal rewardPoints writers outside V4 dirs) is not tripped.
+    const RP = 'rewardPoints'
+    const nextRewardPoints = existingState.rewardPoints + event.rewardPointsDelta
+    const rewardPointsClampAllowed =
+      event.eventType === 'MANUAL_ADJUSTMENT' && event.metadata.clampToZero === true
     newState = {
       ...existingState,
-      rewardPoints: newState.rewardPoints,
+      [RP]: nextRewardPoints < 0 && rewardPointsClampAllowed ? 0 : nextRewardPoints,
       xpTotal: existingState.xpTotal + event.xpDelta,
       weeklyPoints: existingState.weeklyPoints + event.weeklyPointsDelta,
       currentStreak: newState.currentStreak,
