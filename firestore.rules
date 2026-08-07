@@ -31,14 +31,56 @@ service cloud.firestore {
         && get(/databases/$(database)/documents/users/$(managedChildProfileId())).data.get('requiresPasswordChange', false) == true;
     }
 
+    // P0 REDEEM BUDGET FIX.
+    //
+    // The previous authProfileId() re-ran the full managed-child verification
+    // (isTrustedManagedChildCaller() = 3 gets + requiresManagedChildPasswordChange()
+    // = 1 get) on EVERY call site. The multi-document redeem commit calls
+    // authProfileId() ~9 times across users/redemptions/feed/notifications, so a
+    // single managed-child redeem paid ~36+ document reads and overflowed
+    // Firestore's shared rule access/expression budget, denying the whole commit.
+    //
+    // authProfileId() is now CHEAP: it returns the childId claim verbatim for a
+    // managed-child caller and request.auth.uid otherwise. It performs ZERO
+    // document reads. The managed-child identity/security verification that used
+    // to live here is moved to the OUTER GATE isTrustedManagedChild(), which is
+    // invoked once per managed-child write path (isFamilyMember + the users
+    // update allow) instead of once per authProfileId() call. This makes the
+    // managed-child redeem cost equivalent to a normal-child redeem (the only
+    // remaining managed-child read is the single cached user-doc read inside
+    // isTrustedManagedChild(), which is also performed by isFamilyMember for
+    // normal children via the familyId membership check).
     function authProfileId() {
       return request.auth.token.get('managedChild', false) == true
-        ? (isTrustedManagedChildCaller()
-          ? (requiresManagedChildPasswordChange()
-            ? '__restricted_managed_child__'
-            : managedChildProfileId())
-          : '__invalid_managed_child__')
+        ? request.auth.token.get('childId', '__invalid_managed_child__')
         : request.auth.uid;
+    }
+
+    // True iff the caller presents a managed-child token (regardless of validity).
+    function isManagedChildCaller() {
+      return request.auth.token.get('managedChild', false) == true;
+    }
+
+    // OUTER GATE for managed-child identity. Performs the full verification that
+    // authProfileId() used to do, but is called ONCE per managed-child write path
+    // (not per authProfileId() call site). Reads the user doc a single time and
+    // enforces every required check:
+    //   - token role == 'child'
+    //   - user doc authUid == request.auth.uid   (authUid claim matches caller)
+    //   - user doc isManaged == true
+    //   - user doc familyId == token familyId     (cross-family isolation)
+    //   - user doc requiresPasswordChange == false (password-change restriction)
+    // Returns false for non-managed callers so it can be composed as
+    // `(!isManagedChildCaller() || isTrustedManagedChild())`.
+    function isTrustedManagedChild() {
+      let u = get(/databases/$(database)/documents/users/$(managedChildProfileId()));
+      return isManagedChildCaller()
+        && request.auth.token.get('role', '') == 'child'
+        && u != null
+        && u.data.get('authUid', '') == rawAuthUid()
+        && u.data.get('isManaged', false) == true
+        && u.data.get('familyId', 'null') == request.auth.token.get('familyId', '')
+        && u.data.get('requiresPasswordChange', false) == false;
     }
 
     function isManagedChildIdentity(uid) {
@@ -102,6 +144,7 @@ service cloud.firestore {
     function isFamilyMember(familyId) {
       let userDoc = get(/databases/$(database)/documents/users/$(authProfileId()));
       return userDoc != null
+        && (!isManagedChildCaller() || isTrustedManagedChild())
         && !requiresManagedChildPasswordChange()
         && familyIsActive(familyId)
         && userDoc.data.get('familyId', 'null') == familyId;
@@ -1597,14 +1640,19 @@ service cloud.firestore {
       // Cross-member profile reads follow the family lifecycle freeze: while a
       // family is deleting (or its document is gone) only self reads and the
       // managed-child identity lookup remain.
-      allow read: if isAuthenticated() && (
+      // Managed-child read gate: a managed-child caller must be a legitimate
+      // linked identity (isTrustedManagedChildCaller checks authUid/isManaged/
+      // familyId/role) but, unlike the write gate isTrustedManagedChild(), it
+      // does NOT require requiresPasswordChange == false — a managed child in
+      // the password-change flow must still be able to hydrate its own profile.
+      allow read: if isAuthenticated() && (!isManagedChildCaller() || isTrustedManagedChildCaller()) && (
         authProfileId() == uid
         || isManagedChildIdentity(uid)
         || (familyIsActive(resource.data.get('familyId', 'null'))
           && get(/databases/$(database)/documents/users/$(authProfileId())).data.familyId == resource.data.familyId)
       );
 
-      allow update: if isAuthenticated() && (
+      allow update: if isAuthenticated() && (!isManagedChildCaller() || isTrustedManagedChild()) && (
         isValidReversalPointsUpdate(uid) ||
         (authProfileId() == uid
           && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['language'])
