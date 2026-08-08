@@ -96,7 +96,36 @@ export interface TrustedMigrationContext {
   readonly gate: Stage7GateEvidence
 }
 
-export type TrustedWriteContext = TrustedV4WriteContext | TrustedMigrationContext
+/**
+ * Phase 3 (blocker B3) — READ-ONLY production verification authority.
+ *
+ * Stage 6 (`verifyPreCutover`) could not see production because every
+ * repository read went through the emulator-only guard. This context authorises
+ * READS ONLY: it is rejected for every write operation, so it can never be used
+ * to mutate production, and a verification run is provably side-effect free.
+ */
+export interface TrustedReadContext {
+  readonly trustedServer: true
+  readonly writer: 'verify'
+  readonly route: 'read-only'
+  readonly familyId: string
+  readonly operator: string
+}
+
+export type TrustedWriteContext =
+  | TrustedV4WriteContext
+  | TrustedMigrationContext
+  | TrustedReadContext
+
+/** Repository operations that only READ. Everything else is a write. */
+const READ_ONLY_OPERATIONS = new Set([
+  'readLedger',
+  'readEvent',
+  'readState',
+  'readMigrationMarker',
+  'readAllStateMemberIds',
+  'verifyPreCutover',
+])
 
 /** Environment declaration required for a PRODUCTION migration write. */
 export const PRODUCTION_MIGRATION_MODE = 'production-trusted'
@@ -176,8 +205,19 @@ function isRuntimeWriterContext(ctx: unknown): ctx is TrustedV4WriteContext {
     && Number.isFinite(c.gate.verifiedAt)
 }
 
+function isReadContext(ctx: unknown): ctx is TrustedReadContext {
+  if (ctx === null || typeof ctx !== 'object') return false
+  const c = ctx as Partial<TrustedReadContext>
+  return c.trustedServer === true
+    && c.writer === 'verify'
+    && c.route === 'read-only'
+    && isValidFamilyId(c.familyId)
+    && typeof c.operator === 'string'
+    && c.operator.trim().length > 0
+}
+
 function isValidContext(ctx: unknown): ctx is TrustedWriteContext {
-  return isRuntimeWriterContext(ctx) || isMigrationContext(ctx)
+  return isRuntimeWriterContext(ctx) || isMigrationContext(ctx) || isReadContext(ctx)
 }
 
 /**
@@ -223,6 +263,21 @@ export function runWithTrustedMigration<T>(
   return storage.run(context, fn)
 }
 
+/**
+ * Run `fn` under a READ-ONLY trusted verification authority (Phase 3).
+ *
+ * Any write attempted inside this scope is refused by `assertV4WriteAllowed`,
+ * so a production Stage 6 verification physically cannot mutate data.
+ */
+export function runWithTrustedRead<T>(context: TrustedReadContext, fn: () => Promise<T>): Promise<T> {
+  if (!isReadContext(context)) {
+    throw new UntrustedV4WriteError(
+      'Refusing to establish a read-only verification scope: context is missing or malformed.',
+    )
+  }
+  return storage.run(context, fn)
+}
+
 /** Options describing the write being authorised. */
 export interface V4WriteTarget {
   /** Family partition being written. Must match the trusted context. */
@@ -250,6 +305,19 @@ export function assertV4WriteAllowed(operation: string, target: V4WriteTarget = 
   }
   if (!isValidContext(ctx)) {
     throw new UntrustedV4WriteError(`Refusing ${operation}: trusted V4 write context is malformed.`)
+  }
+  if (isReadContext(ctx)) {
+    if (!READ_ONLY_OPERATIONS.has(operation)) {
+      throw new UntrustedV4WriteError(
+        `Refusing ${operation}: a read-only verification scope may never write.`,
+      )
+    }
+    if (target.familyId !== undefined && target.familyId !== ctx.familyId) {
+      throw new UntrustedV4WriteError(
+        `Refusing ${operation}: read scope authorises family ${ctx.familyId}, not ${target.familyId}.`,
+      )
+    }
+    return
   }
   if (isMigrationContext(ctx)) {
     if (!isTrustedOperatorMigrationRuntime()) {

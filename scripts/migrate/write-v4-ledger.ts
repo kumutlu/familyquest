@@ -109,6 +109,41 @@ export interface WriteMigrationLedgerResult {
 }
 
 /**
+ * Build the ONE deterministic MIGRATION_BASELINE event for a member.
+ *
+ * Exported so the Stage 6 verifier can prove, WITHOUT WRITING, that a duplicate
+ * migration would be a no-op: it rebuilds exactly this event and compares it to
+ * what is already stored. Single source of truth — no duplicated migration
+ * event semantics anywhere.
+ */
+export function buildMigrationBaselineEvent(
+  familyId: string,
+  memberId: string,
+  replayed: { rewardPoints: number; xpTotal: number },
+  reportGeneratedAt: string,
+): GamificationEventV4 {
+  return {
+    schemaVersion: GAMIFICATION_V4_SCHEMA_VERSION,
+    eventId: eventIdFor(familyId, memberId, 'MIGRATION_BASELINE', MIGRATION_BASELINE_SOURCE_ID),
+    familyId,
+    memberId,
+    eventType: 'MIGRATION_BASELINE',
+    sourceType: 'migration',
+    sourceId: MIGRATION_BASELINE_SOURCE_ID,
+    effectiveAt: reportGeneratedAt,
+    createdAt: reportGeneratedAt,
+    rewardPointsDelta: replayed.rewardPoints,
+    xpDelta: replayed.xpTotal,
+    metadata: {
+      reason: 'migration_baseline',
+      reportGeneratedAt,
+      classification: 'migration',
+    },
+    estimated: false,
+  }
+}
+
+/**
  * Write the approved replay result to the V4 ledger + state collections.
  *
  * Pure orchestration over the Stage 4 server repository; no Firestore SDK is
@@ -135,25 +170,12 @@ export async function writeMigrationLedger(
   for (const family of report.families) {
     for (const [memberId, member] of Object.entries(family.members)) {
       const replayed = member.replayed
-      const event: GamificationEventV4 = {
-        schemaVersion: GAMIFICATION_V4_SCHEMA_VERSION,
-        eventId: eventIdFor(family.familyId, memberId, 'MIGRATION_BASELINE', MIGRATION_BASELINE_SOURCE_ID),
-        familyId: family.familyId,
+      const event: GamificationEventV4 = buildMigrationBaselineEvent(
+        family.familyId,
         memberId,
-        eventType: 'MIGRATION_BASELINE',
-        sourceType: 'migration',
-        sourceId: MIGRATION_BASELINE_SOURCE_ID,
-        effectiveAt: report.generatedAt,
-        createdAt: report.generatedAt,
-        rewardPointsDelta: replayed.rewardPoints,
-        xpDelta: replayed.xpTotal,
-        metadata: {
-          reason: 'migration_baseline',
-          reportGeneratedAt: report.generatedAt,
-          classification: 'migration',
-        },
-        estimated: false,
-      }
+        replayed,
+        report.generatedAt,
+      )
 
       // Idempotent: deterministic id => overwrite, never duplicate.
       await writeEventIdempotent(db, event)

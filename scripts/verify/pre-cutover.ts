@@ -50,6 +50,7 @@ import {
   rerunIsNoOp,
   type MigrationMarkerV4,
 } from '../migrate/migration-marker'
+import { buildMigrationBaselineEvent } from '../migrate/write-v4-ledger'
 import type { ProductionReplayReport, ProductionFamilyReport } from '../replay/production-report'
 
 // ---------------------------------------------------------------------------
@@ -67,6 +68,15 @@ export interface PreCutoverDeps {
    * the emulator; an absent document is reported as a FAIL (never throws).
    */
   readonly marker?: MigrationMarkerV4 | null
+  /**
+   * Phase 3 (B3): STRICT READ-ONLY mode for production verification.
+   *
+   * When true, check 6 uses the non-mutating duplicate-migration proof
+   * (`duplicateMigrationWouldBeNoOp`) instead of the Task 5.2 `rerunIsNoOp`,
+   * which re-executes the writer. Everything else is unchanged, so there is
+   * still exactly ONE rebuild/reducer implementation.
+   */
+  readonly readOnly?: boolean
 }
 
 /** One named, explicit check result. */
@@ -98,14 +108,14 @@ export async function readMigrationMarker(
   db: Firestore,
   familyId: string,
 ): Promise<MigrationMarkerV4 | null> {
-  assertEmulatorOnly('readMigrationMarker')
+  assertEmulatorOnly('readMigrationMarker', { familyId })
   const snap = await db.doc(migrationMarkerDocPath(familyId)).get()
   return snap.exists ? (snap.data() as MigrationMarkerV4) : null
 }
 
 /** Enumerate every V4 state document id for a family (canonical path). */
 async function readAllStateMemberIds(db: Firestore, familyId: string): Promise<string[]> {
-  assertEmulatorOnly('readAllStateMemberIds')
+  assertEmulatorOnly('readAllStateMemberIds', { familyId })
   const snap = await db
     .collection(FAMILIES_COLLECTION_ID)
     .doc(familyId)
@@ -256,6 +266,50 @@ async function checkNoCrossFamily(
     : fail('noCrossFamily', failures.join('; '))
 }
 
+/**
+ * Check 6 (READ-ONLY variant): prove a duplicate migration would be a no-op
+ * WITHOUT writing anything.
+ *
+ * Reuses the single Stage 5 event builder (`buildMigrationBaselineEvent`), so
+ * there is no duplicated migration semantics: for every member the event a
+ * rerun WOULD write is reconstructed and compared byte-wise (canonical JSON)
+ * with the event already stored under the same deterministic id.
+ */
+async function checkDuplicateNoOpReadOnly(
+  familyId: string,
+  db: Firestore,
+  family: ProductionFamilyReport | null,
+  report: ProductionReplayReport,
+  marker: MigrationMarkerV4 | null,
+): Promise<PreCutoverCheck> {
+  if (!marker) return fail('duplicateMigrationNoOp', 'migration marker missing; cannot verify no-op')
+  if (!family) return fail('duplicateMigrationNoOp', `family ${familyId} absent from the approved report`)
+
+  const ledger = await readLedger(db, familyId)
+  const byId = new Map(ledger.map((e) => [e.eventId, e]))
+  const failures: string[] = []
+
+  for (const [memberId, member] of Object.entries(family.members)) {
+    const expected = buildMigrationBaselineEvent(familyId, memberId, member.replayed, report.generatedAt)
+    const stored = byId.get(expected.eventId)
+    if (!stored) {
+      failures.push(`member ${memberId}: baseline event ${expected.eventId} missing`)
+      continue
+    }
+    if (JSON.stringify(stored) !== JSON.stringify({ ...stored, ...expected })) {
+      failures.push(`member ${memberId}: a rerun would change event ${expected.eventId}`)
+    }
+    const duplicates = ledger.filter((e) => e.eventId === expected.eventId).length
+    if (duplicates !== 1) {
+      failures.push(`member ${memberId}: ${duplicates} copies of ${expected.eventId} (expected exactly 1)`)
+    }
+  }
+
+  return failures.length === 0
+    ? pass('duplicateMigrationNoOp', 'a duplicate migration would be a no-op (proved read-only)')
+    : fail('duplicateMigrationNoOp', failures.join('; '))
+}
+
 /** Check 6: duplicate migration run is a no-op (reuses Task 5.2 proof). */
 async function checkDuplicateNoOp(
   db: Firestore,
@@ -287,7 +341,7 @@ async function checkDuplicateNoOp(
  * internal errors propagate.
  */
 export async function verifyPreCutover(familyId: string, deps: PreCutoverDeps): Promise<PreCutoverReport> {
-  assertEmulatorOnly('verifyPreCutover')
+  assertEmulatorOnly('verifyPreCutover', { familyId })
   const { db, report } = deps
 
   const family = report.families.find((f) => f.familyId === familyId) ?? null
@@ -299,7 +353,9 @@ export async function verifyPreCutover(familyId: string, deps: PreCutoverDeps): 
     await checkNoMalformedAmbiguous(familyId, db, family, report), // 3
     checkWalletHashEquality(familyId, marker), // 4
     await checkNoCrossFamily(familyId, db, family, report), // 5
-    await checkDuplicateNoOp(db, report, marker), // 6
+    deps.readOnly === true
+      ? await checkDuplicateNoOpReadOnly(familyId, db, family, report, marker) // 6 (read-only)
+      : await checkDuplicateNoOp(db, report, marker), // 6
   ]
 
   const passed = checks.every((c) => c.passed)
