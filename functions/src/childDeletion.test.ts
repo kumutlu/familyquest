@@ -85,7 +85,10 @@ function makeFakeDb() {
           get: async () => {
             const isDailyCheckinCollection = path.endsWith('/daily_checkins')
               || path.endsWith('/daily_checkin_skips');
-            const docs = (isDailyCheckinCollection ? docsInCollection(path) : [])
+            const isChildDeletionIdempotencyCollection = path.endsWith('/childLoginIdempotency');
+            const docs = (isDailyCheckinCollection || isChildDeletionIdempotencyCollection
+              ? docsInCollection(path)
+              : [])
               .filter(doc => doc.data()[field] === value)
               .slice(0, limit);
             return { empty: docs.length === 0, docs, size: docs.length };
@@ -497,11 +500,19 @@ describe('deleteChild — ALLOWED', () => {
       .toBe('completed');
   });
 
-  it('globally purges residual history before returning a cached missing-profile result', async () => {
+  it('globally purges residual history for an exact authorized cached missing-profile retry', async () => {
     const input = {
       childId: 'child1', displayNameConfirmation: 'Test', clientReqId: 'del-cached-final-sweep',
     };
     await deleteChildImpl(makeCtx(db, auth), 'owner1', input);
+    expect(db.store.get(`families/${FAMILY_ID}/childLoginIdempotency/${input.clientReqId}`))
+      .toMatchObject({
+        clientReqId: input.clientReqId,
+        operation: 'deleteChild',
+        childId: input.childId,
+        requesterUid: 'owner1',
+        status: 'completed',
+      });
     db.store.set('families/former-family/daily_checkins/residual-child-checkin', { userId: 'child1' });
     db.store.set('families/former-family/daily_checkin_skips/residual-child-skip', { userId: 'child1' });
     db.store.set('families/former-family/daily_checkins/other-checkin', { userId: 'child2' });
@@ -511,6 +522,57 @@ describe('deleteChild — ALLOWED', () => {
     expect(db.store.has('families/former-family/daily_checkins/residual-child-checkin')).toBe(false);
     expect(db.store.has('families/former-family/daily_checkin_skips/residual-child-skip')).toBe(false);
     expect(db.store.has('families/former-family/daily_checkins/other-checkin')).toBe(true);
+  });
+
+  it('does not purge a profileless target when the idempotency payload differs', async () => {
+    const input = {
+      childId: 'child1', displayNameConfirmation: 'Test', clientReqId: 'del-profileless-payload',
+    };
+    await deleteChildImpl(makeCtx(db, auth), 'owner1', input);
+    db.store.set('families/former-family/daily_checkins/residual-child-checkin', { userId: 'child1' });
+
+    await expect(deleteChildImpl(makeCtx(db, auth), 'owner1', {
+      ...input,
+      displayNameConfirmation: 'Different',
+    })).rejects.toMatchObject({ code: 'already-exists' });
+    expect(db.store.has('families/former-family/daily_checkins/residual-child-checkin')).toBe(true);
+  });
+
+  it('does not purge a profileless target for a different authorized caller', async () => {
+    const input = {
+      childId: 'child1', displayNameConfirmation: 'Test', clientReqId: 'del-profileless-requester',
+    };
+    await deleteChildImpl(makeCtx(db, auth), 'owner1', input);
+    db.store.set('families/former-family/daily_checkins/residual-child-checkin', { userId: 'child1' });
+
+    await expect(deleteChildImpl(makeCtx(db, auth), 'parent1', input))
+      .rejects.toMatchObject({ code: 'permission-denied' });
+    expect(db.store.has('families/former-family/daily_checkins/residual-child-checkin')).toBe(true);
+  });
+
+  it.each([
+    ['operation', { operation: 'resetChildPassword' }],
+    ['child ID', { childId: 'child2' }],
+    ['request ID metadata', { clientReqId: 'different-request-id' }],
+  ])('does not purge a profileless target for mismatched idempotency %s', async (_label, mismatch) => {
+    const input = {
+      childId: 'child1', displayNameConfirmation: 'Test', clientReqId: `del-profileless-${_label}`,
+    };
+    await deleteChildImpl(makeCtx(db, auth), 'owner1', input);
+    const markerPath = `families/${FAMILY_ID}/childLoginIdempotency/${input.clientReqId}`;
+    db.store.set(markerPath, {
+      ...db.store.get(markerPath),
+      clientReqId: input.clientReqId,
+      operation: 'deleteChild',
+      childId: input.childId,
+      requesterUid: 'owner1',
+      ...mismatch,
+    });
+    db.store.set('families/former-family/daily_checkins/residual-child-checkin', { userId: 'child1' });
+
+    await expect(deleteChildImpl(makeCtx(db, auth), 'owner1', input))
+      .rejects.toMatchObject({ code: 'already-exists' });
+    expect(db.store.has('families/former-family/daily_checkins/residual-child-checkin')).toBe(true);
   });
 
   it('does not remove other children login records', async () => {
@@ -551,7 +613,7 @@ describe('deleteChild — ALLOWED', () => {
     expect(result.deleted).toBe(false);
   });
 
-  it('missing Firestore doc is treated idempotently', async () => {
+  it('a different request for a missing profile returns false without purging history', async () => {
     // Delete child1 first
     const ctx = makeCtx(db, auth);
     await deleteChildImpl(ctx, 'owner1', {
@@ -559,6 +621,7 @@ describe('deleteChild — ALLOWED', () => {
       displayNameConfirmation: 'Test',
       clientReqId: 'del-missing-doc',
     });
+    db.store.set('families/former-family/daily_checkins/residual-child-checkin', { userId: 'child1' });
     // Second call with a different clientReqId but same child (now gone)
     // should return deleted: false idempotently (no error)
     const result = await deleteChildImpl(ctx, 'owner1', {
@@ -567,6 +630,9 @@ describe('deleteChild — ALLOWED', () => {
       clientReqId: 'del-missing-doc-retry',
     });
     expect(result.deleted).toBe(false);
+    expect(db.store.has('families/former-family/daily_checkins/residual-child-checkin')).toBe(true);
+    expect(db.store.has(`families/${FAMILY_ID}/childLoginIdempotency/del-missing-doc-retry`))
+      .toBe(false);
   });
 });
 
@@ -666,6 +732,22 @@ describe('deleteChild — DENIED', () => {
         clientReqId: 'del-no-caller',
       }),
     ).rejects.toMatchObject({ code: 'permission-denied' });
+  });
+
+  it('does not purge a profileless target for an authenticated child caller', async () => {
+    db.store.delete('users/child1');
+    db.store.set('families/former-family/daily_checkins/residual-child-checkin', {
+      userId: 'child1',
+    });
+
+    await expect(
+      deleteChildImpl(makeCtx(db, auth), 'child2', {
+        childId: 'child1',
+        displayNameConfirmation: 'Test',
+        clientReqId: 'del-profileless-child-caller',
+      }),
+    ).rejects.toMatchObject({ code: 'permission-denied' });
+    expect(db.store.has('families/former-family/daily_checkins/residual-child-checkin')).toBe(true);
   });
 
   it('non-existent child is treated idempotently', async () => {
