@@ -6,6 +6,8 @@ const dailyCheckinFieldOverrides = ['daily_checkins', 'daily_checkin_skips'].map
   collectionGroup,
   fieldPath: 'userId',
   indexes: [
+    { order: 'ASCENDING', queryScope: 'COLLECTION' },
+    { order: 'DESCENDING', queryScope: 'COLLECTION' },
     { order: 'ASCENDING', queryScope: 'COLLECTION_GROUP' },
     { order: 'DESCENDING', queryScope: 'COLLECTION_GROUP' },
   ],
@@ -51,7 +53,10 @@ describe('Firestore composite index configuration', () => {
     })
   })
 
-  it('deploys collection-group userId indexes for permanent account cleanup', () => {
+  it('deploys collection and collection-group userId indexes for every daily cleanup path', () => {
+    // Child deletion filters one family's direct subcollections, while account
+    // deletion filters every matching collection through collectionGroup(). A
+    // field override must retain both scopes because it replaces the defaults.
     const indexConfig = JSON.parse(readFileSync('firestore.indexes.json', 'utf8'))
     expect(indexConfig.fieldOverrides).toEqual(expect.arrayContaining(dailyCheckinFieldOverrides))
   })
