@@ -69,7 +69,39 @@ export interface TrustedV4WriteContext {
   readonly gate: Stage7GateEvidence
 }
 
-const storage = new AsyncLocalStorage<TrustedV4WriteContext>()
+/**
+ * Phase 2 (blocker B2) — the ONE explicit authority under which the Stage 5
+ * migration writer may target PRODUCTION.
+ *
+ * This is deliberately a different shape from `TrustedV4WriteContext`: a
+ * migration is an operator-driven, family-scoped, one-shot backfill, not a
+ * request-driven runtime writer. It requires:
+ *   - `mode: 'production-trusted'` declared by the operator out of band
+ *     (`GAMIFICATION_MIGRATION_MODE`, checked as runtime provenance);
+ *   - an identified operator;
+ *   - the sha256 of the APPROVED Gate 1 artifact the migration consumes;
+ *   - `execute: true` — a dry run never establishes this context at all.
+ */
+export interface TrustedMigrationContext {
+  readonly trustedServer: true
+  readonly writer: 'migration'
+  readonly route: 'migration'
+  readonly familyId: string
+  /** Identity of the human operator running the migration. */
+  readonly operator: string
+  /** sha256 of the approved Gate 1 artifact (binds the write to the evidence). */
+  readonly gate1Hash: string
+  /** Always true: dry runs never establish a write authority. */
+  readonly execute: true
+  readonly gate: Stage7GateEvidence
+}
+
+export type TrustedWriteContext = TrustedV4WriteContext | TrustedMigrationContext
+
+/** Environment declaration required for a PRODUCTION migration write. */
+export const PRODUCTION_MIGRATION_MODE = 'production-trusted'
+
+const storage = new AsyncLocalStorage<TrustedWriteContext>()
 
 /** True iff FIRESTORE_EMULATOR_HOST points at a local address. */
 export function isEmulatorOnlyMode(): boolean {
@@ -96,22 +128,56 @@ export function isTrustedServerRuntime(): boolean {
 }
 
 /** Read the trusted context active for the current async execution. */
-export function currentTrustedV4WriteContext(): TrustedV4WriteContext | undefined {
+export function currentTrustedV4WriteContext(): TrustedWriteContext | undefined {
   return storage.getStore()
 }
 
-function isValidContext(ctx: unknown): ctx is TrustedV4WriteContext {
+/**
+ * True iff the operator has explicitly declared a trusted PRODUCTION migration
+ * run. This is an operator/runtime fact set out of band on a machine that
+ * already holds Admin credentials — it is not, and can never be, presented by
+ * a client (this module is unreachable from any client bundle).
+ */
+export function isTrustedOperatorMigrationRuntime(): boolean {
+  if (typeof process === 'undefined' || typeof process.env !== 'object') return false
+  return process.env.GAMIFICATION_MIGRATION_MODE === PRODUCTION_MIGRATION_MODE
+}
+
+function isValidFamilyId(value: unknown): value is string {
+  return typeof value === 'string' && value.length > 0 && !value.includes('/')
+}
+
+function isMigrationContext(ctx: unknown): ctx is TrustedMigrationContext {
+  if (ctx === null || typeof ctx !== 'object') return false
+  const c = ctx as Partial<TrustedMigrationContext>
+  return c.trustedServer === true
+    && c.writer === 'migration'
+    && c.route === 'migration'
+    && isValidFamilyId(c.familyId)
+    && typeof c.operator === 'string'
+    && c.operator.trim().length > 0
+    && typeof c.gate1Hash === 'string'
+    && c.gate1Hash.length > 0
+    && c.execute === true
+    && c.gate !== undefined
+    && c.gate.passed === true
+    && Number.isFinite(c.gate.verifiedAt)
+}
+
+function isRuntimeWriterContext(ctx: unknown): ctx is TrustedV4WriteContext {
   if (ctx === null || typeof ctx !== 'object') return false
   const c = ctx as Partial<TrustedV4WriteContext>
   return c.trustedServer === true
     && c.writer === 'task_approval'
     && c.route === 'v4'
-    && typeof c.familyId === 'string'
-    && c.familyId.length > 0
-    && !c.familyId.includes('/')
+    && isValidFamilyId(c.familyId)
     && c.gate !== undefined
     && c.gate.passed === true
     && Number.isFinite(c.gate.verifiedAt)
+}
+
+function isValidContext(ctx: unknown): ctx is TrustedWriteContext {
+  return isRuntimeWriterContext(ctx) || isMigrationContext(ctx)
 }
 
 /**
@@ -124,9 +190,34 @@ export function runWithTrustedV4Write<T>(
   context: TrustedV4WriteContext,
   fn: () => Promise<T>,
 ): Promise<T> {
-  if (!isValidContext(context)) {
+  if (!isRuntimeWriterContext(context)) {
     throw new UntrustedV4WriteError(
       'Refusing to establish a V4 write scope: trusted context is missing or malformed.',
+    )
+  }
+  return storage.run(context, fn)
+}
+
+/**
+ * Run `fn` under an explicit trusted OPERATOR MIGRATION authority (Phase 2).
+ *
+ * Fails closed when the context is malformed, or when the operator has not
+ * declared `GAMIFICATION_MIGRATION_MODE=production-trusted` while targeting a
+ * non-emulator Firestore. Scoped to one async execution; torn down on settle.
+ */
+export function runWithTrustedMigration<T>(
+  context: TrustedMigrationContext,
+  fn: () => Promise<T>,
+): Promise<T> {
+  if (!isMigrationContext(context)) {
+    throw new UntrustedV4WriteError(
+      'Refusing to establish a migration write scope: trusted migration context is missing or malformed.',
+    )
+  }
+  if (!isEmulatorOnlyMode() && !isTrustedOperatorMigrationRuntime()) {
+    throw new UntrustedV4WriteError(
+      'Refusing to establish a PRODUCTION migration write scope: ' +
+        `GAMIFICATION_MIGRATION_MODE must be "${PRODUCTION_MIGRATION_MODE}".`,
     )
   }
   return storage.run(context, fn)
@@ -159,6 +250,26 @@ export function assertV4WriteAllowed(operation: string, target: V4WriteTarget = 
   }
   if (!isValidContext(ctx)) {
     throw new UntrustedV4WriteError(`Refusing ${operation}: trusted V4 write context is malformed.`)
+  }
+  if (isMigrationContext(ctx)) {
+    if (!isTrustedOperatorMigrationRuntime()) {
+      throw new UntrustedV4WriteError(
+        `Refusing ${operation}: production migration requires ` +
+          `GAMIFICATION_MIGRATION_MODE=${PRODUCTION_MIGRATION_MODE}.`,
+      )
+    }
+    const migAge = (target.now ?? Date.now)() - ctx.gate.verifiedAt
+    if (!Number.isFinite(migAge) || migAge < 0 || migAge > TRUSTED_GATE_MAX_AGE_MS) {
+      throw new UntrustedV4WriteError(
+        `Refusing ${operation}: Gate 1 migration evidence is stale or invalid (age=${migAge}ms).`,
+      )
+    }
+    if (target.familyId !== undefined && target.familyId !== ctx.familyId) {
+      throw new UntrustedV4WriteError(
+        `Refusing ${operation}: migration context authorises family ${ctx.familyId}, not ${target.familyId}.`,
+      )
+    }
+    return
   }
   if (!isTrustedServerRuntime()) {
     throw new UntrustedV4WriteError(
