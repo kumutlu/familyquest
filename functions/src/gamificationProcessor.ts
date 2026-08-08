@@ -1,6 +1,6 @@
 export const GAMIFICATION_PROCESSOR_VERSION = 'gamification-processor-v2-shared-tasks'
 
-import { requireLegacyRoute } from './gamification/routingShim'
+import { requireLegacyRoute, resolveWriterRouteSafe } from './gamification/routingShim'
 
 export interface ProcessApprovedCompletionArgs {
   readonly familyId: string
@@ -50,9 +50,23 @@ export interface GamificationProcessorRepository {
   recordProcessorFailure(record: ProcessorFailureRecord): Promise<void>
 }
 
+/**
+ * The V4 authoritative task-approval engine (Stage 7, Task 7.1).
+ *
+ * Injected ONLY where the V4 route can be reached (emulator / cutover tests).
+ * `functions/src/index.ts` never provides it, so the deployed bundle keeps no
+ * reference to any `gamification/v4` module. When the route resolves to `v4`
+ * and this dependency is absent, the processor FAILS CLOSED rather than
+ * silently falling back to the legacy writer.
+ */
+export interface GamificationV4TaskApprovalEngine {
+  processApprovedCompletion(args: ProcessApprovedCompletionArgs): Promise<GamificationProcessResult>
+}
+
 export interface GamificationProcessorDependencies {
   readonly repository: GamificationProcessorRepository
   readonly now: () => number
+  readonly v4TaskApproval?: GamificationV4TaskApprovalEngine
 }
 
 function assertId(value: string, label: string): void {
@@ -91,11 +105,25 @@ export async function processApprovedCompletion(
   dependencies: GamificationProcessorDependencies,
   args: Omit<ProcessApprovedCompletionArgs, 'processingAt'>,
 ): Promise<GamificationProcessResult> {
-  // Stage 7 pre-cutover routing: single authoritative route, fail-closed.
-  await requireLegacyRoute('task_approval', args.familyId)
+  // Stage 7 cutover routing: exactly ONE authoritative route is resolved here.
+  // The branch below is mutually exclusive by construction — for one approval
+  // either the legacy repository runs or the V4 engine runs, never both.
+  const route = await resolveWriterRouteSafe('task_approval', args.familyId)
   assertId(args.familyId, 'familyId')
   assertId(args.completionId, 'completionId')
   const at = processingAt(dependencies)
+
+  if (route === 'v4') {
+    const engine = dependencies.v4TaskApproval
+    if (engine === undefined) {
+      // Fail closed: never fall back to a legacy authoritative write when the
+      // family has been routed to V4 (that would be a dual/undefined write).
+      throw new Error('V4 task approval engine is not available for route "v4"')
+    }
+    return runWithDeadLettering(dependencies, { ...args, failedAt: at }, () =>
+      engine.processApprovedCompletion({ ...args, processingAt: at }))
+  }
+
   return runWithDeadLettering(dependencies, { ...args, failedAt: at }, () =>
     dependencies.repository.processApprovedCompletion({ ...args, processingAt: at }))
 }

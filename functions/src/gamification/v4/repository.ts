@@ -152,6 +152,28 @@ export async function readLedger(db: Firestore, familyId: string): Promise<Gamif
 }
 
 /**
+ * Read a single V4 event by its deterministic id from the canonical path
+ * `families/{familyId}/gamification_events/{eventId}`.
+ *
+ * This is the duplicate-delivery probe used by the authoritative V4 writers:
+ * if the deterministic event id already exists, the operation is a no-op.
+ */
+export async function readEvent(
+  db: Firestore,
+  familyId: string,
+  eventId: string,
+): Promise<GamificationEventV4 | null> {
+  assertEmulatorOnly('readEvent')
+  assertNonEmptyString(familyId, 'familyId')
+  assertNonEmptyString(eventId, 'eventId')
+
+  eventDocPath(familyId, eventId)
+
+  const snap = await eventCollectionRef(db, familyId).doc(eventId).get()
+  return snap.exists ? (snap.data() as GamificationEventV4) : null
+}
+
+/**
  * Write a member's V4 projection state to the canonical path
  * `families/{familyId}/gamification_state/{memberId}`
  * (docs/gamification-v4-design.md §2.4).
