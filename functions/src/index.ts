@@ -22,6 +22,10 @@ import {
 import { AdminGamificationRepository } from './gamificationRepository';
 import { AdminBehaviourRepository } from './behaviourRepository';
 import { createGamificationTriggers } from './gamificationTriggers';
+import {
+  createV4TaskApprovalEngine,
+  denyStage7ByDefault,
+} from './gamification/v4/taskApprovalAdapter';
 import { finalizeGamificationDaysOnce } from './gamificationScheduler';
 import { ensureFamilyGamificationInitialized } from './familyGamificationInit';
 
@@ -42,9 +46,18 @@ if (process.env.FCM_SERVICE_ACCOUNT_PATH) {
 const db = getFirestore();
 const messaging = getMessaging();
 const gamificationRepository = new AdminGamificationRepository(db);
+// Stage 7 / Task 7.1: the REAL V4 task-approval engine is constructed and
+// injected here so the writer is production-ACTIVATABLE. It is NOT active:
+// `processApprovedCompletion` resolves the route first and the default resolver
+// is all-legacy, so this engine is never called. Even if a family were routed
+// to v4, `denyStage7ByDefault` refuses before any write (fail closed).
 const gamificationTriggers = createGamificationTriggers({
   repository: gamificationRepository,
   now: () => Date.now(),
+  v4TaskApproval: createV4TaskApprovalEngine({
+    db,
+    verifyStage7: denyStage7ByDefault,
+  }),
 });
 
 export const onTaskCompletionWritten = gamificationTriggers.onTaskCompletionWritten;
