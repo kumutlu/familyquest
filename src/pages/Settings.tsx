@@ -306,7 +306,7 @@ export function Settings() {
   const roleNotificationCopy = isParentOrOwner
     ? t('roleCopyParent')
     : t('roleCopyChild');
-  const { connectionState, retry } = useNotifications(currentUser?.familyId ?? null, currentUser?.uid ?? null);
+  const { connectionState, retry } = useNotifications(currentUser?.familyId ?? null, currentUser?.id ?? null);
 
   const handlePasswordReset = async () => {
     if (resetState.loading) return;
