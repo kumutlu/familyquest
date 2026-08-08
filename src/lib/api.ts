@@ -285,6 +285,7 @@ export interface FamilySettingsUpdates {
   weekStartsOn?: 0 | 1;
   gamificationConfig?: GamificationConfigInput;
   petBoxEnabled?: boolean;
+  dailyCheckins?: { childrenEnabled: boolean; historyVisibleToParents: boolean };
 }
 
 /** Update only the owner-managed family settings allowlist. */
@@ -298,10 +299,21 @@ export const updateFamilySettings = async (familyId: string, updates: FamilySett
   if (updates.weekStartsOn !== undefined) allowedUpdates.weekStartsOn = updates.weekStartsOn;
   if (updates.gamificationConfig !== undefined) allowedUpdates.gamificationConfig = updates.gamificationConfig;
   if (updates.petBoxEnabled !== undefined) allowedUpdates.petBoxEnabled = updates.petBoxEnabled;
+  if (updates.dailyCheckins !== undefined) {
+    allowedUpdates.dailyCheckins = {
+      childrenEnabled: updates.dailyCheckins.childrenEnabled,
+      historyVisibleToParents: updates.dailyCheckins.historyVisibleToParents,
+    };
+  }
   if (Object.keys(allowedUpdates).length === 0) throw new Error('No family settings to update');
 
   await updateDoc(doc(db, 'families', familyId), allowedUpdates);
 };
+
+export const updateParentDailyCheckinPreference = (userId: string, enabled: boolean) =>
+  updateDoc(doc(db, 'users', userId), {
+    dailyCheckins: { parentParticipationEnabled: enabled },
+  });
 
 export const completeFamilyWelcomeSetup = async (familyId: string, uid: string) => {
   if (!familyId.trim() || !uid.trim()) throw new Error('Family and user ids are required');

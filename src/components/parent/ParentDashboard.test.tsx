@@ -72,7 +72,7 @@ beforeEach(async () => {
   await i18n.loadNamespaces([
     'common', 'auth', 'family', 'tasks', 'wallet', 'goals', 'rewards',
     'dashboard', 'approvals', 'settings', 'notifications', 'errors',
-    'behaviour', 'profile', 'funds', 'requests', 'reversals',
+    'behaviour', 'profile', 'funds', 'requests', 'reversals', 'checkins',
   ]);
   await i18n.changeLanguage('en');
 });
@@ -222,6 +222,24 @@ describe('ParentDashboard', () => {
     expect(screen.getByText(/couldn.t load your family dashboard/i)).toBeInTheDocument();
     expect(errorSpy).toHaveBeenCalled();
     errorSpy.mockRestore();
+  });
+
+  it.each(['owner', 'parent'])('renders check-in history for a %s', role => {
+    store.state = {
+      ...baseState(),
+      currentUser: { id: `${role}-1`, familyId: 'family-1', role },
+      familyData: {
+        ...baseState().familyData,
+        dailyCheckins: { historyVisibleToParents: true },
+      },
+      dailyCheckinDay: '2026-08-01',
+      dailyCheckinHistoryResolved: true,
+      dailyCheckinHistory: [],
+    };
+
+    render(<MemoryRouter><ParentDashboard /></MemoryRouter>);
+
+    expect(screen.getByRole('heading', { name: 'Recent check-ins' })).toBeVisible();
   });
 });
 

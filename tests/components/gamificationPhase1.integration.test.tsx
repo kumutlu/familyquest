@@ -393,7 +393,7 @@ describe('Gamification Phase 1 Integration', () => {
   });
 
   describe('summary dirty/rebuilding behavior', () => {
-    it('shows unavailable state when summary is rebuilding', () => {
+    it('keeps rebuilding projection values available while flagging them as updating', () => {
       const summary: GamificationSummaryV1 = {
         schemaVersion: 1,
         familyId: 'family-1',
@@ -418,7 +418,8 @@ describe('Gamification Phase 1 Integration', () => {
       };
 
       const view = adaptGamificationSummary(summary, null);
-      expect(view.isAvailable).toBe(false);
+      expect(view.isAvailable).toBe(true);
+      expect(view.isUpdating).toBe(true);
     });
   });
 

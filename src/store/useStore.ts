@@ -4,6 +4,7 @@ import {
   doc,
   getDocFromServer,
   getDocsFromServer,
+  limit,
   onSnapshot,
   orderBy,
   query,
@@ -19,6 +20,14 @@ import {
   type BootstrapRole,
 } from '../lib/bootstrapQueries';
 import i18n, { applyDocumentDirection, applyLanguage, resolveProfileLanguage } from '../i18n';
+import {
+  dailyCheckinDocumentId,
+  familyDayKey,
+  resolvedDailyCheckinSettings,
+  type DailyCheckinRecord,
+  type DailyCheckinSkip,
+} from '../lib/dailyCheckins';
+import { isParentRole } from '../lib/roles';
 
 export type BootstrapStatus = 'idle' | 'loading' | 'ready' | 'error';
 
@@ -89,6 +98,12 @@ const emptyFamilyState = () => ({
   dailyProgress: [] as any[],
   myGamificationSummary: null as any,
   myDailyProgress: null as any,
+  dailyCheckinDay: null as string | null,
+  dailyCheckinStateResolved: false,
+  todayDailyCheckin: null as DailyCheckinRecord | null,
+  todayDailyCheckinSkip: null as DailyCheckinSkip | null,
+  dailyCheckinHistory: [] as DailyCheckinRecord[],
+  dailyCheckinHistoryResolved: false,
 });
 
 interface AppState {
@@ -148,12 +163,19 @@ interface AppState {
   dailyProgress: any[];
   myGamificationSummary: any | null;
   myDailyProgress: any | null;
+  dailyCheckinDay: string | null;
+  dailyCheckinStateResolved: boolean;
+  todayDailyCheckin: DailyCheckinRecord | null;
+  todayDailyCheckinSkip: DailyCheckinSkip | null;
+  dailyCheckinHistory: DailyCheckinRecord[];
+  dailyCheckinHistoryResolved: boolean;
   error: string | null;
 
   initAuth: () => void;
   loadFamilyData: (uid: string, familyId: string) => void;
   refreshCurrentUser: (uid: string, updatedUser: { familyId: string; role: string }) => void;
   retryBootstrap: () => void;
+  refreshDailyCheckinDay: (now?: Date) => void;
   loadReversals: () => void;
   retryFeature: (name: string) => void;
   cleanup: () => void;
@@ -169,6 +191,12 @@ type ListenerRegistration = {
 let familyListeners = new Map<string, ListenerRegistration>();
 let authGeneration = 0;
 let familyGeneration = 0;
+let refreshActiveDailyCheckinDay: ((now: Date) => void) | null = null;
+let activeFamilySubscriptionIdentity: {
+  familyId: string;
+  profileId: string;
+  role: BootstrapRole;
+} | null = null;
 
 const stopProfileListener = () => {
   profileUnsubscribe?.();
@@ -177,6 +205,8 @@ const stopProfileListener = () => {
 
 const stopFamilyListeners = () => {
   familyGeneration += 1;
+  refreshActiveDailyCheckinDay = null;
+  activeFamilySubscriptionIdentity = null;
   const subscriptions = [...familyListeners.values()];
   familyListeners.clear();
   subscriptions.forEach(({ unsubscribe }) => unsubscribe());
@@ -501,14 +531,27 @@ export const useStore = create<AppState>((set, get) => ({
     ) return;
 
     familyId = safeFamilyId;
+    const requestedProfileId = state.currentUser.id;
+    const requestedRole = state.currentUser.role as BootstrapRole;
 
-    if (state.activeFamilyId === familyId && familyListeners.size > 0) return;
+    if (
+      state.activeFamilyId === familyId &&
+      familyListeners.size > 0 &&
+      activeFamilySubscriptionIdentity?.familyId === familyId &&
+      activeFamilySubscriptionIdentity?.profileId === requestedProfileId &&
+      activeFamilySubscriptionIdentity.role === requestedRole
+    ) return;
 
     stopFamilyListeners();
     const generation = familyGeneration;
     const owningAuthGeneration = authGeneration;
 
-    const role = state.currentUser.role as BootstrapRole;
+    const role = requestedRole;
+    activeFamilySubscriptionIdentity = {
+      familyId,
+      profileId: requestedProfileId,
+      role,
+    };
     const roleResources = bootstrapResourcesForRole(role);
     const requiredResources = criticalBootstrapResources.filter(resource => roleResources.includes(resource));
     const queryPlan = createBootstrapQueryPlan(db, {
@@ -537,8 +580,13 @@ export const useStore = create<AppState>((set, get) => ({
     const isCurrent = () =>
       familyGeneration === generation &&
       authGeneration === owningAuthGeneration &&
+      activeFamilySubscriptionIdentity?.familyId === familyId &&
+      activeFamilySubscriptionIdentity.profileId === requestedProfileId &&
+      activeFamilySubscriptionIdentity.role === role &&
       get().activeFamilyId === familyId &&
-      get().currentUser?.familyId === familyId;
+      get().currentUser?.familyId === familyId &&
+      get().currentUser?.id === requestedProfileId &&
+      get().currentUser?.role === role;
 
     const markReady = (resource: BootstrapResource) => {
       const status = get().bootstrapStatus[resource];
@@ -619,6 +667,165 @@ export const useStore = create<AppState>((set, get) => ({
     };
 
     const docs = (snapshot: any) => snapshot.docs.map((item: any) => ({ id: item.id, ...item.data() }));
+    const currentUser = state.currentUser;
+    let dailyCheckinListenerGeneration = 0;
+    let dailyCheckinHistoryListenerGeneration = 0;
+    let activeDailyCheckinDay: string | null = null;
+    const subscribeCurrentDailyCheckin = (family: any, now: Date) => {
+      if (!isCurrent()) return;
+      const day = familyDayKey(now, family.timezone);
+      if (
+        day === activeDailyCheckinDay &&
+        familyListeners.has('todayDailyCheckin') &&
+        familyListeners.has('todayDailyCheckinSkip')
+      ) return;
+
+      const listenerGeneration = ++dailyCheckinListenerGeneration;
+      activeDailyCheckinDay = day;
+      stopFamilyListener('todayDailyCheckin');
+      stopFamilyListener('todayDailyCheckinSkip');
+      set(current => ({
+        dailyCheckinDay: day,
+        dailyCheckinStateResolved: false,
+        todayDailyCheckin: null,
+        todayDailyCheckinSkip: null,
+        featureErrors: {
+          ...current.featureErrors,
+          todayDailyCheckin: null,
+          todayDailyCheckinSkip: null,
+        },
+      }));
+
+      let checkinResolved = false;
+      let skipResolved = false;
+      const isCurrentDailyCheckin = () =>
+        isCurrent() &&
+        listenerGeneration === dailyCheckinListenerGeneration &&
+        get().dailyCheckinDay === day &&
+        get().currentUser?.id === currentUser.id;
+      const resolveIfComplete = () => {
+        if (isCurrentDailyCheckin() && checkinResolved && skipResolved) {
+          set({ dailyCheckinStateResolved: true });
+        }
+      };
+      const subscribeDocument = (
+        name: 'todayDailyCheckin' | 'todayDailyCheckinSkip',
+        path: string,
+        apply: (snapshot: any) => void,
+      ) => {
+        const target = doc(db, path);
+        const unsubscribe = onSnapshot(
+          target,
+          { includeMetadataChanges: true },
+          snapshot => {
+            if (!isCurrentDailyCheckin() || snapshot.metadata?.fromCache) return;
+            apply(snapshot);
+            resolveIfComplete();
+          },
+          error => {
+            if (!isCurrentDailyCheckin()) return;
+            logDevError(name, error, { document: path });
+            dailyCheckinListenerGeneration += 1;
+            stopFamilyListener(name);
+            set(current => ({
+              featureErrors: { ...current.featureErrors, [name]: errorText(name, error) },
+            }));
+          },
+        );
+        familyListeners.set(name, { critical: false, unsubscribe });
+      };
+
+      const documentId = dailyCheckinDocumentId(currentUser.id, day);
+      subscribeDocument(
+        'todayDailyCheckin',
+        `families/${familyId}/daily_checkins/${documentId}`,
+        snapshot => {
+          checkinResolved = true;
+          set({
+            todayDailyCheckin: snapshot.exists()
+              ? { id: snapshot.id, ...snapshot.data() } as DailyCheckinRecord
+              : null,
+          });
+        },
+      );
+      subscribeDocument(
+        'todayDailyCheckinSkip',
+        `families/${familyId}/daily_checkin_skips/${documentId}`,
+        snapshot => {
+          skipResolved = true;
+          set({
+            todayDailyCheckinSkip: snapshot.exists()
+              ? { id: snapshot.id, ...snapshot.data() } as DailyCheckinSkip
+              : null,
+          });
+        },
+      );
+    };
+    const subscribeDailyCheckinHistory = (family: any) => {
+      if (!isCurrent()) return;
+      const settings = resolvedDailyCheckinSettings(family.dailyCheckins);
+      const canReadHistory =
+        isParentRole(currentUser.role) &&
+        settings.historyVisibleToParents;
+      if (!canReadHistory) {
+        dailyCheckinHistoryListenerGeneration += 1;
+        stopFamilyListener('dailyCheckinHistory');
+        set({ dailyCheckinHistory: [], dailyCheckinHistoryResolved: true });
+        return;
+      }
+      if (familyListeners.has('dailyCheckinHistory')) return;
+
+      const listenerGeneration = ++dailyCheckinHistoryListenerGeneration;
+      set(current => ({
+        dailyCheckinHistory: [],
+        dailyCheckinHistoryResolved: false,
+        featureErrors: { ...current.featureErrors, dailyCheckinHistory: null },
+      }));
+      const target = query(
+        collection(db, `families/${familyId}/daily_checkins`),
+        orderBy('createdAt', 'desc'),
+        limit(100),
+      );
+      const isCurrentHistory = () =>
+        isCurrent() &&
+        listenerGeneration === dailyCheckinHistoryListenerGeneration &&
+        get().currentUser?.id === currentUser.id &&
+        isParentRole(get().currentUser?.role);
+      const unsubscribe = onSnapshot(
+        target,
+        { includeMetadataChanges: true },
+        snapshot => {
+          if (!isCurrentHistory() || snapshot.metadata?.fromCache) return;
+          set({
+            dailyCheckinHistory: docs(snapshot) as DailyCheckinRecord[],
+            dailyCheckinHistoryResolved: true,
+          });
+        },
+        error => {
+          if (!isCurrentHistory()) return;
+          logDevError('Daily check-in history', error, {
+            collection: 'daily_checkins',
+            orderBy: ['createdAt', 'desc'],
+            limit: 100,
+          });
+          dailyCheckinHistoryListenerGeneration += 1;
+          stopFamilyListener('dailyCheckinHistory');
+          set(current => ({
+            dailyCheckinHistory: [],
+            dailyCheckinHistoryResolved: true,
+            featureErrors: {
+              ...current.featureErrors,
+              dailyCheckinHistory: errorText('Daily check-in history', error),
+            },
+          }));
+        },
+      );
+      familyListeners.set('dailyCheckinHistory', { critical: false, unsubscribe });
+    };
+    refreshActiveDailyCheckinDay = now => {
+      const family = get().familyData;
+      if (family) subscribeCurrentDailyCheckin(family, now);
+    };
     const subscribePlanned = (
       resource: BootstrapResource,
       context: string,
@@ -722,13 +929,15 @@ export const useStore = create<AppState>((set, get) => ({
           handleCriticalListenerError('family', 'Family', { code: 'not-found', message: 'Family document does not exist' });
           return;
         }
-        set({ familyData: { id: snapshot.id, ...snapshot.data() } });
+        const family = { id: snapshot.id, ...snapshot.data() };
+        set({ familyData: family });
+        subscribeCurrentDailyCheckin(family, new Date());
+        subscribeDailyCheckinHistory(family);
       });
 
       subscribePlanned('tasks', 'Tasks', snapshot => set({ tasks: docs(snapshot) }));
       subscribePlanned('rewards', 'Rewards', snapshot => set({ rewards: docs(snapshot) }));
 
-      const currentUser = state.currentUser;
       if (currentUser?.role === 'parent' || currentUser?.role === 'owner') {
         subscribePlanned('wallets', 'Wallets', snapshot => set({ childWallets: docs(snapshot) }));
       } else if (currentUser?.role === 'child') {
@@ -875,6 +1084,10 @@ export const useStore = create<AppState>((set, get) => ({
 
     // Now load the family data since we have a familyId
     get().loadFamilyData(authoritativeUid, updatedUser.familyId);
+  },
+
+  refreshDailyCheckinDay: (now = new Date()) => {
+    refreshActiveDailyCheckinDay?.(now);
   },
 
   loadReversals: () => {

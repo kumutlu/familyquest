@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { render, screen, act } from '@testing-library/react';
 import i18n from '../../i18n/config';
 import { Toast } from './Toast';
@@ -15,6 +15,7 @@ beforeEach(async () => {
 });
 
 afterEach(async () => {
+  vi.useRealTimers();
   await act(async () => { await i18n.changeLanguage('en'); });
 });
 
@@ -37,5 +38,21 @@ describe('Toast — shared labels', () => {
     await act(async () => { await i18n.changeLanguage('tr'); });
     rerender(<Toast toast={toast} onDismiss={() => {}} />);
     expect(screen.getByRole('button', { name: /bildirimi kapat/i })).toBeInTheDocument();
+  });
+
+  it('keeps the original auto-dismiss deadline when the callback identity changes', () => {
+    vi.useFakeTimers();
+    const firstDismiss = vi.fn();
+    const latestDismiss = vi.fn();
+    const { rerender } = render(
+      <Toast toast={toast} onDismiss={firstDismiss} duration={4000} />,
+    );
+
+    act(() => { vi.advanceTimersByTime(3000); });
+    rerender(<Toast toast={toast} onDismiss={latestDismiss} duration={4000} />);
+    act(() => { vi.advanceTimersByTime(1000); });
+
+    expect(firstDismiss).not.toHaveBeenCalled();
+    expect(latestDismiss).toHaveBeenCalledOnce();
   });
 });

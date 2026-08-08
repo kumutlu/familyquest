@@ -1,0 +1,49 @@
+{
+  "modal": {
+    "title": "Who are you today?",
+    "supporting": "Choose the animal that feels most like you today.",
+    "skip": "Skip for today",
+    "saving": "Saving your check-in…",
+    "error": "We couldn't save that yet. Please try again."
+  },
+  "badge": {
+    "today": "Today I'm a {{animal}}",
+    "confirmation": "Today you're a {{animal}}."
+  },
+  "animals": {
+    "cheetah": { "name": "Cheetah", "feeling": "Energetic", "aria": "Cheetah, energetic" },
+    "lion": { "name": "Lion", "feeling": "Brave", "aria": "Lion, brave" },
+    "monkey": { "name": "Monkey", "feeling": "Playful", "aria": "Monkey, playful" },
+    "owl": { "name": "Owl", "feeling": "Ready to learn", "aria": "Owl, ready to learn" },
+    "fox": { "name": "Fox", "feeling": "Curious", "aria": "Fox, curious" },
+    "panda": { "name": "Panda", "feeling": "Calm", "aria": "Panda, calm" },
+    "turtle": { "name": "Turtle", "feeling": "Taking it slowly", "aria": "Turtle, taking it slowly" },
+    "sloth": { "name": "Sloth", "feeling": "Tired", "aria": "Sloth, tired" }
+  },
+  "settings": {
+    "title": "Daily check-ins",
+    "description": "Choose who can take part and whether parents can see recent check-ins.",
+    "children": "Enable check-ins for children",
+    "childrenDescription": "Children can choose an animal once each day.",
+    "parent": "Participate as a parent",
+    "parentDescription": "Choose whether daily check-ins appear for you.",
+    "history": "Show check-in history",
+    "historyDescription": "Parents can see recent family check-ins.",
+    "saving": "Saving…",
+    "error": "We couldn't save this setting. Please try again."
+  },
+  "history": {
+    "title": "Recent check-ins",
+    "loading": "Loading check-in history…",
+    "error": "We couldn't load check-in history.",
+    "empty": "No check-ins to show yet.",
+    "disabled": "Check-in history is turned off.",
+    "filter": "Family member",
+    "allMembers": "All family members",
+    "recent": "Recent selections",
+    "summary": "Last seven days",
+    "summaryLine_one": "{{member}} selected ‘{{feeling}}’ once in the last seven days.",
+    "summaryLine_other": "{{member}} selected ‘{{feeling}}’ {{formattedCount}} times in the last seven days.",
+    "unknownMember": "Family member"
+  }
+}

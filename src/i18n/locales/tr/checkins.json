@@ -1,0 +1,49 @@
+{
+  "modal": {
+    "title": "Bugün hangisisin?",
+    "supporting": "Bugün kendine en yakın hissettiğin hayvanı seç.",
+    "skip": "Bugünlük geç",
+    "saving": "Yoklaman kaydediliyor…",
+    "error": "Bunu henüz kaydedemedik. Lütfen tekrar dene."
+  },
+  "badge": {
+    "today": "Bugün bir {{animal}} gibiyim",
+    "confirmation": "Bugün bir {{animal}} gibisin."
+  },
+  "animals": {
+    "cheetah": { "name": "Çita", "feeling": "Enerjik", "aria": "Çita, enerjik" },
+    "lion": { "name": "Aslan", "feeling": "Cesur", "aria": "Aslan, cesur" },
+    "monkey": { "name": "Maymun", "feeling": "Neşeli", "aria": "Maymun, neşeli" },
+    "owl": { "name": "Baykuş", "feeling": "Öğrenmeye hazır", "aria": "Baykuş, öğrenmeye hazır" },
+    "fox": { "name": "Tilki", "feeling": "Meraklı", "aria": "Tilki, meraklı" },
+    "panda": { "name": "Panda", "feeling": "Sakin", "aria": "Panda, sakin" },
+    "turtle": { "name": "Kaplumbağa", "feeling": "Yavaş ilerliyor", "aria": "Kaplumbağa, yavaş ilerliyor" },
+    "sloth": { "name": "Tembel hayvan", "feeling": "Yorgun", "aria": "Tembel hayvan, yorgun" }
+  },
+  "settings": {
+    "title": "Günlük yoklamalar",
+    "description": "Kimlerin katılabileceğini ve ebeveynlerin son yoklamaları görüp göremeyeceğini seç.",
+    "children": "Çocuklar için yoklamaları etkinleştir",
+    "childrenDescription": "Çocuklar her gün bir kez hayvan seçebilir.",
+    "parent": "Ebeveyn olarak katıl",
+    "parentDescription": "Günlük yoklamaların sana gösterilip gösterilmeyeceğini seç.",
+    "history": "Yoklama geçmişini göster",
+    "historyDescription": "Ebeveynler ailenin son yoklamalarını görebilir.",
+    "saving": "Kaydediliyor…",
+    "error": "Bu ayarı kaydedemedik. Lütfen tekrar dene."
+  },
+  "history": {
+    "title": "Son yoklamalar",
+    "loading": "Yoklama geçmişi yükleniyor…",
+    "error": "Yoklama geçmişini yükleyemedik.",
+    "empty": "Henüz gösterilecek yoklama yok.",
+    "disabled": "Yoklama geçmişi kapalı.",
+    "filter": "Aile üyesi",
+    "allMembers": "Tüm aile üyeleri",
+    "recent": "Son seçimler",
+    "summary": "Son yedi gün",
+    "summaryLine_one": "{{member}} son yedi günde bir kez ‘{{feeling}}’ seçti.",
+    "summaryLine_other": "{{member}} son yedi günde {{formattedCount}} kez ‘{{feeling}}’ seçti.",
+    "unknownMember": "Aile üyesi"
+  }
+}

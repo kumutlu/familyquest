@@ -49,6 +49,7 @@ import {
 import { FAMILYQUEST_BUILD } from '../buildInfo';
 import { ProfileEditorModal } from '../components/profile/ProfileEditorModal';
 import { FamilySettings } from '../components/family/FamilySettings';
+import { DailyCheckinSettings } from '../components/settings/DailyCheckinSettings';
 import { DeleteAccountDialog } from '../components/settings/DeleteAccountDialog';
 import { getLegalLinks } from '../config/legalLinks';
 
@@ -469,6 +470,7 @@ export function Settings() {
         description={t('familyDesc')}
       >
         <FamilySettings />
+        <DailyCheckinSettings />
       </Section>
 
       {/* 3. NOTIFICATIONS */}

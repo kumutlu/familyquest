@@ -2,14 +2,37 @@ import { readFileSync } from 'node:fs'
 import { describe, expect, it } from 'vitest'
 import { bootstrapCompositeIndexes } from '../../src/lib/bootstrapQueries'
 
+const dailyCheckinFieldOverrides = ['daily_checkins', 'daily_checkin_skips'].map(collectionGroup => ({
+  collectionGroup,
+  fieldPath: 'userId',
+  indexes: [
+    { order: 'ASCENDING', queryScope: 'COLLECTION' },
+    { order: 'DESCENDING', queryScope: 'COLLECTION' },
+    { order: 'ASCENDING', queryScope: 'COLLECTION_GROUP' },
+    { order: 'DESCENDING', queryScope: 'COLLECTION_GROUP' },
+  ],
+}))
+
+const invitationFieldOverride = {
+  collectionGroup: 'invitations',
+  fieldPath: 'code',
+  indexes: [
+    { order: 'ASCENDING', queryScope: 'COLLECTION' },
+    { order: 'DESCENDING', queryScope: 'COLLECTION' },
+    { order: 'ASCENDING', queryScope: 'COLLECTION_GROUP' },
+  ],
+}
+
 describe('Firestore composite index configuration', () => {
   it('points Firebase at a source-controlled manifest matching production bootstrap queries', () => {
     const firebaseConfig = JSON.parse(readFileSync('firebase.json', 'utf8'))
     const indexConfig = JSON.parse(readFileSync('firestore.indexes.json', 'utf8'))
 
     expect(firebaseConfig.firestore.indexes).toBe('firestore.indexes.json')
-    expect(indexConfig.indexes).toEqual(bootstrapCompositeIndexes)
-    expect(Object.keys(indexConfig).sort()).toEqual(['fieldOverrides', 'indexes'])
+    expect(indexConfig).toEqual({
+      indexes: bootstrapCompositeIndexes,
+      fieldOverrides: [...dailyCheckinFieldOverrides, invitationFieldOverride],
+    })
   })
 
   it('retains the single-field override required by the invitation collection-group query', () => {
@@ -28,6 +51,14 @@ describe('Firestore composite index configuration', () => {
       order: 'ASCENDING',
       queryScope: 'COLLECTION_GROUP',
     })
+  })
+
+  it('deploys collection and collection-group userId indexes for every daily cleanup path', () => {
+    // Child deletion filters one family's direct subcollections, while account
+    // deletion filters every matching collection through collectionGroup(). A
+    // field override must retain both scopes because it replaces the defaults.
+    const indexConfig = JSON.parse(readFileSync('firestore.indexes.json', 'utf8'))
+    expect(indexConfig.fieldOverrides).toEqual(expect.arrayContaining(dailyCheckinFieldOverrides))
   })
 
   it('keeps the transfer_requests index in sync with the child pending-query shape', () => {

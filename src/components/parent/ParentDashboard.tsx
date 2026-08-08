@@ -25,6 +25,7 @@ import { FamilyBulletin } from '../bulletin/FamilyBulletin';
 import { FamilySetupPrompt } from '../family/FamilySetupPrompt';
 import { AddChildModal } from '../family/AddChildModal';
 import { shouldShowFamilySetupPrompt } from '../../lib/familySetup';
+import { DailyCheckinHistory } from '../checkins/DailyCheckinHistory';
 import { FocusModeDashboard } from './dashboard/FocusModeDashboard';
 import { getFocusModeState, isFamilySetupComplete } from '../../lib/focusMode';
 
@@ -229,6 +230,8 @@ export function ParentDashboard() {
       </div>
 
       <ChildrenOverview />
+
+      <DailyCheckinHistory />
 
       <RecentActivity />
 

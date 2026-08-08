@@ -74,6 +74,7 @@ import {
   onCall,
   type CallableRequest,
 } from 'firebase-functions/v2/https';
+import { purgeUserDailyCheckinRecords } from './dailyCheckinCleanup';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -184,6 +185,28 @@ function assertTargetIsManagedChild(
   }
 }
 
+async function purgeDailyCheckinRecords(
+  db: Firestore,
+  familyId: string,
+  childId: string,
+): Promise<void> {
+  const BATCH_LIMIT = 500;
+  for (const collectionName of ['daily_checkins', 'daily_checkin_skips']) {
+    while (true) {
+      const snapshot = await db
+        .collection(`${FAMILIES}/${familyId}/${collectionName}`)
+        .where('userId', '==', childId)
+        .limit(BATCH_LIMIT)
+        .get();
+      if (snapshot.empty) break;
+
+      const batch = db.batch();
+      for (const doc of snapshot.docs) batch.delete(doc.ref);
+      await batch.commit();
+    }
+  }
+}
+
 // ---------------------------------------------------------------------------
 // Core implementation (injectable context for testing)
 // ---------------------------------------------------------------------------
@@ -208,23 +231,45 @@ export async function deleteChildImpl(
   const childRef = db.doc(`${USERS}/${childId}`);
   const childSnap = await childRef.get();
   if (!childSnap.exists) {
-    // Idempotent: child already gone.
-    // Use the caller's familyId for the idempotency path if available.
-    const idemPath = callerFamilyId
-      ? `${FAMILIES}/${callerFamilyId}/${CHILD_LOGIN_IDEMPOTENCY}/${clientReqId}`
-      : `${CHILD_LOGIN_IDEMPOTENCY}/${clientReqId}`;
-    const idemRef = db.doc(idemPath);
-    const idemSnap = await idemRef.get();
-    if (idemSnap.exists) {
-      const idemData = idemSnap.data() as Record<string, unknown>;
-      if (idemData.status === 'completed') {
-        return idemData.result as DeleteChildResult;
-      }
+    // A profileless target can no longer supply its family or authorization
+    // boundary. Only an exact attempt created after normal authorization may
+    // resume the global cleanup.
+    if (typeof callerFamilyId !== 'string') {
+      throw new HttpsError('permission-denied', 'NOT_AUTHORIZED');
     }
-    // No prior record — treat as not-found idempotently.
-    await idemRef.set({
+    assertCallerIsParentOrOwner(caller, callerFamilyId);
+
+    const idemRef = db.doc(
+      `${FAMILIES}/${callerFamilyId}/${CHILD_LOGIN_IDEMPOTENCY}/${clientReqId}`,
+    );
+    const idemSnap = await idemRef.get();
+    if (!idemSnap.exists) {
+      return { childId, deleted: false };
+    }
+
+    const idemData = idemSnap.data() as Record<string, unknown>;
+    const status = idemData.status;
+    if (
+      idemData.clientReqId !== clientReqId ||
+      idemData.operation !== 'deleteChild' ||
+      idemData.childId !== childId ||
+      idemData.payloadHash !== computePayloadHash(childId, displayNameConfirmation) ||
+      (status !== 'processing' && status !== 'failed' && status !== 'completed')
+    ) {
+      throw new HttpsError('already-exists', 'IDEMPOTENCY_ATTEMPT_MISMATCH');
+    }
+    if (idemData.requesterUid !== callerUid) {
+      throw new HttpsError('permission-denied', 'IDEMPOTENCY_CALLER_MISMATCH');
+    }
+
+    await purgeUserDailyCheckinRecords(db, childId);
+    if (status === 'completed') {
+      return idemData.result as DeleteChildResult;
+    }
+
+    await idemRef.update({
       status: 'completed',
-      payloadHash: computePayloadHash(childId, displayNameConfirmation),
+      phase: 'completed',
       result: { childId, deleted: false },
       completedAt: FieldValue.serverTimestamp(),
     });
@@ -329,6 +374,11 @@ export async function deleteChildImpl(
     }
   }
 
+  // Daily check-ins identify their subject with `userId`, not `childId`.
+  // Keep the original family-local pre-purge, then close its last-write window
+  // with a global sweep after the profile has been removed.
+  await purgeDailyCheckinRecords(db, familyId, childId);
+
   // --- Phase 3: Firestore cleanup (transactional) -----------------
   const usernameIndexRef = db.doc(
     `${FAMILIES}/${familyId}/${CHILD_LOGIN_INDEX}/${normalizeUsernameForIndex(child.displayName as string)}`,
@@ -418,14 +468,15 @@ export async function deleteChildImpl(
           createdAt: FieldValue.serverTimestamp(),
         },
       );
-
-      // Mark idempotency as completed
-      await idemRef.set({
-        status: 'completed',
-        payloadHash: computePayloadHash(childId, displayNameConfirmation),
-        result: { childId, deleted: true },
-        completedAt: FieldValue.serverTimestamp(),
-      });
+    });
+    // No new self-write can pass Rules after the profile deletion. Do not
+    // publish terminal idempotency state until this global sweep succeeds.
+    await purgeUserDailyCheckinRecords(db, childId);
+    await idemRef.update({
+      status: 'completed',
+      phase: 'completed',
+      result: { childId, deleted: true },
+      completedAt: FieldValue.serverTimestamp(),
     });
   } catch (err) {
     // If the transaction failed, mark idempotency as failed so retries
@@ -451,6 +502,7 @@ export async function deleteChildImpl(
     try {
       const snapshot = await db.collection(collectionPath).where('childId', '==', childId).limit(BATCH_LIMIT).get();
       for (const doc of snapshot.docs) {
+        if (doc.ref.path === idemRef.path) continue;
         batch.delete(doc.ref);
         batchCount += 1;
         if (batchCount >= BATCH_LIMIT) {

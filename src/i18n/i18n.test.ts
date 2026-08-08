@@ -102,6 +102,57 @@ describe('i18n initialization', () => {
 });
 
 describe('locale completeness', () => {
+  it('registers the lazy check-ins namespace with complete English and Turkish copy', () => {
+    expect(NAMESPACES).toContain('checkins');
+
+    const english = localeNamespace('en', 'checkins') as {
+      modal: Record<string, string>;
+      badge: Record<string, string>;
+      animals: Record<string, Record<string, string>>;
+      settings: Record<string, string>;
+      history: Record<string, string>;
+    };
+    const turkish = localeNamespace('tr', 'checkins');
+
+    expect(english.modal).toMatchObject({
+      title: 'Who are you today?',
+      supporting: 'Choose the animal that feels most like you today.',
+      skip: 'Skip for today',
+      saving: 'Saving your check-in…',
+      error: "We couldn't save that yet. Please try again.",
+    });
+    expect(english.badge).toEqual({
+      today: "Today I'm a {{animal}}",
+      confirmation: "Today you're a {{animal}}.",
+    });
+    expect(Object.keys(english.animals)).toEqual([
+      'cheetah', 'lion', 'monkey', 'owl', 'fox', 'panda', 'turtle', 'sloth',
+    ]);
+    expect(english.animals.cheetah).toEqual({
+      name: 'Cheetah',
+      feeling: 'Energetic',
+      aria: 'Cheetah, energetic',
+    });
+    expect(english.settings).toEqual(expect.objectContaining({
+      title: expect.any(String),
+      error: expect.any(String),
+    }));
+    expect(english.history).toEqual(expect.objectContaining({
+      error: expect.any(String),
+      empty: expect.any(String),
+      disabled: expect.any(String),
+      filter: expect.any(String),
+      summary: expect.any(String),
+    }));
+    expect(flattenLocaleKeys(turkish).sort()).toEqual(flattenLocaleKeys(english).sort());
+  });
+
+  it('keeps diagnostic and predictive wording out of check-in copy', () => {
+    const copy = `${JSON.stringify(localeNamespace('en', 'checkins'))} ${JSON.stringify(localeNamespace('tr', 'checkins'))}`;
+
+    expect(copy).not.toMatch(/depress|anxious|mentally unwell|abnormal|at risk|diagnos|predict|depres|kaygı|ruh sağlığı|anormal|risk/i);
+  });
+
   it('keeps every English and Turkish namespace key in parity', () => {
     for (const namespace of NAMESPACES) {
       const englishKeys = flattenLocaleKeys(localeNamespace('en', namespace)).sort();

@@ -28,6 +28,7 @@ import {
 import { onTaskDispatched } from 'firebase-functions/v2/tasks';
 import { onSchedule } from 'firebase-functions/v2/scheduler';
 import { getFunctions } from 'firebase-admin/functions';
+import { purgeUserDailyCheckinRecords } from './dailyCheckinCleanup';
 
 // ---------------------------------------------------------------------------
 // Reviewed registry of known family subcollections (regression guard only —
@@ -51,6 +52,7 @@ export const FAMILY_SUBCOLLECTION_REGISTRY: readonly string[] = [
   'task_occurrences',
   'gamification_events', 'daily_eligibility', 'daily_progress',
   'gamification_summaries', 'gamification_checkpoints',
+  'daily_checkins', 'daily_checkin_skips',
 ];
 
 export const FAMILY_NESTED_SUBCOLLECTIONS: readonly string[] = [
@@ -871,6 +873,7 @@ async function runPhaseOnce(
         .where('familyId', '==', familyId).limit(BATCH_LIMIT).get();
       for (const docSnap of acctSnap.docs) {
         const uid = docSnap.id;
+        await purgeUserDailyCheckinRecords(db, uid);
         await db.doc(`users/${uid}`).delete();
         try {
           await ctx.auth.deleteUser(uid);

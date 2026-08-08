@@ -77,7 +77,9 @@ service cloud.firestore {
       let userDoc = get(/databases/$(database)/documents/users/$(authProfileId()));
       return userDoc != null
         && userDoc.data.get('familyId', 'null') == familyId
-        && (userDoc.data.get('role', 'null') == 'parent' || userDoc.data.get('role', 'null') == 'owner');
+        && (userDoc.data.get('role', 'null') == 'parent'
+          || userDoc.data.get('role', 'null') == 'admin'
+          || userDoc.data.get('role', 'null') == 'owner');
     }
 
     function isParent(familyId) {
@@ -119,6 +121,25 @@ service cloud.firestore {
         && data.welcomePromptCompleted == true
         && data.completedAt == request.time
         && data.completedBy == authProfileId();
+    }
+
+    function isValidDailyCheckinFamilySettings(data) {
+      return data.keys().hasOnly(['childrenEnabled', 'historyVisibleToParents'])
+        && data.childrenEnabled is bool
+        && data.historyVisibleToParents is bool;
+    }
+
+    function isValidParentDailyCheckinPreference(uid) {
+      return authProfileId() == uid
+        && resource.data.role in ['owner', 'parent', 'admin']
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['dailyCheckins'])
+        && request.resource.data.dailyCheckins.keys().hasOnly(['parentParticipationEnabled'])
+        && request.resource.data.dailyCheckins.parentParticipationEnabled is bool;
+    }
+
+    function isDailyCheckinId(userId, localDate, documentId) {
+      return documentId == userId + '_' + localDate
+        && localDate.matches('^[0-9]{4}-[0-9]{2}-[0-9]{2}$');
     }
 
     function canReadAnnouncement(familyId, data) {
@@ -1605,9 +1626,10 @@ service cloud.firestore {
         (authProfileId() == uid
           && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['language'])
           && isValidLanguage(request.resource.data.language)) ||
+        isValidParentDailyCheckinPreference(uid) ||
         (authProfileId() == uid && !request.resource.data.diff(resource.data).affectedKeys().hasAny([
           'role', 'familyId', 'rewardPoints', 'lifetimeXP', 'walletBalance', 'balance', 'lastFundTxId',
-          'displayName', 'avatarUrl', 'avatarId', 'language',
+          'displayName', 'avatarUrl', 'avatarId', 'language', 'dailyCheckins',
           // Phase 1 child-login linking fields: server-only (Admin SDK). A client
           // must never be able to set its own login link, username, or flags.
           'hasLogin', 'username', 'loginEnabled', 'requiresPasswordChange', 'authUid'
@@ -1669,12 +1691,66 @@ service cloud.firestore {
             || isValidGamificationConfig(request.resource.data.gamificationConfig))
         && (!('petBoxEnabled' in request.resource.data)
             || request.resource.data.petBoxEnabled is bool)
+        && (!request.resource.data.diff(resource.data).affectedKeys().hasAny(['dailyCheckins'])
+            || isValidDailyCheckinFamilySettings(request.resource.data.dailyCheckins))
         // The setup audit block is validated only when this write actually
         // changes it. It pins completedAt == request.time, so re-validating an
         // untouched, previously-approved setup map would reject every later
         // owner update (regional settings, name, Pet Box, ...).
         && (!request.resource.data.diff(resource.data).affectedKeys().hasAny(['setup'])
             || isValidFamilySetup(request.resource.data.setup));
+
+      match /daily_checkins/{checkinId} {
+        allow get: if isFamilyMember(familyId)
+          && resource.data.familyId == familyId
+          && (resource.data.userId == authProfileId()
+            || (isParent(familyId)
+              && get(/databases/$(database)/documents/families/$(familyId)).data
+                .get('dailyCheckins', {}).get('historyVisibleToParents', true) == true));
+        allow list: if isParent(familyId)
+          && get(/databases/$(database)/documents/families/$(familyId)).data
+            .get('dailyCheckins', {}).get('historyVisibleToParents', true) == true;
+        allow create: if isFamilyMember(familyId)
+          && request.resource.data.keys().hasOnly([
+            'familyId', 'userId', 'localDate', 'animal', 'catalogVersion', 'createdAt', 'updatedAt'
+          ])
+          && request.resource.data.familyId == familyId
+          && request.resource.data.userId == authProfileId()
+          && isDailyCheckinId(request.resource.data.userId, request.resource.data.localDate, checkinId)
+          && request.resource.data.animal in [
+            'cheetah', 'lion', 'monkey', 'owl', 'fox', 'panda', 'turtle', 'sloth'
+          ]
+          && request.resource.data.catalogVersion == 1
+          && request.resource.data.createdAt == request.time
+          && request.resource.data.updatedAt == request.time;
+        allow update, delete: if false;
+      }
+
+      match /daily_checkin_skips/{skipId} {
+        allow read: if isFamilyMember(familyId)
+          && resource.data.familyId == familyId
+          && resource.data.userId == authProfileId()
+          && isDailyCheckinId(resource.data.userId, resource.data.localDate, skipId);
+        allow create: if isFamilyMember(familyId)
+          && request.resource.data.keys().hasOnly(['familyId', 'userId', 'localDate', 'createdAt'])
+          && request.resource.data.familyId == familyId
+          && request.resource.data.userId == authProfileId()
+          && isDailyCheckinId(request.resource.data.userId, request.resource.data.localDate, skipId)
+          && request.resource.data.createdAt == request.time
+          && !existsAfter(
+            /databases/$(database)/documents/families/$(familyId)/daily_checkins/$(skipId)
+          );
+        allow update: if false;
+        allow delete: if isFamilyMember(familyId)
+          && resource.data.familyId == familyId
+          && resource.data.userId == authProfileId()
+          && isDailyCheckinId(resource.data.userId, resource.data.localDate, skipId)
+          && (exists(
+              /databases/$(database)/documents/families/$(familyId)/daily_checkins/$(skipId)
+            ) || existsAfter(
+              /databases/$(database)/documents/families/$(familyId)/daily_checkins/$(skipId)
+            ));
+      }
 
       // Role-authoritative invitation records. Written exclusively by the
       // trusted backend (createFamilyInvitation / acceptInvitation) and never

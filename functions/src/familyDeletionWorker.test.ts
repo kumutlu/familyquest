@@ -144,6 +144,21 @@ function makeFakeDb() {
     doc: (id?: string) => makeRef(`${collPath}/${id || Math.random().toString(36).slice(2)}`),
   });
 
+  const makeCollectionGroupQuery = (collectionId: string, filters: Array<[string, unknown]>): any => ({
+    where: (field: string, _op: string, value: unknown) =>
+      makeCollectionGroupQuery(collectionId, [...filters, [field, value]]),
+    limit: (n: number) => ({
+      get: async () => {
+        const docs = [...store.keys()]
+          .filter(path => path.split('/').at(-2) === collectionId)
+          .map(path => snapOf(path))
+          .filter(snap => filters.every(([field, value]) => (snap.data() as any)?.[field] === value))
+          .slice(0, n);
+        return { empty: docs.length === 0, docs, size: docs.length };
+      },
+    }),
+  });
+
   // Every committed transaction records its write operations so tests can
   // assert atomic grouping (e.g. receipt + family delete in one transaction).
   const txLog: Array<Array<string>> = [];
@@ -154,6 +169,16 @@ function makeFakeDb() {
     leaseWrites,
     doc: makeRef,
     collection: (path: string) => makeQuery(path, []),
+    collectionGroup: (collectionId: string) => makeCollectionGroupQuery(collectionId, []),
+    batch: () => {
+      const deletions: any[] = [];
+      return {
+        delete: (ref: any) => { deletions.push(ref); },
+        commit: async () => {
+          for (const ref of deletions) store.delete(ref.path);
+        },
+      };
+    },
     runTransaction: async (cb: (tx: any) => Promise<any>) => {
       const writes: Array<['set' | 'update' | 'delete', any, Record<string, unknown>]> = [];
       const tx = {
@@ -676,11 +701,58 @@ describe('finalize — transactional completion', () => {
     seedFinalizeOnly();
     db.store.set('users/rider-uid', { familyId: FAMILY_ID, role: 'owner' });
     db.store.set('accountDeletionJobs/rider-uid', { familyId: FAMILY_ID });
+    db.store.set('families/former/daily_checkins/rider-checkin', { userId: 'rider-uid' });
+    db.store.set('families/former/daily_checkin_skips/rider-skip', { userId: 'rider-uid' });
+    db.store.set('families/former/daily_checkins/other-checkin', { userId: 'other-uid' });
     auth.users.set('rider-uid', { customClaims: {} });
     await processFamilyDeletionImpl(ctx, FAMILY_ID);
     expect(db.store.has('users/rider-uid')).toBe(false);
     expect(db.store.has('accountDeletionJobs/rider-uid')).toBe(false);
+    expect(db.store.has('families/former/daily_checkins/rider-checkin')).toBe(false);
+    expect(db.store.has('families/former/daily_checkin_skips/rider-skip')).toBe(false);
+    expect(db.store.has('families/former/daily_checkins/other-checkin')).toBe(true);
     expect(auth.deleted).toContain('rider-uid');
+  });
+
+  it('resumes a partial rider purge without a profile and removes residual daily history', async () => {
+    seedFinalizeOnly();
+    db.store.set('accountDeletionJobs/rider-uid', { familyId: FAMILY_ID });
+    db.store.set(`families/${FAMILY_ID}/daily_checkins/current-checkin`, { userId: 'rider-uid' });
+    db.store.set('families/former/daily_checkin_skips/former-skip', { userId: 'rider-uid' });
+    db.store.set('families/former/daily_checkin_skips/other-skip', { userId: 'other-uid' });
+    auth.users.set('rider-uid', { customClaims: {} });
+
+    const result = await processFamilyDeletionImpl(ctx, FAMILY_ID);
+
+    expect(result.state).toBe('completed');
+    expect(db.store.has('users/rider-uid')).toBe(false);
+    expect(db.store.has('accountDeletionJobs/rider-uid')).toBe(false);
+    expect(db.store.has(`families/${FAMILY_ID}/daily_checkins/current-checkin`)).toBe(false);
+    expect(db.store.has('families/former/daily_checkin_skips/former-skip')).toBe(false);
+    expect(db.store.has('families/former/daily_checkin_skips/other-skip')).toBe(true);
+    expect(auth.deleted).toContain('rider-uid');
+  });
+
+  it('keeps the riding profile, Auth user, and job retryable when daily cleanup fails', async () => {
+    seedFinalizeOnly();
+    db.store.set('users/rider-uid', { familyId: FAMILY_ID, role: 'owner' });
+    db.store.set('accountDeletionJobs/rider-uid', { familyId: FAMILY_ID });
+    db.store.set('families/former/daily_checkins/rider-checkin', { userId: 'rider-uid' });
+    auth.users.set('rider-uid', { customClaims: {} });
+    db.batch = () => ({
+      delete: () => undefined,
+      commit: async () => { throw new Error('cleanup unavailable'); },
+    });
+
+    const result = await processFamilyDeletionImpl(ctx, FAMILY_ID);
+
+    expect(result.done).toBe(false);
+    expect(db.store.has('users/rider-uid')).toBe(true);
+    expect(db.store.has('accountDeletionJobs/rider-uid')).toBe(true);
+    expect(db.store.has('families/former/daily_checkins/rider-checkin')).toBe(true);
+    expect(auth.users.has('rider-uid')).toBe(true);
+    expect(auth.deleted).not.toContain('rider-uid');
+    expect(db.store.get(`familyDeletionJobs/${FAMILY_ID}`).state).toBe('retry_wait');
   });
 });
 

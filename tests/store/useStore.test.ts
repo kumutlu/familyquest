@@ -28,6 +28,7 @@ vi.mock('firebase/firestore', () => ({
     return target;
   }),
   orderBy: vi.fn((field: string, direction?: string) => ({ type: 'orderBy', field, direction })),
+  limit: vi.fn((value: number) => ({ type: 'limit', value })),
   where: vi.fn((field: string, operator: string, value: unknown) => ({ type: 'where', field, operator, value })),
   onSnapshot: vi.fn((target: string, optionsOrNext: any, nextOrError: any, maybeError: any) => {
     const hasOptions = typeof optionsOrNext !== 'function';

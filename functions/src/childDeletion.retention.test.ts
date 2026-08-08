@@ -95,6 +95,24 @@ function makeQueryDb() {
         },
       }),
     }),
+    collectionGroup: (collectionId: string) => ({
+      where: (field: string, _op: string, value: unknown) => ({
+        limit: (n: number) => ({
+          get: async () => {
+            const docs = [...store.entries()]
+              .filter(([path]) => path.split('/').at(-2) === collectionId)
+              .map(([path, data]) => ({
+                id: path.split('/').pop(),
+                data: () => data,
+                ref: makeRef(path),
+              }))
+              .filter(doc => doc.data()[field] === value)
+              .slice(0, n);
+            return { docs, empty: docs.length === 0, size: docs.length };
+          },
+        }),
+      }),
+    }),
     runTransaction: async (cb: (tx: any) => Promise<any>) => {
       const writes: Array<[string, any, Record<string, unknown>]> = [];
       const tx = {

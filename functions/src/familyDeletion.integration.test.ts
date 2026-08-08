@@ -90,6 +90,8 @@ describeWithEmulators('family deletion — Firestore + Auth emulator integration
     // Family subcollection content proving real recursive cleanup.
     await db.doc(`families/${FAMILY_ID}/tasks/task-1`).set({ title: 'Tidy up' });
     await db.doc(`families/${FAMILY_ID}/wallets/${CHILD_ID}`).set({ balancePence: 500 });
+    await db.doc(`families/${FAMILY_ID}/daily_checkins/checkin-1`).set({ userId: CHILD_ID });
+    await db.doc(`families/${FAMILY_ID}/daily_checkin_skips/skip-1`).set({ userId: CHILD_ID });
     await db.doc(`families/${FAMILY_ID}/childLogins/${CHILD_ID}`).set({
       authUid: CHILD_AUTH_UID,
       usernameLower: 'integ_child',
@@ -174,6 +176,8 @@ describeWithEmulators('family deletion — Firestore + Auth emulator integration
     // Family document and all its subcollection content are gone.
     expect((await db.doc(`families/${FAMILY_ID}`).get()).exists).toBe(false);
     expect((await db.doc(`families/${FAMILY_ID}/tasks/task-1`).get()).exists).toBe(false);
+    expect((await db.doc(`families/${FAMILY_ID}/daily_checkins/checkin-1`).get()).exists).toBe(false);
+    expect((await db.doc(`families/${FAMILY_ID}/daily_checkin_skips/skip-1`).get()).exists).toBe(false);
     expect((await db.doc(`families/${FAMILY_ID}/childLogins/${CHILD_ID}`).get()).exists).toBe(false);
 
     // External references are gone.

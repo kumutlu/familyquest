@@ -30,6 +30,8 @@ export interface ModalProps {
   zIndex?: number;
   /** Disable the body scroll lock (e.g. for nested modals). */
   lockScroll?: boolean;
+  /** Prevent Escape, backdrop, and the default close button from dismissing. */
+  preventClose?: boolean;
 }
 
 export function Modal({
@@ -41,6 +43,7 @@ export function Modal({
   footer,
   zIndex = 50,
   lockScroll = true,
+  preventClose = false,
 }: ModalProps) {
   const { t } = useTranslation('common');
   const previouslyFocused = useRef<HTMLElement | null>(null);
@@ -63,6 +66,11 @@ export function Modal({
   // Goal form's Fixed amount / Percentage inputs jumped back to Title).
   const onCloseRef = useRef(onClose);
   onCloseRef.current = onClose;
+  const preventCloseRef = useRef(preventClose);
+  preventCloseRef.current = preventClose;
+  const requestClose = () => {
+    if (!preventCloseRef.current) onCloseRef.current();
+  };
 
   useBodyScrollLock(isOpen && lockScroll);
 
@@ -75,7 +83,7 @@ export function Modal({
     const onKey = (e: KeyboardEvent) => {
       if (e.key === 'Escape') {
         e.preventDefault();
-        onCloseRef.current();
+        requestClose();
         return;
       }
       if (e.key !== 'Tab' || !dialogRef.current) return;
@@ -127,19 +135,24 @@ export function Modal({
     >
       {/* Backdrop */}
       <div
+        data-testid="modal-backdrop"
         className="fixed inset-0 bg-gray-900/40 backdrop-blur-sm transition-opacity"
-        onClick={onClose}
+        onClick={requestClose}
         aria-hidden="true"
       />
 
       {/* Dialog: flex column, bounded dynamic viewport height, overflow hidden */}
-      <div className="relative bg-white w-full sm:max-w-md flex flex-col max-h-[90dvh] sm:max-h-[90vh] overflow-hidden rounded-t-3xl sm:rounded-3xl shadow-xl animate-in fade-in zoom-in-95 duration-200">
+      <div
+        data-testid="modal-panel"
+        className="relative bg-white w-full sm:max-w-md flex flex-col max-h-[90dvh] sm:max-h-[90vh] overflow-hidden rounded-t-3xl sm:rounded-3xl shadow-xl animate-in fade-in zoom-in-95 duration-200 motion-reduce:animate-none"
+      >
         {/* Header (shrink-0) */}
         {header ?? (
           <div className="shrink-0 px-6 py-4 border-b border-gray-50 flex items-center justify-between">
             {title && <h3 id={titleId} className="text-lg font-bold text-gray-900">{title}</h3>}
             <button
-              onClick={onClose}
+              onClick={requestClose}
+              aria-disabled={preventClose}
               aria-label={t('closeDialog')}
               className="p-2 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-full transition-colors ml-auto"
             >

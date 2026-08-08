@@ -20,6 +20,30 @@ afterEach(async () => {
 });
 
 describe('Modal — shared dialog labels', () => {
+  it.each(['Escape', 'backdrop', 'close button'] as const)(
+    'does not dismiss through %s while locked',
+    (route) => {
+      const onClose = vi.fn();
+      const { container } = render(
+        <Modal isOpen onClose={onClose} preventClose title="Title">
+          Body
+        </Modal>,
+      );
+
+      if (route === 'Escape') fireEvent.keyDown(document, { key: 'Escape' });
+      if (route === 'backdrop') {
+        fireEvent.click(container.querySelector('[aria-hidden="true"]') as HTMLElement);
+      }
+      if (route === 'close button') {
+        const close = screen.getByRole('button', { name: /close dialog/i });
+        expect(close).toHaveAttribute('aria-disabled', 'true');
+        fireEvent.click(close);
+      }
+
+      expect(onClose).not.toHaveBeenCalled();
+    },
+  );
+
   it('renders the title and an English close-dialog label', () => {
     renderModal();
     expect(screen.getByRole('heading', { name: 'Test dialog' })).toBeInTheDocument();

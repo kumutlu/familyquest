@@ -19,8 +19,22 @@ import { GamificationSummaryCard } from '../components/dashboard/GamificationSum
 import { adaptGamificationSummary } from '../lib/gamificationAdapters';
 import { isPetBoxEnabled } from '../lib/familyFeatures';
 import { FamilyBulletin } from '../components/bulletin/FamilyBulletin';
+import { DailyCheckinExperience } from '../components/checkins/DailyCheckinExperience';
 
 export function Dashboard() {
+  const { t } = useTranslation('dashboard');
+  const { currentUser, loading } = useStore();
+
+  if (loading || !currentUser) return <PageLoader label={t('loading')} />;
+
+  return (
+    <DailyCheckinExperience>
+      {isParentRole(currentUser.role) ? <ParentDashboard /> : <ChildDashboardContent />}
+    </DailyCheckinExperience>
+  );
+}
+
+function ChildDashboardContent() {
   const { t } = useTranslation('dashboard');
   const {
     currentUser,
@@ -41,11 +55,7 @@ export function Dashboard() {
   } = useStore();
   const { openRequest } = useRequestDetail();
 
-  if (loading || !currentUser) return <PageLoader label={t('loading')} />;
-
-  if (isParentRole(currentUser.role)) {
-    return <ParentDashboard />;
-  }
+  if (!currentUser) return null;
 
   // Adapt gamification summary for child view
   const gamificationView = adaptGamificationSummary(myGamificationSummary, myDailyProgress);

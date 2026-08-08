@@ -109,10 +109,34 @@ function makeFakeDb() {
     },
     doc: (id?: string) => makeRef(`${collPath}/${id || Math.random().toString(36).slice(2)}`),
   });
+  const makeCollectionGroupQuery = (collectionId: string, filters: Array<[string, unknown]>): any => ({
+    where: (field: string, _op: string, value: unknown) =>
+      makeCollectionGroupQuery(collectionId, [...filters, [field, value]]),
+    limit: (n: number) => ({
+      get: async () => {
+        const docs = [...store.keys()]
+          .filter(path => path.split('/').at(-2) === collectionId)
+          .map(path => snapOf(path))
+          .filter(snap => filters.every(([field, value]) => (snap.data() as any)?.[field] === value))
+          .slice(0, n);
+        return { empty: docs.length === 0, docs, size: docs.length };
+      },
+    }),
+  });
   const db: any = {
     store,
     doc: makeRef,
     collection: (path: string) => makeQuery(path, []),
+    collectionGroup: (collectionId: string) => makeCollectionGroupQuery(collectionId, []),
+    batch: () => {
+      const deletions: any[] = [];
+      return {
+        delete: (ref: any) => { deletions.push(ref); },
+        commit: async () => {
+          for (const ref of deletions) store.delete(ref.path);
+        },
+      };
+    },
     runTransaction: async (cb: (tx: any) => Promise<any>) => {
       const writes: Array<['set' | 'update' | 'delete', any, Record<string, unknown>]> = [];
       const tx = {
@@ -223,7 +247,80 @@ describe('deleteAccountImpl — guards', () => {
 });
 
 describe('deleteAccountImpl — non-owner adult', () => {
+  it('removes residual daily history when the profile was already deleted', async () => {
+    db.store.delete('users/parent-uid');
+    db.store.set('families/fam-former/daily_checkins/residual-checkin', { userId: 'parent-uid' });
+    db.store.set('families/fam-former/daily_checkin_skips/residual-skip', { userId: 'parent-uid' });
+    db.store.set('families/fam-former/daily_checkins/other-checkin', { userId: 'owner-uid' });
+    db.store.set('families/fam-former/daily_checkin_skips/other-skip', { userId: 'owner-uid' });
+
+    await deleteAccountImpl(ctx, 'parent-uid', {}, FRESH_AUTH);
+
+    expect(db.store.has('families/fam-former/daily_checkins/residual-checkin')).toBe(false);
+    expect(db.store.has('families/fam-former/daily_checkin_skips/residual-skip')).toBe(false);
+    expect(db.store.has('families/fam-former/daily_checkins/other-checkin')).toBe(true);
+    expect(db.store.has('families/fam-former/daily_checkin_skips/other-skip')).toBe(true);
+  });
+
+  it('removes the account daily history from former and current families', async () => {
+    const formerFamilyId = 'fam-former';
+    db.store.set(`families/${FAMILY_ID}/daily_checkins/current-checkin`, { userId: 'parent-uid' });
+    db.store.set(`families/${FAMILY_ID}/daily_checkin_skips/current-skip`, { userId: 'parent-uid' });
+    db.store.set(`families/${formerFamilyId}/daily_checkins/former-checkin`, { userId: 'parent-uid' });
+    db.store.set(`families/${formerFamilyId}/daily_checkin_skips/former-skip`, { userId: 'parent-uid' });
+    db.store.set(`families/${FAMILY_ID}/daily_checkins/owner-checkin`, { userId: 'owner-uid' });
+    db.store.set(`families/${formerFamilyId}/daily_checkin_skips/owner-skip`, { userId: 'owner-uid' });
+
+    await deleteAccountImpl(ctx, 'parent-uid', {}, FRESH_AUTH);
+
+    expect(db.store.has(`families/${FAMILY_ID}/daily_checkins/current-checkin`)).toBe(false);
+    expect(db.store.has(`families/${FAMILY_ID}/daily_checkin_skips/current-skip`)).toBe(false);
+    expect(db.store.has(`families/${formerFamilyId}/daily_checkins/former-checkin`)).toBe(false);
+    expect(db.store.has(`families/${formerFamilyId}/daily_checkin_skips/former-skip`)).toBe(false);
+    expect(db.store.has(`families/${FAMILY_ID}/daily_checkins/owner-checkin`)).toBe(true);
+    expect(db.store.has(`families/${formerFamilyId}/daily_checkin_skips/owner-skip`)).toBe(true);
+  });
+
+  it('removes daily check-in history after family membership was already cleared', async () => {
+    db.store.set('users/left-uid', { role: 'parent', displayName: 'Already Left' });
+    auth.users.set('left-uid', { customClaims: {} });
+    db.store.set(`families/${FAMILY_ID}/daily_checkins/left-checkin`, { userId: 'left-uid' });
+    db.store.set(`families/${FAMILY_ID}/daily_checkins/owner-checkin`, { userId: 'owner-uid' });
+    db.store.set(`families/${FAMILY_ID}/daily_checkin_skips/left-skip`, { userId: 'left-uid' });
+    db.store.set(`families/${FAMILY_ID}/daily_checkin_skips/owner-skip`, { userId: 'owner-uid' });
+
+    const result = await deleteAccountImpl(ctx, 'left-uid', {}, FRESH_AUTH);
+
+    expect(result.status).toBe('completed');
+    expect(db.store.has(`families/${FAMILY_ID}/daily_checkins/left-checkin`)).toBe(false);
+    expect(db.store.has(`families/${FAMILY_ID}/daily_checkin_skips/left-skip`)).toBe(false);
+    expect(db.store.has(`families/${FAMILY_ID}/daily_checkins/owner-checkin`)).toBe(true);
+    expect(db.store.has(`families/${FAMILY_ID}/daily_checkin_skips/owner-skip`)).toBe(true);
+  });
+
+  it('pages collection-group cleanup until more than 500 records are gone', async () => {
+    db.store.set('users/left-uid', { role: 'parent', displayName: 'Already Left' });
+    auth.users.set('left-uid', { customClaims: {} });
+    for (let index = 0; index < 501; index += 1) {
+      db.store.set(`families/${FAMILY_ID}/daily_checkins/checkin-${index}`, { userId: 'left-uid' });
+      db.store.set(`families/${FAMILY_ID}/daily_checkin_skips/skip-${index}`, { userId: 'left-uid' });
+    }
+    db.store.set(`families/${FAMILY_ID}/daily_checkins/owner-checkin`, { userId: 'owner-uid' });
+    db.store.set(`families/${FAMILY_ID}/daily_checkin_skips/owner-skip`, { userId: 'owner-uid' });
+
+    await deleteAccountImpl(ctx, 'left-uid', {}, FRESH_AUTH);
+
+    expect([...db.store.values()].some(data => data.userId === 'left-uid')).toBe(false);
+    expect(db.store.has(`families/${FAMILY_ID}/daily_checkins/owner-checkin`)).toBe(true);
+    expect(db.store.has(`families/${FAMILY_ID}/daily_checkin_skips/owner-skip`)).toBe(true);
+  });
+
   it('deletes profile, membership projection, claims and Auth (last), preserving the family', async () => {
+    db.store.set(`families/${FAMILY_ID}/daily_checkins/parent-checkin`, { userId: 'parent-uid' });
+    db.store.set(`families/${FAMILY_ID}/daily_checkins/owner-checkin`, { userId: 'owner-uid' });
+    db.store.set(`families/${FAMILY_ID}/daily_checkin_skips/parent-skip`, { userId: 'parent-uid' });
+    db.store.set(`families/${FAMILY_ID}/daily_checkin_skips/owner-skip`, { userId: 'owner-uid' });
+
     const result = await deleteAccountImpl(ctx, 'parent-uid', {}, FRESH_AUTH);
     expect(result.status).toBe('completed');
     expect(db.store.has('users/parent-uid')).toBe(false);
@@ -233,6 +330,70 @@ describe('deleteAccountImpl — non-owner adult', () => {
     // Family and other members untouched.
     expect(db.store.get(`families/${FAMILY_ID}`).name).toBe('Acct Family');
     expect(db.store.get('users/owner-uid').role).toBe('owner');
+    expect(db.store.has(`families/${FAMILY_ID}/daily_checkins/parent-checkin`)).toBe(false);
+    expect(db.store.has(`families/${FAMILY_ID}/daily_checkin_skips/parent-skip`)).toBe(false);
+    expect(db.store.has(`families/${FAMILY_ID}/daily_checkins/owner-checkin`)).toBe(true);
+    expect(db.store.has(`families/${FAMILY_ID}/daily_checkin_skips/owner-skip`)).toBe(true);
+  });
+
+  it('purges a final authorized check-in written between the first sweep and profile removal', async () => {
+    db.store.set(`families/${FAMILY_ID}/daily_checkins/owner-checkin`, { userId: 'owner-uid' });
+    const runTransaction = db.runTransaction.bind(db);
+    let injected = false;
+    db.runTransaction = async (callback: (transaction: any) => Promise<unknown>) => {
+      const result = await runTransaction(callback);
+      if (!injected && !db.store.has('users/parent-uid')) {
+        injected = true;
+        db.store.set(`families/${FAMILY_ID}/daily_checkins/final-parent-checkin`, { userId: 'parent-uid' });
+        db.store.set(`families/${FAMILY_ID}/daily_checkin_skips/final-parent-skip`, { userId: 'parent-uid' });
+      }
+      return result;
+    };
+
+    await expect(deleteAccountImpl(ctx, 'parent-uid', {}, FRESH_AUTH))
+      .resolves.toEqual({ status: 'completed' });
+
+    expect(injected).toBe(true);
+    expect(db.store.has(`families/${FAMILY_ID}/daily_checkins/final-parent-checkin`)).toBe(false);
+    expect(db.store.has(`families/${FAMILY_ID}/daily_checkin_skips/final-parent-skip`)).toBe(false);
+    expect(db.store.has(`families/${FAMILY_ID}/daily_checkins/owner-checkin`)).toBe(true);
+  });
+
+  it('does not complete when the final sweep fails and a missing-profile retry finishes it', async () => {
+    const runTransaction = db.runTransaction.bind(db);
+    const createBatch = db.batch.bind(db);
+    let failFinalSweep = false;
+    db.runTransaction = async (callback: (transaction: any) => Promise<unknown>) => {
+      const result = await runTransaction(callback);
+      if (!db.store.has('users/parent-uid')) {
+        db.store.set(`families/${FAMILY_ID}/daily_checkins/final-parent-checkin`, { userId: 'parent-uid' });
+        failFinalSweep = true;
+      }
+      return result;
+    };
+    db.batch = () => {
+      const batch = createBatch();
+      const commit = batch.commit.bind(batch);
+      batch.commit = async () => {
+        if (failFinalSweep) {
+          failFinalSweep = false;
+          throw new Error('final daily check-in sweep failed');
+        }
+        return commit();
+      };
+      return batch;
+    };
+
+    await expect(deleteAccountImpl(ctx, 'parent-uid', {}, FRESH_AUTH))
+      .rejects.toThrow('final daily check-in sweep failed');
+    expect(db.store.has('users/parent-uid')).toBe(false);
+    expect(db.store.has(`families/${FAMILY_ID}/daily_checkins/final-parent-checkin`)).toBe(true);
+    expect(auth.deleted).not.toContain('parent-uid');
+
+    await expect(deleteAccountImpl(ctx, 'parent-uid', {}, FRESH_AUTH))
+      .resolves.toEqual({ status: 'completed' });
+    expect(db.store.has(`families/${FAMILY_ID}/daily_checkins/final-parent-checkin`)).toBe(false);
+    expect(auth.deleted).toContain('parent-uid');
   });
 
   it('a self-registered child adult account can also delete itself', async () => {
@@ -254,6 +415,11 @@ describe('deleteAccountImpl — non-owner adult', () => {
 
 describe('deleteAccountImpl — owner with successor', () => {
   it('transfers ownership to the chosen eligible adult then deletes the owner', async () => {
+    db.store.set(`families/${FAMILY_ID}/daily_checkins/owner-checkin`, { userId: 'owner-uid' });
+    db.store.set(`families/${FAMILY_ID}/daily_checkins/parent-checkin`, { userId: 'parent-uid' });
+    db.store.set(`families/${FAMILY_ID}/daily_checkin_skips/owner-skip`, { userId: 'owner-uid' });
+    db.store.set(`families/${FAMILY_ID}/daily_checkin_skips/parent-skip`, { userId: 'parent-uid' });
+
     const result = await deleteAccountImpl(ctx, 'owner-uid', { successorUid: 'parent-uid' }, FRESH_AUTH);
     expect(result.status).toBe('completed');
     expect(db.store.get('users/parent-uid').role).toBe('owner');
@@ -261,6 +427,26 @@ describe('deleteAccountImpl — owner with successor', () => {
     expect(db.store.has('users/owner-uid')).toBe(false);
     expect(auth.deleted).toContain('owner-uid');
     expect(auth.deleted).not.toContain('parent-uid');
+    expect(db.store.has(`families/${FAMILY_ID}/daily_checkins/owner-checkin`)).toBe(false);
+    expect(db.store.has(`families/${FAMILY_ID}/daily_checkin_skips/owner-skip`)).toBe(false);
+    expect(db.store.has(`families/${FAMILY_ID}/daily_checkins/parent-checkin`)).toBe(true);
+    expect(db.store.has(`families/${FAMILY_ID}/daily_checkin_skips/parent-skip`)).toBe(true);
+  });
+
+  it('cleans the orphaned owner records before completing account deletion', async () => {
+    db.store.delete(`families/${FAMILY_ID}`);
+    db.store.set(`families/${FAMILY_ID}/daily_checkins/owner-checkin`, { userId: 'owner-uid' });
+    db.store.set(`families/${FAMILY_ID}/daily_checkins/parent-checkin`, { userId: 'parent-uid' });
+    db.store.set(`families/${FAMILY_ID}/daily_checkin_skips/owner-skip`, { userId: 'owner-uid' });
+    db.store.set(`families/${FAMILY_ID}/daily_checkin_skips/parent-skip`, { userId: 'parent-uid' });
+
+    const result = await deleteAccountImpl(ctx, 'owner-uid', {}, FRESH_AUTH);
+
+    expect(result.status).toBe('completed');
+    expect(db.store.has(`families/${FAMILY_ID}/daily_checkins/owner-checkin`)).toBe(false);
+    expect(db.store.has(`families/${FAMILY_ID}/daily_checkin_skips/owner-skip`)).toBe(false);
+    expect(db.store.has(`families/${FAMILY_ID}/daily_checkins/parent-checkin`)).toBe(true);
+    expect(db.store.has(`families/${FAMILY_ID}/daily_checkin_skips/parent-skip`)).toBe(true);
   });
 
   it('requires the successor when eligible adults exist', async () => {
@@ -319,6 +505,25 @@ describe('deleteAccountImpl — sole owner (family deletion cascade)', () => {
     // Repeated deleteAccount call after completion is a stable no-op success.
     const resume = await deleteAccountImpl(ctx, 'owner-uid', {}, FRESH_AUTH);
     expect(resume.status).toBe('completed');
+  });
+
+  it('the riding worker removes owner history from former and current families', async () => {
+    db.store.set(`families/${FAMILY_ID}/daily_checkins/current-checkin`, { userId: 'owner-uid' });
+    db.store.set(`families/${FAMILY_ID}/daily_checkin_skips/current-skip`, { userId: 'owner-uid' });
+    db.store.set('families/fam-former/daily_checkins/former-checkin', { userId: 'owner-uid' });
+    db.store.set('families/fam-former/daily_checkin_skips/former-skip', { userId: 'owner-uid' });
+    db.store.set('families/fam-former/daily_checkins/other-checkin', { userId: 'teen-uid' });
+    db.store.set('families/fam-former/daily_checkin_skips/other-skip', { userId: 'teen-uid' });
+
+    await deleteAccountImpl(ctx, 'owner-uid', { familyNameConfirmation: 'Acct Family' }, FRESH_AUTH);
+    await processFamilyDeletionImpl(ctx, FAMILY_ID);
+
+    expect(db.store.has(`families/${FAMILY_ID}/daily_checkins/current-checkin`)).toBe(false);
+    expect(db.store.has(`families/${FAMILY_ID}/daily_checkin_skips/current-skip`)).toBe(false);
+    expect(db.store.has('families/fam-former/daily_checkins/former-checkin')).toBe(false);
+    expect(db.store.has('families/fam-former/daily_checkin_skips/former-skip')).toBe(false);
+    expect(db.store.has('families/fam-former/daily_checkins/other-checkin')).toBe(true);
+    expect(db.store.has('families/fam-former/daily_checkin_skips/other-skip')).toBe(true);
   });
 
   it('joins an already-running family deletion instead of starting a duplicate', async () => {

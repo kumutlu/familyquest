@@ -1,4 +1,4 @@
-import { useEffect } from 'react';
+import { useEffect, useRef } from 'react';
 import { CheckCircle2, AlertCircle, Info, X } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { cn } from '../../lib/utils';
@@ -24,11 +24,14 @@ export interface ToastProps {
  */
 export function Toast({ toast, onDismiss, duration = 4000 }: ToastProps) {
   const { t } = useTranslation('common');
+  const onDismissRef = useRef(onDismiss);
+  onDismissRef.current = onDismiss;
+
   useEffect(() => {
     if (!toast) return;
-    const timer = setTimeout(onDismiss, duration);
+    const timer = setTimeout(() => onDismissRef.current(), duration);
     return () => clearTimeout(timer);
-  }, [toast, onDismiss, duration]);
+  }, [toast, duration]);
 
   if (!toast) return null;
 

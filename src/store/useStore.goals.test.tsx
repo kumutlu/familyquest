@@ -24,6 +24,7 @@ vi.mock('firebase/firestore', () => ({
   doc: vi.fn((_db: unknown, collectionOrPath: string, id?: string) => (id ? `${collectionOrPath}/${id}` : collectionOrPath)),
   query: vi.fn((target: string, ..._constraints: any[]) => target),
   orderBy: vi.fn((field: string, direction?: string) => ({ type: 'orderBy', field, direction })),
+  limit: vi.fn((value: number) => ({ type: 'limit', value })),
   where: vi.fn((field: string, operator: string, value: unknown) => ({ type: 'where', field, operator, value })),
   onSnapshot: vi.fn((target: string, optionsOrNext: any, nextOrError: any, maybeError: any) => {
     const hasOptions = typeof optionsOrNext !== 'function';

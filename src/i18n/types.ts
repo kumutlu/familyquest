@@ -19,6 +19,7 @@ import type enReversals from './locales/en/reversals.json';
 import type enBulletin from './locales/en/bulletin.json';
 import type enLegal from './locales/en/legal.json';
 import type enStartup from './locales/en/startup.json';
+import type enCheckins from './locales/en/checkins.json';
 
 /**
  * Strongly-typed resource shape, keyed by NAMESPACE (not language). `en` is the
@@ -48,6 +49,7 @@ interface Resources {
   bulletin: typeof enBulletin;
   legal: typeof enLegal;
   startup: typeof enStartup;
+  checkins: typeof enCheckins;
   // The Help Center resolves article/category keys dynamically at runtime, so
   // its namespace is registered with an open key map rather than a literal
   // key union.
