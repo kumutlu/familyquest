@@ -39,10 +39,45 @@ function sourceFiles(dir: string): string[] {
     .sort()
 }
 
-describe('Stage 7 boundary — no deployed V4 production write path', () => {
-  it('functions/src/index.ts does not reference any gamification/v4 module', () => {
-    const index = readFileSync(FUNCTIONS_INDEX, 'utf8')
-    expect(index).not.toMatch(/gamification\/v4/)
+// Task 7.1 activation readiness: the deploy entry MAY now reference exactly ONE
+// V4 module — the task-approval adapter — so the engine can be injected into the
+// real trigger. Everything else stays unreachable from the deployed bundle.
+const INDEX_V4_ALLOWLIST = ['./gamification/v4/taskApprovalAdapter']
+
+describe('Stage 7 boundary — only the task-approval adapter is reachable from deploy', () => {
+  const index = readFileSync(FUNCTIONS_INDEX, 'utf8')
+
+  it('every gamification/v4 reference in index.ts is on the allowlist', () => {
+    const refs = [...index.matchAll(/['"]([^'"]*gamification\/v4[^'"]*)['"]/g)].map((m) => m[1])
+    expect(refs.length).toBeGreaterThan(0)
+    for (const ref of refs) expect(INDEX_V4_ALLOWLIST).toContain(ref)
+  })
+
+  it('index.ts injects the V4 engine but never flips a route to v4', () => {
+    expect(index).toContain('createV4TaskApprovalEngine')
+    expect(index).toContain('denyStage7ByDefault')
+    expect(index).not.toMatch(/setRouteResolver|setWriterFlag|activateStage7/)
+  })
+})
+
+describe('Stage 7 boundary — client-facing code cannot import the server V4 repository', () => {
+  const CLIENT_DIRS = [resolve(ROOT, 'src')]
+
+  function walk(dir: string): string[] {
+    const out: string[] = []
+    for (const entry of readdirSync(dir, { withFileTypes: true })) {
+      const full = resolve(dir, entry.name)
+      if (entry.isDirectory()) out.push(...walk(full))
+      else if (entry.name.endsWith('.ts') || entry.name.endsWith('.tsx')) out.push(full)
+    }
+    return out
+  }
+
+  it('no src/ module imports functions/src/gamification/v4', () => {
+    const offenders = CLIENT_DIRS.flatMap(walk).filter((file) =>
+      /from ['"][^'"]*functions\/src\/gamification\/v4/.test(readFileSync(file, 'utf8')),
+    )
+    expect(offenders).toEqual([])
   })
 })
 
@@ -100,8 +135,9 @@ describe('Stage 7 infrastructure — files exist and stay non-production', () =>
 
   it('functions/src/index.ts does NOT import any Stage 7 infrastructure module', () => {
     const index = readFileSync(FUNCTIONS_INDEX, 'utf8')
-    // The whole gamification/v4 dir must stay unreferenced by the deploy entry.
-    expect(index).not.toMatch(/gamification\/v4/)
+    // Only the Task 7.1 adapter may be referenced by the deploy entry.
+    const refs = [...index.matchAll(/['"]([^'"]*gamification\/v4[^'"]*)['"]/g)].map((m) => m[1])
+    for (const ref of refs) expect(INDEX_V4_ALLOWLIST).toContain(ref)
   })
 
   it('Stage 7 infrastructure modules are NOT referenced by functions/src/index.ts by name', () => {
