@@ -220,3 +220,33 @@ describe('Stage 7 verifier — read-only', () => {
     expect(store.writes).toEqual([])
   })
 })
+
+describe('Stage 7 verifier — evidence provider wiring (Task 7.1)', () => {
+  it('11. uses the injected READ-ONLY provider when no static evidence is supplied', async () => {
+    const { db, store } = await cutoverDb()
+    const loadEvidence = vi.fn(async () => evidence())
+    await expect(
+      createStage7WriterVerifier(deps(db, { evidence: null, loadEvidence }))(FAMILY),
+    ).resolves.toBeUndefined()
+    expect(loadEvidence).toHaveBeenCalledWith(FAMILY)
+    expect(store.writes).toEqual([])
+  })
+
+  it('12. a provider that yields no evidence fails closed', async () => {
+    const { db } = await cutoverDb()
+    await expect(
+      createStage7WriterVerifier(deps(db, { evidence: null, loadEvidence: async () => null }))(FAMILY),
+    ).rejects.toBeInstanceOf(Stage7EvidenceUnavailableError)
+  })
+
+  it('13. a provider that throws (invalid artifact) propagates => zero writers', async () => {
+    const { db, store } = await cutoverDb()
+    const loadEvidence = async (): Promise<Stage7ApprovedEvidence> => {
+      throw new Error('Stage 7 evidence invalid: marker reportHash mismatch')
+    }
+    await expect(
+      createStage7WriterVerifier(deps(db, { evidence: null, loadEvidence }))(FAMILY),
+    ).rejects.toThrow(/evidence invalid/i)
+    expect(store.writes).toEqual([])
+  })
+})

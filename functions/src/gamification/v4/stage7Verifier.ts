@@ -83,6 +83,12 @@ export interface Stage7WriterVerifierDeps {
   readonly writer: GamificationWriter
   /** Provisioned evidence; `null`/absent => fail closed. */
   readonly evidence?: Stage7ApprovedEvidence | null
+  /**
+   * READ-ONLY evidence provider used when no static `evidence` is supplied
+   * (see `stage7EvidenceProvider.ts`). It loads the approved Gate 1 artifact and
+   * the Task 5.2 marker per family. Any load failure propagates => fail closed.
+   */
+  readonly loadEvidence?: (familyId: string) => Promise<Stage7ApprovedEvidence | null>
   /** Stage 6 verification. Absent => Stage 6 reported as FAILED (fail closed). */
   readonly verifyPreCutoverFn?: VerifyPreCutoverFn
   /** Task 5.2 marker reader. */
@@ -119,7 +125,7 @@ export function createStage7WriterVerifier(
   const maxAge = deps.maxEvidenceAgeMs ?? DEFAULT_MAX_EVIDENCE_AGE_MS
 
   return async (familyId: string): Promise<void> => {
-    const evidence = deps.evidence ?? null
+    const evidence = deps.evidence ?? (deps.loadEvidence ? await deps.loadEvidence(familyId) : null)
     if (!evidence) throw new Stage7EvidenceUnavailableError(familyId)
 
     if (evidence.familyId !== familyId) {

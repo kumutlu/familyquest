@@ -26,6 +26,10 @@ import {
   createV4TaskApprovalEngine,
   createStage7WriterVerifier,
 } from './gamification/v4/taskApprovalAdapter';
+import {
+  createStage7EvidenceProvider,
+  type Gate1Artifact,
+} from './gamification/v4/stage7EvidenceProvider';
 import { finalizeGamificationDaysOnce } from './gamificationScheduler';
 import { ensureFamilyGamificationInitialized } from './familyGamificationInit';
 
@@ -56,9 +60,23 @@ const gamificationRepository = new AdminGamificationRepository(db);
 //   Gate 1 approved replay evidence + Task 5.2 migration marker (wallet hash
 //   BEFORE == AFTER) + Stage 6 pre-cutover verification are ALL green AND the
 //   runtime cutover config has the writer flag enabled.
-// No evidence is provisioned in the deployed bundle (`evidence: null`), so the
-// verifier fails closed today; activation is an explicit provisioning step.
-// The verifier is read-only: it never writes, and there is no dual write.
+// Evidence is loaded by the READ-ONLY Stage 7 evidence provider (Gate 1
+// approved replay artifact + Task 5.2 migration marker). The artifact is only
+// present when an operator provisions it via STAGE7_GATE1_ARTIFACT (a JSON
+// string, no secrets), so the deployed bundle has NO evidence today and the
+// verifier fails closed. The provider performs reads only.
+function loadProvisionedGate1Artifact(): Gate1Artifact | null {
+  const raw = process.env.STAGE7_GATE1_ARTIFACT;
+  if (!raw) return null;
+  try {
+    return JSON.parse(raw) as Gate1Artifact;
+  } catch (error) {
+    console.error('[stage7-evidence] STAGE7_GATE1_ARTIFACT is not valid JSON; failing closed', error);
+    return null;
+  }
+}
+const provisionedGate1Artifact = loadProvisionedGate1Artifact();
+
 const gamificationTriggers = createGamificationTriggers({
   repository: gamificationRepository,
   now: () => Date.now(),
@@ -67,7 +85,11 @@ const gamificationTriggers = createGamificationTriggers({
     verifyStage7: createStage7WriterVerifier({
       db,
       writer: 'task_approval',
-      evidence: null,
+      loadEvidence: createStage7EvidenceProvider({
+        db,
+        writer: 'task_approval',
+        loadGate1Artifact: async () => provisionedGate1Artifact,
+      }),
     }),
   }),
 });

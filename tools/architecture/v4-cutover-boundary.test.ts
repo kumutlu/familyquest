@@ -39,10 +39,14 @@ function sourceFiles(dir: string): string[] {
     .sort()
 }
 
-// Task 7.1 activation readiness: the deploy entry MAY now reference exactly ONE
-// V4 module — the task-approval adapter — so the engine can be injected into the
-// real trigger. Everything else stays unreachable from the deployed bundle.
-const INDEX_V4_ALLOWLIST = ['./gamification/v4/taskApprovalAdapter']
+// Task 7.1 activation readiness: the deploy entry MAY reference exactly TWO
+// V4 modules — the task-approval adapter (engine injection) and the READ-ONLY
+// Stage 7 evidence provider (Gate 1 artifact + Gate 2 marker loading). Both are
+// non-writing. Everything else stays unreachable from the deployed bundle.
+const INDEX_V4_ALLOWLIST = [
+  './gamification/v4/taskApprovalAdapter',
+  './gamification/v4/stage7EvidenceProvider',
+]
 
 describe('Stage 7 boundary — only the task-approval adapter is reachable from deploy', () => {
   const index = readFileSync(FUNCTIONS_INDEX, 'utf8')
@@ -61,8 +65,14 @@ describe('Stage 7 boundary — only the task-approval adapter is reachable from 
     expect(index).not.toMatch(/setRouteResolver|setWriterFlag|activateStage7/)
   })
 
-  it('index.ts provisions NO Stage 7 evidence (verifier fails closed)', () => {
-    expect(index).toMatch(/evidence:\s*null/)
+  it('index.ts embeds NO Stage 7 evidence: it is loaded read-only, fails closed unprovisioned', () => {
+    expect(index).toContain('createStage7EvidenceProvider')
+    // No inline/static evidence object and no approved artifact baked into the bundle.
+    expect(index).not.toMatch(/evidence:\s*\{/)
+    expect(index).not.toContain('GATE_1_REACHED')
+    // The artifact is supplied out-of-band by an operator; absent => null => blocked.
+    expect(index).toContain('STAGE7_GATE1_ARTIFACT')
+    expect(index).not.toContain('applicationDefault')
   })
 })
 
@@ -157,6 +167,19 @@ describe('Stage 7 infrastructure — files exist and stay non-production', () =>
     const source = readFileSync(resolve(FUNCTIONS_V4_DIR, 'stage7Verifier.ts'), 'utf8')
     expect(source).toContain('assertWriterCutoverAllowed')
     expect(source).not.toMatch(/\.(set|update|create|delete)\(/)
+  })
+
+  it('the Stage 7 evidence provider is READ-ONLY and does not duplicate Stage 6', () => {
+    const source = readFileSync(resolve(FUNCTIONS_V4_DIR, 'stage7EvidenceProvider.ts'), 'utf8')
+    // No Firestore mutation of any kind (`.update(` alone would match the
+    // sha256 hasher, so document mutations are matched precisely).
+    expect(source).not.toMatch(/\.(set|create|delete)\(/)
+    expect(source).not.toMatch(/\.doc\([^)]*\)\.(set|update|delete)\(/)
+    expect(source).not.toMatch(/\bref\.(set|update|delete)\(/)
+    expect(source).not.toMatch(/runTransaction|batch\(/)
+    // Stage 6 stays in scripts/verify/pre-cutover.ts (single implementation).
+    expect(source).not.toMatch(/function\s+verifyPreCutover/)
+    expect(source).toContain('gamification_migration_marker/marker')
   })
 })
 
