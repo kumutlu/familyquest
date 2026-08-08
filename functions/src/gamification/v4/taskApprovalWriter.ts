@@ -159,7 +159,7 @@ export async function applyTaskApprovalV4(
   db: Firestore,
   facts: TaskApprovalFactsV4,
 ): Promise<TaskApprovalWriteResultV4> {
-  assertEmulatorOnly('applyTaskApprovalV4')
+  assertEmulatorOnly('applyTaskApprovalV4', { familyId: facts?.familyId })
 
   const event = buildTaskApprovedEventV4(facts)
 

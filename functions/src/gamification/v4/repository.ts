@@ -31,9 +31,20 @@ import {
   stateDocPath,
 } from '../../../../src/domain/gamification/v4/storage'
 
-const LOCAL_EMULATOR_HOSTS = new Set(['localhost', '127.0.0.1', '::1'])
+import {
+  assertV4WriteAllowed,
+  isEmulatorOnlyMode as trustedIsEmulatorOnlyMode,
+  UntrustedV4WriteError,
+  type V4WriteTarget,
+} from './trustedServerContext'
 
-/** Thrown when a write is attempted outside a local Firestore emulator. */
+/**
+ * Thrown when a write is attempted without authority.
+ *
+ * Historically this meant "not a local emulator". It now means "neither a local
+ * emulator NOR an authorised Stage 7 trusted-server scope" — strictly the same
+ * guarantee plus one explicitly-proven production path.
+ */
 export class EmulatorOnlyGuardError extends Error {
   constructor(message: string) {
     super(message)
@@ -51,19 +62,28 @@ export class CrossFamilyEventError extends Error {
 
 /** True iff FIRESTORE_EMULATOR_HOST points at a local address. */
 export function isEmulatorOnlyMode(): boolean {
-  const host = process.env.FIRESTORE_EMULATOR_HOST
-  if (!host) return false
-  const hostPart = host.split(':')[0] || ''
-  return LOCAL_EMULATOR_HOSTS.has(hostPart)
+  return trustedIsEmulatorOnlyMode()
 }
 
-/** Fail closed unless we are targeting a local Firestore emulator. */
-export function assertEmulatorOnly(context: string): void {
-  if (!isEmulatorOnlyMode()) {
-    throw new EmulatorOnlyGuardError(
-      `Refusing ${context}: FIRESTORE_EMULATOR_HOST must be set to a local ` +
-        `address (localhost|127.0.0.1|::1). Production writes are forbidden.`,
-    )
+/**
+ * Fail closed unless this V4 repository write is authorised.
+ *
+ * Delegates to the explicit trusted-server contract:
+ *   - local emulator                       => allowed (unchanged);
+ *   - production + trusted Stage 7 scope   => allowed for that family only;
+ *   - anything else                        => throws.
+ *
+ * The kill switch is NOT removed: without an explicit, unexpired, family-scoped
+ * trusted context, production writes remain impossible.
+ */
+export function assertEmulatorOnly(context: string, target: V4WriteTarget = {}): void {
+  try {
+    assertV4WriteAllowed(context, target)
+  } catch (error) {
+    if (error instanceof UntrustedV4WriteError) {
+      throw new EmulatorOnlyGuardError(error.message)
+    }
+    throw error
   }
 }
 
@@ -121,7 +141,7 @@ export async function writeEventIdempotent(
   db: Firestore,
   event: GamificationEventV4,
 ): Promise<GamificationEventV4> {
-  assertEmulatorOnly('writeEventIdempotent')
+  assertEmulatorOnly('writeEventIdempotent', { familyId: event?.familyId })
   assertValidEventV4(event)
   rejectCrossFamily(event)
 
@@ -143,7 +163,7 @@ export async function writeEventIdempotent(
  * family partition are returned (family/member isolation is structural).
  */
 export async function readLedger(db: Firestore, familyId: string): Promise<GamificationEventV4[]> {
-  assertEmulatorOnly('readLedger')
+  assertEmulatorOnly('readLedger', { familyId })
   assertNonEmptyString(familyId, 'familyId')
 
   const snap = await eventCollectionRef(db, familyId).get()
@@ -163,7 +183,7 @@ export async function readEvent(
   familyId: string,
   eventId: string,
 ): Promise<GamificationEventV4 | null> {
-  assertEmulatorOnly('readEvent')
+  assertEmulatorOnly('readEvent', { familyId })
   assertNonEmptyString(familyId, 'familyId')
   assertNonEmptyString(eventId, 'eventId')
 
@@ -192,7 +212,7 @@ export async function writeState(
   memberId: string,
   state: GamificationStateV4,
 ): Promise<GamificationStateV4> {
-  assertEmulatorOnly('writeState')
+  assertEmulatorOnly('writeState', { familyId })
   assertNonEmptyString(familyId, 'familyId')
   assertNonEmptyString(memberId, 'memberId')
 
@@ -215,7 +235,7 @@ export async function readState(
   familyId: string,
   memberId: string,
 ): Promise<GamificationStateV4 | null> {
-  assertEmulatorOnly('readState')
+  assertEmulatorOnly('readState', { familyId })
   assertNonEmptyString(familyId, 'familyId')
   assertNonEmptyString(memberId, 'memberId')
 
