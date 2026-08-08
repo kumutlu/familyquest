@@ -79,7 +79,7 @@ export function Notifications() {
   const { t } = useTranslation(['notifications', 'common']);
   const currentUser = useStore(state => state.currentUser);
   const familyId = currentUser?.familyId ?? null;
-  const userId = currentUser?.uid ?? null;
+  const userId = currentUser?.id ?? null;
 
   const {
     notifications,

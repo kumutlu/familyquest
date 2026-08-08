@@ -81,7 +81,7 @@ const DRAG_VELOCITY_THRESHOLD = 0.6; // px/ms flick velocity to close
 export function NotificationCenter() {
   const currentUser = useStore(state => state.currentUser);
   const familyId = currentUser?.familyId ?? null;
-  const userId = currentUser?.uid ?? null;
+  const userId = currentUser?.id ?? null;
 
   const {
     notifications,
