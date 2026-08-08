@@ -55,8 +55,14 @@ describe('Stage 7 boundary — only the task-approval adapter is reachable from 
 
   it('index.ts injects the V4 engine but never flips a route to v4', () => {
     expect(index).toContain('createV4TaskApprovalEngine')
-    expect(index).toContain('denyStage7ByDefault')
+    // Task 7.1: the real Stage 7 verifier replaces `denyStage7ByDefault`.
+    expect(index).toContain('createStage7WriterVerifier')
+    expect(index).not.toContain('denyStage7ByDefault')
     expect(index).not.toMatch(/setRouteResolver|setWriterFlag|activateStage7/)
+  })
+
+  it('index.ts provisions NO Stage 7 evidence (verifier fails closed)', () => {
+    expect(index).toMatch(/evidence:\s*null/)
   })
 })
 
@@ -145,6 +151,12 @@ describe('Stage 7 infrastructure — files exist and stay non-production', () =>
     for (const name of ['cutoverConfig', 'stage7Gate', 'rollback', 'featureFlags', 'stage7Readiness']) {
       expect(index).not.toContain(name)
     }
+  })
+
+  it('the Stage 7 verifier delegates to the existing gate chain and never writes', () => {
+    const source = readFileSync(resolve(FUNCTIONS_V4_DIR, 'stage7Verifier.ts'), 'utf8')
+    expect(source).toContain('assertWriterCutoverAllowed')
+    expect(source).not.toMatch(/\.(set|update|create|delete)\(/)
   })
 })
 

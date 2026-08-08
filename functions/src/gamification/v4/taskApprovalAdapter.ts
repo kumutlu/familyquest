@@ -34,6 +34,7 @@ import {
   runWithTrustedV4Write,
   type TrustedV4WriteContext,
 } from './trustedServerContext'
+import { Stage7EvidenceUnavailableError as Stage7EvidenceUnavailableErrorImpl } from './stage7Verifier'
 import type {
   GamificationProcessResult,
   GamificationV4TaskApprovalEngine,
@@ -48,29 +49,30 @@ export class TaskApprovalFactsError extends Error {
   }
 }
 
-/** Thrown when no Stage 7 evidence provider has been provisioned. */
-export class Stage7EvidenceUnavailableError extends Error {
-  constructor(familyId: string) {
-    super(
-      `Stage 7 evidence provider is not provisioned: refusing a V4 task-approval ` +
-        `write for family ${familyId}. Task 7.1 activation requires wiring an ` +
-        `approved Gate 1 replay report + Task 5.2 migration marker into ` +
-        `assertWriterCutoverAllowed.`,
-    )
-    this.name = 'Stage7EvidenceUnavailableError'
-  }
-}
+/**
+ * Task 7.1 wiring surface. The deployed entry point may only import THIS module
+ * (pinned by the architecture boundary test), so the real Stage 7 verifier is
+ * re-exported here. The verifier itself is read-only and delegates every
+ * decision to `assertWriterCutoverAllowed` (Gate 1 + Gate 2 + Stage 6).
+ */
+export {
+  createStage7WriterVerifier,
+  Stage7EvidenceUnavailableError,
+  Stage7EvidenceRefusedError,
+  DEFAULT_MAX_EVIDENCE_AGE_MS,
+  type Stage7ApprovedEvidence,
+  type Stage7WriterVerifierDeps,
+} from './stage7Verifier'
 
 /**
- * The DEFAULT production Stage 7 verifier: always denies.
+ * The fail-closed placeholder verifier: always denies.
  *
- * This is the deliberate fail-closed default for the deployed bundle. The V4
- * engine is constructed and injected, but even if a family's route were flipped
- * to `v4` today, this verifier throws before any write — so activation is a
- * single, explicit, reviewable provisioning step rather than a flag flip.
+ * Retained for tests and for any writer that has NOT been provisioned with
+ * approved Stage 7 evidence. The deployed task-approval path now uses the real
+ * verifier (`createStage7WriterVerifier`).
  */
 export const denyStage7ByDefault: VerifyStage7ForFamily = async (familyId) => {
-  throw new Stage7EvidenceUnavailableError(familyId)
+  throw new Stage7EvidenceUnavailableErrorImpl(familyId)
 }
 
 /**

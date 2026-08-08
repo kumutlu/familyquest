@@ -24,7 +24,7 @@ import { AdminBehaviourRepository } from './behaviourRepository';
 import { createGamificationTriggers } from './gamificationTriggers';
 import {
   createV4TaskApprovalEngine,
-  denyStage7ByDefault,
+  createStage7WriterVerifier,
 } from './gamification/v4/taskApprovalAdapter';
 import { finalizeGamificationDaysOnce } from './gamificationScheduler';
 import { ensureFamilyGamificationInitialized } from './familyGamificationInit';
@@ -49,14 +49,26 @@ const gamificationRepository = new AdminGamificationRepository(db);
 // Stage 7 / Task 7.1: the REAL V4 task-approval engine is constructed and
 // injected here so the writer is production-ACTIVATABLE. It is NOT active:
 // `processApprovedCompletion` resolves the route first and the default resolver
-// is all-legacy, so this engine is never called. Even if a family were routed
-// to v4, `denyStage7ByDefault` refuses before any write (fail closed).
+// is all-legacy, so this engine is never called.
+//
+// Even if a family were routed to v4, the REAL Stage 7 verifier below runs
+// first and refuses before any write unless, for THAT family and THAT writer:
+//   Gate 1 approved replay evidence + Task 5.2 migration marker (wallet hash
+//   BEFORE == AFTER) + Stage 6 pre-cutover verification are ALL green AND the
+//   runtime cutover config has the writer flag enabled.
+// No evidence is provisioned in the deployed bundle (`evidence: null`), so the
+// verifier fails closed today; activation is an explicit provisioning step.
+// The verifier is read-only: it never writes, and there is no dual write.
 const gamificationTriggers = createGamificationTriggers({
   repository: gamificationRepository,
   now: () => Date.now(),
   v4TaskApproval: createV4TaskApprovalEngine({
     db,
-    verifyStage7: denyStage7ByDefault,
+    verifyStage7: createStage7WriterVerifier({
+      db,
+      writer: 'task_approval',
+      evidence: null,
+    }),
   }),
 });
 
