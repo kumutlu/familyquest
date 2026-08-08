@@ -1,5 +1,5 @@
 import { assertFails, assertSucceeds, initializeTestEnvironment, RulesTestEnvironment } from '@firebase/rules-unit-testing';
-import { doc, setDoc, serverTimestamp, collection, addDoc, getDoc, updateDoc, deleteDoc } from 'firebase/firestore';
+import { doc, setDoc, serverTimestamp, collection, addDoc, getDoc, updateDoc, deleteDoc, writeBatch } from 'firebase/firestore';
 import { readFileSync } from 'fs';
 import { describe, beforeAll, afterAll, beforeEach, it, expect } from 'vitest';
 
@@ -298,5 +298,69 @@ describe('Notification read state (families/{familyId}/notification_reads/{id})'
     await assertFails(
       setDoc(doc(db, 'families/family1/notification_reads/r1'), { ...validRead('child1', 'n1'), userId: 'child2' }),
     );
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Regression: "Mark all as read" must not exceed the Firestore rules
+// per-request document-access limit (20 get/exists calls).
+//
+// The notification_reads create rule performs a `get()` on the parent
+// notification document for every write it evaluates. A single batched write of
+// 20+ read records therefore triggers 20+ distinct document accesses (one
+// cached family doc + one per distinct notification) and the whole batch is
+// rejected with permission-denied. The client must chunk the writes (see
+// MARK_ALL_READ_CHUNK_SIZE = 15 in src/lib/notifications.ts) so each commit
+// stays under the limit.
+// ---------------------------------------------------------------------------
+describe('mark-all batching vs Firestore rules document-access limit', () => {
+  // Mirrors validNotification / validRead from the read-records suite so this
+  // regression block is self-contained.
+  function notif(nid: string) {
+    return validNotification({ recipientIds: ['child1'], dedupeKey: `task_approve_${nid}` });
+  }
+  function read(nid: string) {
+    return {
+      familyId: 'family1',
+      userId: 'child1',
+      notificationId: nid,
+      readAt: serverTimestamp(),
+    };
+  }
+
+  const COUNT = 25; // > 20, clearly exceeds the per-request access limit
+  const CHUNK = 15; // mirrors MARK_ALL_READ_CHUNK_SIZE in src/lib/notifications.ts
+
+  beforeEach(async () => {
+    const setup = testEnv.authenticatedContext('parent1').firestore();
+    for (let i = 0; i < COUNT; i++) {
+      await setDoc(doc(setup, `families/family1/notifications/n${i}`), notif(`n${i}`));
+    }
+  });
+
+  it('OLD behaviour: a single batch of 20+ read records is REJECTED (document access limit)', async () => {
+    const db = testEnv.authenticatedContext('child1').firestore();
+    const batch = writeBatch(db);
+    for (let i = 0; i < COUNT; i++) {
+      batch.set(doc(db, `families/family1/notification_reads/child1_n${i}`), read(`n${i}`));
+    }
+    // Reproduces the production failure: the whole batch is denied because the
+    // rules evaluation exceeds the 20 document-access limit.
+    await assertFails(batch.commit());
+  });
+
+  it('NEW behaviour: chunked writes of 20+ read records SUCCEED (stays under the limit)', async () => {
+    const db = testEnv.authenticatedContext('child1').firestore();
+    for (let i = 0; i < COUNT; i += CHUNK) {
+      const batch = writeBatch(db);
+      for (let j = i; j < Math.min(i + CHUNK, COUNT); j++) {
+        batch.set(doc(db, `families/family1/notification_reads/child1_n${j}`), read(`n${j}`));
+      }
+      // Each chunk commits independently and stays within the access budget.
+      await assertSucceeds(batch.commit());
+    }
+    // All 25 notifications are eventually marked read.
+    const snap = await getDoc(doc(db, 'families/family1/notification_reads/child1_n24'));
+    expect(snap.exists()).toBe(true);
   });
 });

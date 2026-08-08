@@ -40,6 +40,7 @@ import {
   getNotificationBody,
   markNotificationRead,
   markAllNotificationsRead,
+  MARK_ALL_READ_CHUNK_SIZE,
   NOTIFICATION_FALLBACK_TITLE,
   NOTIFICATION_FALLBACK_BODY,
   NOTIFICATION_PAGE_SIZE,
@@ -374,5 +375,75 @@ describe('mark read (read-state writes)', () => {
     const batch = { set: vi.fn(), commit: vi.fn(async () => { throw new Error('permission-denied'); }) };
     firestore.writeBatch.mockReturnValue(batch as any);
     await expect(markAllNotificationsRead('fam1', 'u1', ['n1'])).rejects.toThrow();
+  });
+});
+
+describe('markAllNotificationsRead chunking (regression for rules document-access limit)', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    // Reset writeBatch so a lingering mockReturnValue (e.g. a throwing batch
+    // from the "throws on failure" test above) cannot leak into these tests.
+    firestore.writeBatch.mockReset();
+    firestore.writeBatch.mockImplementation(() => ({ set: vi.fn(), commit: vi.fn(async () => {}) }));
+  });
+
+  it('commits 20+ unread notifications in safe chunks of at most MARK_ALL_READ_CHUNK_SIZE', async () => {
+    // Reproduces the production scenario: a user with 25 unread notifications.
+    // The old single-batch implementation would issue one writeBatch().commit()
+    // with 25 sets and be rejected by the Firestore rules 20-document-access
+    // limit. The new implementation must split into multiple commits so each
+    // stays under the limit. (The actual rules-limit rejection is asserted in
+    // tests/firestore/notifications.rules.test.ts.)
+    const ids = Array.from({ length: 25 }, (_, i) => `n${i}`);
+    await markAllNotificationsRead('fam1', 'u1', ids);
+
+    // 25 notifications with chunk size 15 => 2 batches (15 + 10).
+    expect(firestore.writeBatch).toHaveBeenCalledTimes(2);
+    const batches = firestore.writeBatch.mock.results.map(r => r.value as any);
+    expect(batches[0].set).toHaveBeenCalledTimes(MARK_ALL_READ_CHUNK_SIZE);
+    expect(batches[1].set).toHaveBeenCalledTimes(25 - MARK_ALL_READ_CHUNK_SIZE);
+    expect(batches[0].commit).toHaveBeenCalledTimes(1);
+    expect(batches[1].commit).toHaveBeenCalledTimes(1);
+
+    // Every notification is eventually written (all marked read), with no
+    // duplicates.
+    const writtenPaths = batches.flatMap(b => b.set.mock.calls.map((c: any) => c[0].path));
+    expect(writtenPaths).toHaveLength(25);
+    expect(new Set(writtenPaths).size).toBe(25);
+    for (let i = 0; i < 25; i++) {
+      expect(writtenPaths).toContain(`families/fam1/notification_reads/u1_n${i}`);
+    }
+  });
+
+  it('still skips already-read notifications when chunking across boundaries', async () => {
+    const ids = Array.from({ length: 20 }, (_, i) => `n${i}`);
+    const already = new Set(['n0', 'n14', 'n19']); // spread across chunk boundaries
+    await markAllNotificationsRead('fam1', 'u1', ids, already);
+    const batches = firestore.writeBatch.mock.results.map(r => r.value as any);
+    const written = batches.flatMap(b => b.set.mock.calls.map((c: any) => c[0].path));
+    expect(written).toHaveLength(17);
+    expect(written).not.toContain('families/fam1/notification_reads/u1_n0');
+    expect(written).not.toContain('families/fam1/notification_reads/u1_n14');
+    expect(written).not.toContain('families/fam1/notification_reads/u1_n19');
+  });
+
+  it('throws on a chunk commit failure (no misleading success) and preserves idempotent retry', async () => {
+    const ids = Array.from({ length: 20 }, (_, i) => `n${i}`);
+    const original = firestore.writeBatch.getMockImplementation();
+    let call = 0;
+    firestore.writeBatch.mockImplementation(() => {
+      const idx = call++;
+      return {
+        set: vi.fn(),
+        commit: vi.fn(async () => {
+          if (idx === 1) throw new Error('permission-denied');
+        }),
+      } as any;
+    });
+    try {
+      await expect(markAllNotificationsRead('fam1', 'u1', ids)).rejects.toThrow();
+    } finally {
+      firestore.writeBatch.mockImplementation(original!);
+    }
   });
 });
