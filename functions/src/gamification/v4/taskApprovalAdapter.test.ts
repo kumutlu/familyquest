@@ -159,7 +159,10 @@ afterEach(() => {
 // --- 1. the real trigger constructs/injects the V4 engine --------------------
 describe('1. real trigger chain injects the V4 engine', () => {
   it('functions/src/index.ts constructs the engine and passes it to createGamificationTriggers', () => {
-    const index = readFileSync(new URL('../../index.ts', import.meta.url), 'utf8')
+    const indexPath = process.cwd().endsWith('/functions')
+      ? resolve(process.cwd(), 'src/index.ts')
+      : resolve(process.cwd(), 'functions/src/index.ts')
+    const index = readFileSync(indexPath, 'utf8')
     expect(index).toContain("from './gamification/v4/taskApprovalAdapter'")
     expect(index).toMatch(/createGamificationTriggers\({[\s\S]*v4TaskApproval:\s*createV4TaskApprovalEngine\(/)
   })
