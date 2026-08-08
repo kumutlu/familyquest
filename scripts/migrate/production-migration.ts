@@ -30,6 +30,9 @@
  */
 
 import { createRequire } from 'node:module'
+import { readFileSync } from 'node:fs'
+import { resolve } from 'node:path'
+import { pathToFileURL } from 'node:url'
 
 import type { Firestore } from 'firebase-admin/firestore'
 
@@ -109,6 +112,33 @@ export interface RunFamilyMigrationOptions {
   readonly maxGate1AgeMs?: number
   /** Migration timestamp override (determinism in tests). */
   readonly migratedAt?: string
+}
+
+export interface ProductionMigrationCliArgs {
+  readonly projectId: string
+  readonly familyId: string
+  readonly reportPath: string
+  readonly gate1Path: string
+  readonly execute: true
+  readonly operator: string
+}
+
+/** Parse the supported production migration/recovery command. It is always family-scoped and execute-explicit. */
+export function parseProductionMigrationCliArgs(argv: readonly string[]): ProductionMigrationCliArgs {
+  const value = (flag: string): string | undefined => {
+    const index = argv.indexOf(flag)
+    return index >= 0 ? argv[index + 1] : undefined
+  }
+  const projectId = value('--project')
+  const familyId = value('--family')
+  const reportPath = value('--report')
+  const gate1Path = value('--gate1')
+  const operator = value('--operator')
+  const execute = argv.includes('--execute')
+  if (!projectId || !familyId || !reportPath || !gate1Path || !execute || !operator) {
+    throw new MigrationRefusedError('--project, --family, --report, --gate1, --execute and --operator are required')
+  }
+  return { projectId, familyId, reportPath, gate1Path, execute: true, operator }
 }
 
 /** Narrow the approved report to ONE family (family-scoped migration). */
@@ -276,4 +306,42 @@ export async function runFamilyMigration(
       && priorMarker.reportHash === marker.reportHash
       && priorMarker.eventsWritten === marker.eventsWritten,
   }
+}
+
+/** Supported production CLI used for the first migration and partial-state recovery rerun. */
+export async function main(argv: readonly string[] = process.argv.slice(2)): Promise<FamilyMigrationResult> {
+  const args = parseProductionMigrationCliArgs(argv)
+  if (process.env.FIRESTORE_EMULATOR_HOST) {
+    throw new MigrationRefusedError('production migration CLI refuses FIRESTORE_EMULATOR_HOST')
+  }
+  const report = JSON.parse(readFileSync(resolve(args.reportPath), 'utf8')) as ProductionReplayReport
+  const gate1 = JSON.parse(readFileSync(resolve(args.gate1Path), 'utf8')) as Gate1Artifact
+  const { initializeApp, getApps } = await import('firebase-admin/app')
+  const { getFirestore } = await import('firebase-admin/firestore')
+  if (getApps().length === 0) initializeApp({ projectId: args.projectId })
+  const result = await runFamilyMigration({
+    db: getFirestore(),
+    report,
+    gate1,
+    familyId: args.familyId,
+    execute: true,
+    operator: args.operator,
+  })
+  console.log(JSON.stringify({
+    familyId: result.familyId,
+    executed: result.executed,
+    walletHashOk: result.walletHashOk,
+    eventsWritten: result.eventsWritten,
+    statesWritten: result.statesWritten,
+    markerStatus: result.marker?.status ?? null,
+    rerunNoOp: result.rerunNoOp,
+  }))
+  return result
+}
+
+if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
+  main().catch((error) => {
+    console.error(error instanceof Error ? error.message : error)
+    process.exitCode = 1
+  })
 }

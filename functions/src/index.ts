@@ -28,8 +28,8 @@ import {
 } from './gamification/v4/taskApprovalAdapter';
 import {
   createStage7EvidenceProvider,
-  type Gate1Artifact,
 } from './gamification/v4/stage7EvidenceProvider';
+import { loadProvisionedGate1Artifact } from './gamification/v4/provisionedGate1Artifact';
 import { finalizeGamificationDaysOnce } from './gamificationScheduler';
 import { ensureFamilyGamificationInitialized } from './familyGamificationInit';
 // Phase 4 (B4): install the dynamic, production-capable cutover resolver into the
@@ -73,16 +73,6 @@ const gamificationRepository = new AdminGamificationRepository(db);
 // present when an operator provisions it via STAGE7_GATE1_ARTIFACT (a JSON
 // string, no secrets), so the deployed bundle has NO evidence today and the
 // verifier fails closed. The provider performs reads only.
-function loadProvisionedGate1Artifact(): Gate1Artifact | null {
-  const raw = process.env.STAGE7_GATE1_ARTIFACT;
-  if (!raw) return null;
-  try {
-    return JSON.parse(raw) as Gate1Artifact;
-  } catch (error) {
-    console.error('[stage7-evidence] STAGE7_GATE1_ARTIFACT is not valid JSON; failing closed', error);
-    return null;
-  }
-}
 const provisionedGate1Artifact = loadProvisionedGate1Artifact();
 
 const gamificationTriggers = createGamificationTriggers({
