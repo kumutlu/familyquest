@@ -234,3 +234,35 @@ green) was committed separately.
 - ADR for dropping `weeklyPoints` and for unsuffixed V4 collection ids (collision with legacy `gamification_events`).
 - Operational guide for `rebuildProjection` and `gamification_failures` triage.
 - Inventory of the 7 legacy writers with their per-writer cutover order and rollback owner.
+
+---
+
+## Post-audit addendum — P0 Stage 7 infrastructure (B3 + R1 closed)
+
+**No cutover was performed, no legacy writer modified, no V4 writer activated,
+nothing deployed, no production write occurred.** The blocking gaps **B3** and
+**R1** are now closed by infrastructure that lives *behind the emulator-only
+guard* and is **not** imported by `functions/src/index.ts`:
+
+- **Feature flag framework** (`src/domain/gamification/v4/featureFlags.ts`, pure)
+  — per-writer, per-family kill switch, defaults to all-legacy (fail closed).
+  Closes B3's "no feature flags" and the GATE 3 per-writer gating requirement.
+- **Runtime cutover configuration layer**
+  (`functions/src/gamification/v4/cutoverConfig.ts`, emulator-gated) — persists
+  the `FeatureFlagSet` per family; `readCutoverConfig` returns the fail-closed
+  default when absent.
+- **Mandatory Stage 7 gate** (`functions/src/gamification/v4/stage7Gate.ts`,
+  emulator-gated) — `assertStage7Allowed` makes `verifyPreCutover` (Stage 6) a
+  HARD precondition: Stage 7 cannot start unless Gate 1 + Gate 2 + Stage 6 are
+  all green. Closes B3's "gate not enforced in code".
+- **Instant rollback** (`functions/src/gamification/v4/rollback.ts`,
+  emulator-gated) — `rollbackStage7` flips the config to `rolled_back` and resets
+  every writer to legacy in a single write (no redeploy). Closes R1.
+
+Full design, GATE 3 exit criteria, runbook and rollback procedure:
+[`08-stage7-infrastructure.md`](./08-stage7-infrastructure.md).
+
+**Still open (out of scope for this P0, require a deploy / production-behaviour
+change):** B1 (`rebuildProjection` export), B2 (`failures.ts` wiring + rule),
+and the `users.rewardPoints` → server-only rules change. These remain blockers
+for the *actual* writer cutover (Stage 7.1–7.7), not for the infrastructure.
