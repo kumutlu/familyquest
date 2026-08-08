@@ -28,30 +28,21 @@ export function ChildSummaryCard({ child, walletBalance, pendingTaskCount, gamif
   const { t } = useTranslation('dashboard');
   const displayName = child.displayName || 'Child';
 
-  // Use gamification summary if available, otherwise fall back to legacy profile data
-  // (but show "Unavailable" for misleading zeroes when summary is not ready)
+  // Authoritative progression source: families/{familyId}/gamification_summaries/{memberId}.
+  // `users/{id}.lifetimeXP` is legacy and must never drive level/XP UI here — when the
+  // projection is unavailable we render the fallback state instead of fabricating a level.
   const isSummaryAvailable = gamificationSummary?.isAvailable ?? false;
   const summary = isSummaryAvailable ? gamificationSummary : null;
 
-  const level = summary
-    ? summary.level
-    : Math.floor((child.lifetimeXP || 0) / 1000) + 1;
+  const level = summary ? summary.level : null;
 
   const points = child.rewardPoints || 0;
 
-  const bestStreak = summary
-    ? summary.bestStreak
-    : 0;
+  const bestStreak = summary ? summary.bestStreak : 0;
 
-  const xpToNextLevel = summary
-    ? summary.xpToNextLevel
-    : (1000 - (child.lifetimeXP || 0) % 1000);
+  const xpToNextLevel = summary ? summary.xpToNextLevel : null;
 
-  const xpProgressInLevel = summary
-    ? summary.xpProgressInLevel
-    : ((child.lifetimeXP || 0) % 1000);
-
-  const levelProgress = (xpProgressInLevel / 1000) * 100;
+  const levelProgress = summary ? (summary.xpProgressInLevel / 1000) * 100 : 0;
 
   const todayProgress = summary ? summary.todayProgress : null;
   const todayGoalReached = summary ? summary.todayGoalReached : null;
@@ -69,20 +60,24 @@ export function ChildSummaryCard({ child, walletBalance, pendingTaskCount, gamif
             <Avatar src={child.avatarUrl} fallback={displayName[0] || '?'} size="md" />
             <div className="min-w-0">
               <h3 className="truncate font-bold text-gray-900">{displayName}</h3>
-              <p className="text-xs font-medium text-gray-500">{t('childCard.level', { level })}</p>
+              <p className="text-xs font-medium text-gray-500">
+                {summary ? t('childCard.level', { level }) : t('childCard.unavailable')}
+              </p>
             </div>
           </div>
 
-          {/* Level progress bar */}
-          <div className="mt-3">
-            <div className="flex justify-between text-[10px] font-medium text-gray-500">
-              <span>{t('childCard.xpTotal')}</span>
-              <span aria-label={t('childCard.xpToNext', { xp: xpToNextLevel, level: level + 1 })}>
-                {t('childCard.xpToNext', { xp: xpToNextLevel, level: level + 1 })}
-              </span>
+          {/* Level progress bar — projection only */}
+          {summary && (
+            <div className="mt-3">
+              <div className="flex justify-between text-[10px] font-medium text-gray-500">
+                <span>{t('childCard.xpTotal')}</span>
+                <span aria-label={t('childCard.xpToNext', { xp: xpToNextLevel, level: (level as number) + 1 })}>
+                  {t('childCard.xpToNext', { xp: xpToNextLevel, level: (level as number) + 1 })}
+                </span>
+              </div>
+              <Progress value={levelProgress} className="mt-1" />
             </div>
-            <Progress value={levelProgress} className="mt-1" />
-          </div>
+          )}
 
           <div className="mt-3 grid grid-cols-3 gap-2 text-center">
             <div>
@@ -150,7 +145,13 @@ export function ChildSummaryCard({ child, walletBalance, pendingTaskCount, gamif
             </div>
           )}
 
-          {/* Rebuilding/unavailable indicator */}
+          {/* Quiet "updating" indicator for a dirty/rebuilding projection whose
+              own values are still shown (never hidden). */}
+          {summary && summary.isUpdating && (
+            <p className="mt-2 text-xs text-gray-400">{t('childCard.rebuilding')}</p>
+          )}
+
+          {/* Unavailable indicator when no projection and no fallback. */}
           {!summary && (
             <p className="mt-2 text-xs text-gray-400">{t('childCard.rebuilding')}</p>
           )}

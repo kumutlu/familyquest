@@ -18,6 +18,7 @@ const store = vi.hoisted(() => ({
     tasks: [
       { id: 't-1', title: 'Brush teeth', isActive: true, assigneeId: 'owner-1' },
     ],
+    rewards: [{ id: 'r-1', title: 'Gold Star' }],
     taskCompletions: [],
     moneyRequests: [] as any[],
     myGamificationSummary: null,
@@ -72,6 +73,8 @@ describe('Dashboard role routing', () => {
       ],
       funds: [{ id: 'f-1', name: 'Rex', species: 'dog', balance: 1500, emergencyGoal: 5000 }],
       tasks: [{ id: 't-1', title: 'Brush teeth', isActive: true, assigneeId: 'owner-1' }],
+      // Activated family (child + reward + task) so Focus Mode stays off.
+      rewards: [{ id: 'r-1', title: 'Gold Star' }],
       taskCompletions: [],
       moneyRequests: [],
       myGamificationSummary: null,
@@ -142,6 +145,7 @@ describe('Dashboard summary cards', () => {
       ],
       funds: [{ id: 'f-1', name: 'Rex', species: 'dog', balance: 1500, emergencyGoal: 5000 }],
       tasks: [{ id: 't-1', title: 'Brush teeth', isActive: true, assigneeId: 'owner-1' }],
+      rewards: [{ id: 'r-1', title: 'Gold Star' }],
       taskCompletions: [],
       moneyRequests: [],
       myGamificationSummary: null,
@@ -302,7 +306,7 @@ describe('Dashboard gamification summary', () => {
     expect(screen.getByText('Level 2')).toBeInTheDocument();
   });
 
-  it('child dashboard shows rebuilding state when rebuildRequired is true', () => {
+  it('child dashboard keeps an authoritative rebuilding projection visible', () => {
     store.state = {
       currentUser: { id: 'child-1', familyId: 'family-1', role: 'child', displayName: 'Child' },
       feed: [],
@@ -336,7 +340,8 @@ describe('Dashboard gamification summary', () => {
     };
     render(<MemoryRouter><Dashboard /></MemoryRouter>);
     expect(screen.getByTestId('gamification-summary')).toBeInTheDocument();
-    expect(screen.getByText('Loading…')).toBeInTheDocument();
+    expect(screen.getByText('Level 2')).toBeInTheDocument();
+    expect(screen.queryByText('Loading…')).not.toBeInTheDocument();
   });
 
   it('child dashboard shows no misleading zeroes when summary is unavailable', () => {

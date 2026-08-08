@@ -9,6 +9,49 @@
     "subtitle": "Ailenizde bugün neler olduğuna göz atın.",
     "family": "{{name}} ailesi"
   },
+  "nextAction": {
+    "inviteFamily": "Aile üyeleri davet et",
+    "createGoal": "Bir hedef oluştur",
+    "createTask": "Bir görev oluştur",
+    "createReward": "Bir ödül oluştur",
+    "continueSetup": "Kurulumu devam et",
+    "reviewJoinRequests": "Katılım isteklerini incele",
+    "allSet": "Hazırsınız"
+  },
+  "focus": {
+    "welcomeSubtitle": "Ailenizi hazır hale getirelim.",
+    "progress": "Adım {{current}} / {{total}}",
+    "progressLabel": "Kurulum ilerlemesi",
+    "steps": {
+      "addChild": {
+        "title": "İlk çocuğunuzu davet edin veya ekleyin",
+        "description": "Görevlerin ve ödüllerin anlam kazanması için ailenizde bir çocuk olmalı.",
+        "duration": "Bu genellikle 30 saniyeden kısa sürer.",
+        "cta": "İlk çocuğunuzu ekleyin"
+      },
+      "pendingInvite": {
+        "title": "Çocuğunuzun katılması bekleniyor",
+        "description": "Henüz katılmadıysa aile kodunu tekrar paylaşın.",
+        "duration": "Katılmaları 30 saniyeden kısa sürer."
+      },
+      "createReward": {
+        "title": "İlk ödülünüzü oluşturun",
+        "description": "Ödüller çocuğunuza çalışacağı bir hedef verir.",
+        "duration": "Bu genellikle 20 saniyeden kısa sürer.",
+        "cta": "İlk ödülünüzü oluşturun"
+      },
+      "createTask": {
+        "title": "İlk görevinizi oluşturun",
+        "description": "Çocuğunuz puan ve ödülleri görevlerle kazanır.",
+        "duration": "Bu genellikle 20 saniyeden kısa sürer.",
+        "cta": "İlk görevinizi oluşturun"
+      }
+    }
+  },
+  "continueSetup": {
+    "allDone": "Hazırsınız! Aileniz kullanıma hazır.",
+    "inProgress": "Ailenizi kurmaya devam etmek için bu adımları tamamlayın."
+  },
   "quickActions": {
     "heading": "Hızlı İşlemler",
     "newTask": "Yeni Görev",
@@ -46,6 +89,8 @@
   "gamification": {
     "level": "Seviye {{level}}",
     "loading": "Yükleniyor…",
+    "unavailableTitle": "İlerleme",
+    "unavailable": "İlerleme ayrıntıları şu anda kullanılamıyor.",
     "updating": "Güncelleniyor…",
     "xpTotal": "{{xp}} Toplam XP",
     "xpToNext": "{{xp}} XP seviye {{level}}'e",

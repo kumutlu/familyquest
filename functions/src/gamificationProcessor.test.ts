@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from 'vitest'
 import {
+  DeterministicProcessorFailure,
   processApprovedCompletion,
   processTaskInvalidation,
   type GamificationProcessorRepository,
@@ -9,6 +10,7 @@ function repository(): GamificationProcessorRepository {
   return {
     processApprovedCompletion: vi.fn().mockResolvedValue({ status: 'processed', logicalCompletionKey: 'key' }),
     processTaskInvalidation: vi.fn().mockResolvedValue({ status: 'processed', logicalCompletionKey: 'key' }),
+    recordProcessorFailure: vi.fn().mockResolvedValue(undefined),
   }
 }
 
@@ -45,5 +47,34 @@ describe('gamificationProcessor dependency boundary', () => {
       familyId: 'family-1', completionId: invalid,
     })).rejects.toThrow(/completionId/)
     expect(repo.processApprovedCompletion).not.toHaveBeenCalled()
+  })
+
+  it('records a structured dead-letter and stops retrying a deterministic failure', async () => {
+    const repo = repository()
+    repo.processApprovedCompletion = vi.fn().mockRejectedValue(new DeterministicProcessorFailure(
+      'task_not_awardable_for_child', { childId: 'child-1', taskId: 'task-1' },
+    ))
+    const result = await processApprovedCompletion({ repository: repo, now: () => 99 }, {
+      familyId: 'family-1', completionId: 'completion-1',
+    })
+    expect(result.status).toBe('failed')
+    expect(repo.recordProcessorFailure).toHaveBeenCalledWith(expect.objectContaining({
+      familyId: 'family-1',
+      completionId: 'completion-1',
+      childId: 'child-1',
+      taskId: 'task-1',
+      reason: 'task_not_awardable_for_child',
+      failedAt: 99,
+      processorVersion: expect.any(String),
+    }))
+  })
+
+  it('keeps infrastructure failures retryable', async () => {
+    const repo = repository()
+    repo.processApprovedCompletion = vi.fn().mockRejectedValue(new Error('DEADLINE_EXCEEDED'))
+    await expect(processApprovedCompletion({ repository: repo, now: () => 1 }, {
+      familyId: 'family-1', completionId: 'completion-1',
+    })).rejects.toThrow(/DEADLINE_EXCEEDED/)
+    expect(repo.recordProcessorFailure).not.toHaveBeenCalled()
   })
 })

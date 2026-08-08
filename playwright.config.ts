@@ -5,6 +5,8 @@ import { defineConfig, devices } from '@playwright/test';
  */
 export default defineConfig({
   testDir: './tests/e2e',
+  /* The mobile regression suite has its own config (playwright.mobile.config.ts). */
+  testIgnore: /mobile-.*\.spec\.ts/,
   /* Maximum time one test can run for. */
   timeout: 30 * 1000,
   expect: {

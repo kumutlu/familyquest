@@ -11,6 +11,16 @@ const dailyCheckinFieldOverrides = ['daily_checkins', 'daily_checkin_skips'].map
   ],
 }))
 
+const invitationFieldOverride = {
+  collectionGroup: 'invitations',
+  fieldPath: 'code',
+  indexes: [
+    { order: 'ASCENDING', queryScope: 'COLLECTION' },
+    { order: 'DESCENDING', queryScope: 'COLLECTION' },
+    { order: 'ASCENDING', queryScope: 'COLLECTION_GROUP' },
+  ],
+}
+
 describe('Firestore composite index configuration', () => {
   it('points Firebase at a source-controlled manifest matching production bootstrap queries', () => {
     const firebaseConfig = JSON.parse(readFileSync('firebase.json', 'utf8'))
@@ -19,13 +29,31 @@ describe('Firestore composite index configuration', () => {
     expect(firebaseConfig.firestore.indexes).toBe('firestore.indexes.json')
     expect(indexConfig).toEqual({
       indexes: bootstrapCompositeIndexes,
-      fieldOverrides: dailyCheckinFieldOverrides,
+      fieldOverrides: [...dailyCheckinFieldOverrides, invitationFieldOverride],
+    })
+  })
+
+  it('retains the single-field override required by the invitation collection-group query', () => {
+    // functions/src/familyInvitations.ts runs
+    //   db.collectionGroup('invitations').where('code', '==', code)
+    // which requires an explicit COLLECTION_GROUP scoped single-field index on
+    // `code`. Automatic single-field indexes are COLLECTION scoped only, so this
+    // override is required by a real production query and must not be removed.
+    const indexConfig = JSON.parse(readFileSync('firestore.indexes.json', 'utf8'))
+
+    const override = indexConfig.fieldOverrides.find(
+      (entry: any) => entry.collectionGroup === 'invitations' && entry.fieldPath === 'code',
+    )
+    expect(override).toBeDefined()
+    expect(override.indexes).toContainEqual({
+      order: 'ASCENDING',
+      queryScope: 'COLLECTION_GROUP',
     })
   })
 
   it('deploys collection-group userId indexes for permanent account cleanup', () => {
     const indexConfig = JSON.parse(readFileSync('firestore.indexes.json', 'utf8'))
-    expect(indexConfig.fieldOverrides).toEqual(dailyCheckinFieldOverrides)
+    expect(indexConfig.fieldOverrides).toEqual(expect.arrayContaining(dailyCheckinFieldOverrides))
   })
 
   it('keeps the transfer_requests index in sync with the child pending-query shape', () => {

@@ -64,3 +64,6 @@ test-results/
 # Temporary patches and backups
 *.patch
 *.backup
+
+# Wallet snapshot artifacts (Task 0.4) — git-ignored local backup directory.
+backups/wallet-snapshots/

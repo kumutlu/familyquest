@@ -357,9 +357,10 @@ describe('Phase 2D i18n — Member profile (English)', () => {
     );
     expect(screen.getByText('Profile')).toBeInTheDocument();
     expect(screen.getByText('0 Reward Points')).toBeInTheDocument();
-    expect(screen.getByText('Level 1')).toBeInTheDocument();
-    expect(screen.getByText('0 Total XP')).toBeInTheDocument();
-    expect(screen.getByText('Current Streak')).toBeInTheDocument();
+    expect(screen.getAllByText('Level 1').length).toBeGreaterThan(0);
+    expect(screen.getByText('0 XP this level')).toBeInTheDocument();
+    expect(screen.getByText('Lifetime XP')).toBeInTheDocument();
+    expect(screen.getByText('Day Streak')).toBeInTheDocument();
     expect(screen.getByText('Best Streak')).toBeInTheDocument();
     expect(screen.getByText('Behaviour History')).toBeInTheDocument();
     expect(screen.getByText('No logged events.')).toBeInTheDocument();
@@ -398,9 +399,9 @@ describe('Phase 2D i18n — Member profile (Turkish)', () => {
     );
     expect(screen.getByText('Profil')).toBeInTheDocument();
     expect(screen.getByText('0 Ödül Puanı')).toBeInTheDocument();
-    expect(screen.getByText('Seviye 1')).toBeInTheDocument();
-    expect(screen.getByText('0 Toplam XP')).toBeInTheDocument();
-    expect(screen.getByText('Mevcut Seri')).toBeInTheDocument();
+    expect(screen.getAllByText('Seviye 1').length).toBeGreaterThan(0);
+    expect(screen.getByText('Bu seviyede 0 XP')).toBeInTheDocument();
+    expect(screen.getByText('Gün Serisi')).toBeInTheDocument();
     expect(screen.getByText('En İyi Seri')).toBeInTheDocument();
     expect(screen.getByText('Davranış Geçmişi')).toBeInTheDocument();
     expect(screen.getByText('Kayıtlı olay yok.')).toBeInTheDocument();

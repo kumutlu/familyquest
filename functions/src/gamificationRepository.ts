@@ -20,6 +20,10 @@ import {
   perfectDayRevocationEventId,
   planThresholdEvents,
 } from '../../src/domain/gamification/perfectDay'
+import { DEFAULT_WEEKLY_CONTEXT } from '../../src/domain/gamification/v3/weeklyWindow'
+import { BaselineMissingErrorV3, writeV3ShadowInTransaction } from './gamificationV3/integration'
+import { mapTaskApproval } from './gamificationV3/sourceMappers/taskMapper'
+import { mapDailyGoal, mapPerfectDay } from './gamificationV3/sourceMappers/dailyAwardMapper'
 import {
   finalizationSourceTransitionId,
   type DailyEligibilitySnapshotV1,
@@ -29,13 +33,25 @@ import {
   type SemanticCursorV1,
   type TaskGamificationEffectV1,
 } from '../../src/domain/gamification/types'
+import {
+  GAMIFICATION_READY_STATUSES,
+  type GamificationMigrationStatus,
+} from '../../src/domain/gamification/migrationState'
 import { logicalCompletionKey, taskXpEventId, taskXpReversalEventId } from '../../src/domain/gamification/xp'
-import { authoritativePeriodKey, buildDailyEligibilitySnapshot, type RepositoryScheduledTask } from './dailyEligibilityAdapter'
-import type {
-  GamificationProcessResult,
-  GamificationProcessorRepository,
-  ProcessApprovedCompletionArgs,
-  ProcessTaskInvalidationArgs,
+import {
+  authoritativePeriodKey,
+  buildDailyEligibilitySnapshot,
+  taskIsAwardableForChild,
+  type RepositoryScheduledTask,
+} from './dailyEligibilityAdapter'
+import {
+  DeterministicProcessorFailure,
+  GAMIFICATION_PROCESSOR_VERSION,
+  type GamificationProcessResult,
+  type GamificationProcessorRepository,
+  type ProcessApprovedCompletionArgs,
+  type ProcessTaskInvalidationArgs,
+  type ProcessorFailureRecord,
 } from './gamificationProcessor'
 import {
   mergeRebuildStreams,
@@ -52,7 +68,7 @@ import type {
   GamificationSchedulerRepository,
 } from './gamificationScheduler'
 
-type MigrationStatus = 'inactive' | 'prepared' | 'baseline_complete' | 'active'
+type MigrationStatus = GamificationMigrationStatus
 
 interface MigrationState {
   readonly status: MigrationStatus
@@ -91,8 +107,22 @@ interface StoredRebuildRecord {
   readonly value: DocumentData
 }
 
-const APPROVED_STATUSES: readonly MigrationStatus[] = ['prepared', 'baseline_complete', 'active']
+const APPROVED_STATUSES: readonly MigrationStatus[] = GAMIFICATION_READY_STATUSES
 const REBUILD_STREAM_LIMIT = 125
+
+/**
+ * Structured, one-shot diagnostic for a completion the processor refuses to
+ * award. These are the failures that are otherwise completely silent: the user
+ * sees a completed task and no points.
+ */
+function warnIgnoredCompletion(details: {
+  readonly familyId: string
+  readonly completionId: string
+  readonly migrationStatus: MigrationStatus
+  readonly reason: 'migration_not_ready'
+}): void {
+  console.warn('[gamification-ignored]', JSON.stringify(details))
+}
 
 function millis(value: unknown, label: string): number {
   if (value instanceof Date && Number.isSafeInteger(value.getTime()) && value.getTime() >= 0) return value.getTime()
@@ -162,7 +192,8 @@ function taskFromDocument(document: QueryDocumentSnapshot | DocumentSnapshot): R
   const data = document.data() ?? {}
   return {
     id: document.id,
-    assigneeId: typeof data.assigneeId === 'string' ? data.assigneeId : undefined,
+    // An empty or missing assignee means the task is shared/family-wide.
+    assigneeId: typeof data.assigneeId === 'string' && data.assigneeId.length > 0 ? data.assigneeId : undefined,
     pointsReward: data.pointsReward,
     requiresApproval: typeof data.requiresApproval === 'boolean' ? data.requiresApproval : undefined,
     type: typeof data.type === 'string' ? data.type : undefined,
@@ -184,6 +215,14 @@ function taskFromDocument(document: QueryDocumentSnapshot | DocumentSnapshot): R
     dueWeekday: Number.isInteger(data.dueWeekday) ? data.dueWeekday : undefined,
     customDays: Array.isArray(data.customDays) ? data.customDays : undefined,
   }
+}
+
+/**
+ * Tasks a child may be awarded for on this day: assigned to them, or shared
+ * (no assigneeId). Tasks assigned to a different child are excluded.
+ */
+function awardableTasks(documents: readonly QueryDocumentSnapshot[], childId: string): readonly RepositoryScheduledTask[] {
+  return documents.map(taskFromDocument).filter(task => taskIsAwardableForChild(task, childId))
 }
 
 function effectFromData(data: DocumentData): TaskGamificationEffectV1 {
@@ -483,6 +522,26 @@ export class AdminGamificationRepository implements
   GamificationSchedulerRepository {
   constructor(private readonly db: Firestore) {}
 
+  /**
+   * Dead-letter record for a non-transient processor failure. Written once per
+   * completion (merge), so a redelivered event does not fan out records, and
+   * never marks the award as processed.
+   */
+  async recordProcessorFailure(record: ProcessorFailureRecord): Promise<void> {
+    console.error('[gamification-processor-failure]', JSON.stringify(record))
+    await this.db.doc(`families/${record.familyId}/gamification_processor_failures/${record.completionId}`).set({
+      schemaVersion: 1,
+      familyId: record.familyId,
+      completionId: record.completionId,
+      ...(record.childId !== undefined ? { childId: record.childId } : {}),
+      ...(record.taskId !== undefined ? { taskId: record.taskId } : {}),
+      reason: record.reason,
+      failedAt: timestamp(record.failedAt),
+      processorVersion: record.processorVersion ?? GAMIFICATION_PROCESSOR_VERSION,
+      retryable: false,
+    }, { merge: true })
+  }
+
   async processApprovedCompletion(args: ProcessApprovedCompletionArgs): Promise<GamificationProcessResult> {
     const familyRef = this.db.doc(`families/${args.familyId}`)
     const completionRef = familyRef.collection('task_completions').doc(args.completionId)
@@ -496,7 +555,19 @@ export class AdminGamificationRepository implements
       const completion = completionDocument.data()!
       if (completion.status !== 'approved') return { status: 'ignored' }
       const migration = migrationState(family)
-      if (!APPROVED_STATUSES.includes(migration.status)) return { status: 'ignored' }
+      if (!APPROVED_STATUSES.includes(migration.status)) {
+        // A family stuck outside the ready states awards nothing while task
+        // completion still appears to succeed to the user. Make that visible.
+        // One warning per ignored completion — the transaction runs once per
+        // completion, so this cannot loop.
+        warnIgnoredCompletion({
+          familyId: args.familyId,
+          completionId: args.completionId,
+          migrationStatus: migration.status,
+          reason: 'migration_not_ready',
+        })
+        return { status: 'ignored' }
+      }
       if (migration.cutoverAt === undefined) throw new Error('Prepared gamification migration requires cutoverAt')
       const approvedAt = millis(completion.approvedAt, 'completion approvedAt')
       if (approvedAt < migration.cutoverAt) return { status: 'ignored' }
@@ -512,13 +583,17 @@ export class AdminGamificationRepository implements
       if (!childDocument.exists) throw new Error(`Child ${childId} does not exist`)
       const child = childDocument.data()!
       if (child.familyId !== args.familyId || child.role !== 'child' || child.status === 'deleted' || child.status === 'disabled' || child.disabled === true) {
-        throw new Error('Completion child is not an active child in this family')
+        throw new DeterministicProcessorFailure('child_not_active_in_family', { childId, taskId })
       }
       const completedAt = millis(completion.completedAt, 'completion completedAt')
       const timezone = timezoneOf(family)
       const dayKey = familyDayKey(completedAt, timezone)
       const task = taskFromDocument(taskDocument)
-      if (task.assigneeId !== childId) throw new Error('Completion task is not assigned to this child')
+      // Shared/family-wide tasks (no assigneeId) may be completed by any active
+      // child in the family; an assigned task must match the completion child.
+      if (!taskIsAwardableForChild(task, childId)) {
+        throw new DeterministicProcessorFailure('task_assigned_to_another_child', { childId, taskId })
+      }
       if (typeof task.pointsReward !== 'number' || !Number.isSafeInteger(task.pointsReward) || task.pointsReward < 0) {
         throw new Error(`Task ${taskId} has an invalid reward`)
       }
@@ -541,12 +616,13 @@ export class AdminGamificationRepository implements
         return { status: 'duplicate', logicalCompletionKey: logicalKey }
       }
 
-      const tasksQuery = familyRef.collection('tasks').where('assigneeId', '==', childId)
-      const tasks = await transaction.get(tasksQuery)
+      // The family task collection is read in full and filtered in memory:
+      // Firestore cannot express "assigneeId == childId OR assigneeId missing".
+      const tasks = await transaction.get(familyRef.collection('tasks'))
       const config = resolveGamificationConfig(family.gamification)
       const expectedSnapshot = buildDailyEligibilitySnapshot({
         familyId: args.familyId, childId, dayKey, timezone, dailyGoalPercentage: config.dailyGoalPercentage,
-        tasks: tasks.docs.map(taskFromDocument), effectiveAt: localDayStart(dayKey, timezone), createdAt: args.processingAt,
+        tasks: awardableTasks(tasks.docs, childId), effectiveAt: localDayStart(dayKey, timezone), createdAt: args.processingAt,
       })
       const snapshot = eligibilityDocument.exists ? eligibilityFromData(eligibilityDocument.data()!) : expectedSnapshot
       if (snapshot.familyId !== args.familyId || snapshot.childId !== childId || snapshot.dayKey !== dayKey || snapshot.timezone !== timezone
@@ -627,7 +703,15 @@ export class AdminGamificationRepository implements
         gamificationProcessedAt: timestamp(args.processingAt),
         ...(alreadyInvalid ? { gamificationRewardRevokedBy: reversalRef.id } : {}),
       })
-      if (nextPoints !== currentPoints) transaction.update(childRef, { rewardPoints: nextPoints, lastTaskCompletionId: args.completionId })
+      // Mirror the authoritative gamification_summaries.xpTotal into the
+      // users.lifetimeXP compatibility field, in the SAME transaction, so the
+      // legacy mirror can never drift from the projection.
+      const childUpdate: Record<string, unknown> = { lifetimeXP: summary.xpTotal }
+      if (nextPoints !== currentPoints) {
+        childUpdate.rewardPoints = nextPoints
+        childUpdate.lastTaskCompletionId = args.completionId
+      }
+      transaction.update(childRef, childUpdate)
       for (const document of plan.events) transaction.create(familyRef.collection('gamification_events').doc(document.id), eventToData(document.event))
       transaction.set(progressRef, progressToData(plan.progress, [...existingEvents, ...plan.events]))
       transaction.set(summaryRef, summaryToData(summary))
@@ -644,6 +728,38 @@ export class AdminGamificationRepository implements
         recipientIds: [childId], title: 'Task approved', body: `${taskDocument.data()!.title ?? 'Task'} was approved. +${effect.rewardPointsAward} points`,
         entityType: 'task_completion', entityId: args.completionId, actionUrl: '/tasks', dedupeKey: notificationId(logicalKey), createdAt: timestamp(args.processingAt),
       })
+      // V3 shadow write — atomic with the transaction.
+      // Duplicate processing is idempotent: writeV3ShadowInTransaction checks
+      // for an existing event and returns early if one exists.
+      // If the V3 baseline is missing, the shadow write is best-effort: the
+      // authoritative legacy write above is unaffected and the V3 projection
+      // can be repaired later.
+      try {
+        await writeV3ShadowInTransaction(transaction, (path) => this.db.doc(path), {
+          familyId: args.familyId,
+          memberId: childId,
+          event: mapTaskApproval({
+            familyId: args.familyId,
+            memberId: childId,
+            taskId,
+            logicalCompletionKey: logicalKey,
+            pointsReward: effect.rewardPointsAward,
+            xpAward: effect.xpAward,
+            approvedAt: new Date(approvedAt).toISOString(),
+            createdAt: new Date(args.processingAt).toISOString(),
+          }),
+          weeklyContext: DEFAULT_WEEKLY_CONTEXT,
+          asOf: new Date(args.processingAt).toISOString(),
+        })
+      } catch (error) {
+        if (error instanceof BaselineMissingErrorV3) {
+          console.warn('[gamification-v3-shadow-skipped]', JSON.stringify({
+            familyId: args.familyId, memberId: childId, processor: 'processApprovedCompletion',
+          }))
+        } else {
+          throw error
+        }
+      }
       return { status: 'processed', logicalCompletionKey: logicalKey }
     })
   }
@@ -760,13 +876,15 @@ export class AdminGamificationRepository implements
       const progressRef = familyRef.collection('daily_progress').doc(`${childId}:${dayKey}`)
       const summaryRef = familyRef.collection('gamification_summaries').doc(childId)
       const checkpointRef = familyRef.collection('gamification_checkpoints').doc(childId)
-      const [eligibilityDocument, progressDocument, summaryDocument, checkpointDocument, tasks] = await Promise.all([
+      const childRef = this.db.doc(`users/${childId}`)
+      const [eligibilityDocument, progressDocument, summaryDocument, checkpointDocument, , tasks] = await Promise.all([
         transaction.get(eligibilityRef), transaction.get(progressRef), transaction.get(summaryRef), transaction.get(checkpointRef),
-        transaction.get(familyRef.collection('tasks').where('assigneeId', '==', childId)),
+        transaction.get(childRef),
+        transaction.get(familyRef.collection('tasks')),
       ])
       const snapshot = eligibilityDocument.exists ? eligibilityFromData(eligibilityDocument.data()!) : buildDailyEligibilitySnapshot({
         familyId, childId, dayKey, timezone, dailyGoalPercentage: resolveGamificationConfig(family.gamification).dailyGoalPercentage,
-        tasks: tasks.docs.map(taskFromDocument), effectiveAt: localDayStart(dayKey, timezone), createdAt: processingAt,
+        tasks: awardableTasks(tasks.docs, childId), effectiveAt: localDayStart(dayKey, timezone), createdAt: processingAt,
       })
       const priorProgress = progressDocument.exists ? progressFromData(progressDocument.data()!) : undefined
       if (priorProgress?.finalized === true) return { snapshotCreated: false, finalized: false }
@@ -794,7 +912,52 @@ export class AdminGamificationRepository implements
       for (const document of events) transaction.create(familyRef.collection('gamification_events').doc(document.id), eventToData(document.event))
       transaction.set(progressRef, progressToData(progress, [...existingEvents, ...events]))
       transaction.set(summaryRef, summaryToData(summary))
+      // Mirror the authoritative gamification_summaries.xpTotal into the
+      // users.lifetimeXP compatibility field, in the SAME transaction, so the
+      // legacy mirror can never drift from the projection.
+      transaction.update(childRef, { lifetimeXP: summary.xpTotal })
       if (checkpointDocument.exists && checkpointDocument.data()!.dirty !== true) transaction.update(checkpointRef, { dirty: true })
+      // V3 shadow writes for DAILY_GOAL_AWARDED and PERFECT_DAY_AWARDED events.
+      // These are emitted when the corresponding V2 threshold qualification events
+      // are created with 'qualified' state, inside the same authoritative transaction.
+      for (const document of events) {
+        if (document.event.eventType === 'daily_goal_qualification_changed'
+          && document.event.qualificationState === 'qualified') {
+          await writeV3ShadowInTransaction(transaction, (path) => this.db.doc(path), {
+            familyId,
+            memberId: childId,
+            event: mapDailyGoal({
+              familyId,
+              memberId: childId,
+              dayKey,
+              xpAward: 25,
+              rewardPointsAward: 0,
+              weeklyPointsAward: 0,
+              awardedAt: new Date(processingAt).toISOString(),
+            }),
+            weeklyContext: DEFAULT_WEEKLY_CONTEXT,
+            asOf: new Date(processingAt).toISOString(),
+          })
+        }
+        if (document.event.eventType === 'perfect_day_qualification_changed'
+          && document.event.qualificationState === 'qualified') {
+          await writeV3ShadowInTransaction(transaction, (path) => this.db.doc(path), {
+            familyId,
+            memberId: childId,
+            event: mapPerfectDay({
+              familyId,
+              memberId: childId,
+              dayKey,
+              xpAward: 50,
+              rewardPointsAward: 0,
+              weeklyPointsAward: 0,
+              awardedAt: new Date(processingAt).toISOString(),
+            }),
+            weeklyContext: DEFAULT_WEEKLY_CONTEXT,
+            asOf: new Date(processingAt).toISOString(),
+          })
+        }
+      }
       return { snapshotCreated: !eligibilityDocument.exists, finalized: true }
     })
   }

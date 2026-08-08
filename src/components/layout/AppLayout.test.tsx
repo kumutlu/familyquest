@@ -2,7 +2,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { act, render, screen } from '@testing-library/react';
 import { AppLayout } from './AppLayout';
 import { useStore } from '../../store/useStore';
-import { MemoryRouter } from 'react-router-dom';
+import { MemoryRouter, Routes, Route } from 'react-router-dom';
 import '@testing-library/jest-dom/vitest';
 import i18n from '../../i18n/config';
 
@@ -53,6 +53,24 @@ describe('AppLayout — mobile bottom navigation layout', () => {
       </MemoryRouter>
     );
   };
+
+  it('renders exactly one mobile bottom navigation, anchored to the viewport', () => {
+    const { container } = renderAppLayout();
+    const navs = screen.getAllByTestId('mobile-bottom-nav');
+    expect(navs).toHaveLength(1);
+    const nav = navs[0];
+    // Anchored to the viewport bottom, not to page content.
+    expect(nav.className).toMatch(/\bfixed\b/);
+    expect(nav.className).toMatch(/bottom-0/);
+    expect(nav.className).toMatch(/inset-x-0/);
+    expect(nav.className).toMatch(/pb-\[env\(safe-area-inset-bottom\)\]/);
+    expect(nav.style.position).toBe('fixed');
+    // Must be the last child of the layout root — never nested inside the
+    // scrolling/transformable main content area.
+    const root = container.querySelector('div.min-h-dvh')!;
+    expect(root.lastElementChild).toBe(nav);
+    expect(container.querySelector('main')!.contains(nav)).toBe(false);
+  });
 
   it('uses min-h-dvh (dynamic viewport) instead of min-h-screen (100vh)', () => {
     const { container } = renderAppLayout();
@@ -153,5 +171,27 @@ describe('AppLayout — global startup gate', () => {
     renderWith({});
     expect(screen.queryByRole('status')).not.toBeInTheDocument();
     expect(screen.getAllByText('Home')).toHaveLength(2);
+  });
+
+  it('redirects an existing family owner away from /onboarding', () => {
+    const state = {
+      ...mockStoreState,
+      currentUser: { id: 'u1', uid: 'u1', familyId: 'f1', role: 'owner' },
+    };
+    (useStore as any).mockImplementation((selector: any) => (selector ? selector(state) : state));
+    render(
+      <MemoryRouter initialEntries={['/onboarding']}>
+        <Routes>
+          <Route path="/" element={<AppLayout />}>
+            <Route index element={<div>DASHBOARD</div>} />
+            <Route path="onboarding" element={<div>CREATE FAMILY SCREEN</div>} />
+          </Route>
+        </Routes>
+      </MemoryRouter>,
+    );
+    // The onboarding route must never render for a user who already has a
+    // family; the layout redirects to the dashboard instead.
+    expect(screen.queryByText('CREATE FAMILY SCREEN')).not.toBeInTheDocument();
+    expect(screen.getByText('DASHBOARD')).toBeInTheDocument();
   });
 });

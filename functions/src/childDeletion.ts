@@ -36,6 +36,24 @@
 //  * tasks or assignments according to the existing approved product rule
 //  * wallet/gamification projections owned only by that child
 //
+// RETENTION POLICY (authoritative)
+// --------------------------------
+//  DELETED  : users/{childId}; managed-child Auth account;
+//             families/{familyId}/childLogins/{childId};
+//             families/{familyId}/childLoginIndex/{username};
+//             families/{familyId}/wallets/{childId} (uid-keyed, no childId
+//             field — deleted explicitly inside the transaction);
+//             childId-tagged operational documents listed in
+//             childSpecificCollections.
+//  RETAINED : families/{familyId}/childLoginAudit/* — ALL audit records,
+//             including historical security events and the final
+//             child_deleted evidence written by this operation. Cleanup
+//             must never erase the evidence of the deletion itself.
+//  RETAINED : families/{familyId}/childLoginIdempotency/{clientReqId} —
+//             replay receipts required for safe retries and recovery.
+//  ANONYMISED: none. Audit records reference childId only (no PII beyond
+//             the identifier already required for accountability).
+//
 // Preserved (unrelated family members and family data are untouched):
 //  * Other family members' user docs
 //  * Family document itself
@@ -87,6 +105,7 @@ const FAMILIES = 'families';
 const CHILD_LOGINS = 'childLogins';
 const CHILD_LOGIN_INDEX = 'childLoginIndex';
 const CHILD_LOGIN_AUDIT = 'childLoginAudit';
+const WALLETS = 'wallets';
 const CHILD_LOGIN_IDEMPOTENCY = 'childLoginIdempotency';
 
 // ---------------------------------------------------------------------------
@@ -365,6 +384,21 @@ export async function deleteChildImpl(
     `${FAMILIES}/${familyId}/${CHILD_LOGIN_INDEX}/${normalizeUsernameForIndex(child.displayName as string)}`,
   );
 
+  // Uid-keyed child wallet: families/{familyId}/wallets/{childId}.
+  // This document has NO childId field, so the childId-tagged Phase-4
+  // sweep can never reach it — it must be deleted explicitly.
+  const walletRef = db.doc(`${FAMILIES}/${familyId}/${WALLETS}/${childId}`);
+  let walletBalanceAtDeletion: number | null = null;
+  try {
+    const walletSnap = await walletRef.get();
+    if (walletSnap.exists) {
+      const balance = (walletSnap.data() as Record<string, unknown>)?.balance;
+      walletBalanceAtDeletion = typeof balance === 'number' ? balance : null;
+    }
+  } catch {
+    // Missing wallet is not an error — deletion remains idempotent.
+  }
+
   // Collect all sub-collection paths that belong exclusively to this child
   const childSpecificCollections = [
     `families/${familyId}/notifications`,
@@ -387,8 +421,10 @@ export async function deleteChildImpl(
     `families/${familyId}/money_requests`,
     `families/${familyId}/profile_update_requests`,
     `families/${familyId}/childLogins`,
-    `families/${familyId}/childLoginAudit`,
-    `families/${familyId}/childLoginIdempotency`,
+    // NOTE: `childLoginAudit` and `childLoginIdempotency` are deliberately
+    // NOT swept here. Audit records are security evidence (including the
+    // child_deleted record written by this operation) and idempotency
+    // receipts guarantee safe retries. See RETENTION POLICY at the top.
   ];
 
   try {
@@ -412,6 +448,9 @@ export async function deleteChildImpl(
       // Delete child-login private record
       t.delete(db.doc(`${FAMILIES}/${familyId}/${CHILD_LOGINS}/${childId}`));
 
+      // Delete the uid-keyed child wallet
+      t.delete(walletRef);
+
       // Delete username index entry
       t.delete(usernameIndexRef);
 
@@ -424,6 +463,8 @@ export async function deleteChildImpl(
           actorId: callerUid,
           success: true,
           clientReqId,
+          walletDeleted: true,
+          walletBalanceAtDeletion,
           createdAt: FieldValue.serverTimestamp(),
         },
       );

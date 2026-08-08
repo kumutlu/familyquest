@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { Family } from './Family';
 import { useStore } from '../store/useStore';
 import { useRecurrenceClock } from '../lib/useRecurrenceClock';
@@ -85,7 +86,10 @@ describe('Family page', () => {
       currentUser: { id: 'b', role: 'parent', familyId: 'f1' },
       familyMembers: []
     });
-    expect(screen.getAllByRole('button').length).toBe(4);
+    // A parent (non-owner) gets the Invite Member button too — inviting is a
+    // parent-level capability, not owner-only. This count is the regression
+    // guard for the P0 fix where the button was missing for non-owner parents.
+    expect(screen.getAllByRole('button').length).toBe(5);
     unmountParent();
 
     renderFamily({
@@ -157,5 +161,55 @@ describe('Family page', () => {
     expect(screen.getByText('1')).toBeInTheDocument();
     expect(screen.getByText(/20 pts this week/)).toBeInTheDocument();
     expect(screen.getByText(/10 pts this week/)).toBeInTheDocument();
+  });
+
+  // Regression: the Family Hub header actions were silently disconnected —
+  // "Invite Member" queried a `[data-invite-code]` node that no longer exists,
+  // so tapping it did nothing. These tests fail if the handlers stop opening
+  // their flows again.
+  describe('owner header actions stay wired', () => {
+    const ownerState = {
+      currentUser: { id: 'k', uid: 'k', role: 'owner', familyId: 'f1' },
+      familyMembers: [],
+      familyData: { id: 'f1', inviteCode: 'ABC123' },
+    };
+
+    beforeEach(async () => {
+      await i18n.loadNamespaces(['family', 'common', 'settings', 'auth']);
+    });
+
+    it('Add child opens the managed child creation flow', async () => {
+      const user = userEvent.setup();
+      renderFamily(ownerState);
+
+      await user.click(screen.getByRole('button', { name: /add child/i }));
+
+      expect(await screen.findByRole('dialog')).toBeInTheDocument();
+    });
+
+    it('Invite Member opens the redesigned invite flow without exposing any code', async () => {
+      const user = userEvent.setup();
+      renderFamily(ownerState);
+
+      expect(screen.queryByRole('heading', { name: 'Invite someone' })).toBeNull();
+
+      await user.click(screen.getByRole('button', { name: /invite member/i }));
+
+      expect(await screen.findByRole('heading', { name: 'Invite someone' })).toBeInTheDocument();
+      expect(screen.getByText('Who would you like to add?')).toBeInTheDocument();
+      // The raw family code is never shown by default any more.
+      expect(screen.queryByText('ABC123')).toBeNull();
+    });
+
+    it('Managed Child jumps straight into the existing add-child flow', async () => {
+      const user = userEvent.setup();
+      renderFamily(ownerState);
+
+      await user.click(screen.getByRole('button', { name: /invite member/i }));
+      await user.click(await screen.findByRole('button', { name: /Create managed child/ }));
+
+      expect(screen.queryByRole('heading', { name: 'Invite someone' })).toBeNull();
+      expect(await screen.findByRole('dialog')).toBeInTheDocument();
+    });
   });
 });

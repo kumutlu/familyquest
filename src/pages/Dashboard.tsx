@@ -39,6 +39,7 @@ function ChildDashboardContent() {
   const {
     currentUser,
     feed,
+    loading,
     familyMembers,
     tasks,
     rewards,
@@ -131,7 +132,13 @@ function ChildDashboardContent() {
       </div>
 
       <div className="grid grid-cols-1 gap-4">
-        <GamificationSummaryCard summary={gamificationView} />
+        {/*
+          `loading` is always false here (the page returns PageLoader above while
+          bootstrap is in flight). Passing it explicitly documents that the card
+          may only show a skeleton for an active request — a missing gamification
+          projection renders the fallback UI instead.
+        */}
+        <GamificationSummaryCard summary={gamificationView} loading={loading} />
       </div>
 
       <section aria-label="Quick summaries">

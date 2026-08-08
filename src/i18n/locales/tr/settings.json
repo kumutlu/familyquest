@@ -132,6 +132,7 @@
     "familyNameUpdateError": "Aile adı güncellenemedi",
     "familyNameSaved": "Aile adı başarıyla güncellendi",
     "inviteCode": "Davet kodu",
+    "editInvite": "Davet ayarlarını düzenle",
     "copyInviteAria": "Davet kodunu kopyala",
     "copied": "Kopyalandı",
     "copyFailed": "Kopyalama başarısız",

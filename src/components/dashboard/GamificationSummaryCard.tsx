@@ -10,6 +10,15 @@ export interface GamificationSummaryCardProps {
    * `null` means the summary is unavailable or still loading.
    */
   summary: GamificationSummaryView | null;
+  /**
+   * Whether a gamification request is genuinely in flight.
+   *
+   * Skeletons are only permitted while this is `true`. When the summary is
+   * unavailable and nothing is loading we render the fallback UI instead —
+   * the gamification projection is optional data and its absence must never
+   * leave a permanent skeleton on the dashboard.
+   */
+  loading?: boolean;
 }
 
 /**
@@ -26,17 +35,17 @@ export interface GamificationSummaryCardProps {
  * - Perfect Day status when achieved
  *
  * Handles:
- * - Loading/unavailable state (shows "Updating…" message)
+ * - In-flight loading state (skeleton, only while `loading` is true)
+ * - Unavailable/rebuilding projection (static fallback card, never a skeleton)
  * - Zero eligible tasks (shows "No tasks today")
- * - Rebuilding/dirty state (shows unavailable)
  */
-export function GamificationSummaryCard({ summary }: GamificationSummaryCardProps) {
+export function GamificationSummaryCard({ summary, loading = false }: GamificationSummaryCardProps) {
   const { t } = useTranslation('dashboard');
 
-  // Handle unavailable or rebuilding summary.
-  // Render a neutral skeleton placeholder — never a card that could be
-  // mistaken for real data (e.g. "Level 1 / Loading… / Updating…").
-  if (!summary || !summary.isAvailable) {
+  const unavailable = !summary || !summary.isAvailable;
+
+  // Skeletons are only allowed while an active request is in flight.
+  if (unavailable && loading) {
     return (
       <Card
         data-testid="gamification-summary-skeleton"
@@ -60,6 +69,23 @@ export function GamificationSummaryCard({ summary }: GamificationSummaryCardProp
             <div className="mx-auto h-8 w-20 rounded bg-gray-200" />
           </div>
           <span className="sr-only">{t('gamification.loading')}</span>
+        </CardContent>
+      </Card>
+    );
+  }
+
+  // Optional data is unavailable (missing / dirty / rebuilding projection) and
+  // no request is in flight: render the static fallback, never a skeleton.
+  if (unavailable) {
+    return (
+      <Card data-testid="gamification-summary-unavailable" className="border-gray-100 bg-white">
+        <CardHeader className="pb-2">
+          <CardTitle className="text-sm font-medium uppercase tracking-wider text-gray-500">
+            {t('gamification.unavailableTitle')}
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          <p className="text-sm text-gray-500">{t('gamification.unavailable')}</p>
         </CardContent>
       </Card>
     );

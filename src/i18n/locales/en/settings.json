@@ -132,6 +132,7 @@
     "familyNameUpdateError": "Failed to update family name",
     "familyNameSaved": "Family name updated successfully",
     "inviteCode": "Invite code",
+    "editInvite": "Edit invite settings",
     "copyInviteAria": "Copy invite code",
     "copied": "Copied",
     "copyFailed": "Copy failed",

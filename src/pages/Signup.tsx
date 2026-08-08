@@ -4,6 +4,7 @@ import { useTranslation } from 'react-i18next';
 import { Button } from '../components/ui/Button';
 import { signUp, signInWithGoogle } from '../lib/api';
 import { useStore } from '../store/useStore';
+import { postAuthDestination } from '../lib/inviteLink';
 
 export function Signup() {
   const { t } = useTranslation(['auth', 'common']);
@@ -19,7 +20,8 @@ export function Signup() {
   // guard performs the redirect to the correct protected route.
   useEffect(() => {
     if (authStatus === 'authenticated') {
-      navigate('/', { replace: true });
+      // Resume a pending invitation when the visitor came from a /join link.
+      navigate(postAuthDestination('/'), { replace: true });
     }
   }, [authStatus, navigate]);
 

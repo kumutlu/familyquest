@@ -4,7 +4,7 @@ import { isChildRole } from '../../../lib/roles';
 import { isTaskDoneThisPeriod } from '../../../lib/taskRecurrence';
 import { useRecurrenceClock } from '../../../lib/useRecurrenceClock';
 import { ChildSummaryCard } from './ChildSummaryCard';
-import { adaptGamificationSummary } from '../../../lib/gamificationAdapters';
+import { findMemberSummary, resolveGamificationView } from '../../../lib/gamificationAdapters';
 import type { GamificationSummaryV1, DailyProgressV1 } from '../../../domain/gamification/types';
 
 function ChildCardSkeleton() {
@@ -99,12 +99,15 @@ export function ChildrenOverview() {
                   !isTaskDoneThisPeriod(task, taskCompletions, now, child.id),
               ).length;
 
-              // Get gamification summary and today's progress for this child
-              const summaryDoc = gamificationSummaries.find(
-                (s: GamificationSummaryV1) => s.childId === child.id,
-              ) ?? null;
+              // Get gamification summary and today's progress for this child.
+              // Shared lookup (mirrors MemberProfile) — legacy/backfilled
+              // documents may omit `childId`; the document id is the child id.
+              const summaryDoc = findMemberSummary(gamificationSummaries, null, child.id);
               const todaysProgress = getTodaysProgress(dailyProgress, child.id, todayKey);
-              const gamificationView = adaptGamificationSummary(summaryDoc, todaysProgress);
+              // Shared resolver: a present projection (even dirty/rebuilding)
+              // is authoritative; `child.lifetimeXP` is only a compatibility
+              // fallback when the projection document is genuinely absent.
+              const gamificationView = resolveGamificationView(summaryDoc, child, todaysProgress);
 
               return (
                 <ChildSummaryCard

@@ -76,6 +76,20 @@ function dueOnDay(task: RepositoryScheduledTask, dayKey: string): boolean {
   }
 }
 
+/**
+ * Approved shared-task rule.
+ *
+ * - An assigned task (`assigneeId` present) may only be awarded to that child.
+ * - A task without `assigneeId` is shared/family-wide: any active child in the
+ *   same family may complete it.
+ *
+ * Family membership and child activity are enforced by the caller; this
+ * predicate only decides task ownership.
+ */
+export function taskIsAwardableForChild(task: RepositoryScheduledTask, childId: string): boolean {
+  return task.assigneeId === undefined || task.assigneeId === childId
+}
+
 /** Product Gate A eligibility policy. A frozen snapshot is never recomputed from later task edits. */
 export function isTaskEligibleForDay(
   task: RepositoryScheduledTask,
@@ -84,7 +98,7 @@ export function isTaskEligibleForDay(
   timezone: string,
 ): boolean {
   assertDayKey(dayKey)
-  if (task.assigneeId !== childId || task.isActive !== true) return false
+  if (!taskIsAwardableForChild(task, childId) || task.isActive !== true) return false
   if (task.archived === true || task.isArchived === true || task.deleted === true || task.disabled === true
     || task.archivedAt !== undefined || task.deletedAt !== undefined || task.disabledAt !== undefined) return false
   if (['archived', 'deleted', 'disabled', 'inactive'].includes(task.status ?? '')) return false

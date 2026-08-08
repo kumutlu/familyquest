@@ -1,4 +1,5 @@
-import { useState } from 'react';
+import { useRef, useState, type KeyboardEvent as ReactKeyboardEvent, type MouseEvent as ReactMouseEvent } from 'react';
+import { createPortal } from 'react-dom';
 import { useTranslation } from 'react-i18next';
 import { Loader2 } from 'lucide-react';
 import { Button } from '../ui/Button';
@@ -67,6 +68,29 @@ export function ChildLoginSection({ member, onRequestCreate }: ChildLoginSection
   const [deleteNameInput, setDeleteNameInput] = useState('');
   const [deleteBusy, setDeleteBusy] = useState(false);
   const [deleteFeedback, setDeleteFeedback] = useState('');
+  /**
+   * Synchronous in-flight guard. `deleteBusy` is React state, so it is still
+   * `false` for a second activation dispatched in the same task (a real
+   * double tap on a phone) and would let a duplicate callable through.
+   */
+  const deleteInFlight = useRef(false);
+
+  /**
+   * The whole managed-child card is wrapped in a router <Link> on the Family
+   * page. Any click originating inside this action block must never bubble up
+   * to that link, otherwise activating "Reset password" / "Delete child"
+   * navigates to the MemberProfile page instead of running the action.
+   */
+  const isolatePointer = (event: ReactMouseEvent) => {
+    event.preventDefault();
+    event.stopPropagation();
+  };
+
+  const isolateKeyboard = (event: ReactKeyboardEvent) => {
+    if (event.key === 'Enter' || event.key === ' ' || event.key === 'Spacebar') {
+      event.stopPropagation();
+    }
+  };
 
   const changeEnabledState = async () => {
     setBusy(true);
@@ -120,6 +144,9 @@ export function ChildLoginSection({ member, onRequestCreate }: ChildLoginSection
       setDeleteFeedback(t('login.deleteNameMismatch'));
       return;
     }
+    // Guard against duplicate submissions (double tap on mobile).
+    if (deleteInFlight.current || deleteBusy) return;
+    deleteInFlight.current = true;
     setDeleteBusy(true);
     setDeleteFeedback('');
     try {
@@ -129,13 +156,14 @@ export function ChildLoginSection({ member, onRequestCreate }: ChildLoginSection
     } catch (error) {
       setDeleteFeedback(mapChildLoginError(error));
     } finally {
+      deleteInFlight.current = false;
       setDeleteBusy(false);
     }
   };
 
   if (!member.hasLogin) {
     return (
-      <div className="mt-3 pt-3 border-t border-gray-100">
+      <div className="mt-3 pt-3 border-t border-gray-100" onClick={isolatePointer} onKeyDown={isolateKeyboard}>
         <div className="flex items-center justify-between gap-3">
           <div className="min-w-0">
             <p className="text-xs font-semibold uppercase tracking-wider text-gray-400">{t('login.label')}</p>
@@ -161,7 +189,12 @@ export function ChildLoginSection({ member, onRequestCreate }: ChildLoginSection
   const status = member.loginEnabled ? t('login.enabled') : t('login.disabled');
 
   return (
-    <div className="mt-3 pt-3 border-t border-gray-100 space-y-2">
+    <div
+      className="mt-3 pt-3 border-t border-gray-100 space-y-2"
+      data-testid="child-login-section"
+      onClick={isolatePointer}
+      onKeyDown={isolateKeyboard}
+    >
       <p className="text-xs font-semibold uppercase tracking-wider text-gray-400">{t('login.label')}</p>
 
       <dl className="text-sm text-gray-700 space-y-0.5">
@@ -184,7 +217,7 @@ export function ChildLoginSection({ member, onRequestCreate }: ChildLoginSection
       </dl>
 
       <div className="flex flex-wrap items-center gap-2 pt-1">
-        <Button type="button" size="sm" variant="outline" disabled={busy} onClick={() => setResetOpen(true)}>
+        <Button type="button" size="sm" variant="outline" disabled={busy} onClick={() => setResetOpen(true)} data-testid="reset-password-button">
           {t('login.resetPassword')}
         </Button>
         {member.loginEnabled ? (
@@ -207,6 +240,7 @@ export function ChildLoginSection({ member, onRequestCreate }: ChildLoginSection
             variant="outline"
             className="text-red-600 border-red-300 hover:bg-red-50 hover:text-red-700"
             onClick={openDeleteDialog}
+            data-testid="delete-child-button"
           >
             {t('login.deleteChild')}
           </Button>
@@ -230,7 +264,7 @@ export function ChildLoginSection({ member, onRequestCreate }: ChildLoginSection
             className="w-full rounded-lg border border-amber-200 bg-white px-3 py-2"
           />
           <div className="flex gap-2">
-            <Button type="button" size="sm" disabled={busy} onClick={submitReset}>
+            <Button type="button" size="sm" disabled={busy} onClick={submitReset} data-testid="reset-password-submit">
               Set temporary password
             </Button>
             <Button type="button" size="sm" variant="outline" disabled={busy} onClick={() => {
@@ -243,9 +277,12 @@ export function ChildLoginSection({ member, onRequestCreate }: ChildLoginSection
         </div>
       )}
 
-      {/* Delete confirmation dialog */}
-      {deleteOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-gray-900/40 backdrop-blur-sm p-4">
+      {/* Delete confirmation dialog.
+          Rendered through a portal on document.body so it can never be clipped
+          or stacked below the (overflow-hidden, transform-animated) member card
+          it logically belongs to. */}
+      {deleteOpen && createPortal(
+        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-gray-900/40 backdrop-blur-sm p-4" onClick={isolatePointer}>
           <div
             role="dialog"
             aria-modal="true"
@@ -320,7 +357,8 @@ export function ChildLoginSection({ member, onRequestCreate }: ChildLoginSection
               </div>
             </div>
           </div>
-        </div>
+        </div>,
+        document.body,
       )}
     </div>
   );

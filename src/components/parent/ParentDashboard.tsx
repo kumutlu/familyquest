@@ -26,6 +26,8 @@ import { FamilySetupPrompt } from '../family/FamilySetupPrompt';
 import { AddChildModal } from '../family/AddChildModal';
 import { shouldShowFamilySetupPrompt } from '../../lib/familySetup';
 import { DailyCheckinHistory } from '../checkins/DailyCheckinHistory';
+import { FocusModeDashboard } from './dashboard/FocusModeDashboard';
+import { getFocusModeState, isFamilySetupComplete } from '../../lib/focusMode';
 
 const joinRequestProcessingKey = (request: { id: string; uid: string }) => `join:${request.id}:${request.uid}`;
 
@@ -37,6 +39,8 @@ export function ParentDashboard() {
     familyMembers,
     familyData,
     joinRequests,
+    rewards = [],
+    tasks = [],
     loading,
     bootstrapError,
     appReady,
@@ -105,9 +109,35 @@ export function ParentDashboard() {
   const petBoxEnabled = isPetBoxEnabled(familyData);
   const summaryCols = petBoxEnabled ? 'lg:grid-cols-4' : 'lg:grid-cols-3';
 
+  const focus = getFocusModeState({ familyMembers, rewards, tasks, joinRequests, currentUser });
+  const setupComplete = isFamilySetupComplete({ familyMembers, rewards, tasks });
+
+  // Focus Mode: while setup is incomplete, suppress every non-essential
+  // dashboard section and show a single guided next action instead.
+  if (focus.isFocusMode) {
+    return (
+      <div data-testid="dashboard-focus-mode">
+        <FocusModeDashboard onAddChild={() => setIsAddChildOpen(true)} />
+
+        {isAddChildOpen && (
+          <AddChildModal
+            familyId={currentUser.familyId}
+            onClose={() => setIsAddChildOpen(false)}
+          />
+        )}
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-8 animate-in fade-in duration-300 pb-8">
       <DashboardHeader />
+
+      {/* Onboarding surfaces live in Focus Mode only. An activated family (or a
+          family whose data is still hydrating) never sees the guided next
+          action, the "You're all set" card or the large Invite Member card
+          here; invites remain available via Family → Invite Member and
+          Settings. */}
 
       <QuickActions
         onNewTask={() => setIsTaskModalOpen(true)}
@@ -207,7 +237,7 @@ export function ParentDashboard() {
 
       <ReversalHistoryPanel />
 
-      {!setupPromptHidden && shouldShowFamilySetupPrompt({
+      {!setupPromptHidden && !setupComplete && shouldShowFamilySetupPrompt({
         appReady,
         familyLoading,
         familyData,

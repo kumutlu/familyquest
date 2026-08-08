@@ -20,8 +20,10 @@ import {
   type PushNotificationInput,
 } from './pushDelivery';
 import { AdminGamificationRepository } from './gamificationRepository';
+import { AdminBehaviourRepository } from './behaviourRepository';
 import { createGamificationTriggers } from './gamificationTriggers';
 import { finalizeGamificationDaysOnce } from './gamificationScheduler';
+import { ensureFamilyGamificationInitialized } from './familyGamificationInit';
 
 // Region chosen to be close to the project's European user base.
 const REGION = 'europe-west1';
@@ -47,6 +49,56 @@ const gamificationTriggers = createGamificationTriggers({
 
 export const onTaskCompletionWritten = gamificationTriggers.onTaskCompletionWritten;
 export const onGamificationReversalCreated = gamificationTriggers.onGamificationReversalCreated;
+
+const behaviourRepository = new AdminBehaviourRepository(db);
+
+/**
+ * Server-authoritative behaviour awarding. The client only creates the
+ * behaviour event; reward points, XP projection, level and the immutable
+ * gamification event are all derived here, idempotently.
+ */
+export const onBehaviourEventCreated = onDocumentCreated(
+  'families/{familyId}/behaviour_events/{behaviourEventId}',
+  async (event) => {
+    const result = await behaviourRepository.processBehaviourEvent({
+      familyId: event.params.familyId,
+      behaviourEventId: event.params.behaviourEventId,
+      processingAt: event.time ? Date.parse(event.time) : Date.now(),
+    });
+    if (result.status === 'ignored') {
+      console.warn('[behaviour-ignored]', JSON.stringify({
+        familyId: event.params.familyId,
+        behaviourEventId: event.params.behaviourEventId,
+        reason: result.reason,
+      }));
+    }
+  },
+);
+
+/**
+ * Backstop for family creation. The client already stamps
+ * `gamificationMigration` inside the family-creation transaction, so this is
+ * normally a no-op; it exists so that a family created through any other path
+ * can never be left in the `inactive` state that makes the processor silently
+ * ignore every task completion.
+ */
+export const onFamilyCreatedInitializeGamification = onDocumentCreated(
+  'families/{familyId}',
+  async (event) => {
+    const familyId = event.params.familyId;
+    const result = await ensureFamilyGamificationInitialized(
+      db,
+      familyId,
+      event.time ? new Date(event.time) : new Date(),
+    );
+    if (result.outcome === 'initialized' || result.outcome === 'malformed') {
+      console.warn(
+        '[gamification-init]',
+        JSON.stringify({ familyId, outcome: result.outcome }),
+      );
+    }
+  },
+);
 
 export const finalizeGamificationDays = onSchedule('every 60 minutes', async () => {
   await finalizeGamificationDaysOnce({ repository: gamificationRepository, now: () => Date.now() });
@@ -165,6 +217,15 @@ export {
   requestFamilyJoin,
   regenerateFamilyCode,
 } from './familyMembership';
+
+// Role-authoritative invitation records; see familyInvitations.ts. The
+// resulting family role is always derived server-side from the stored
+// invitation, never from client input or URL parameters.
+export {
+  createFamilyInvitation,
+  previewInvitation,
+  acceptInvitation,
+} from './familyInvitations';
 
 // Child join request with mandatory parent approval; see childJoinRequest.ts.
 export {

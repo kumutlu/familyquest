@@ -1,5 +1,5 @@
 import { beforeEach, describe, it, expect, vi } from 'vitest';
-import { render, screen } from '@testing-library/react';
+import { act, render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { ChildLoginSection, type ChildLoginMember } from './ChildLoginSection';
 
@@ -200,6 +200,30 @@ describe('ChildLoginSection', () => {
 
       await user.click(confirm);
       expect(lifecycle.deleteChild).toHaveBeenCalledWith('c1', 'Alisya');
+    });
+
+    it('collapses a synchronous double tap into a single deleteChild call', async () => {
+      let resolveDelete: (value: unknown) => void = () => {};
+      lifecycle.deleteChild.mockImplementation(
+        () => new Promise(resolve => { resolveDelete = resolve; }),
+      );
+      const user = userEvent.setup();
+      render(<ChildLoginSection member={member} onRequestCreate={() => {}} />);
+      const dialog = await openDialog(user);
+
+      await user.type(screen.getByLabelText(/full name to confirm/i), 'Alisya');
+      const confirm = screen
+        .getAllByRole('button', { name: 'Delete child' })
+        .find(b => dialog.contains(b)) as HTMLButtonElement;
+
+      // Two activations dispatched in the same task, as a real double tap does.
+      await act(async () => {
+        confirm.click();
+        confirm.click();
+      });
+
+      expect(lifecycle.deleteChild).toHaveBeenCalledTimes(1);
+      await act(async () => { resolveDelete({}); });
     });
 
     it('closes the dialog via Cancel without deleting', async () => {

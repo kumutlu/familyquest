@@ -1,11 +1,25 @@
 
+/**
+ * Explicit, authoritative input for achievement evaluation.
+ *
+ * `xpTotal` MUST come from the gamification projection
+ * (families/{familyId}/gamification_summaries/{memberId}.xpTotal), resolved via
+ * `resolveProgression`. `users/{id}.lifetimeXP` is legacy and must never be read
+ * here. `rewardPoints` remains the spendable currency balance.
+ */
+export interface AchievementInput {
+  xpTotal: number;
+  rewardPoints: number;
+  longestStreak?: number;
+}
+
 export interface BadgeDefinition {
   id: string;
   name: string;
   description: string;
   iconName: string;
   color: string;
-  checkUnlocked: (user: any, completions?: any[]) => boolean;
+  checkUnlocked: (input: AchievementInput, completions?: any[]) => boolean;
 }
 
 export const ACHIEVEMENTS: BadgeDefinition[] = [
@@ -15,7 +29,7 @@ export const ACHIEVEMENTS: BadgeDefinition[] = [
     description: 'Earn your first 50 XP',
     iconName: 'Star',
     color: 'bg-primary-50 text-primary-500 border-primary-200',
-    checkUnlocked: (user) => (user.lifetimeXP || 0) >= 50
+    checkUnlocked: (input) => (input.xpTotal || 0) >= 50
   },
   {
     id: 'centurion',
@@ -23,7 +37,7 @@ export const ACHIEVEMENTS: BadgeDefinition[] = [
     description: 'Reach 1,000 Lifetime XP',
     iconName: 'Shield',
     color: 'bg-primary-50 text-primary-500 border-primary-200',
-    checkUnlocked: (user) => (user.lifetimeXP || 0) >= 1000
+    checkUnlocked: (input) => (input.xpTotal || 0) >= 1000
   },
   {
     id: 'streak_starter',
@@ -31,7 +45,7 @@ export const ACHIEVEMENTS: BadgeDefinition[] = [
     description: 'Achieve a 3-day streak',
     iconName: 'Flame',
     color: 'bg-warning-50 text-warning-500 border-warning-200',
-    checkUnlocked: (user) => (user.longestStreak || 0) >= 3
+    checkUnlocked: (input) => (input.longestStreak || 0) >= 3
   },
   {
     id: 'streak_master',
@@ -39,7 +53,7 @@ export const ACHIEVEMENTS: BadgeDefinition[] = [
     description: 'Achieve a 7-day streak',
     iconName: 'Flame',
     color: 'bg-warning-100 text-warning-600 border-warning-300',
-    checkUnlocked: (user) => (user.longestStreak || 0) >= 7
+    checkUnlocked: (input) => (input.longestStreak || 0) >= 7
   },
   {
     id: 'wealthy',
@@ -47,7 +61,7 @@ export const ACHIEVEMENTS: BadgeDefinition[] = [
     description: 'Save up 500 Reward Points at once',
     iconName: 'Award',
     color: 'bg-reward-50 text-reward-500 border-reward-200',
-    checkUnlocked: (user) => (user.rewardPoints || 0) >= 500
+    checkUnlocked: (input) => (input.rewardPoints || 0) >= 500
   },
   {
     id: 'champion',
@@ -55,6 +69,6 @@ export const ACHIEVEMENTS: BadgeDefinition[] = [
     description: 'Reach 5,000 Lifetime XP',
     iconName: 'Trophy',
     color: 'bg-reward-100 text-reward-600 border-reward-300',
-    checkUnlocked: (user) => (user.lifetimeXP || 0) >= 5000
+    checkUnlocked: (input) => (input.xpTotal || 0) >= 5000
   }
 ];

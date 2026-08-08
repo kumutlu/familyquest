@@ -120,6 +120,65 @@ describe('approval API transaction contracts', () => {
     )
   })
 
+  it('uses the invitation intendedRole instead of the owner-selected role', async () => {
+    const tx = transactionWith({
+      'families/family-1/join_requests/request-1': {
+        uid: 'target-1',
+        displayName: 'Stored Name',
+        status: 'pending',
+        intendedRole: 'child',
+        invitationCode: '7ZXWRZ',
+      },
+      'users/owner-1': { familyId: 'family-1', role: 'owner', displayName: 'Owner' },
+    })
+    // The owner tries to promote an invitation-derived child to parent.
+    await approveJoinRequest('family-1', 'request-1', 'parent')
+    expect(tx.set).toHaveBeenCalledWith(
+      expect.objectContaining({ path: 'users/target-1' }),
+      expect.objectContaining({ role: 'child' }),
+      { merge: true },
+    )
+    expect(tx.update).toHaveBeenCalledWith(
+      expect.objectContaining({ path: 'families/family-1/join_requests/request-1' }),
+      expect.objectContaining({ status: 'approved', assignedRole: 'child' }),
+    )
+  })
+
+  it('honours a parent-intended invitation record', async () => {
+    const tx = transactionWith({
+      'families/family-1/join_requests/request-1': {
+        uid: 'target-1',
+        displayName: 'Stored Name',
+        status: 'pending',
+        intendedRole: 'parent',
+        invitationCode: '7ZXWRZ',
+      },
+      'users/owner-1': { familyId: 'family-1', role: 'owner', displayName: 'Owner' },
+    })
+    await approveJoinRequest('family-1', 'request-1', 'child')
+    expect(tx.set).toHaveBeenCalledWith(
+      expect.objectContaining({ path: 'users/target-1' }),
+      expect.objectContaining({ role: 'parent' }),
+      { merge: true },
+    )
+  })
+
+  it('refuses to honour a corrupt owner intendedRole on a join request', async () => {
+    const tx = transactionWith({
+      'families/family-1/join_requests/request-1': {
+        uid: 'target-1',
+        displayName: 'Stored Name',
+        status: 'pending',
+        intendedRole: 'owner',
+      },
+      'users/owner-1': { familyId: 'family-1', role: 'owner', displayName: 'Owner' },
+    })
+    await expect(approveJoinRequest('family-1', 'request-1', 'parent')).rejects.toThrow(
+      'Join request role is invalid',
+    )
+    expect(tx.set).not.toHaveBeenCalled()
+  })
+
   it('rejects an unsupported approval role before starting a transaction', async () => {
     await expect(
       approveJoinRequest('family-1', 'request-1', 'owner' as any),

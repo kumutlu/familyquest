@@ -95,14 +95,15 @@ describe('addBehaviourEvent transaction contract', () => {
     })
   })
 
-  it('stores the applied negative delta, clamps points, preserves XP, and creates no ledger', async () => {
+  it('stores the applied negative delta and leaves balances to the server processor', async () => {
     const transaction = installTransaction(baseDocs)
 
     await addBehaviourEvent('family-1', 'child-1', 'owner-1', {
       type: 'negative', reason: 'Late home', pointsDelta: -25, walletDelta: 0,
     })
 
-    expect(transaction.update).toHaveBeenCalledWith(expect.objectContaining({ path: 'users/child-1' }), { rewardPoints: 0, lastBehaviourEventId: 'generated-1' })
+    // Server-authoritative: the client must not write reward/XP balances.
+    expect(transaction.update.mock.calls.some(([ref]) => ref.path === 'users/child-1')).toBe(false)
     const eventWrite = transaction.set.mock.calls.find(([ref]) => ref.path.includes('/behaviour_events/'))?.[1]
     expect(eventWrite).toMatchObject({ pointsDelta: -10, walletDelta: 0 })
     expect(transaction.set.mock.calls.some(([ref]) => ref.path.includes('/wallet_transactions/'))).toBe(false)
@@ -120,6 +121,7 @@ describe('addBehaviourEvent transaction contract', () => {
 
     await addBehaviourEvent('family-1', 'child-1', 'owner-1', { type: 'positive', reason: 'Helped out', pointsDelta: 5, walletDelta: 0 })
 
+    expect(transaction.update.mock.calls.some(([ref]) => ref.path === 'users/child-1')).toBe(false)
     const eventWrite = transaction.set.mock.calls.find(([ref]) => ref.path.includes('/behaviour_events/'))?.[1]
     expect(eventWrite).toMatchObject({ type: 'positive', reason: 'Helped out', pointsDelta: 5, walletDelta: 0 })
 

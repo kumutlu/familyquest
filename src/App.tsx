@@ -8,9 +8,11 @@ import { Rewards } from './pages/Rewards';
 import { Wallet } from './pages/Wallet';
 import { Wallets } from './pages/Wallets';
 import { Settings } from './pages/Settings';
+import { ContinueSetup } from './pages/ContinueSetup';
 import { Login } from './pages/Login';
 import { Signup } from './pages/Signup';
 import { JoinFamily } from './pages/JoinFamily';
+import { JoinInvite } from './pages/JoinInvite';
 import { Onboarding } from './pages/Onboarding';
 import { PrivacyPolicy } from './pages/legal/PrivacyPolicy';
 import { TermsOfService } from './pages/legal/TermsOfService';
@@ -62,6 +64,9 @@ function App() {
           <Route path="/login" element={<Login />} />
           <Route path="/signup" element={<Signup />} />
           <Route path="/join-family" element={<JoinFamily />} />
+          {/* Code-specific invitation link. Public: the invitation is
+              validated server-side before any family detail is rendered. */}
+          <Route path="/join" element={<JoinInvite />} />
 
           {/* Public legal surfaces — intentionally outside <AppLayout> so they
               render without authentication and without app navigation. */}
@@ -84,6 +89,7 @@ function App() {
             <Route path="notifications" element={<Notifications />} />
             <Route path="history" element={<TransactionHistoryScreen />} />
             <Route path="settings" element={<Settings />} />
+            <Route path="continue-setup" element={<ContinueSetup />} />
 
             {/* Help Center. `search` and `category/:id` are declared before the
                 catch-all `:articleId` so they are never swallowed by it. */}

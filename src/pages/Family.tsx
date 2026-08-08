@@ -20,9 +20,11 @@ import { ChildLoginSection, type ChildLoginMember } from '../components/family/C
 import { CreateChildLoginDialog } from '../components/family/CreateChildLoginDialog';
 import { Toast, type ToastData } from '../components/ui/Toast';
 import { AddChildModal } from '../components/family/AddChildModal';
+import { InviteMemberCard } from '../components/dashboard/InviteMemberCard';
 
 export function Family() {
   const { t } = useTranslation('family');
+  const { t: tCommon } = useTranslation('common');
   const { currentUser, familyMembers, loading, tasks, taskCompletions, challenges } = useStore();
   const [activeTab, setActiveTab] = useState<'current' | 'history'>('current');
   
@@ -39,6 +41,7 @@ export function Family() {
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   const [isAddChildOpen, setIsAddChildOpen] = useState(false);
+  const [isInviteOpen, setIsInviteOpen] = useState(false);
 
   // Open-session clock: rolls the weekly scoreboard over on Monday while the
   // app stays open (no full reload needed).
@@ -134,22 +137,20 @@ export function Family() {
             </Button>
           )}
           {isOwnerRole(currentUser?.role) && (
-            <>
-              <Button variant="outline" size="sm" onClick={() => setIsAddChildOpen(true)} className="border-primary-300 text-primary-700 hover:bg-primary-50 whitespace-nowrap">
-                <UserPlus size={16} className="mr-1 shrink-0" />
-                {t('addChild')}
-              </Button>
-              <Button variant="secondary" size="sm" onClick={() => {
-                const inviteCode = document.querySelector('[data-invite-code]') as HTMLElement;
-                if (inviteCode) {
-                  navigator.clipboard.writeText(inviteCode.textContent || '');
-                  showToast(t('inviteCopied'));
-                }
-              }} className="bg-primary-50 text-primary-700 border-primary-300 hover:bg-primary-100 whitespace-nowrap">
-                <UserPlus size={16} className="mr-1 shrink-0" />
-                {t('inviteMember')}
-              </Button>
-            </>
+            <Button variant="outline" size="sm" onClick={() => setIsAddChildOpen(true)} className="border-primary-300 text-primary-700 hover:bg-primary-50 whitespace-nowrap">
+              <UserPlus size={16} className="mr-1 shrink-0" />
+              {t('addChild')}
+            </Button>
+          )}
+          {/* Inviting is a parent-level capability, not an owner-only one: a
+              second parent/adult must be able to share the family code too.
+              Gating this on the owner role left every non-owner parent with no
+              working invite entry point at all. */}
+          {isParentRole(currentUser?.role) && (
+            <Button variant="secondary" size="sm" onClick={() => setIsInviteOpen(true)} className="bg-primary-50 text-primary-700 border-primary-300 hover:bg-primary-100 whitespace-nowrap">
+              <UserPlus size={16} className="mr-1 shrink-0" />
+              {t('inviteMember')}
+            </Button>
           )}
         </div>
       </header>
@@ -366,6 +367,50 @@ export function Family() {
             showToast(t('childAdded'));
           }}
         />
+      )}
+
+      {/* Invite Member Modal.
+          Rendered as a real dialog: labelled for screen readers, dismissible
+          with Escape and with a backdrop click, and focused on open. */}
+      {isInviteOpen && (
+        <div
+          className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-gray-900/40 backdrop-blur-sm"
+          onClick={() => setIsInviteOpen(false)}
+          onKeyDown={event => {
+            if (event.key === 'Escape') setIsInviteOpen(false);
+          }}
+        >
+          <div
+            role="dialog"
+            aria-modal="true"
+            aria-label={t('invite.title')}
+            tabIndex={-1}
+            ref={node => node?.focus()}
+            onClick={event => event.stopPropagation()}
+            className="bg-white w-full sm:max-w-md sm:rounded-3xl rounded-t-3xl shadow-xl overflow-hidden flex flex-col focus:outline-none"
+          >
+            {/* A bottom sheet on mobile: a grabber, a single close affordance
+                and then the flow itself. The flow owns its own title so the
+                sheet never repeats it. */}
+            <div className="flex items-center justify-end px-4 pt-3">
+              <button
+                onClick={() => setIsInviteOpen(false)}
+                aria-label={tCommon('closeDialog')}
+                className="h-11 w-11 flex items-center justify-center bg-gray-100 hover:bg-gray-200 rounded-full text-gray-500"
+              >
+                ✕
+              </button>
+            </div>
+            <div className="px-5 pb-6 pt-1">
+              <InviteMemberCard
+                onManagedChild={() => {
+                  setIsInviteOpen(false);
+                  setIsAddChildOpen(true);
+                }}
+              />
+            </div>
+          </div>
+        </div>
       )}
 
       {/* Toast / snackbar */}
