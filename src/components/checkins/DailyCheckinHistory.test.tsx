@@ -33,6 +33,7 @@ function renderHistory(overrides: Record<string, unknown> = {}) {
     dailyCheckinDay: '2026-08-01',
     dailyCheckinHistoryResolved: true,
     dailyCheckinHistory: [],
+    featureErrors: {},
     ...overrides,
   };
   const user = userEvent.setup();
@@ -53,9 +54,11 @@ describe('DailyCheckinHistory', () => {
         dailyCheckins: { historyVisibleToParents: false },
       },
       dailyCheckinHistory: [alexRecord],
+      featureErrors: { dailyCheckinHistory: '[listener] unavailable: offline' },
     });
 
     expect(screen.getByText(/history is turned off/i)).toBeVisible();
+    expect(screen.queryByText(/couldn't load check-in history/i)).not.toBeInTheDocument();
     expect(screen.queryByText('Alex')).not.toBeInTheDocument();
     expect(screen.queryByRole('list')).not.toBeInTheDocument();
   });
@@ -71,6 +74,16 @@ describe('DailyCheckinHistory', () => {
     renderHistory();
 
     expect(screen.getByText(/no check-ins to show yet/i)).toBeVisible();
+  });
+
+  it('renders the localized listener error instead of an empty history state', () => {
+    renderHistory({
+      featureErrors: { dailyCheckinHistory: '[Daily check-in history] unavailable: offline' },
+    });
+
+    expect(screen.getByRole('alert')).toHaveTextContent("We couldn't load check-in history.");
+    expect(screen.queryByText(/no check-ins to show yet/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/unavailable: offline/i)).not.toBeInTheDocument();
   });
 
   it('filters the newest-first history list by family member', async () => {

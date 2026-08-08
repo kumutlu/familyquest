@@ -199,10 +199,19 @@ beforeEach(() => {
 
 describe('family deletion registry', () => {
   it('keeps the reviewed subcollection registry intact and duplicate-free', () => {
-    expect(FAMILY_SUBCOLLECTION_REGISTRY).toEqual(expect.arrayContaining([
-      'daily_checkins',
-      'daily_checkin_skips',
-    ]));
+    expect(FAMILY_SUBCOLLECTION_REGISTRY).toEqual([
+      'join_requests', 'announcements', 'announcement_reads', 'tasks',
+      'task_completions', 'behaviour_events', 'rewards', 'redemptions', 'wallets',
+      'wallet_transactions', 'savings_goals', 'goal_requests', 'idempotency',
+      'feed', 'notifications', 'notification_deliveries', 'notification_reads',
+      'challenges', 'funds', 'fund_transactions', 'reversal_events', 'reversals',
+      'transfer_requests', 'money_requests', 'petbox_requests',
+      'profile_update_requests', 'users', 'childLoginIndex', 'childLogins',
+      'childLoginAudit', 'childLoginIdempotency', 'child_join_requests',
+      'childJoinSecrets', 'task_occurrences', 'gamification_events',
+      'daily_eligibility', 'daily_progress', 'gamification_summaries',
+      'gamification_checkpoints', 'daily_checkins', 'daily_checkin_skips',
+    ]);
     expect(new Set(FAMILY_SUBCOLLECTION_REGISTRY).size).toBe(FAMILY_SUBCOLLECTION_REGISTRY.length);
     expect(FAMILY_NESTED_SUBCOLLECTIONS.length).toBe(5);
     expect(DELETION_PHASES[0]).toBe('inventory_members');

@@ -77,7 +77,9 @@ service cloud.firestore {
       let userDoc = get(/databases/$(database)/documents/users/$(authProfileId()));
       return userDoc != null
         && userDoc.data.get('familyId', 'null') == familyId
-        && (userDoc.data.get('role', 'null') == 'parent' || userDoc.data.get('role', 'null') == 'owner');
+        && (userDoc.data.get('role', 'null') == 'parent'
+          || userDoc.data.get('role', 'null') == 'admin'
+          || userDoc.data.get('role', 'null') == 'owner');
     }
 
     function isParent(familyId) {
@@ -129,7 +131,7 @@ service cloud.firestore {
 
     function isValidParentDailyCheckinPreference(uid) {
       return authProfileId() == uid
-        && resource.data.role in ['owner', 'parent']
+        && resource.data.role in ['owner', 'parent', 'admin']
         && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['dailyCheckins'])
         && request.resource.data.dailyCheckins.keys().hasOnly(['parentParticipationEnabled'])
         && request.resource.data.dailyCheckins.parentParticipationEnabled is bool;

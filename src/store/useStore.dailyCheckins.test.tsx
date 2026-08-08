@@ -87,7 +87,7 @@ const emitCollection = (listener: Listener, items: Array<{ id: string; data: Rec
   });
 };
 
-const hydrate = (role: 'child' | 'parent' | 'owner' = 'child') => {
+const hydrate = (role: 'child' | 'parent' | 'admin' | 'owner' = 'child') => {
   useStore.setState({
     authStatus: 'authenticated',
     authInitialized: true,
@@ -178,7 +178,7 @@ describe('daily check-in store subscriptions', () => {
     expect(useStore.getState().dailyCheckinStateResolved).toBe(false);
   });
 
-  it.each(['parent', 'owner'] as const)(
+  it.each(['parent', 'admin', 'owner'] as const)(
     'loads bounded newest-first history for a %s when family visibility is enabled',
     role => {
       hydrate(role);

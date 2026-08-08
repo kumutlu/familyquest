@@ -78,13 +78,16 @@ async function deleteAuthUserQuietly(ctx: FamilyDeletionContext, uid: string): P
   }
 }
 
-/** Firestore membership cleanup + profile purge. Auth deletion is separate and always last. */
+/** Firestore membership/profile purge plus a final global check-in sweep. Auth deletion stays last. */
 async function purgeProfile(ctx: FamilyDeletionContext, uid: string, familyId: string | null): Promise<void> {
   const { db } = ctx;
   await db.runTransaction(async (t: any) => {
     if (familyId) t.delete(db.doc(`families/${familyId}/users/${uid}`));
     t.delete(userRef(db, uid));
   });
+  // Once the profile is gone, no new self-write can pass Rules. This second
+  // idempotent sweep closes the last-write window left by the pre-purge.
+  await purgeUserDailyCheckinRecords(db, uid);
 }
 
 export async function deleteAccountImpl(
@@ -196,6 +199,9 @@ export async function deleteAccountImpl(
       t.delete(db.doc(`families/${familyId}/users/${callerUid}`));
       t.delete(userRef(db, callerUid));
     });
+    // The ownership-transfer transaction removes the old owner's authority;
+    // sweep again before reporting terminal account completion.
+    await purgeUserDailyCheckinRecords(db, callerUid);
     await stripClaimsQuietly(ctx, callerUid);
     await deleteAuthUserQuietly(ctx, callerUid);
     return { status: 'completed' };

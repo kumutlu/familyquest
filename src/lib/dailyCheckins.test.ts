@@ -32,6 +32,19 @@ describe('daily check-in domain', () => {
     expect(dailyCheckinDocumentId('child-1', '2026-03-29')).toBe('child-1_2026-03-29');
   });
 
+  it.each([
+    ['spring transition day before local midnight', '2026-03-28T23:59:59.999Z', '2026-03-28'],
+    ['spring transition day after local midnight', '2026-03-29T00:00:00.000Z', '2026-03-29'],
+    ['first post-spring midnight before rollover', '2026-03-29T22:59:59.999Z', '2026-03-29'],
+    ['first post-spring midnight after rollover', '2026-03-29T23:00:00.000Z', '2026-03-30'],
+    ['autumn transition day before local midnight', '2026-10-24T22:59:59.999Z', '2026-10-24'],
+    ['autumn transition day after local midnight', '2026-10-24T23:00:00.000Z', '2026-10-25'],
+    ['first post-autumn midnight before rollover', '2026-10-25T23:59:59.999Z', '2026-10-25'],
+    ['first post-autumn midnight after rollover', '2026-10-26T00:00:00.000Z', '2026-10-26'],
+  ])('uses the literal London family day at %s', (_caseName, instant, expectedDay) => {
+    expect(familyDayKey(new Date(instant), 'Europe/London')).toBe(expectedDay);
+  });
+
   it('falls back to Europe/London for invalid legacy timezone data', () => {
     expect(familyDayKey(new Date('2026-08-01T23:30:00Z'), 'invalid')).toBe('2026-08-02');
   });

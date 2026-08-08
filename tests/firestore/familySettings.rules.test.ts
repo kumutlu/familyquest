@@ -35,6 +35,7 @@ beforeEach(async () => {
     });
     await setDoc(doc(db, 'users/owner'), { familyId: FAMILY_ID, role: 'owner' });
     await setDoc(doc(db, 'users/parent'), { familyId: FAMILY_ID, role: 'parent' });
+    await setDoc(doc(db, 'users/admin'), { familyId: FAMILY_ID, role: 'admin' });
     await setDoc(doc(db, 'users/child'), { familyId: FAMILY_ID, role: 'child' });
   });
 });
@@ -43,10 +44,13 @@ afterAll(async () => {
   await testEnv.cleanup();
 });
 
-const familyRef = (uid: 'owner' | 'parent' | 'child') =>
+const familyRef = (uid: 'owner' | 'parent' | 'admin' | 'child') =>
   doc(testEnv.authenticatedContext(uid).firestore(), `families/${FAMILY_ID}`);
 
-const userRef = (actorUid: 'owner' | 'parent' | 'child', targetUid: 'owner' | 'parent' | 'child') =>
+const userRef = (
+  actorUid: 'owner' | 'parent' | 'admin' | 'child',
+  targetUid: 'owner' | 'parent' | 'admin' | 'child',
+) =>
   doc(testEnv.authenticatedContext(actorUid).firestore(), `users/${targetUid}`);
 
 describe('family settings ownership', () => {
@@ -55,6 +59,9 @@ describe('family settings ownership', () => {
       dailyCheckins: { childrenEnabled: false, historyVisibleToParents: true },
     }))).resolves.toBeUndefined();
     await expect(assertFails(updateDoc(familyRef('parent'), {
+      dailyCheckins: { childrenEnabled: true, historyVisibleToParents: false },
+    }))).resolves.toBeDefined();
+    await expect(assertFails(updateDoc(familyRef('admin'), {
       dailyCheckins: { childrenEnabled: true, historyVisibleToParents: false },
     }))).resolves.toBeDefined();
   });
@@ -72,6 +79,9 @@ describe('family settings ownership', () => {
 
   it('allows each adult to update only their own participation preference', async () => {
     await expect(assertSucceeds(updateDoc(userRef('parent', 'parent'), {
+      dailyCheckins: { parentParticipationEnabled: true },
+    }))).resolves.toBeUndefined();
+    await expect(assertSucceeds(updateDoc(userRef('admin', 'admin'), {
       dailyCheckins: { parentParticipationEnabled: true },
     }))).resolves.toBeUndefined();
     await expect(assertFails(updateDoc(userRef('parent', 'owner'), {

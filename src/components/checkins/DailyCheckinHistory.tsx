@@ -32,6 +32,7 @@ export function DailyCheckinHistory() {
     dailyCheckinDay,
     dailyCheckinHistory,
     dailyCheckinHistoryResolved,
+    featureErrors,
   } = useStore();
   const [memberId, setMemberId] = useState('all');
   const settings = resolvedDailyCheckinSettings(familyData?.dailyCheckins);
@@ -41,6 +42,15 @@ export function DailyCheckinHistory() {
       <section aria-labelledby="daily-checkin-history-title" className="rounded-2xl border border-gray-200 bg-white p-5 shadow-sm">
         <h2 id="daily-checkin-history-title" className="text-lg font-bold text-gray-900">{t('history.title')}</h2>
         <p className="mt-2 text-sm text-gray-600">{t('history.disabled')}</p>
+      </section>
+    );
+  }
+
+  if (featureErrors?.dailyCheckinHistory) {
+    return (
+      <section aria-labelledby="daily-checkin-history-title" className="rounded-2xl border border-gray-200 bg-white p-5 shadow-sm">
+        <h2 id="daily-checkin-history-title" className="text-lg font-bold text-gray-900">{t('history.title')}</h2>
+        <p role="alert" className="mt-2 text-sm text-red-600">{t('history.error')}</p>
       </section>
     );
   }

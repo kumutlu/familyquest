@@ -49,6 +49,7 @@ beforeEach(async () => {
     await setDoc(doc(db, `families/${OTHER_FAMILY_ID}`), { name: 'Other family' });
     await setDoc(doc(db, 'users/owner'), { familyId: FAMILY_ID, role: 'owner' });
     await setDoc(doc(db, 'users/parent'), { familyId: FAMILY_ID, role: 'parent' });
+    await setDoc(doc(db, 'users/admin'), { familyId: FAMILY_ID, role: 'admin' });
     await setDoc(doc(db, 'users/child'), { familyId: FAMILY_ID, role: 'child' });
     await setDoc(doc(db, 'users/sibling'), { familyId: FAMILY_ID, role: 'child' });
     await setDoc(doc(db, 'users/outsider'), { familyId: OTHER_FAMILY_ID, role: 'parent' });
@@ -118,6 +119,7 @@ describe('daily check-in records', () => {
   it.each([
     ['child', 'child'],
     ['parent', 'parent'],
+    ['admin', 'admin'],
     ['owner', 'owner'],
   ] as const)('allows %s members to create and read their own V1 check-in', async (actor, userId) => {
     const db = dbFor(actor);
@@ -132,6 +134,7 @@ describe('daily check-in records', () => {
     await seedCheckin();
 
     await expect(assertSucceeds(getDoc(doc(dbFor('parent'), checkinPath())))).resolves.toBeDefined();
+    await expect(assertSucceeds(getDoc(doc(dbFor('admin'), checkinPath())))).resolves.toBeDefined();
     await expect(assertSucceeds(getDoc(doc(dbFor('owner'), checkinPath())))).resolves.toBeDefined();
   });
 
@@ -144,6 +147,13 @@ describe('daily check-in records', () => {
     );
 
     await expect(assertSucceeds(getDocs(historyQuery))).resolves.toBeDefined();
+
+    const adminHistoryQuery = query(
+      collection(dbFor('admin'), `families/${FAMILY_ID}/daily_checkins`),
+      orderBy('createdAt', 'desc'),
+      limit(100),
+    );
+    await expect(assertSucceeds(getDocs(adminHistoryQuery))).resolves.toBeDefined();
   });
 
   it('denies parent history when disabled while preserving the child self-read', async () => {
@@ -151,6 +161,7 @@ describe('daily check-in records', () => {
     await setParentHistoryVisibility(false);
 
     await expect(assertFails(getDoc(doc(dbFor('parent'), checkinPath())))).resolves.toBeDefined();
+    await expect(assertFails(getDoc(doc(dbFor('admin'), checkinPath())))).resolves.toBeDefined();
     await expect(assertFails(getDoc(doc(dbFor('owner'), checkinPath())))).resolves.toBeDefined();
     await expect(assertSucceeds(getDoc(doc(dbFor('child'), checkinPath())))).resolves.toBeDefined();
   });

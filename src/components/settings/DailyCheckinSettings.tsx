@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react';
+import { useLayoutEffect, useRef, useState } from 'react';
 import { Loader2 } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { updateFamilySettings, updateParentDailyCheckinPreference } from '../../lib/api';
@@ -80,11 +80,28 @@ export function DailyCheckinSettings() {
   const [errors, setErrors] = useState(emptyErrorState);
   const parent = isParentRole(currentUser?.role);
   const owner = isOwnerRole(currentUser?.role);
-
-  if (!parent) return null;
-
   const familySettings = resolvedDailyCheckinSettings(familyData?.dailyCheckins);
   const parentParticipationEnabled = resolvedParentParticipation(currentUser?.dailyCheckins);
+
+  useLayoutEffect(() => {
+    const familyWriteActive = locks.current.has('children') || locks.current.has('history');
+    if (familyWriteActive) return;
+    familyWriteBaseline.current = familyData?.id
+      ? {
+          familyId: familyData.id,
+          settings: {
+            childrenEnabled: familySettings.childrenEnabled,
+            historyVisibleToParents: familySettings.historyVisibleToParents,
+          },
+        }
+      : null;
+  }, [
+    familyData?.id,
+    familySettings.childrenEnabled,
+    familySettings.historyVisibleToParents,
+  ]);
+
+  if (!parent) return null;
 
   const runWrite = async (key: ToggleKey, write: () => Promise<unknown>) => {
     if (locks.current.has(key)) return;

@@ -19,7 +19,7 @@ vi.mock('../../lib/api', async importOriginal => {
   };
 });
 
-function renderSettings(role: 'owner' | 'parent' | 'child') {
+function renderSettings(role: 'owner' | 'parent' | 'admin' | 'child') {
   act(() => {
     useStore.setState({
       currentUser: {
@@ -77,6 +77,14 @@ describe('DailyCheckinSettings role visibility', () => {
     expect(screen.queryByRole('switch', { name: /Show check-in history/i })).not.toBeInTheDocument();
   });
 
+  it('treats a legacy admin as a regular parent without owner-only controls', () => {
+    renderSettings('admin');
+
+    expect(screen.getByRole('switch', { name: /Participate as a parent/i })).toBeVisible();
+    expect(screen.queryByRole('switch', { name: /Enable check-ins for children/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole('switch', { name: /Show check-in history/i })).not.toBeInTheDocument();
+  });
+
   it('renders no Daily Check-in settings for a child', () => {
     renderSettings('child');
 
@@ -110,6 +118,17 @@ describe('DailyCheckinSettings writes', () => {
   it('uses only the self-preference API with the current user id', async () => {
     const user = userEvent.setup();
     renderSettings('parent');
+
+    await user.click(screen.getByRole('switch', { name: /Participate as a parent/i }));
+
+    expect(apiMocks.updateParentDailyCheckinPreference).toHaveBeenCalledOnce();
+    expect(apiMocks.updateParentDailyCheckinPreference).toHaveBeenCalledWith('user-1', true);
+    expect(apiMocks.updateFamilySettings).not.toHaveBeenCalled();
+  });
+
+  it('uses the self-preference API for a legacy admin', async () => {
+    const user = userEvent.setup();
+    renderSettings('admin');
 
     await user.click(screen.getByRole('switch', { name: /Participate as a parent/i }));
 
@@ -233,6 +252,30 @@ describe('DailyCheckinSettings writes', () => {
     await waitFor(() => expect(apiMocks.updateFamilySettings).toHaveBeenCalledTimes(3));
     expect(apiMocks.updateFamilySettings).toHaveBeenNthCalledWith(3, 'family-1', {
       dailyCheckins: { childrenEnabled: false, historyVisibleToParents: true },
+    });
+  });
+
+  it('reconciles an idle family baseline before an unrelated toggle preserves an external privacy update', async () => {
+    const user = userEvent.setup();
+    renderSettings('owner');
+    const childrenToggle = screen.getByRole('switch', { name: /Enable check-ins for children/i });
+
+    await user.click(childrenToggle);
+    await waitFor(() => expect(apiMocks.updateFamilySettings).toHaveBeenCalledTimes(1));
+
+    act(() => {
+      useStore.setState({
+        familyData: {
+          ...useStore.getState().familyData,
+          dailyCheckins: { childrenEnabled: false, historyVisibleToParents: true },
+        },
+      });
+    });
+    await user.click(childrenToggle);
+
+    await waitFor(() => expect(apiMocks.updateFamilySettings).toHaveBeenCalledTimes(2));
+    expect(apiMocks.updateFamilySettings).toHaveBeenNthCalledWith(2, 'family-1', {
+      dailyCheckins: { childrenEnabled: true, historyVisibleToParents: true },
     });
   });
 

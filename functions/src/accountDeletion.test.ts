@@ -336,6 +336,66 @@ describe('deleteAccountImpl — non-owner adult', () => {
     expect(db.store.has(`families/${FAMILY_ID}/daily_checkin_skips/owner-skip`)).toBe(true);
   });
 
+  it('purges a final authorized check-in written between the first sweep and profile removal', async () => {
+    db.store.set(`families/${FAMILY_ID}/daily_checkins/owner-checkin`, { userId: 'owner-uid' });
+    const runTransaction = db.runTransaction.bind(db);
+    let injected = false;
+    db.runTransaction = async (callback: (transaction: any) => Promise<unknown>) => {
+      const result = await runTransaction(callback);
+      if (!injected && !db.store.has('users/parent-uid')) {
+        injected = true;
+        db.store.set(`families/${FAMILY_ID}/daily_checkins/final-parent-checkin`, { userId: 'parent-uid' });
+        db.store.set(`families/${FAMILY_ID}/daily_checkin_skips/final-parent-skip`, { userId: 'parent-uid' });
+      }
+      return result;
+    };
+
+    await expect(deleteAccountImpl(ctx, 'parent-uid', {}, FRESH_AUTH))
+      .resolves.toEqual({ status: 'completed' });
+
+    expect(injected).toBe(true);
+    expect(db.store.has(`families/${FAMILY_ID}/daily_checkins/final-parent-checkin`)).toBe(false);
+    expect(db.store.has(`families/${FAMILY_ID}/daily_checkin_skips/final-parent-skip`)).toBe(false);
+    expect(db.store.has(`families/${FAMILY_ID}/daily_checkins/owner-checkin`)).toBe(true);
+  });
+
+  it('does not complete when the final sweep fails and a missing-profile retry finishes it', async () => {
+    const runTransaction = db.runTransaction.bind(db);
+    const createBatch = db.batch.bind(db);
+    let failFinalSweep = false;
+    db.runTransaction = async (callback: (transaction: any) => Promise<unknown>) => {
+      const result = await runTransaction(callback);
+      if (!db.store.has('users/parent-uid')) {
+        db.store.set(`families/${FAMILY_ID}/daily_checkins/final-parent-checkin`, { userId: 'parent-uid' });
+        failFinalSweep = true;
+      }
+      return result;
+    };
+    db.batch = () => {
+      const batch = createBatch();
+      const commit = batch.commit.bind(batch);
+      batch.commit = async () => {
+        if (failFinalSweep) {
+          failFinalSweep = false;
+          throw new Error('final daily check-in sweep failed');
+        }
+        return commit();
+      };
+      return batch;
+    };
+
+    await expect(deleteAccountImpl(ctx, 'parent-uid', {}, FRESH_AUTH))
+      .rejects.toThrow('final daily check-in sweep failed');
+    expect(db.store.has('users/parent-uid')).toBe(false);
+    expect(db.store.has(`families/${FAMILY_ID}/daily_checkins/final-parent-checkin`)).toBe(true);
+    expect(auth.deleted).not.toContain('parent-uid');
+
+    await expect(deleteAccountImpl(ctx, 'parent-uid', {}, FRESH_AUTH))
+      .resolves.toEqual({ status: 'completed' });
+    expect(db.store.has(`families/${FAMILY_ID}/daily_checkins/final-parent-checkin`)).toBe(false);
+    expect(auth.deleted).toContain('parent-uid');
+  });
+
   it('a self-registered child adult account can also delete itself', async () => {
     const result = await deleteAccountImpl(ctx, 'teen-uid', {}, FRESH_AUTH);
     expect(result.status).toBe('completed');

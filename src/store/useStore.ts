@@ -27,6 +27,7 @@ import {
   type DailyCheckinRecord,
   type DailyCheckinSkip,
 } from '../lib/dailyCheckins';
+import { isParentRole } from '../lib/roles';
 
 export type BootstrapStatus = 'idle' | 'loading' | 'ready' | 'error';
 
@@ -764,7 +765,7 @@ export const useStore = create<AppState>((set, get) => ({
       if (!isCurrent()) return;
       const settings = resolvedDailyCheckinSettings(family.dailyCheckins);
       const canReadHistory =
-        (currentUser.role === 'parent' || currentUser.role === 'owner') &&
+        isParentRole(currentUser.role) &&
         settings.historyVisibleToParents;
       if (!canReadHistory) {
         dailyCheckinHistoryListenerGeneration += 1;
@@ -789,7 +790,7 @@ export const useStore = create<AppState>((set, get) => ({
         isCurrent() &&
         listenerGeneration === dailyCheckinHistoryListenerGeneration &&
         get().currentUser?.id === currentUser.id &&
-        (get().currentUser?.role === 'parent' || get().currentUser?.role === 'owner');
+        isParentRole(get().currentUser?.role);
       const unsubscribe = onSnapshot(
         target,
         { includeMetadataChanges: true },

@@ -56,6 +56,7 @@ import {
   onCall,
   type CallableRequest,
 } from 'firebase-functions/v2/https';
+import { purgeUserDailyCheckinRecords } from './dailyCheckinCleanup';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -218,6 +219,7 @@ export async function deleteChildImpl(
       : `${CHILD_LOGIN_IDEMPOTENCY}/${clientReqId}`;
     const idemRef = db.doc(idemPath);
     const idemSnap = await idemRef.get();
+    await purgeUserDailyCheckinRecords(db, childId);
     if (idemSnap.exists) {
       const idemData = idemSnap.data() as Record<string, unknown>;
       if (idemData.status === 'completed') {
@@ -333,8 +335,8 @@ export async function deleteChildImpl(
   }
 
   // Daily check-ins identify their subject with `userId`, not `childId`.
-  // Finish this retryable cleanup before deleting the profile or recording
-  // terminal idempotency state.
+  // Keep the original family-local pre-purge, then close its last-write window
+  // with a global sweep after the profile has been removed.
   await purgeDailyCheckinRecords(db, familyId, childId);
 
   // --- Phase 3: Firestore cleanup (transactional) -----------------
@@ -404,14 +406,15 @@ export async function deleteChildImpl(
           createdAt: FieldValue.serverTimestamp(),
         },
       );
-
-      // Mark idempotency as completed
-      await idemRef.set({
-        status: 'completed',
-        payloadHash: computePayloadHash(childId, displayNameConfirmation),
-        result: { childId, deleted: true },
-        completedAt: FieldValue.serverTimestamp(),
-      });
+    });
+    // No new self-write can pass Rules after the profile deletion. Do not
+    // publish terminal idempotency state until this global sweep succeeds.
+    await purgeUserDailyCheckinRecords(db, childId);
+    await idemRef.set({
+      status: 'completed',
+      payloadHash: computePayloadHash(childId, displayNameConfirmation),
+      result: { childId, deleted: true },
+      completedAt: FieldValue.serverTimestamp(),
     });
   } catch (err) {
     // If the transaction failed, mark idempotency as failed so retries
