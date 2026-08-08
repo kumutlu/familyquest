@@ -1,5 +1,7 @@
 export const GAMIFICATION_PROCESSOR_VERSION = 'gamification-processor-v2-shared-tasks'
 
+import { requireLegacyRoute } from './gamification/routingShim'
+
 export interface ProcessApprovedCompletionArgs {
   readonly familyId: string
   readonly completionId: string
@@ -89,6 +91,8 @@ export async function processApprovedCompletion(
   dependencies: GamificationProcessorDependencies,
   args: Omit<ProcessApprovedCompletionArgs, 'processingAt'>,
 ): Promise<GamificationProcessResult> {
+  // Stage 7 pre-cutover routing: single authoritative route, fail-closed.
+  await requireLegacyRoute('task_approval', args.familyId)
   assertId(args.familyId, 'familyId')
   assertId(args.completionId, 'completionId')
   const at = processingAt(dependencies)
@@ -100,6 +104,8 @@ export async function processTaskInvalidation(
   dependencies: GamificationProcessorDependencies,
   args: Omit<ProcessTaskInvalidationArgs, 'processingAt'>,
 ): Promise<GamificationProcessResult> {
+  // Stage 7 pre-cutover routing: single authoritative route, fail-closed.
+  await requireLegacyRoute('task_invalidation', args.familyId)
   assertId(args.familyId, 'familyId')
   assertId(args.completionId, 'completionId')
   if (args.immutableReversalId !== undefined) assertId(args.immutableReversalId, 'immutableReversalId')

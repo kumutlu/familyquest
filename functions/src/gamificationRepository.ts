@@ -5,6 +5,7 @@ import {
   type QueryDocumentSnapshot,
 } from 'firebase-admin/firestore'
 import { resolveGamificationConfig } from '../../src/domain/gamification/config'
+import { requireLegacyRoute } from './gamification/routingShim'
 import { addFamilyDays, calculateDailyProgress, familyDayKey } from '../../src/domain/gamification/dailyProgress'
 import {
   planApprovedTask,
@@ -876,6 +877,8 @@ export class AdminGamificationRepository implements
   }
 
   private async finalizeChildDay(familyId: string, childId: string, dayKey: string, processingAt: number): Promise<{ snapshotCreated: boolean; finalized: boolean }> {
+    // Stage 7 pre-cutover routing: single authoritative route, fail-closed.
+    await requireLegacyRoute('day_finalization', familyId)
     const familyRef = this.db.doc(`families/${familyId}`)
     return this.db.runTransaction(async transaction => {
       const familyDocument = await transaction.get(familyRef)

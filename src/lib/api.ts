@@ -49,6 +49,7 @@ import type { SupportedCurrencyCode } from '../i18n/format';
 import { isSupportedLanguage, type SupportedLanguage } from '../i18n';
 import { isPetBoxEnabled } from './familyFeatures';
 import { buildInitialGamificationMigration } from '../domain/gamification/migrationState';
+import { defaultFeatureFlags, resolveWriterRoute, type GamificationWriter } from '../domain/gamification/v4/featureFlags';
 import {
   computeNetChild,
   computeMatchPence,
@@ -77,6 +78,19 @@ function requireActorId(): string {
   const uid = auth.currentUser?.uid;
   if (!uid) throw new Error('Authentication required');
   return uid;
+}
+
+/**
+ * Stage 7 pre-cutover routing guard for client-authoritative writers.
+ * The client has no cutover config reader; the route is always `legacy` until
+ * Task 7.1. Fail-closed: if a route ever resolves to `v4` before the V4 engine
+ * is deployed, the writer refuses rather than performing an undefined write.
+ */
+async function requireLegacyClientRoute(writer: GamificationWriter, familyId: string): Promise<void> {
+  const route = resolveWriterRoute(defaultFeatureFlags(), writer, familyId)
+  if (route !== 'legacy') {
+    throw new Error(`V4 writer not deployed for "${writer}" (pre-cutover): route resolved to "${route}"`)
+  }
 }
 
 // Managed children sign in with a synthetic Auth UID while their Firestore
@@ -965,6 +979,8 @@ export const createChallenge = async (familyId: string, title: string, targetXP:
 };
 
 export const claimChallenge = async (familyId: string, challengeId: string, rewardPoints: number, childrenIds: string[], challengeTitle: string) => {
+  // Stage 7 pre-cutover routing: single authoritative route, fail-closed.
+  await requireLegacyClientRoute('challenge_claim', familyId)
   const actorId = requireActorId();
   const challengeRef = doc(db, `families/${familyId}/challenges`, challengeId);
 
@@ -1020,6 +1036,8 @@ export const redeemReward = async (
   rewardId: string,
 ): Promise<RedeemRewardResult> => {
   if (!auth.currentUser?.uid) throw new Error('Not authenticated');
+  // Stage 7 pre-cutover routing: single authoritative route, fail-closed.
+  await requireLegacyClientRoute('reward_redemption', familyId)
   const actorId = await getEffectiveActorId();
   if (actorId !== userId) throw new Error('Cannot redeem a reward for another user');
   const rewardRef = doc(db, `families/${familyId}/rewards`, rewardId);
@@ -3102,6 +3120,8 @@ export const submitProfileUpdateRequest = async (
  * Selecting the avatar afterwards is a separate, free action (profile update).
  */
 export const unlockAvatar = async (familyId: string, avatarId: string): Promise<number> => {
+  // Stage 7 pre-cutover routing: single authoritative route, fail-closed.
+  await requireLegacyClientRoute('avatar_unlock', familyId)
   const currentUserUid = requireActorId();
   const def = getAvatarById(avatarId);
   if (!def || !def.isActive) throw new Error('This avatar is no longer available.');

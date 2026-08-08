@@ -8,6 +8,7 @@ import {
 import { DEFAULT_WEEKLY_CONTEXT } from '../../src/domain/gamification/v3/weeklyWindow'
 import { applyV3Shadow, BaselineMissingErrorV3, readV3ShadowState, type PreparedV3Shadow } from './gamificationV3/integration'
 import { mapBehaviour } from './gamificationV3/sourceMappers/behaviourMapper'
+import { requireLegacyRoute } from './gamification/routingShim'
 
 export interface ProcessBehaviourEventArgs {
   readonly familyId: string
@@ -48,6 +49,8 @@ export class AdminBehaviourRepository {
   constructor(private readonly db: Firestore) {}
 
   async processBehaviourEvent(args: ProcessBehaviourEventArgs): Promise<BehaviourProcessResult> {
+    // Stage 7 pre-cutover routing: single authoritative route, fail-closed.
+    await requireLegacyRoute('behaviour', args.familyId)
     const familyRef = this.db.doc(`families/${args.familyId}`)
     const eventRef = familyRef.collection('behaviour_events').doc(args.behaviourEventId)
     return this.db.runTransaction(async transaction => {
