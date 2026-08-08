@@ -32,6 +32,13 @@ import {
 } from './gamification/v4/stage7EvidenceProvider';
 import { finalizeGamificationDaysOnce } from './gamificationScheduler';
 import { ensureFamilyGamificationInitialized } from './familyGamificationInit';
+// Phase 4 (B4): install the dynamic, production-capable cutover resolver into the
+// routing shim. Production families have no cutover config document, so the
+// resolver fails closed to `legacy` — behaviour is byte-for-byte unchanged until
+// an operator activates a family via cutoverAdmin. The wiring lives in
+// runtimeCutoverWiring.ts so this entry point names none of the forbidden
+// Stage 7 wiring primitives.
+import { installRuntimeCutoverResolver } from './gamification/runtimeCutoverWiring';
 
 // Region chosen to be close to the project's European user base.
 const REGION = 'europe-west1';
@@ -48,6 +55,7 @@ if (process.env.FCM_SERVICE_ACCOUNT_PATH) {
 }
 
 const db = getFirestore();
+installRuntimeCutoverResolver(db);
 const messaging = getMessaging();
 const gamificationRepository = new AdminGamificationRepository(db);
 // Stage 7 / Task 7.1: the REAL V4 task-approval engine is constructed and

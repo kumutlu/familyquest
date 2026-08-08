@@ -2514,6 +2514,28 @@ service cloud.firestore {
       }
 
       // =====================================================================
+      // GAMIFICATION V4 — RUNTIME CUTOVER CONFIG + AUDIT (Phase 4, blocker B4)
+      // =====================================================================
+      // These collections are the production runtime's dynamic cutover flag and
+      // its immutable audit trail. They are written ONLY by the trusted backend
+      // (Admin SDK) via functions/src/gamification/v4/cutoverAdmin.ts and read
+      // ONLY by the deployed runtime resolver (runtimeCutoverConfig.ts). Clients
+      // (parent, owner, or child) MUST NOT be able to read or write them — a
+      // client must never see, set, or spoof the cutover flag, and no secret of
+      // any kind is involved (the flag is just a Firestore document the Admin
+      // SDK owns). This is defense-in-depth: even a compromised client token
+      // cannot flip a family to V4 or erase the audit trail.
+      //
+      // The config is a SINGLE document per family (gamification_cutover_config/
+      // config); the audit is a collection (gamification_cutover_audit/{id}).
+      match /gamification_cutover_config {
+        allow read, write: if false;
+      }
+      match /gamification_cutover_audit/{auditId} {
+        allow read, write: if false;
+      }
+
+      // =====================================================================
       // GAMIFICATION V3 — SHADOW COLLECTIONS (Phase 2)
       // =====================================================================
       // Written ONLY by the trusted backend (Admin SDK / Cloud Functions).
