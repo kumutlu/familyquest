@@ -2,6 +2,15 @@ import { readFileSync } from 'node:fs'
 import { describe, expect, it } from 'vitest'
 import { bootstrapCompositeIndexes } from '../../src/lib/bootstrapQueries'
 
+const dailyCheckinFieldOverrides = ['daily_checkins', 'daily_checkin_skips'].map(collectionGroup => ({
+  collectionGroup,
+  fieldPath: 'userId',
+  indexes: [
+    { order: 'ASCENDING', queryScope: 'COLLECTION_GROUP' },
+    { order: 'DESCENDING', queryScope: 'COLLECTION_GROUP' },
+  ],
+}))
+
 describe('Firestore composite index configuration', () => {
   it('points Firebase at a source-controlled manifest matching production bootstrap queries', () => {
     const firebaseConfig = JSON.parse(readFileSync('firebase.json', 'utf8'))
@@ -10,8 +19,13 @@ describe('Firestore composite index configuration', () => {
     expect(firebaseConfig.firestore.indexes).toBe('firestore.indexes.json')
     expect(indexConfig).toEqual({
       indexes: bootstrapCompositeIndexes,
-      fieldOverrides: [],
+      fieldOverrides: dailyCheckinFieldOverrides,
     })
+  })
+
+  it('deploys collection-group userId indexes for permanent account cleanup', () => {
+    const indexConfig = JSON.parse(readFileSync('firestore.indexes.json', 'utf8'))
+    expect(indexConfig.fieldOverrides).toEqual(dailyCheckinFieldOverrides)
   })
 
   it('keeps the transfer_requests index in sync with the child pending-query shape', () => {
