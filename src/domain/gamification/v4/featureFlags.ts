@@ -157,3 +157,54 @@ export function allV4(flags: FeatureFlagSet): boolean {
   }
   return true
 }
+
+// ---------------------------------------------------------------------------
+// Routing shim (production-safe, pure).
+//
+// The routing layer is the SINGLE decision point that resolves a writer to
+// `legacy` or `v4` for a family. It is intentionally pure (no firebase) so it
+// can be imported by both the Cloud Functions bundle and the web client
+// without dragging in any write path. The emulator-gated, cutover-aware
+// resolver (`functions/src/gamification/v4/routeResolver.ts`) is the only place
+// that reads the persisted cutover config and enforces `assertStage7Allowed`
+// before a V4 route is permitted.
+//
+// Default is fail-closed: `defaultRouteResolver()` always returns `legacy`, so
+// an unconfigured family can never be routed to V4 in production.
+// ---------------------------------------------------------------------------
+
+/** A function that resolves the concrete route for a writer + family. */
+export type ResolveRoute = (
+  writer: GamificationWriter,
+  familyId: string,
+) => WriterRoute | Promise<WriterRoute>
+
+/** Pluggable route resolver (injectable for tests / future cutover). */
+export interface RouteResolver {
+  readonly resolve: ResolveRoute
+}
+
+/** Fail-closed resolver: every writer stays on legacy. */
+export function legacyRouteResolver(): RouteResolver {
+  return { resolve: () => 'legacy' as const }
+}
+
+/** Resolver backed by an explicit feature-flag set (per-writer, per-family). */
+export function flagRouteResolver(flags: FeatureFlagSet): RouteResolver {
+  return { resolve: (writer, familyId) => resolveWriterRoute(flags, writer, familyId) }
+}
+
+/** The production default: all-legacy, fail closed. */
+export function defaultRouteResolver(): RouteResolver {
+  return legacyRouteResolver()
+}
+
+/** Resolve a writer's route through a resolver, defaulting to all-legacy. */
+export async function resolveRouteSafe(
+  resolver: RouteResolver | undefined,
+  writer: GamificationWriter,
+  familyId: string,
+): Promise<WriterRoute> {
+  if (resolver === undefined) return 'legacy' as const
+  return resolver.resolve(writer, familyId)
+}
