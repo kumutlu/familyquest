@@ -43,7 +43,7 @@
     "recent": "Son seçimler",
     "summary": "Son yedi gün",
     "summaryLine_one": "{{member}} son yedi günde bir kez ‘{{feeling}}’ seçti.",
-    "summaryLine_other": "{{member}} son yedi günde {{count}} kez ‘{{feeling}}’ seçti.",
+    "summaryLine_other": "{{member}} son yedi günde {{formattedCount}} kez ‘{{feeling}}’ seçti.",
     "unknownMember": "Aile üyesi"
   }
 }

@@ -43,7 +43,7 @@
     "recent": "Recent selections",
     "summary": "Last seven days",
     "summaryLine_one": "{{member}} selected ‘{{feeling}}’ once in the last seven days.",
-    "summaryLine_other": "{{member}} selected ‘{{feeling}}’ {{count}} times in the last seven days.",
+    "summaryLine_other": "{{member}} selected ‘{{feeling}}’ {{formattedCount}} times in the last seven days.",
     "unknownMember": "Family member"
   }
 }

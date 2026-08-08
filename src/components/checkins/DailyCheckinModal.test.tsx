@@ -55,7 +55,9 @@ describe('DailyCheckinModal', () => {
   it('renders all eight choices as keyboard-operable buttons in catalog order', async () => {
     const onSelect = vi.fn();
     const { user } = await renderModal({ onSelect });
-    const choices = animalLabels.map((label) => screen.getByRole('button', { name: label }));
+    const choices = screen.getAllByRole('button').filter(choice =>
+      animalLabels.includes(choice.getAttribute('aria-label') ?? ''),
+    );
 
     expect(choices.map((choice) => choice.getAttribute('aria-label'))).toEqual(animalLabels);
     choices[0].focus();

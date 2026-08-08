@@ -116,7 +116,8 @@ export function DailyCheckinExperience({ children }: DailyCheckinExperienceProps
     setError(null);
 
     if (operation.kind === 'checkin' && validRecord?.animal === operation.animal) {
-      const option = DAILY_CHECKIN_CATALOG.find(item => item.id === validRecord.animal);
+      const persistedAnimal = operation.animal;
+      const option = DAILY_CHECKIN_CATALOG.find(item => item.id === persistedAnimal);
       if (option) {
         setToast({
           id: ++toastIdRef.current,

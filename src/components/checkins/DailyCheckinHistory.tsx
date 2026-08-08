@@ -95,12 +95,19 @@ export function DailyCheckinHistory() {
               {summary.map(item => {
                 const option = DAILY_CHECKIN_CATALOG.find(candidate => candidate.id === item.animal)!;
                 const member = memberNames.get(item.userId) || t('history.unknownMember');
-                const count = i18n.language.startsWith('en') ? englishCount(item.count) : String(item.count);
+                const formattedCount = i18n.language.startsWith('en')
+                  ? englishCount(item.count)
+                  : String(item.count);
                 return (
                   <li key={`${item.userId}:${item.animal}`}>
                     {item.count === 1
                       ? t('history.summaryLine_one', { member, feeling: t(option.feelingKey) })
-                      : t('history.summaryLine_other', { member, feeling: t(option.feelingKey), count })}
+                      : t('history.summaryLine_other', {
+                          member,
+                          feeling: t(option.feelingKey),
+                          count: item.count,
+                          formattedCount,
+                        })}
                   </li>
                 );
               })}

@@ -91,6 +91,7 @@ describe('Dashboard role routing', () => {
     render(<MemoryRouter><Dashboard /></MemoryRouter>);
     expect(screen.queryByText('Approval Center Section')).not.toBeInTheDocument();
     expect(screen.queryByText('New Task')).not.toBeInTheDocument();
+    expect(screen.queryByRole('heading', { name: 'Recent check-ins' })).not.toBeInTheDocument();
     expect(screen.getByText('Total Points')).toBeInTheDocument();
   });
 

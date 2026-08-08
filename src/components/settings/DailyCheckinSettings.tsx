@@ -114,8 +114,9 @@ export function DailyCheckinSettings() {
         .catch(() => undefined)
         .then(async () => {
           const persisted = resolvedDailyCheckinSettings(useStore.getState().familyData?.dailyCheckins);
-          const baseline = familyWriteBaseline.current?.familyId === familyId
-            ? familyWriteBaseline.current.settings
+          const queuedBaseline = familyWriteBaseline.current;
+          const baseline = queuedBaseline && queuedBaseline.familyId === familyId
+            ? queuedBaseline.settings
             : persisted;
           const next = { ...baseline, [field]: enabled };
 
