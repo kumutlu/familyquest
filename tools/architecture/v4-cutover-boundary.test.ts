@@ -39,13 +39,14 @@ function sourceFiles(dir: string): string[] {
     .sort()
 }
 
-// Task 7.1 activation readiness: the deploy entry MAY reference exactly TWO
+// Task 7.1 activation readiness: the deploy entry MAY reference exactly THREE
 // V4 modules — the task-approval adapter (engine injection) and the READ-ONLY
-// Stage 7 evidence provider (Gate 1 artifact + Gate 2 marker loading). Both are
+// Stage 7 evidence provider plus its parameter-only Gate 1 loader. All are
 // non-writing. Everything else stays unreachable from the deployed bundle.
 const INDEX_V4_ALLOWLIST = [
   './gamification/v4/taskApprovalAdapter',
   './gamification/v4/stage7EvidenceProvider',
+  './gamification/v4/provisionedGate1Artifact',
 ]
 
 describe('Stage 7 boundary — only the task-approval adapter is reachable from deploy', () => {
@@ -70,8 +71,11 @@ describe('Stage 7 boundary — only the task-approval adapter is reachable from 
     // No inline/static evidence object and no approved artifact baked into the bundle.
     expect(index).not.toMatch(/evidence:\s*\{/)
     expect(index).not.toContain('GATE_1_REACHED')
-    // The artifact is supplied out-of-band by an operator; absent => null => blocked.
-    expect(index).toContain('STAGE7_GATE1_ARTIFACT')
+    // The artifact is supplied through supported parameterized configuration;
+    // absent/malformed => null => blocked.
+    const loader = readFileSync(resolve(FUNCTIONS_V4_DIR, 'provisionedGate1Artifact.ts'), 'utf8')
+    expect(loader).toContain("defineString('STAGE7_GATE1_ARTIFACT'")
+    expect(index).toContain('loadProvisionedGate1Artifact')
     expect(index).not.toContain('applicationDefault')
   })
 })
