@@ -1,9 +1,10 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen } from '@testing-library/react';
+import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { Family } from './Family';
 import { useStore } from '../store/useStore';
 import { useRecurrenceClock } from '../lib/useRecurrenceClock';
+import { claimChallenge } from '../lib/api';
 import { MemoryRouter } from 'react-router-dom';
 import '@testing-library/jest-dom/vitest';
 import i18n from '../i18n/config';
@@ -14,6 +15,14 @@ vi.mock('../store/useStore', () => ({
 
 vi.mock('../lib/useRecurrenceClock', () => ({
   useRecurrenceClock: vi.fn(),
+}));
+
+// The challenge card must reuse the EXISTING authoritative completion/reward
+// action. We mock it (and createChallenge, which the component also imports)
+// so tests can assert the existing handler is invoked — never a second path.
+vi.mock('../lib/api', () => ({
+  createChallenge: vi.fn(),
+  claimChallenge: vi.fn(),
 }));
 
 const renderFamily = (storeState: any, now: Date = new Date()) => {
@@ -211,5 +220,140 @@ describe('Family page', () => {
       expect(screen.queryByRole('heading', { name: 'Invite someone' })).toBeNull();
       expect(await screen.findByRole('dialog')).toBeInTheDocument();
     });
+  });
+});
+
+// Family Challenge card — presentation clarity pass.
+// These tests assert the card is self-explanatory and reuses the EXISTING
+// challenge data sources and the EXISTING claimChallenge action. They must NOT
+// introduce or assert any reward/XP calculation or Firestore write logic.
+describe('Family Challenge card', () => {
+  beforeEach(async () => {
+    await i18n.loadNamespaces(['family']);
+    await i18n.changeLanguage('en');
+    vi.resetAllMocks();
+  });
+
+  const child = (lifetimeXP: number) => ({
+    id: 'c1',
+    displayName: 'Kid',
+    role: 'child',
+    avatarUrl: '',
+    lifetimeXP,
+  });
+
+  const baseChallenge = {
+    id: 'ch-1',
+    isActive: true,
+    title: 'Weekly Warriors',
+    targetXP: 500,
+    rewardPoints: 100,
+    startXP: 0,
+  };
+
+  it('in progress: shows progress + remaining XP and NO claim button', () => {
+    renderFamily({
+      currentUser: { id: 'p', role: 'parent', familyId: 'f1' },
+      familyMembers: [child(420)],
+      challenges: [{ ...baseChallenge, id: 'ch-inprogress' }],
+    });
+
+    // Status, title, and derived description.
+    expect(screen.getByText('In progress')).toBeInTheDocument();
+    expect(screen.getByText('Weekly Warriors')).toBeInTheDocument();
+    expect(screen.getByText('Earn 500 family XP together.')).toBeInTheDocument();
+
+    // Exact existing progress/target values, both the fraction and the percent.
+    expect(screen.getByText(/420 \/ 500 XP earned \(84%\)/)).toBeInTheDocument();
+    expect(screen.getByText('80 XP to go')).toBeInTheDocument();
+
+    // No fake CTA while the challenge is still running.
+    expect(screen.queryByRole('button', { name: /claim reward/i })).toBeNull();
+    expect(screen.getByText(/Keep completing tasks/i)).toBeInTheDocument();
+  });
+
+  it('ready to claim: shows target reached, reward, claim CTA and consequence copy', async () => {
+    const user = userEvent.setup();
+    renderFamily({
+      currentUser: { id: 'p', role: 'parent', familyId: 'f1' },
+      familyMembers: [child(500)],
+      challenges: [{ ...baseChallenge, id: 'ch-ready' }],
+    });
+
+    expect(screen.getByText('Ready to claim')).toBeInTheDocument();
+    expect(screen.getByText(/500 \/ 500 XP earned \(100%\)/)).toBeInTheDocument();
+    expect(screen.getByText(/✓ Target reached/)).toBeInTheDocument();
+    expect(screen.getByText('Every child receives +100 points')).toBeInTheDocument();
+
+    const claimBtn = screen.getByRole('button', { name: /claim reward/i });
+    expect(claimBtn).toBeInTheDocument();
+    expect(
+      screen.getByText(/Gives every child \+100 points and closes the challenge\./),
+    ).toBeInTheDocument();
+
+    await user.click(claimBtn);
+
+    // The EXISTING authoritative completion/reward action is invoked, reusing
+    // the existing rewardPoints + child ids (no client-side reward calc).
+    await waitFor(() =>
+      expect(claimChallenge).toHaveBeenCalledWith(
+        'f1',
+        'ch-ready',
+        100,
+        ['c1'],
+        'Weekly Warriors',
+      ),
+    );
+  });
+
+  it('already claimed: shows passive success state and NO claim button', () => {
+    renderFamily({
+      currentUser: { id: 'p', role: 'parent', familyId: 'f1' },
+      familyMembers: [child(500)],
+      challenges: [
+        {
+          id: 'ch-done',
+          isActive: false,
+          title: 'Weekly Warriors',
+          targetXP: 500,
+          rewardPoints: 100,
+          completedAt: { toMillis: () => 123 },
+        },
+      ],
+    });
+
+    expect(screen.getByText('✓ Completed')).toBeInTheDocument();
+    expect(
+      screen.getByText(/Reward distributed: every child received \+100 points\./),
+    ).toBeInTheDocument();
+    // Never a second opportunity to distribute the reward.
+    expect(screen.queryByRole('button', { name: /claim reward/i })).toBeNull();
+  });
+
+  it('child viewer of a ready challenge sees no claim button (parent-only CTA)', () => {
+    renderFamily({
+      currentUser: { id: 'c1', role: 'child', familyId: 'f1' },
+      familyMembers: [child(500)],
+      challenges: [{ ...baseChallenge, id: 'ch-ready-child' }],
+    });
+
+    expect(screen.getByText('Ready to claim')).toBeInTheDocument();
+    expect(
+      screen.getByText(/Goal reached! Waiting for parent to claim\./),
+    ).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /claim reward/i })).toBeNull();
+  });
+
+  it('uses the stored description when present instead of deriving one', () => {
+    renderFamily({
+      currentUser: { id: 'p', role: 'parent', familyId: 'f1' },
+      familyMembers: [child(250)],
+      challenges: [
+        { ...baseChallenge, id: 'ch-desc', description: 'Read 10 books together.' },
+      ],
+    });
+
+    expect(screen.getByText('Read 10 books together.')).toBeInTheDocument();
+    expect(screen.queryByText('Earn 500 family XP together.')).toBeNull();
   });
 });

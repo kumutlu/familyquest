@@ -14,9 +14,26 @@
     "badge": "Family Challenge",
     "percentComplete": "{{percent}}% Complete",
     "rewardEach": "Reward: {{points}} pts each",
-    "claim": "Complete Challenge & Award Points!",
+    "claim": "Claim reward",
     "claiming": "Claiming…",
-    "goalReached": "Goal reached! Waiting for parent to claim."
+    "goalReached": "Goal reached! Waiting for parent to claim.",
+    "description": "Earn {{target}} family XP together.",
+    "progressLabel": "Progress",
+    "progressValue": "{{earned}} / {{target}} XP earned ({{percent}}%)",
+    "remaining": "{{remaining}} XP to go",
+    "targetReached": "✓ Target reached — the whole family made it!",
+    "rewardLabel": "Reward",
+    "rewardValue": "Every child receives +{{points}} points",
+    "daysRemaining_one": "{{count}} day remaining",
+    "daysRemaining_other": "{{count}} days remaining",
+    "inProgressHint": "Keep completing tasks — the reward unlocks when the target is reached.",
+    "claimHint": "Gives every child +{{points}} points and closes the challenge.",
+    "completedSummary": "Reward distributed: every child received +{{points}} points.",
+    "status": {
+      "inProgress": "In progress",
+      "readyToClaim": "Ready to claim",
+      "completed": "✓ Completed"
+    }
   },
   "topEarner": {
     "label": "Top Earner",
