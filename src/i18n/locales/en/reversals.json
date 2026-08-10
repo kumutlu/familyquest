@@ -44,5 +44,10 @@
     "cancelNoBalance": "Cancelling a pending action does not change balances.",
     "createsReversal": "This creates a linked reversal record. The original action will remain in history.",
     "keepAction": "Keep action"
+  },
+  "entry": {
+    "by": "{{name}} completed",
+    "points": "{{sign}}{{points}} Points",
+    "approvedBy": "Approved by {{name}}"
   }
 }

@@ -1,7 +1,10 @@
 import { render, screen } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 
-vi.mock('./store/useStore', () => ({ useStore: (selector: any) => selector({ initAuth: vi.fn() }) }));
+vi.mock('./store/useStore', () => ({
+  useStore: (selector: any) => selector({ initAuth: vi.fn() }),
+  logAuthTrace: vi.fn(),
+}));
 vi.mock('./components/layout/AppLayout', async () => {
   const { Outlet } = await vi.importActual<typeof import('react-router-dom')>('react-router-dom');
   return { AppLayout: () => <div><span>layout</span><Outlet /></div> };

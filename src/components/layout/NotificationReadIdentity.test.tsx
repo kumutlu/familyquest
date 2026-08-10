@@ -20,8 +20,8 @@ import i18n from '../../i18n/config'
 // spying on the repository write. A managed child with a divergent `uid` and
 // `id` clicks a notification; we assert the write uses the profile id.
 
-const markReadSpy = vi.fn(async () => {})
-const markAllSpy = vi.fn(async () => {})
+const markReadSpy = vi.fn(async (..._args: any[]) => {})
+const markAllSpy = vi.fn(async (..._args: any[]) => {})
 
 // Captured by the mocked subscription so the test can push notifications
 // inside `act` (mirrors useNotifications.test.ts).

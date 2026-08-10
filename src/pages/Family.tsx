@@ -80,15 +80,34 @@ export function Family() {
 
   
   const activeChallenge = challenges?.find(c => c.isActive);
-  
+
+  // Display-only: the most recently finished challenge is surfaced as a success
+  // state so "what happened after I pressed the button" is never a mystery.
+  const completedChallenge = !activeChallenge
+    ? [...(challenges || [])]
+        .filter(c => !c.isActive && c.completedAt)
+        .sort((a, b) => (b.completedAt?.toMillis?.() || 0) - (a.completedAt?.toMillis?.() || 0))[0]
+    : undefined;
+
   // Calculate Family XP (total of all children)
   const totalFamilyXP = children.reduce((acc, child) => acc + (child.lifetimeXP || 0), 0);
-  
+
   let challengeProgress = 0;
+  let challengeEarnedXP = 0;
+  let challengeRemainingXP = 0;
   if (activeChallenge) {
     const earnedSinceStart = Math.max(0, totalFamilyXP - (activeChallenge.startXP || 0));
     challengeProgress = Math.min(100, (earnedSinceStart / activeChallenge.targetXP) * 100);
+    challengeEarnedXP = Math.min(earnedSinceStart, activeChallenge.targetXP);
+    challengeRemainingXP = Math.max(0, activeChallenge.targetXP - earnedSinceStart);
   }
+  const challengeComplete = challengeProgress >= 100;
+
+  // Optional deadline: only rendered when the challenge document carries one.
+  const challengeDeadline = activeChallenge?.endsAt?.toDate?.() ?? null;
+  const challengeDaysLeft = challengeDeadline
+    ? Math.max(0, Math.ceil((challengeDeadline.getTime() - Date.now()) / 86_400_000))
+    : null;
 
   const handleCreateChallenge = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -155,32 +174,88 @@ export function Family() {
         </div>
       </header>
 
-      {/* Active Family Challenge */}
+      {/* Active Family Challenge — every element answers one question:
+          what is this, how far are we, what is the reward, what happens next. */}
       {activeChallenge && (
         <Card className="bg-primary-500 text-white border-none shadow-lg relative overflow-hidden">
           <div className="absolute top-0 right-0 p-4 opacity-20">
             <Target size={64} />
           </div>
           <CardContent className="p-6 relative z-10">
-            <div className="flex items-center gap-2 mb-1">
+            <div className="mb-1 flex flex-wrap items-center gap-2">
               <Badge variant="default" className="bg-primary-400 text-white border-none">{t('challenge.badge')}</Badge>
+              <Badge variant="default" className="bg-primary-600 text-white border-none">
+                {challengeComplete ? t('challenge.status.readyToClaim') : t('challenge.status.inProgress')}
+              </Badge>
             </div>
-            <h3 className="text-xl font-bold tracking-tight mb-4">{activeChallenge.title}</h3>
-            
-            <div className="mb-2 flex justify-between text-sm font-medium">
-              <span>{t('challenge.percentComplete', { percent: Math.floor(challengeProgress) })}</span>
-              <span>{t('challenge.rewardEach', { points: activeChallenge.rewardPoints })}</span>
+            <h3 className="text-xl font-bold tracking-tight">{activeChallenge.title}</h3>
+            <p className="mt-1 text-sm text-white/85">
+              {activeChallenge.description || t('challenge.description', { target: activeChallenge.targetXP })}
+            </p>
+
+            <div className="mt-4">
+              <p className="text-xs font-bold uppercase tracking-wider text-white/70">{t('challenge.progressLabel')}</p>
+              <p className="mt-0.5 text-sm font-semibold">
+                {t('challenge.progressValue', {
+                  earned: challengeEarnedXP,
+                  target: activeChallenge.targetXP,
+                  percent: Math.floor(challengeProgress),
+                })}
+              </p>
+              <Progress value={challengeProgress} className="h-2 bg-primary-700 [&>div]:bg-white mt-2" />
+              <p className="mt-1 text-xs text-white/80">
+                {challengeComplete
+                  ? t('challenge.targetReached')
+                  : t('challenge.remaining', { remaining: challengeRemainingXP })}
+              </p>
             </div>
-            <Progress value={challengeProgress} className="h-2 bg-primary-700 [&>div]:bg-white mb-4" />
-            
-            {challengeProgress >= 100 && isParentRole(currentUser?.role) && (
-              <Button onClick={handleClaimChallenge} disabled={isSubmitting} fullWidth className="bg-white text-primary-600 hover:bg-primary-50 font-bold shadow-md">
-                {isSubmitting ? t('challenge.claiming') : t('challenge.claim')}
-              </Button>
+
+            <div className="mt-4">
+              <p className="text-xs font-bold uppercase tracking-wider text-white/70">{t('challenge.rewardLabel')}</p>
+              <p className="mt-0.5 text-sm font-semibold">{t('challenge.rewardValue', { points: activeChallenge.rewardPoints })}</p>
+            </div>
+
+            {challengeDaysLeft !== null && (
+              <p className="mt-3 text-xs font-medium text-white/80">
+                {t('challenge.daysRemaining', { count: challengeDaysLeft })}
+              </p>
             )}
-            {challengeProgress >= 100 && isChildRole(currentUser?.role) && (
-              <p className="text-sm font-bold text-center bg-primary-600/50 py-2 rounded-lg">{t('challenge.goalReached')}</p>
+
+            {/* State A — still running: no action is possible yet. */}
+            {!challengeComplete && (
+              <p className="mt-4 rounded-lg bg-primary-600/50 py-2 text-center text-sm font-medium">
+                {t('challenge.inProgressHint')}
+              </p>
             )}
+
+            {/* State B — target reached, reward not yet distributed. */}
+            {challengeComplete && isParentRole(currentUser?.role) && (
+              <div className="mt-4">
+                <Button onClick={handleClaimChallenge} disabled={isSubmitting} fullWidth className="bg-white text-primary-600 hover:bg-primary-50 font-bold shadow-md">
+                  {isSubmitting ? t('challenge.claiming') : t('challenge.claim')}
+                </Button>
+                <p className="mt-2 text-center text-xs text-white/80">
+                  {t('challenge.claimHint', { points: activeChallenge.rewardPoints })}
+                </p>
+              </div>
+            )}
+            {challengeComplete && isChildRole(currentUser?.role) && (
+              <p className="mt-4 text-sm font-bold text-center bg-primary-600/50 py-2 rounded-lg">{t('challenge.goalReached')}</p>
+            )}
+          </CardContent>
+        </Card>
+      )}
+
+      {/* State C — reward already distributed: a success state, not a button. */}
+      {completedChallenge && (
+        <Card className="border-none bg-success-50 shadow-sm">
+          <CardContent className="p-6">
+            <div className="mb-1 flex flex-wrap items-center gap-2">
+              <Badge variant="default" className="border-none bg-success-500 text-white">{t('challenge.badge')}</Badge>
+              <Badge variant="default" className="border-none bg-success-100 text-success-700">{t('challenge.status.completed')}</Badge>
+            </div>
+            <h3 className="text-xl font-bold tracking-tight text-gray-900">{completedChallenge.title}</h3>
+            <p className="mt-1 text-sm text-gray-600">{t('challenge.completedSummary', { points: completedChallenge.rewardPoints })}</p>
           </CardContent>
         </Card>
       )}

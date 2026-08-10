@@ -8,6 +8,8 @@ import { Badge } from '../ui/Badge';
 import { Button } from '../ui/Button';
 import { Card, CardContent } from '../ui/Card';
 import { ReversalActionModal } from './ReversalActionModal';
+import { attributeHistorySource } from '../../lib/activityAttribution';
+import { formatDate } from '../../i18n/format';
 
 const sourceDate = (source: any) => {
   const value = source.createdAt || source.timestamp || source.completedAt || source.approvedAt || source.redeemedAt;
@@ -15,6 +17,14 @@ const sourceDate = (source: any) => {
 };
 
 const reversalDate = (value: any) => value?.toDate ? value.toDate() : value instanceof Date ? value : new Date(value || 0);
+
+/** "Today • 08:15" for today's entries, otherwise "13 Jul 2026 • 08:15". */
+const entryTimestamp = (value: Date | null) => {
+  if (!value || value.getTime() === 0) return '';
+  const time = formatDate(value, undefined, { hour: '2-digit', minute: '2-digit' });
+  const isToday = value.toDateString() === new Date().toDateString();
+  return isToday ? time : `${formatDate(value)} • ${time}`;
+};
 
 export function ReversalHistoryPanel() {
   const { t } = useTranslation('reversals');
@@ -70,12 +80,33 @@ export function ReversalHistoryPanel() {
     <section>
       <h2 className="mb-4 text-lg font-bold text-gray-900">{t('title')}</h2>
       <div className="space-y-3">
-        {actions.map(action => (
+        {actions.map(action => {
+          const attribution = attributeHistorySource(action.sourceKind, action.source, {
+            tasks: state.tasks,
+            familyMembers: state.familyMembers,
+          });
+          const occurredAt = entryTimestamp(sourceDate(action.source));
+          return (
           <Card key={`${action.sourceKind}:${action.sourceId}`}>
             <CardContent className="flex items-center justify-between gap-4 p-4">
               <div>
-                <p className="font-semibold text-gray-900">{action.summary}</p>
-                <p className="mt-1 text-xs text-gray-500">{action.sourceKind.replaceAll('_', ' ')}</p>
+                {attribution.subjectName && (
+                  <p className="text-xs font-semibold uppercase tracking-wide text-gray-500">
+                    {t('entry.by', { name: attribution.subjectName })}
+                  </p>
+                )}
+                <p className="font-semibold text-gray-900">{attribution.taskTitle || action.summary}</p>
+                {attribution.points !== undefined && (
+                  <p className={`mt-0.5 text-sm font-bold ${attribution.points > 0 ? 'text-success-600' : 'text-danger-600'}`}>
+                    {t('entry.points', { sign: attribution.points > 0 ? '+' : '−', points: Math.abs(attribution.points) })}
+                  </p>
+                )}
+                <p className="mt-1 text-xs text-gray-500">
+                  {action.sourceKind.replaceAll('_', ' ')}{occurredAt ? ` • ${occurredAt}` : ''}
+                </p>
+                {attribution.approverName && (
+                  <p className="text-xs text-gray-500">{t('entry.approvedBy', { name: attribution.approverName })}</p>
+                )}
                 {action.reversal && (
                   <div className="mt-2 text-xs text-gray-600">
                     <Badge variant="danger">{t('reversed')}</Badge>
@@ -87,7 +118,8 @@ export function ReversalHistoryPanel() {
               {action.action && <Button size="sm" variant={action.action === 'cancel' ? 'danger' : 'secondary'} onClick={() => setSelected(action)}>{t(`actionLabel.${action.actionLabel}`)}</Button>}
             </CardContent>
           </Card>
-        ))}
+          );
+        })}
       </div>
       <ReversalActionModal
         open={!!selected}

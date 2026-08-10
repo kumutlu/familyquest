@@ -121,7 +121,10 @@
     "dashboardHeading": "Son Etkinlik",
     "empty": "Henüz aile etkinliği yok.",
     "viewRequest": "İsteği gör",
-    "viewRequestAria": "İsteği gör: {{text}}"
+    "viewRequestAria": "İsteği gör: {{text}}",
+    "completedBy": "{{child}} tamamladı",
+    "points": "{{sign}}{{points}} Puan",
+    "approvedBy": "{{name}} tarafından onaylandı"
   },
   "joinRequests": {
     "heading": "Bekleyen Katılım İstekleri",

@@ -44,5 +44,10 @@
     "cancelNoBalance": "Bekleyen bir işlemi iptal etmek bakiyeleri değiştirmez.",
     "createsReversal": "Bu, bağlı bir geri alma kaydı oluşturur. Orijinal işlem geçmişte kalır.",
     "keepAction": "İşlemi koru"
+  },
+  "entry": {
+    "by": "{{name}} tamamladı",
+    "points": "{{sign}}{{points}} Puan",
+    "approvedBy": "{{name}} tarafından onayladı"
   }
 }

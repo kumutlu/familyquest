@@ -14,9 +14,26 @@
     "badge": "Aile Meydan Okuması",
     "percentComplete": "%{{percent}} Tamamlandı",
     "rewardEach": "Ödül: çocuk başına {{points}} puan",
-    "claim": "Meydan Okumayı Tamamla ve Puanları Ver!",
+    "claim": "Ödülü ver",
     "claiming": "Tamamlanıyor…",
-    "goalReached": "Hedefe ulaşıldı! Ebeveynin talep etmesi bekleniyor."
+    "goalReached": "Hedefe ulaşıldı! Ebeveynin talep etmesi bekleniyor.",
+    "description": "Birlikte {{target}} aile XP kazanın.",
+    "progressLabel": "İlerleme",
+    "progressValue": "{{earned}} / {{target}} XP kazanıldı (%{{percent}})",
+    "remaining": "{{remaining}} XP kaldı",
+    "targetReached": "✓ Hedefe ulaşıldı — tüm aile başardı!",
+    "rewardLabel": "Ödül",
+    "rewardValue": "Her çocuk +{{points}} puan alır",
+    "daysRemaining_one": "{{count}} gün kaldı",
+    "daysRemaining_other": "{{count}} gün kaldı",
+    "inProgressHint": "Görevleri tamamlamaya devam edin — ödül hedefe ulaşınca açılır.",
+    "claimHint": "Her çocuğa +{{points}} puan verir ve meydan okumayı kapatır.",
+    "completedSummary": "Ödül dağıtıldı: her çocuk +{{points}} puan aldı.",
+    "status": {
+      "inProgress": "Devam ediyor",
+      "readyToClaim": "Verilmeye hazır",
+      "completed": "✓ Tamamlandı"
+    }
   },
   "topEarner": {
     "label": "En Çok Kazanan",

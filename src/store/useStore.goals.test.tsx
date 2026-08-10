@@ -86,6 +86,16 @@ function authenticatedState(familyId = 'fam1', role = 'parent') {
 
 const GOAL_ID = 'goal-1';
 
+// Bootstrap is two-stage: non-critical resources (savings_goals and its nested
+// subcollections) only subscribe once every critical resource has resolved.
+function completeCriticalBootstrap() {
+  listener('families/fam1').next(familySnapshot());
+  listener('families/fam1/tasks').next(collectionSnapshot());
+  listener('families/fam1/rewards').next(collectionSnapshot());
+  listener('families/fam1/wallets').next(collectionSnapshot());
+  listener('users').next(collectionSnapshot());
+}
+
 describe('goals store + bootstrap wiring', () => {
   beforeEach(() => {
     useStore.getState().cleanup();
@@ -112,7 +122,7 @@ describe('goals store + bootstrap wiring', () => {
     useStore.getState().loadFamilyData('user1', 'fam1');
 
     // Family doc + savings_goals (legacy collection reused as goals).
-    listener('families/fam1').next(familySnapshot());
+    completeCriticalBootstrap();
     listener('families/fam1/savings_goals').next(
       collectionSnapshot([{ id: GOAL_ID, title: 'Bike', targetAmountPence: 10000, currentAmountPence: 0, status: 'active' }]),
     );
@@ -152,7 +162,7 @@ describe('goals store + bootstrap wiring', () => {
     authenticatedState();
     useStore.getState().loadFamilyData('user1', 'fam1');
 
-    listener('families/fam1').next(familySnapshot());
+    completeCriticalBootstrap();
     listener('families/fam1/savings_goals').next(
       collectionSnapshot([
         { id: 'legacy-1', title: 'Old goal', targetAmount: 50 },
@@ -190,7 +200,7 @@ describe('goals store + bootstrap wiring', () => {
   it('does not surface goal subcollection listener errors as bootstrap failures', () => {
     authenticatedState();
     useStore.getState().loadFamilyData('user1', 'fam1');
-    listener('families/fam1').next(familySnapshot());
+    completeCriticalBootstrap();
     listener('families/fam1/savings_goals').next(collectionSnapshot([{ id: GOAL_ID, title: 'Bike' }]));
 
     const contribListener = listener(`families/fam1/savings_goals/${GOAL_ID}/contributions`);

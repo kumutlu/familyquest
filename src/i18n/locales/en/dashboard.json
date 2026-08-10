@@ -121,7 +121,10 @@
     "dashboardHeading": "Recent Activity",
     "empty": "No family activity yet.",
     "viewRequest": "View request",
-    "viewRequestAria": "View request: {{text}}"
+    "viewRequestAria": "View request: {{text}}",
+    "completedBy": "{{child}} completed",
+    "points": "{{sign}}{{points}} Points",
+    "approvedBy": "Approved by {{name}}"
   },
   "joinRequests": {
     "heading": "Pending Join Requests",

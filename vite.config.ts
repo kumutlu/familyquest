@@ -66,11 +66,32 @@ export default defineConfig(({ mode }) => {
     exclude: ['node_modules', 'dist', 'tests/e2e/**', 'functions/**', 'tests/firestore/bootstrapQueries.rules.test.ts', 'tests/firestore/goalReturn.integration.test.ts'],
   },
   plugins: [
-    tailwindcss(), 
+    tailwindcss(),
     react(),
     VitePWA({
-      selfDestroying: true,
-      registerType: 'autoUpdate',
+      // `selfDestroying` is only for the dev server: in development we don't want
+      // a stale precache SW interfering with HMR. In a production build it MUST
+      // be false — otherwise vite-plugin-pwa (see its `generateServiceWorker`)
+      // writes a self-destructing stub that unregisters itself and clears all
+      // caches on activate, and never generates the real Workbox precache SW.
+      // That would disable PWA/offline entirely and leave no service worker to
+      // manage updates.
+      selfDestroying: mode === 'development',
+      // `prompt` (waiting strategy) instead of `autoUpdate`: a newly deployed
+      // service worker installs in the background and stays in the `waiting`
+      // state. It does NOT call `skipWaiting()` and does NOT take control of an
+      // already-open tab. The open tab keeps running one consistent app/SW
+      // version; the new worker only becomes active on the user's next
+      // navigation/reload. This removes the deployment-time race where an old
+      // app shell was served new chunks (or vice-versa) and bootstrap stalled
+      // into a generic "Connection problem".
+      //
+      // NOTE: `autoUpdate` would force `skipWaiting` via its injected register
+      // script (it messages the SW to skip waiting), overriding the workbox
+      // `skipWaiting` option below. `prompt` does not do that, so the
+      // `skipWaiting: false` / `clientsClaim: false` settings below are
+      // honoured. Verify the generated `dist/sw.js` after each build.
+      registerType: 'prompt',
       includeAssets: [
         'favicon.ico',
         'favicon-16x16.png',
@@ -107,9 +128,18 @@ export default defineConfig(({ mode }) => {
         ]
       },
       workbox: {
-        skipWaiting: true,
-        clientsClaim: true,
+        // Disabled so a new SW does NOT skip the waiting phase and does NOT
+        // claim already-open clients. Combined with `registerType: 'prompt'`
+        // above, an open tab stays on one consistent version; the new worker
+        // activates only on a safe reload/new navigation. PWA/offline
+        // functionality is preserved (the SW is still installed and controls
+        // new navigations).
+        skipWaiting: false,
+        clientsClaim: false,
         cleanupOutdatedCaches: true,
+        // The main app bundle exceeds Workbox's 2 MiB default precache limit.
+        // Raise it so the real SW can precache the app shell for offline use.
+        maximumFileSizeToCacheInBytes: 4 * 1024 * 1024,
         globPatterns: ['**/*.{js,css,html,ico,png,svg,woff2}'],
         runtimeCaching: [
           {

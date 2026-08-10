@@ -210,7 +210,7 @@ const logDevError = (context: string, error: any, queryShape?: unknown) => {
 // Timestamps every key step so we can diagnose redirect/loading races. No
 // tokens, credentials, or sensitive user data are ever logged. Remove once the
 // auth bootstrap bugs are confirmed fixed in production.
-const logAuthTrace = (event: string, detail?: Record<string, unknown>) => {
+export const logAuthTrace = (event: string, detail?: Record<string, unknown>) => {
   if (import.meta.env?.PROD) return;
   // eslint-disable-next-line no-console
   console.info(`[auth-trace] ${new Date().toISOString()} ${event}`, detail ?? {});
@@ -533,12 +533,18 @@ export const useStore = create<AppState>((set, get) => ({
       appReady: false,
       loading: true,
     });
+    logAuthTrace('family-load-started', { familyId, role });
 
     const isCurrent = () =>
       familyGeneration === generation &&
       authGeneration === owningAuthGeneration &&
       get().activeFamilyId === familyId &&
       get().currentUser?.familyId === familyId;
+
+    // Stage 2 (non-critical background load) is installed by the stage-1 block
+    // below and invoked only once every critical resource has resolved.
+    let startNonCriticalBootstrap: () => void = () => {};
+    let backgroundCompleteLogged = false;
 
     const markReady = (resource: BootstrapResource) => {
       const status = get().bootstrapStatus[resource];
@@ -548,7 +554,22 @@ export const useStore = create<AppState>((set, get) => ({
       }));
 
       if (requiredResources.every(key => get().bootstrapStatus[key] === 'ready')) {
+        logAuthTrace('family-load-completed', { requiredCount: requiredResources.length, role });
         set({ familyLoading: false, appReady: true, loading: false });
+        startNonCriticalBootstrap();
+      }
+
+      // Dev-only trace point: when the background (stage 2) fan-out finishes.
+      if (
+        !backgroundCompleteLogged &&
+        get().appReady &&
+        roleResources.every(key => {
+          const value = get().bootstrapStatus[key];
+          return value === 'ready' || value === 'error';
+        })
+      ) {
+        backgroundCompleteLogged = true;
+        logAuthTrace('family-background-load-completed', { resourceCount: roleResources.length, role });
       }
     };
 
@@ -716,6 +737,135 @@ export const useStore = create<AppState>((set, get) => ({
       }
     };
 
+    const currentUser = state.currentUser;
+
+    // ------------------------------------------------------------------
+    // STAGE 2 — non-critical background load.
+    // Installed here, executed only after every critical resource resolved
+    // (see markReady). It re-checks isCurrent() so a stale bootstrap (sign
+    // out / family switch during stage 1) can never attach listeners.
+    // ------------------------------------------------------------------
+    let nonCriticalStarted = false;
+    startNonCriticalBootstrap = () => {
+      if (nonCriticalStarted || !isCurrent()) return;
+      nonCriticalStarted = true;
+      logAuthTrace('family-background-load-started', { familyId, role });
+      try {
+        if (currentUser?.role === 'parent' || currentUser?.role === 'owner') {
+          subscribePlanned('joinRequests', 'Join requests', snapshot => set({ joinRequests: docs(snapshot) }));
+          subscribePlanned('childJoinRequests', 'Child join requests', snapshot => set({ childJoinRequests: docs(snapshot) }));
+          subscribePlanned('taskCompletions', 'Task completions', snapshot => set({ taskCompletions: docs(snapshot) }));
+          subscribePlanned('redemptions', 'Redemptions', snapshot => set({ redemptions: docs(snapshot) }));
+          subscribePlanned('walletTransactions', 'Wallet transactions', snapshot => set({ walletTransactions: normalizeHistory(docs(snapshot)) }));
+          subscribePlanned('savingsGoals', 'Savings goals', snapshot => {
+            const goals = docs(snapshot);
+            set({ savingsGoals: goals });
+            subscribeGoalSubcollections(goals.map((goal: any) => goal.id));
+          });
+          subscribePlanned('goalRequests', 'Goal requests', snapshot => set({ goalRequests: docs(snapshot) }));
+          subscribePlanned('transferRequests', 'Transfer requests', snapshot => set({ transferRequests: docs(snapshot) }));
+          subscribePlanned('moneyRequests', 'Money requests', snapshot => set({ moneyRequests: docs(snapshot) }));
+          subscribePlanned('petboxRequests', 'Pet Box requests', snapshot => set({ petboxRequests: docs(snapshot) }));
+          subscribePlanned('profileUpdateRequests', 'Profile update requests', snapshot => set({ profileUpdateRequests: docs(snapshot) }));
+          subscribePlanned('reversals', 'Reversals', snapshot => set({ reversals: docs(snapshot) }));
+          subscribePlanned('avatarUnlocks', 'Avatar unlocks', snapshot => set({ avatarUnlocks: docs(snapshot) }));
+        } else {
+          subscribePlanned('taskCompletions', 'Task completions', snapshot => set({ taskCompletions: docs(snapshot) }));
+          subscribePlanned('redemptions', 'Redemptions', snapshot => set({ redemptions: docs(snapshot) }));
+          subscribePlanned('walletTransactions', 'Wallet transactions', snapshot => set({ walletTransactions: normalizeHistory(docs(snapshot)) }));
+          subscribePlanned('savingsGoals', 'Savings goals', snapshot => {
+            const goals = docs(snapshot);
+            set({ savingsGoals: goals });
+            subscribeGoalSubcollections(goals.map((goal: any) => goal.id));
+          });
+          subscribePlanned('goalRequests', 'Goal requests', snapshot => set({ goalRequests: docs(snapshot) }));
+          subscribePlanned('transferRequests', 'Transfer requests', snapshot => set({ transferRequests: docs(snapshot) }));
+          subscribePlanned('petboxRequests', 'Pet Box requests', snapshot => set({ petboxRequests: docs(snapshot) }));
+          subscribePlanned('profileUpdateRequests', 'Profile update requests', snapshot => set({ profileUpdateRequests: docs(snapshot) }));
+
+          const moneyRequestResults: any[][] = [[], []];
+          const moneyRequestReady = [false, false];
+          const moneyQueries = [
+            queryPlanEntry('moneyRequests:requester'),
+            queryPlanEntry('moneyRequests:requestedFrom'),
+          ].map(entry => {
+            if (entry.kind !== 'query') throw new Error(`${entry.key} must be a query.`);
+            return entry.target;
+          });
+          const acceptMoneySnapshot = (index: number, snapshot: any) => {
+            if (!isCurrent()) return;
+            moneyRequestResults[index] = docs(snapshot);
+            moneyRequestReady[index] = true;
+            const merged = new Map<string, any>();
+            moneyRequestResults.flat().forEach(item => merged.set(item.id, item));
+            set({ moneyRequests: [...merged.values()] });
+            if (moneyRequestReady.every(Boolean)) markReady('moneyRequests');
+          };
+          moneyQueries.forEach((moneyQuery, index) => {
+            const unsubscribe = onSnapshot(
+              moneyQuery,
+              { includeMetadataChanges: true },
+              snapshot => {
+                if (!snapshot.metadata?.fromCache) acceptMoneySnapshot(index, snapshot);
+              },
+              error => handleOptionalListenerError(`moneyRequests:${index}`, 'moneyRequests', 'Money requests', error),
+            );
+            const listenerName = `moneyRequests:${index}`;
+            stopFamilyListener(listenerName);
+            familyListeners.set(listenerName, { critical: false, unsubscribe });
+            void getDocsFromServer(moneyQuery)
+              .then(snapshot => {
+                if (!moneyRequestReady[index]) acceptMoneySnapshot(index, snapshot);
+              })
+              .catch(error => {
+                if (!moneyRequestReady[index]) handleOptionalListenerError(listenerName, 'moneyRequests', 'Money requests', error);
+              });
+          });
+        }
+
+        subscribePlanned('feed', 'Feed', snapshot => set({ feed: docs(snapshot) }));
+        subscribePlanned('behaviourEvents', 'Behaviour events', snapshot => set({ behaviourEvents: normalizeHistory(docs(snapshot)) }));
+        subscribePlanned('challenges', 'Challenges', snapshot => set({ challenges: docs(snapshot) }));
+        subscribePlanned('funds', 'Funds', snapshot => set({ funds: docs(snapshot) }));
+        subscribePlanned('fundTransactions', 'Fund transactions', snapshot => set({ fundTransactions: docs(snapshot) }));
+
+        // Gamification subscriptions: parent/owner reads all family summaries/progress,
+        // child reads only own summary and today's progress
+        if (currentUser?.role === 'parent' || currentUser?.role === 'owner') {
+          subscribePlanned('gamificationSummaries', 'Gamification summaries', snapshot => set({ gamificationSummaries: docs(snapshot) }));
+          subscribePlanned('dailyProgress', 'Daily progress', snapshot => set({ dailyProgress: docs(snapshot) }))
+        } else {
+          // Child: read own summary and filter today's progress client-side
+          subscribePlanned('gamificationSummaries', 'Gamification summaries', snapshot => {
+            if (snapshot.exists()) {
+              set({ myGamificationSummary: { id: snapshot.id, ...snapshot.data() } })
+            } else {
+              set({ myGamificationSummary: null })
+            }
+          })
+          subscribePlanned('dailyProgress', 'Daily progress', snapshot => {
+            // For child, find today's progress from the query results
+            // The dayKey format is YYYYMMDD, but we need to match the server format
+            // For now, just store all progress and let the adapter filter
+            set({ dailyProgress: docs(snapshot) })
+          })
+        }
+      } catch (error: any) {
+        // A background-stage failure must never drag the app back into startup:
+        // appReady has already been granted by the critical stage. Surface it as
+        // a feature error instead of swallowing it.
+        if (!isCurrent()) return;
+        logDevError('Background bootstrap', error, {});
+        set(current => ({
+          featureErrors: { ...current.featureErrors, backgroundBootstrap: errorText('Bootstrap', error) },
+        }));
+      }
+    };
+
+    // ------------------------------------------------------------------
+    // STAGE 1 — critical resources only (criticalBootstrapResources).
+    // appReady is granted by markReady as soon as these resolve.
+    // ------------------------------------------------------------------
     try {
       subscribePlanned('family', 'Family', snapshot => {
         if (!snapshot.exists()) {
@@ -728,7 +878,6 @@ export const useStore = create<AppState>((set, get) => ({
       subscribePlanned('tasks', 'Tasks', snapshot => set({ tasks: docs(snapshot) }));
       subscribePlanned('rewards', 'Rewards', snapshot => set({ rewards: docs(snapshot) }));
 
-      const currentUser = state.currentUser;
       if (currentUser?.role === 'parent' || currentUser?.role === 'owner') {
         subscribePlanned('wallets', 'Wallets', snapshot => set({ childWallets: docs(snapshot) }));
       } else if (currentUser?.role === 'child') {
@@ -744,105 +893,6 @@ export const useStore = create<AppState>((set, get) => ({
       }
 
       subscribePlanned('members', 'Members', snapshot => set({ familyMembers: docs(snapshot) }));
-      if (currentUser?.role === 'parent' || currentUser?.role === 'owner') {
-        subscribePlanned('joinRequests', 'Join requests', snapshot => set({ joinRequests: docs(snapshot) }));
-        subscribePlanned('childJoinRequests', 'Child join requests', snapshot => set({ childJoinRequests: docs(snapshot) }));
-        subscribePlanned('taskCompletions', 'Task completions', snapshot => set({ taskCompletions: docs(snapshot) }));
-        subscribePlanned('redemptions', 'Redemptions', snapshot => set({ redemptions: docs(snapshot) }));
-        subscribePlanned('walletTransactions', 'Wallet transactions', snapshot => set({ walletTransactions: normalizeHistory(docs(snapshot)) }));
-        subscribePlanned('savingsGoals', 'Savings goals', snapshot => {
-          const goals = docs(snapshot);
-          set({ savingsGoals: goals });
-          subscribeGoalSubcollections(goals.map((goal: any) => goal.id));
-        });
-        subscribePlanned('goalRequests', 'Goal requests', snapshot => set({ goalRequests: docs(snapshot) }));
-        subscribePlanned('transferRequests', 'Transfer requests', snapshot => set({ transferRequests: docs(snapshot) }));
-        subscribePlanned('moneyRequests', 'Money requests', snapshot => set({ moneyRequests: docs(snapshot) }));
-        subscribePlanned('petboxRequests', 'Pet Box requests', snapshot => set({ petboxRequests: docs(snapshot) }));
-        subscribePlanned('profileUpdateRequests', 'Profile update requests', snapshot => set({ profileUpdateRequests: docs(snapshot) }));
-        subscribePlanned('reversals', 'Reversals', snapshot => set({ reversals: docs(snapshot) }));
-        subscribePlanned('avatarUnlocks', 'Avatar unlocks', snapshot => set({ avatarUnlocks: docs(snapshot) }));
-      } else {
-        subscribePlanned('taskCompletions', 'Task completions', snapshot => set({ taskCompletions: docs(snapshot) }));
-        subscribePlanned('redemptions', 'Redemptions', snapshot => set({ redemptions: docs(snapshot) }));
-        subscribePlanned('walletTransactions', 'Wallet transactions', snapshot => set({ walletTransactions: normalizeHistory(docs(snapshot)) }));
-        subscribePlanned('savingsGoals', 'Savings goals', snapshot => {
-          const goals = docs(snapshot);
-          set({ savingsGoals: goals });
-          subscribeGoalSubcollections(goals.map((goal: any) => goal.id));
-        });
-        subscribePlanned('goalRequests', 'Goal requests', snapshot => set({ goalRequests: docs(snapshot) }));
-        subscribePlanned('transferRequests', 'Transfer requests', snapshot => set({ transferRequests: docs(snapshot) }));
-        subscribePlanned('petboxRequests', 'Pet Box requests', snapshot => set({ petboxRequests: docs(snapshot) }));
-        subscribePlanned('profileUpdateRequests', 'Profile update requests', snapshot => set({ profileUpdateRequests: docs(snapshot) }));
-
-        const moneyRequestResults: any[][] = [[], []];
-        const moneyRequestReady = [false, false];
-        const moneyQueries = [
-          queryPlanEntry('moneyRequests:requester'),
-          queryPlanEntry('moneyRequests:requestedFrom'),
-        ].map(entry => {
-          if (entry.kind !== 'query') throw new Error(`${entry.key} must be a query.`);
-          return entry.target;
-        });
-        const acceptMoneySnapshot = (index: number, snapshot: any) => {
-          if (!isCurrent()) return;
-          moneyRequestResults[index] = docs(snapshot);
-          moneyRequestReady[index] = true;
-          const merged = new Map<string, any>();
-          moneyRequestResults.flat().forEach(item => merged.set(item.id, item));
-          set({ moneyRequests: [...merged.values()] });
-          if (moneyRequestReady.every(Boolean)) markReady('moneyRequests');
-        };
-        moneyQueries.forEach((moneyQuery, index) => {
-          const unsubscribe = onSnapshot(
-            moneyQuery,
-            { includeMetadataChanges: true },
-            snapshot => {
-              if (!snapshot.metadata?.fromCache) acceptMoneySnapshot(index, snapshot);
-            },
-            error => handleOptionalListenerError(`moneyRequests:${index}`, 'moneyRequests', 'Money requests', error),
-          );
-          const listenerName = `moneyRequests:${index}`;
-          stopFamilyListener(listenerName);
-          familyListeners.set(listenerName, { critical: false, unsubscribe });
-          void getDocsFromServer(moneyQuery)
-            .then(snapshot => {
-              if (!moneyRequestReady[index]) acceptMoneySnapshot(index, snapshot);
-            })
-            .catch(error => {
-              if (!moneyRequestReady[index]) handleOptionalListenerError(listenerName, 'moneyRequests', 'Money requests', error);
-            });
-        });
-      }
-
-      subscribePlanned('feed', 'Feed', snapshot => set({ feed: docs(snapshot) }));
-      subscribePlanned('behaviourEvents', 'Behaviour events', snapshot => set({ behaviourEvents: normalizeHistory(docs(snapshot)) }));
-      subscribePlanned('challenges', 'Challenges', snapshot => set({ challenges: docs(snapshot) }));
-      subscribePlanned('funds', 'Funds', snapshot => set({ funds: docs(snapshot) }));
-      subscribePlanned('fundTransactions', 'Fund transactions', snapshot => set({ fundTransactions: docs(snapshot) }));
-
-      // Gamification subscriptions: parent/owner reads all family summaries/progress,
-      // child reads only own summary and today's progress
-      if (currentUser?.role === 'parent' || currentUser?.role === 'owner') {
-        subscribePlanned('gamificationSummaries', 'Gamification summaries', snapshot => set({ gamificationSummaries: docs(snapshot) }));
-        subscribePlanned('dailyProgress', 'Daily progress', snapshot => set({ dailyProgress: docs(snapshot) }))
-      } else {
-        // Child: read own summary and filter today's progress client-side
-        subscribePlanned('gamificationSummaries', 'Gamification summaries', snapshot => {
-          if (snapshot.exists()) {
-            set({ myGamificationSummary: { id: snapshot.id, ...snapshot.data() } })
-          } else {
-            set({ myGamificationSummary: null })
-          }
-        })
-        subscribePlanned('dailyProgress', 'Daily progress', snapshot => {
-          // For child, find today's progress from the query results
-          // The dayKey format is YYYYMMDD, but we need to match the server format
-          // For now, just store all progress and let the adapter filter
-          set({ dailyProgress: docs(snapshot) })
-        })
-      }
     } catch (error: any) {
       handleCriticalListenerError('family', 'Bootstrap', error);
     }

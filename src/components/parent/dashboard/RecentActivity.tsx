@@ -7,6 +7,7 @@ import type { ReactNode } from 'react';
 import { useRequestDetail } from '../../requests/RequestDetailContext';
 import { resolveFeedRequest } from '../../../lib/feedRequestResolver';
 import { formatDate } from '../../../i18n/format';
+import { attributeFeedItem, toDateValue } from '../../../lib/activityAttribution';
 
 const TYPE_ICONS: Record<string, ReactNode> = {
   behaviour: <Zap size={16} className="text-warning-500" />,
@@ -23,10 +24,11 @@ function iconForType(type?: string): ReactNode {
 }
 
 function formatTimestamp(timestamp: any): string {
-  if (!timestamp) return '';
-  const date = timestamp.toDate ? timestamp.toDate() : new Date();
-  if (isNaN(date.getTime())) return '';
-  return formatDate(date);
+  const date = toDateValue(timestamp);
+  if (!date) return '';
+  const isToday = date.toDateString() === new Date().toDateString();
+  const time = formatDate(date, undefined, { hour: '2-digit', minute: '2-digit' });
+  return isToday ? time : `${formatDate(date)} • ${time}`;
 }
 
 export function RecentActivity() {
@@ -40,6 +42,8 @@ export function RecentActivity() {
     redemptions = [],
     taskCompletions = [],
     petboxRequests = [],
+    tasks = [],
+    familyMembers = [],
   } = useStore();
 
   const events = [...feed]
@@ -77,14 +81,44 @@ export function RecentActivity() {
               petboxRequests,
             });
 
+            const attribution = attributeFeedItem(item, { taskCompletions, tasks, familyMembers });
+            // A fully attributed row (child + task) leads with the child who
+            // completed it; anything else keeps its original, raw activity text.
+            const attributed = Boolean(attribution.subjectName && attribution.taskTitle);
+
             const baseRow = (
               <>
                 <span className="mt-0.5 shrink-0">{iconForType(item.type)}</span>
                 <div className="min-w-0 flex-1">
-                  <p className="text-sm font-medium text-gray-900 break-words">{item.text}</p>
+                  {attributed ? (
+                    <>
+                      <p className="text-xs font-semibold uppercase tracking-wide text-gray-500">
+                        {t('recentActivity.completedBy', { child: attribution.subjectName })}
+                      </p>
+                      <p className="text-sm font-semibold text-gray-900 break-words">{attribution.taskTitle}</p>
+                    </>
+                  ) : (
+                    <p className="text-sm font-semibold text-gray-900 break-words">{item.text}</p>
+                  )}
+                  {attribution.points !== undefined && attribution.points !== 0 && (
+                    <p
+                      className={`mt-0.5 text-sm font-bold ${attribution.points > 0 ? 'text-success-600' : 'text-danger-600'}`}
+                    >
+                      {t('recentActivity.points', {
+                        sign: attribution.points > 0 ? '+' : '−',
+                        points: Math.abs(attribution.points),
+                      })}
+                    </p>
+                  )}
                   <div className="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-0.5">
-                    {item.actorName && (
-                      <span className="text-xs font-medium text-gray-600">{item.actorName}</span>
+                    {attribution.approverName ? (
+                      <span className="text-xs font-medium text-gray-600">
+                        {t('recentActivity.approvedBy', { name: attribution.approverName })}
+                      </span>
+                    ) : (
+                      item.actorName && (
+                        <span className="text-xs font-medium text-gray-600">{item.actorName}</span>
+                      )
                     )}
                     <span className="text-xs text-gray-400">{formatTimestamp(item.timestamp)}</span>
                   </div>

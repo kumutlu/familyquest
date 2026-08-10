@@ -286,7 +286,27 @@ export async function markNotificationRead(
   await setDoc(ref, { familyId, userId, notificationId, readAt: serverTimestamp() });
 }
 
-/** Marks many notifications as read for the authenticated user (batch). */
+/**
+ * Maximum number of read records written per Firestore batch when marking
+ * notifications read.
+ *
+ * Root cause of the production failure: the `notification_reads` create rule
+ * (see firestore.rules) performs a `get()` on the parent notification document
+ * for every write it evaluates. Firestore security rules enforce a hard limit of
+ * 20 document accesses (get/exists) per request. A single `writeBatch().commit()`
+ * of 20+ read records therefore triggers 20+ distinct document accesses (one
+ * cached family doc + one per distinct notification) and the entire batch is
+ * rejected with `permission-denied`.
+ *
+ * Committing in chunks keeps each request's rule-evaluation document accesses at
+ * or below the limit: with this size each commit touches at most
+ * 1 (family, cached) + 15 (distinct notifications) = 16 accesses, leaving
+ * headroom for the rule's other reads and any future rule additions. We must not
+ * raise this above 15 without re-validating the rules document-access budget.
+ */
+export const MARK_ALL_READ_CHUNK_SIZE = 15;
+
+/** Marks many notifications as read for the authenticated user (batched). */
 export async function markAllNotificationsRead(
   familyId: string,
   userId: string,
@@ -294,22 +314,34 @@ export async function markAllNotificationsRead(
   alreadyRead: Set<string> = new Set(),
 ): Promise<void> {
   // Skip notifications the user has already read so we never re-write (and
-  // never risk a misleading success state for) read rows.
+  // never risk a misleading success state for) read rows. This also makes the
+  // operation idempotent across retries after a partial failure: a retry can
+  // pass the updated readIds set and only the still-unread rows are written.
   const ids = notificationIds.filter(Boolean).filter(id => !alreadyRead.has(id));
   if (ids.length === 0) return;
-  const batch = writeBatch(db);
-  for (const nid of ids) {
-    batch.set(readStateRef(familyId, userId, nid), {
-      familyId,
-      userId,
-      notificationId: nid,
-      readAt: serverTimestamp(),
-    });
+
+  // Commit in safe chunks so each writeBatch().commit() stays within the
+  // Firestore rules per-request document access limit (see
+  // MARK_ALL_READ_CHUNK_SIZE). Each chunk is an independent atomic commit.
+  for (let i = 0; i < ids.length; i += MARK_ALL_READ_CHUNK_SIZE) {
+    const chunk = ids.slice(i, i + MARK_ALL_READ_CHUNK_SIZE);
+    const batch = writeBatch(db);
+    for (const nid of chunk) {
+      batch.set(readStateRef(familyId, userId, nid), {
+        familyId,
+        userId,
+        notificationId: nid,
+        readAt: serverTimestamp(),
+      });
+    }
+    // writeBatch.commit() is atomic: either every write in the chunk succeeds
+    // or the whole chunk is rejected. On rejection it throws, so we propagate
+    // the error rather than report success. Already-committed chunks remain
+    // written (idempotent doc ids `userId_notificationId` + the caller's
+    // readIds set guarantee no duplicates and that all notifications are
+    // eventually marked read on retry).
+    await batch.commit();
   }
-  // writeBatch.commit() is atomic: either every write succeeds or the whole
-  // batch is rejected. On rejection it throws, so callers must surface the
-  // error rather than report success.
-  await batch.commit();
 }
 
 // ---------------------------------------------------------------------------

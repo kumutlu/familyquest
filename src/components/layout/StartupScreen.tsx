@@ -3,6 +3,7 @@ import { Loader2 } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { Button } from '../ui/Button';
 import type { StartupPhase } from './startupState';
+import { reportStartupPhase, logStartupDiagnostic } from '../../startupDiagnostics';
 
 /** Delay before the secondary reassurance line appears. */
 export const STARTUP_REASSURANCE_DELAY_MS = 4000;
@@ -65,6 +66,12 @@ export function StartupScreen({ phase, error, onRetry, onSignOut, attempt = 0 }:
   const isLoadingPhase = phase === 'auth' || phase === 'profile' || phase === 'family';
   const token = `${phase}:${attempt}`;
 
+  // Publish the current phase to the diagnostics module so the service-worker
+  // controllerchange handler can tell whether a takeover happened mid-bootstrap.
+  useEffect(() => {
+    reportStartupPhase(phase);
+  }, [phase]);
+
   useEffect(() => {
     setShowReassurance(false);
     if (!isLoadingPhase) return undefined;
@@ -79,12 +86,29 @@ export function StartupScreen({ phase, error, onRetry, onSignOut, attempt = 0 }:
     return () => clearTimeout(handle);
   }, [token, isLoadingPhase]);
 
-  if (phase === 'ready') return null;
-
   // A timeout is a per-phase, per-attempt UI recovery state. As soon as the
   // phase advances (late success, next phase, or a retry) the token no longer
   // matches and the loading screen returns automatically — no refresh needed.
   const failed = phase === 'error' || timedOutToken === token;
+  const timedOut = timedOutToken === token;
+
+  // A per-phase timeout (not a genuine bootstrap error) is classified with a
+  // non-sensitive diagnostic so triage does not have to guess which gate
+  // stalled. The user-facing copy stays generic and non-sensitive. This runs in
+  // an effect (never during render) so it fires exactly once per timeout and
+  // has no effect on the rendered output or on business behaviour.
+  useEffect(() => {
+    if (!timedOut) return;
+    const code =
+      phase === 'auth'
+        ? 'AUTH_TIMEOUT'
+        : phase === 'profile'
+          ? 'PROFILE_LOAD_TIMEOUT'
+          : 'FAMILY_LOAD_TIMEOUT';
+    logStartupDiagnostic(code, { phase });
+  }, [timedOut, phase]);
+
+  if (phase === 'ready') return null;
 
   if (failed) {
     const body = phase === 'error' && error ? error : t('timeoutBody');
