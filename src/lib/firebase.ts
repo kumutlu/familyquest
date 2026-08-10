@@ -62,3 +62,11 @@ if (import.meta.env.VITE_USE_FIREBASE_EMULATOR === 'true') {
   connectFirestoreEmulator(db, '127.0.0.1', 8080);
   connectFunctionsEmulator(functions, '127.0.0.1', 5001);
 }
+
+// Dev-only startup trace: marks the moment the Firebase app/auth/db handles are
+// ready. Mirrors the `[auth-trace]` format used by logAuthTrace in useStore so
+// the full startup can be measured end-to-end. No tokens or config are logged.
+if (import.meta.env?.DEV) {
+  // eslint-disable-next-line no-console
+  console.info('[auth-trace]', new Date().toISOString(), 'firebase-initialized', {});
+}

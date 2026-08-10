@@ -4,10 +4,18 @@ import { I18nextProvider } from 'react-i18next'
 import { FAMILYQUEST_BUILD } from './buildInfo'
 import './index.css'
 import App from './App.tsx'
-import { installServiceWorkerUpdateReload } from './serviceWorkerUpdate'
+import { installServiceWorkerControllerListener } from './serviceWorkerUpdate'
+import { installChunkLoadErrorMonitor } from './chunkLoadErrorMonitor'
 import i18n, { bootstrapI18n } from './i18n'
 
-installServiceWorkerUpdateReload()
+// Observe (but never auto-reload on) service-worker controller changes. This
+// records a diagnostic if a takeover happens mid-bootstrap instead of masking
+// the failure with a reload.
+installServiceWorkerControllerListener()
+
+// Classify chunk-load failures (e.g. a stale hashed asset after a deploy) as a
+// distinct, non-sensitive diagnostic rather than a generic timeout.
+installChunkLoadErrorMonitor()
 
 // PART 1 — Runtime build identifier. Proves which bundle is actually running
 // in the browser so stale-deployment regressions can be diagnosed from the

@@ -26,7 +26,7 @@ import { HelpHome } from './help/pages/HelpHome';
 import { HelpArticlePage } from './help/pages/HelpArticlePage';
 import { HelpCategoryPage } from './help/pages/HelpCategoryPage';
 import { HelpSearchResults } from './help/pages/HelpSearchResults';
-import { useStore } from './store/useStore';
+import { useStore, logAuthTrace } from './store/useStore';
 import { initForegroundMessaging } from './lib/pushNotifications';
 import { RequestDetailProvider } from './components/requests/RequestDetailContext';
 import { useEffect } from 'react';
@@ -36,6 +36,7 @@ function App() {
   const initAuth = useStore(state => state.initAuth);
 
   useEffect(() => {
+    logAuthTrace('app-mount');
     initAuth();
     void consumeGoogleRedirectResult()
       .then(result => {

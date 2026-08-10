@@ -197,3 +197,49 @@ describe('StartupScreen', () => {
     clearSpy.mockRestore();
   });
 });
+
+describe('StartupScreen diagnostics', () => {
+  beforeEach(async () => {
+    vi.useFakeTimers();
+    await i18n.changeLanguage('en');
+    vi.spyOn(console, 'error').mockImplementation(() => {});
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+    vi.runOnlyPendingTimers();
+    vi.useRealTimers();
+  });
+
+  it('logs AUTH_TIMEOUT when the auth phase times out', async () => {
+    render(<StartupScreen phase="auth" onRetry={vi.fn()} />);
+    await advance(STARTUP_TIMEOUT_MS);
+    expect(console.error).toHaveBeenCalledWith('[StartupDiagnostic]', 'AUTH_TIMEOUT', { phase: 'auth' });
+  });
+
+  it('logs PROFILE_LOAD_TIMEOUT when the profile phase times out', async () => {
+    render(<StartupScreen phase="profile" onRetry={vi.fn()} />);
+    await advance(STARTUP_TIMEOUT_MS);
+    expect(console.error).toHaveBeenCalledWith('[StartupDiagnostic]', 'PROFILE_LOAD_TIMEOUT', { phase: 'profile' });
+  });
+
+  it('logs FAMILY_LOAD_TIMEOUT when the family phase times out', async () => {
+    render(<StartupScreen phase="family" onRetry={vi.fn()} />);
+    await advance(STARTUP_TIMEOUT_MS);
+    expect(console.error).toHaveBeenCalledWith('[StartupDiagnostic]', 'FAMILY_LOAD_TIMEOUT', { phase: 'family' });
+  });
+
+  it('does NOT log a timeout code for a genuine bootstrap error', async () => {
+    render(<StartupScreen phase="error" error="[Profile] not-found" onRetry={vi.fn()} />);
+    await advance(STARTUP_TIMEOUT_MS * 2);
+    const calls = (console.error as any).mock.calls;
+    expect(calls.some((c: unknown[]) => c[0] === '[StartupDiagnostic]')).toBe(false);
+  });
+
+  it('keeps the user-facing copy generic (no diagnostic code leaks to the UI)', async () => {
+    render(<StartupScreen phase="family" onRetry={vi.fn()} />);
+    await advance(STARTUP_TIMEOUT_MS);
+    expect(screen.getByRole('alert')).toHaveTextContent('taking longer than expected');
+    expect(screen.getByRole('alert').textContent).not.toMatch(/FAMILY_LOAD_TIMEOUT|AUTH_TIMEOUT/);
+  });
+});
