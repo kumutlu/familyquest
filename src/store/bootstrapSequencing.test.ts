@@ -20,6 +20,8 @@ type Deferred = { resolve: (value: any) => void; reject: (error: any) => void };
 const harness = vi.hoisted(() => ({
   subscribedPaths: [] as string[],
   serverReads: new Map<string, Deferred[]>(),
+  snapshotNext: new Map<string, (snapshot: any) => void>(),
+  snapshotError: new Map<string, (error: any) => void>(),
 }));
 
 const pathOf = (target: any): string => (target && target.path) || 'unknown';
@@ -54,8 +56,10 @@ vi.mock('firebase/firestore', () => ({
   getFirestore: vi.fn(() => ({})),
   getDocFromServer: vi.fn((target: any) => deferredFor(target)),
   getDocsFromServer: vi.fn((target: any) => deferredFor(target)),
-  onSnapshot: vi.fn((target: any) => {
+  onSnapshot: vi.fn((target: any, _options: any, next: any, error: any) => {
     harness.subscribedPaths.push(pathOf(target));
+    harness.snapshotNext.set(pathOf(target), next);
+    harness.snapshotError.set(pathOf(target), error);
     return () => {};
   }),
 }));
@@ -119,6 +123,8 @@ describe('two-stage family bootstrap sequencing', () => {
   beforeEach(() => {
     harness.subscribedPaths = [];
     harness.serverReads = new Map();
+    harness.snapshotNext = new Map();
+    harness.snapshotError = new Map();
     useStore.setState(signedInFamilyState() as any);
   });
 
@@ -145,6 +151,33 @@ describe('two-stage family bootstrap sequencing', () => {
     expect(useStore.getState().appReady).toBe(true);
     expect(useStore.getState().familyLoading).toBe(false);
     expect(useStore.getState().loading).toBe(false);
+  });
+
+  it('uses a matching cached family for fast render while server validation remains pending', async () => {
+    useStore.getState().loadFamilyData('u1', 'f1');
+    harness.snapshotNext.get(FAMILY_PATH)?.({
+      ...documentSnapshot('f1'),
+      metadata: { fromCache: true },
+    });
+    await Promise.resolve();
+
+    expect(useStore.getState().appReady).toBe(true);
+    expect(useStore.getState().familyData).toMatchObject({ id: 'f1', name: 'Family' });
+    expect((harness.serverReads.get(FAMILY_PATH) ?? []).length).toBeGreaterThan(0);
+  });
+
+  it('revokes cached family readiness when server permission validation fails', async () => {
+    useStore.getState().loadFamilyData('u1', 'f1');
+    harness.snapshotNext.get(FAMILY_PATH)?.({
+      ...documentSnapshot('f1'),
+      metadata: { fromCache: true },
+    });
+    await Promise.resolve();
+    expect(useStore.getState().appReady).toBe(true);
+
+    await rejectRead(FAMILY_PATH, { code: 'permission-denied', message: 'denied' });
+    expect(useStore.getState().appReady).toBe(false);
+    expect(useStore.getState().bootstrapError).toContain('permission-denied');
   });
 
   it.each(OPTIONAL_DASHBOARD_PATHS)(

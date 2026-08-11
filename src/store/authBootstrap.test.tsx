@@ -25,7 +25,10 @@ const authState = vi.hoisted(() => ({
 const firestoreState = vi.hoisted(() => ({
   // Profile doc snapshot the getDocFromServer / onSnapshot will resolve with.
   profileSnapshot: null as any,
+  cachedProfileSnapshot: null as any,
   profileError: null as any,
+  deferServer: false,
+  serverResolve: null as ((snapshot: any) => void) | null,
 }));
 
 vi.mock('firebase/auth', () => ({
@@ -44,15 +47,21 @@ vi.mock('firebase/firestore', () => ({
   doc: vi.fn((_db, _col, id) => ({ __id: id, type: 'doc' })),
   getDocFromServer: vi.fn(() => {
     if (firestoreState.profileError) return Promise.reject(firestoreState.profileError);
+    if (firestoreState.deferServer) {
+      return new Promise(resolve => { firestoreState.serverResolve = resolve; });
+    }
     return Promise.resolve(firestoreState.profileSnapshot);
   }),
   onSnapshot: vi.fn((_ref: any, _opts: any, next?: any, error?: any) => {
     // Immediately deliver the configured snapshot (or error) to mimic a
     // server-resolved event. We do NOT deliver a fromCache event first so the
     // test focuses on the authoritative resolve path.
+    if (next && firestoreState.cachedProfileSnapshot) {
+      queueMicrotask(() => next({ ...firestoreState.cachedProfileSnapshot, metadata: { fromCache: true } }));
+    }
     if (error && firestoreState.profileError) {
       queueMicrotask(() => error(firestoreState.profileError));
-    } else if (next && firestoreState.profileSnapshot) {
+    } else if (next && firestoreState.profileSnapshot && !firestoreState.deferServer) {
       queueMicrotask(() => next({ ...firestoreState.profileSnapshot, metadata: { fromCache: false } }));
     }
     return () => {};
@@ -166,7 +175,10 @@ beforeEach(() => {
   authState.listener = null;
   authState.errorListener = null;
   firestoreState.profileSnapshot = null;
+  firestoreState.cachedProfileSnapshot = null;
   firestoreState.profileError = null;
+  firestoreState.deferServer = false;
+  firestoreState.serverResolve = null;
   resetStore();
   // initAuth registers the onAuthStateChanged listener.
   act(() => {
@@ -183,6 +195,32 @@ afterEach(async () => {
 });
 
 describe('auth bootstrap regression', () => {
+  it('uses a matching cached profile while server revalidation is pending', async () => {
+    firestoreState.cachedProfileSnapshot = makeProfileSnapshot('fam-1');
+    firestoreState.profileSnapshot = makeProfileSnapshot('fam-1');
+    firestoreState.deferServer = true;
+    fireSignedIn();
+
+    await waitFor(() => expect(useStore.getState().currentUser?.familyId).toBe('fam-1'));
+    expect(useStore.getState().appReady).toBe(true);
+    expect(firestoreState.serverResolve).not.toBeNull();
+  });
+
+  it('ignores a late cached profile callback after the authenticated user changes', async () => {
+    firestoreState.cachedProfileSnapshot = makeProfileSnapshot('fam-1');
+    firestoreState.profileSnapshot = makeProfileSnapshot('fam-1');
+    firestoreState.deferServer = true;
+    fireSignedIn();
+    await waitFor(() => expect(useStore.getState().currentUser?.familyId).toBe('fam-1'));
+
+    await act(async () => authState.listener?.(null));
+    firestoreState.serverResolve?.(makeProfileSnapshot('fam-1'));
+    await Promise.resolve();
+
+    expect(useStore.getState().authStatus).toBe('unauthenticated');
+    expect(useStore.getState().currentUser).toBeNull();
+  });
+
   it('hydrates a managed child by trusted childId claim and gates the layout at password change', async () => {
     firestoreState.profileSnapshot = {
       exists: () => true,
