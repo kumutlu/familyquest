@@ -221,6 +221,34 @@ describe('auth bootstrap regression', () => {
     expect(useStore.getState().currentUser).toBeNull();
   });
 
+  it('does not let delayed cached-profile language hydration overwrite the server profile', async () => {
+    let releaseCachedLanguage!: () => void;
+    const cachedLanguagePending = new Promise<void>(resolve => { releaseCachedLanguage = resolve; });
+    const changeLanguage = vi.spyOn(i18n, 'changeLanguage').mockImplementation(async language => {
+      if (language === 'tr') await cachedLanguagePending;
+      return i18n.t.bind(i18n);
+    });
+    firestoreState.cachedProfileSnapshot = makeProfileSnapshot('cached-family', 'tr');
+    firestoreState.profileSnapshot = makeProfileSnapshot('server-family', 'en');
+    firestoreState.deferServer = true;
+
+    fireSignedIn();
+    await waitFor(() => expect(firestoreState.serverResolve).not.toBeNull());
+    await waitFor(() => expect(changeLanguage).toHaveBeenCalledWith('tr'));
+    firestoreState.serverResolve?.(makeProfileSnapshot('server-family', 'en'));
+    await waitFor(() => expect(useStore.getState().currentUser?.familyId).toBe('server-family'));
+
+    await act(async () => {
+      releaseCachedLanguage();
+      await cachedLanguagePending;
+      await Promise.resolve();
+    });
+
+    expect(useStore.getState().currentUser?.familyId).toBe('server-family');
+    expect(useStore.getState().currentUser?.language).toBe('en');
+    changeLanguage.mockRestore();
+  });
+
   it('hydrates a managed child by trusted childId claim and gates the layout at password change', async () => {
     firestoreState.profileSnapshot = {
       exists: () => true,

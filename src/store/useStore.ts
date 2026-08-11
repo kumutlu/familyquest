@@ -311,8 +311,10 @@ export const useStore = create<AppState>((set, get) => ({
         markStartupStage('PROFILE_START');
         let profileResolved = false;
         let profileServerConfirmed = false;
+        let profileSnapshotRevision = 0;
 
         const handleProfileSnapshot = (profileSnapshot: any) => {
+          const snapshotRevision = ++profileSnapshotRevision;
           if (generation !== authGeneration || get().authUser?.uid !== user.uid) return;
 
           if (!profileSnapshot.exists()) {
@@ -363,7 +365,11 @@ export const useStore = create<AppState>((set, get) => ({
           profileResolved = true;
           const language = resolveProfileLanguage(profile.language);
           const finishProfileHydration = () => {
-            if (generation !== authGeneration || get().authUser?.uid !== user.uid) return;
+            if (
+              generation !== authGeneration ||
+              get().authUser?.uid !== user.uid ||
+              snapshotRevision !== profileSnapshotRevision
+            ) return;
             const validatedProfile = {
               ...profile,
               language,
@@ -433,6 +439,7 @@ export const useStore = create<AppState>((set, get) => ({
           },
           error => {
             if (generation !== authGeneration) return;
+            profileSnapshotRevision += 1;
             logAuthTrace('profile-request-failed', { code: error?.code });
             set({
               profileLoading: false,
@@ -452,6 +459,7 @@ export const useStore = create<AppState>((set, get) => ({
           })
           .catch(error => {
             if (generation !== authGeneration || profileServerConfirmed) return;
+            profileSnapshotRevision += 1;
             logAuthTrace('profile-request-failed', { code: error?.code });
             set({
               profileLoading: false,
