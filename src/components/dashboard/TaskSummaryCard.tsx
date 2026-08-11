@@ -24,17 +24,7 @@ export function TaskSummaryCard() {
   // boundary crosses while the dashboard stays open.
   const now = useRecurrenceClock();
   const resourceStatus = bootstrapStatus?.tasks;
-
-  if (resourceStatus === 'loading') {
-    return <Card data-testid="task-summary-loading" aria-busy="true" className="h-36 animate-pulse bg-gray-100" />;
-  }
-  if (resourceStatus === 'error') {
-    return (
-      <Card data-testid="task-summary-error" role="status" className="p-4 text-sm text-gray-500">
-        Tasks are temporarily unavailable. Open Tasks to try again.
-      </Card>
-    );
-  }
+  const completionsStatus = bootstrapStatus?.taskCompletions;
 
   const { activeCount, dueTodayCount, completedCount, totalCount, pct } = useMemo(() => {
     const uid = currentUser?.id;
@@ -72,6 +62,17 @@ export function TaskSummaryCard() {
       pct: progress,
     };
   }, [currentUser, tasks, taskCompletions, now]);
+
+  if (resourceStatus === 'loading' || completionsStatus === 'loading') {
+    return <Card data-testid="task-summary-loading" aria-busy="true" className="h-36 animate-pulse bg-gray-100" />;
+  }
+  if (resourceStatus === 'error' || completionsStatus === 'error') {
+    return (
+      <Card data-testid="task-summary-error" role="status" className="p-4 text-sm text-gray-500">
+        Tasks are temporarily unavailable. Open Tasks to try again.
+      </Card>
+    );
+  }
 
   return (
     <Card

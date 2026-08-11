@@ -95,6 +95,14 @@ describe('Dashboard role routing', () => {
     expect(screen.getByText('Total Points')).toBeInTheDocument();
   });
 
+  it('does not claim recent activity is empty while the feed is pending', () => {
+    store.state.currentUser.role = 'child';
+    store.state.bootstrapStatus = { feed: 'loading' };
+    render(<MemoryRouter><Dashboard /></MemoryRouter>);
+    expect(screen.getByTestId('recent-activity-loading')).toBeInTheDocument();
+    expect(screen.queryByText('No family activity yet.')).not.toBeInTheDocument();
+  });
+
   it('treats the legacy admin role as a parent (isParentRole, not strict parent)', () => {
     store.state.currentUser.role = 'admin';
     render(<MemoryRouter><Dashboard /></MemoryRouter>);

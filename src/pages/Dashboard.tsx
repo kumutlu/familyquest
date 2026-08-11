@@ -41,6 +41,7 @@ export function Dashboard() {
     myGamificationSummary,
     myDailyProgress,
     familyData,
+    bootstrapStatus,
   } = useStore();
   const { openRequest } = useRequestDetail();
 
@@ -166,7 +167,13 @@ export function Dashboard() {
           <MessageCircle size={20} className="text-gray-400" />
           {t('recentActivity.dashboardHeading')}
         </h2>
-        {feed.length === 0 ? (
+        {bootstrapStatus?.feed === 'loading' ? (
+          <div data-testid="recent-activity-loading" aria-busy="true" className="h-24 animate-pulse rounded-2xl bg-gray-100" />
+        ) : bootstrapStatus?.feed === 'error' ? (
+          <div data-testid="recent-activity-error" role="status" className="rounded-2xl bg-white p-4 text-sm text-gray-500">
+            Recent activity is temporarily unavailable.
+          </div>
+        ) : feed.length === 0 ? (
           <EmptyState
             title={t('recentActivity.empty')}
             icon={<MessageCircle size={22} aria-hidden="true" />}

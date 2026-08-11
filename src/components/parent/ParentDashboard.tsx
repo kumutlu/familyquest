@@ -110,10 +110,13 @@ export function ParentDashboard() {
 
   const focus = getFocusModeState({ familyMembers, rewards, tasks, joinRequests, currentUser });
   const setupComplete = isFamilySetupComplete({ familyMembers, rewards, tasks });
+  const setupResourcesReady = (['members', 'tasks', 'rewards'] as const).every(
+    resource => bootstrapStatus?.[resource] === 'ready',
+  );
 
   // Focus Mode: while setup is incomplete, suppress every non-essential
   // dashboard section and show a single guided next action instead.
-  if (focus.isFocusMode) {
+  if (setupResourcesReady && focus.isFocusMode) {
     return (
       <div data-testid="dashboard-focus-mode">
         <FocusModeDashboard onAddChild={() => setIsAddChildOpen(true)} />

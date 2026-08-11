@@ -13,7 +13,7 @@ const baseStore = {
   currentUser: { id: 'u-1', familyId: 'f-1', role: 'child', displayName: 'Kid' },
   tasks: [] as any[],
   taskCompletions: [] as any[],
-  bootstrapStatus: { tasks: 'ready' } as any,
+  bootstrapStatus: { tasks: 'ready', taskCompletions: 'ready' } as any,
   retryFeature: vi.fn(),
 };
 
@@ -35,7 +35,7 @@ describe('TaskSummaryCard', () => {
     baseStore.currentUser = { id: 'u-1', familyId: 'f-1', role: 'child', displayName: 'Kid' };
     baseStore.tasks = [];
     baseStore.taskCompletions = [];
-    baseStore.bootstrapStatus = { tasks: 'ready' };
+    baseStore.bootstrapStatus = { tasks: 'ready', taskCompletions: 'ready' };
   });
 
   it('shows active task count and completion summary', () => {
@@ -83,6 +83,14 @@ describe('TaskSummaryCard', () => {
     render(<MemoryRouter><TaskSummaryCard /></MemoryRouter>);
     expect(screen.getByTestId('task-summary-loading')).toBeInTheDocument();
     expect(screen.queryByText('No active tasks yet.')).not.toBeInTheDocument();
+  });
+
+  it('does not show a fabricated completion count while completions load', () => {
+    baseStore.tasks = [{ id: 't-1', title: 'Brush teeth', isActive: true, assigneeId: 'u-1' }];
+    baseStore.bootstrapStatus = { tasks: 'ready', taskCompletions: 'loading' };
+    render(<MemoryRouter><TaskSummaryCard /></MemoryRouter>);
+    expect(screen.getByTestId('task-summary-loading')).toBeInTheDocument();
+    expect(screen.queryByText('0/1')).not.toBeInTheDocument();
   });
 
   it('shows a local recoverable state when tasks fail', () => {
