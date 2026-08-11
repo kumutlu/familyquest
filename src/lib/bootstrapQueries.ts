@@ -176,10 +176,6 @@ export const bootstrapResources: BootstrapResource[] = [
 
 export const criticalBootstrapResources: BootstrapResource[] = [
   'family',
-  'members',
-  'tasks',
-  'rewards',
-  'wallets',
 ]
 
 const childBootstrapResources = bootstrapResources.filter(

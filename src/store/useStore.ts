@@ -751,6 +751,27 @@ export const useStore = create<AppState>((set, get) => ({
       nonCriticalStarted = true;
       logAuthTrace('family-background-load-started', { familyId, role });
       try {
+        // Dashboard resources hydrate independently after family access has
+        // been validated. None of them decides authentication, role, family
+        // identity or route access, so none may hold the global shell hostage.
+        subscribePlanned('tasks', 'Tasks', snapshot => set({ tasks: docs(snapshot) }));
+        subscribePlanned('rewards', 'Rewards', snapshot => set({ rewards: docs(snapshot) }));
+        subscribePlanned('members', 'Members', snapshot => set({ familyMembers: docs(snapshot) }));
+
+        if (currentUser?.role === 'parent' || currentUser?.role === 'owner') {
+          subscribePlanned('wallets', 'Wallets', snapshot => set({ childWallets: docs(snapshot) }));
+        } else if (currentUser?.role === 'child') {
+          subscribePlanned('wallets', 'Wallets', snapshot => {
+            set({
+              myWallet: snapshot.exists()
+                ? { id: snapshot.id, ...snapshot.data() }
+                : { id: currentUser.id, balance: 0 },
+            });
+          });
+        } else {
+          markReady('wallets');
+        }
+
         if (currentUser?.role === 'parent' || currentUser?.role === 'owner') {
           subscribePlanned('joinRequests', 'Join requests', snapshot => set({ joinRequests: docs(snapshot) }));
           subscribePlanned('childJoinRequests', 'Child join requests', snapshot => set({ childJoinRequests: docs(snapshot) }));
@@ -875,24 +896,6 @@ export const useStore = create<AppState>((set, get) => ({
         set({ familyData: { id: snapshot.id, ...snapshot.data() } });
       });
 
-      subscribePlanned('tasks', 'Tasks', snapshot => set({ tasks: docs(snapshot) }));
-      subscribePlanned('rewards', 'Rewards', snapshot => set({ rewards: docs(snapshot) }));
-
-      if (currentUser?.role === 'parent' || currentUser?.role === 'owner') {
-        subscribePlanned('wallets', 'Wallets', snapshot => set({ childWallets: docs(snapshot) }));
-      } else if (currentUser?.role === 'child') {
-      subscribePlanned('wallets', 'Wallets', snapshot => {
-        set({
-          myWallet: snapshot.exists()
-            ? { id: snapshot.id, ...snapshot.data() }
-            : { id: currentUser.id, balance: 0 },
-        });
-      });
-      } else {
-        markReady('wallets');
-      }
-
-      subscribePlanned('members', 'Members', snapshot => set({ familyMembers: docs(snapshot) }));
     } catch (error: any) {
       handleCriticalListenerError('family', 'Bootstrap', error);
     }
