@@ -28,6 +28,7 @@
     "daysRemaining_other": "{{count}} days remaining",
     "inProgressHint": "Keep completing tasks — the reward unlocks when the target is reached.",
     "claimHint": "Gives every child +{{points}} points and closes the challenge.",
+    "claimFailed": "We couldn't claim this reward. Please try again.",
     "completedSummary": "Reward distributed: every child received +{{points}} points.",
     "status": {
       "inProgress": "In progress",

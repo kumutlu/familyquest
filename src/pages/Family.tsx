@@ -129,7 +129,10 @@ export function Family() {
       const childIds = children.map(c => c.id);
       await claimChallenge(currentUser.familyId, activeChallenge.id, activeChallenge.rewardPoints, childIds, activeChallenge.title);
     } catch (e) {
+      // A failed claim used to be swallowed entirely, which is why the broken
+      // button looked like it simply "did nothing". The failure is now visible.
       console.error(e);
+      showToast(t('challenge.claimFailed'), 'error');
     }
     setIsSubmitting(false);
   };
