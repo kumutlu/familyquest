@@ -342,7 +342,8 @@ describe('auth bootstrap regression', () => {
     });
 
     renderAppLayoutAt('/');
-    expect(await screen.findByText('Connection problem')).toBeInTheDocument();
+    expect(await screen.findByText("We couldn't open your dashboard")).toBeInTheDocument();
+    expect(screen.getByRole('alert')).not.toHaveTextContent('permission-denied');
     expect(screen.queryByText('Preparing your family dashboard…')).not.toBeInTheDocument();
   });
 

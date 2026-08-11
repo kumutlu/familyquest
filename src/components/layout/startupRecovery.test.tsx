@@ -139,7 +139,8 @@ describe('startup recovery — delayed but healthy bootstrap', () => {
     state = { ...readyState, appReady: false, bootstrapError: '[Family] permission-denied: nope' };
     renderLayout();
     await advance(STARTUP_TIMEOUT_MS * 2);
-    expect(screen.getByRole('alert')).toHaveTextContent('[Family] permission-denied: nope');
+    expect(screen.getByRole('alert')).toHaveTextContent('family access');
+    expect(screen.getByRole('alert')).not.toHaveTextContent('permission-denied');
   });
 
   it('7. Retry is wired to the store bootstrap restart', async () => {

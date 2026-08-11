@@ -71,6 +71,7 @@ describe('StartupScreen', () => {
     await advance(STARTUP_TIMEOUT_MS);
     expect(screen.queryByRole('status')).not.toBeInTheDocument();
     expect(screen.getByRole('alert')).toHaveTextContent('taking longer than expected');
+    expect(screen.getByRole('alert')).not.toHaveTextContent('Connection problem');
     expect(screen.getByRole('button', { name: 'Retry' })).toBeInTheDocument();
   });
 
@@ -177,8 +178,17 @@ describe('StartupScreen', () => {
   it('17. a genuine bootstrap error is never replaced by the generic timeout copy', async () => {
     render(<StartupScreen phase="error" error="[Family] permission-denied" onRetry={vi.fn()} />);
     await advance(STARTUP_TIMEOUT_MS * 2);
-    expect(screen.getByRole('alert')).toHaveTextContent('[Family] permission-denied');
+    expect(screen.getByRole('alert')).toHaveTextContent('family access');
+    expect(screen.getByRole('alert')).not.toHaveTextContent('permission-denied');
     expect(screen.getByRole('alert')).not.toHaveTextContent('taking longer than expected');
+  });
+
+  it('labels a confirmed offline timeout as a connection problem', async () => {
+    Object.defineProperty(navigator, 'onLine', { configurable: true, value: false });
+    render(<StartupScreen phase="family" onRetry={vi.fn()} />);
+    await advance(STARTUP_TIMEOUT_MS);
+    expect(screen.getByRole('alert')).toHaveTextContent('Connection problem');
+    Object.defineProperty(navigator, 'onLine', { configurable: true, value: true });
   });
 
   it('18. leaves no pending timers once the app becomes ready', async () => {
