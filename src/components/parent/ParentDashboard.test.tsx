@@ -72,7 +72,7 @@ beforeEach(async () => {
   await i18n.loadNamespaces([
     'common', 'auth', 'family', 'tasks', 'wallet', 'goals', 'rewards',
     'dashboard', 'approvals', 'settings', 'notifications', 'errors',
-    'behaviour', 'profile', 'funds', 'requests', 'reversals',
+    'behaviour', 'profile', 'funds', 'requests', 'reversals', 'bulletin',
   ]);
   await i18n.changeLanguage('en');
 });

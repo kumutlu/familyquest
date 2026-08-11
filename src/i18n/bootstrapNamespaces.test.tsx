@@ -95,6 +95,11 @@ describe('bootstrapI18n startup resources', () => {
       </>,
     );
 
+    // The namespace is still loading on the synchronous paint, but untranslated
+    // implementation keys must never be shown to the user.
+    for (const key of RAW_KEYS) {
+      expect(document.body.innerHTML, `raw key "${key}" leaked into the first paint`).not.toContain(key);
+    }
     expect(await screen.findByText('Available balance')).toBeInTheDocument();
     const html = document.body.innerHTML;
     for (const key of RAW_KEYS) {

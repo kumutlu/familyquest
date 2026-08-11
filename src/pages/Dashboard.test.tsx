@@ -58,7 +58,9 @@ vi.mock('../components/dashboard/PetBoxSummaryCard', () => ({
 import { Dashboard } from './Dashboard';
 
 describe('Dashboard role routing', () => {
-  beforeEach(() => {
+  beforeEach(async () => {
+    await i18n.loadNamespaces(['dashboard', 'bulletin', 'auth', 'help']);
+    await i18n.changeLanguage('en');
     store.state = {
       currentUser: { id: 'owner-1', familyId: 'family-1', role: 'owner', displayName: 'Kemal' },
       feed: [],
@@ -112,7 +114,7 @@ describe('Dashboard role routing', () => {
 
 describe('Dashboard summary cards', () => {
   beforeEach(async () => {
-    await i18n.loadNamespaces(['dashboard', 'requests', 'wallet']);
+    await i18n.loadNamespaces(['dashboard', 'requests', 'wallet', 'bulletin']);
     await i18n.changeLanguage('en');
     store.state = {
       currentUser: { id: 'owner-1', familyId: 'family-1', role: 'owner', displayName: 'Kemal' },
@@ -206,7 +208,7 @@ describe('Dashboard summary cards', () => {
 
 describe('Dashboard gamification summary', () => {
   beforeEach(async () => {
-    await i18n.loadNamespaces(['dashboard', 'requests', 'wallet']);
+    await i18n.loadNamespaces(['dashboard', 'requests', 'wallet', 'bulletin']);
     await i18n.changeLanguage('en');
   });
 
