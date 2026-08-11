@@ -28,6 +28,7 @@
     "daysRemaining_other": "{{count}} gün kaldı",
     "inProgressHint": "Görevleri tamamlamaya devam edin — ödül hedefe ulaşınca açılır.",
     "claimHint": "Her çocuğa +{{points}} puan verir ve meydan okumayı kapatır.",
+    "claimFailed": "Ödül alınamadı. Lütfen tekrar deneyin.",
     "completedSummary": "Ödül dağıtıldı: her çocuk +{{points}} puan aldı.",
     "status": {
       "inProgress": "Devam ediyor",

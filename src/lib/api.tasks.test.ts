@@ -122,15 +122,30 @@ describe('claimChallenge (completeChallenge) feed actor', () => {
     authState.currentUser = { uid: 'owner-1' }
   })
 
-  function installTransaction() {
+  // Faithful transaction double: Firestore REJECTS a transaction that performs
+  // a read after a write. The old permissive mock hid the production failure of
+  // the Claim reward button, so the double now enforces the real rule.
+  function installTransaction(options: { existingNotification?: boolean } = {}) {
+    let hasWritten = false
     const transaction = {
-      get: vi.fn(async () => ({ exists: () => true, data: () => ({ isActive: true, rewardPoints: 0, lifetimeXP: 0 }) })),
-      update: vi.fn(),
-      set: vi.fn(),
+      get: vi.fn(async (ref: { path?: string }) => {
+        if (hasWritten) {
+          throw new Error('Firestore transactions require all reads to be executed before all writes.')
+        }
+        if (ref?.path?.includes('/notifications')) {
+          return { exists: () => options.existingNotification === true, data: () => ({}) }
+        }
+        return { exists: () => true, data: () => ({ isActive: true, rewardPoints: 0, lifetimeXP: 0 }) }
+      }),
+      update: vi.fn((_ref: { path: string; id: string }, _data?: Record<string, unknown>) => { hasWritten = true }),
+      set: vi.fn((_ref: { path: string; id: string }, _data?: Record<string, unknown>) => { hasWritten = true }),
     }
     firestore.runTransaction.mockImplementation(async (_db: unknown, callback: (tx: typeof transaction) => unknown) => callback(transaction))
     return transaction
   }
+
+  const notificationWrite = (transaction: { set: { mock: { calls: any[][] } } }) =>
+    transaction.set.mock.calls.find(([ref]) => ref.path.includes('/notifications'))?.[1]
 
   // E. claimChallenge uses the authenticated actor
   it('records the authenticated actor in the challenge-completion feed entry', async () => {
@@ -157,5 +172,55 @@ describe('claimChallenge (completeChallenge) feed actor', () => {
     authState.currentUser = null
     await expect(claimChallenge('family-1', 'challenge-1', 50, ['child-1'], 'Read a book')).rejects.toThrow(/Authentication required/)
     expect(firestore.runTransaction).not.toHaveBeenCalled()
+  })
+
+  // REGRESSION (P0): the Claim reward button always failed because the
+  // challenge document was updated BEFORE the per-child user documents were
+  // read, which Firestore rejects. All reads must now precede all writes.
+  it('performs every read before any write so the claim transaction is legal', async () => {
+    const transaction = installTransaction()
+
+    await expect(
+      claimChallenge('family-1', 'challenge-1', 100, ['child-1', 'child-2'], 'Weekly Warriors'),
+    ).resolves.toBeUndefined()
+
+    // Reward distribution unchanged: exactly one update per existing child.
+    const childUpdates = transaction.update.mock.calls.filter(([ref]) => ref.path.startsWith('users/'))
+    expect(childUpdates).toHaveLength(2)
+    expect(childUpdates[0][1]).toEqual({ rewardPoints: 100, lifetimeXP: 100 })
+    expect(childUpdates[1][1]).toEqual({ rewardPoints: 100, lifetimeXP: 100 })
+  })
+
+  // The one-time child celebration is derived from a single presentation
+  // notification written inside the SAME authoritative claim transaction.
+  it('creates one deterministic child celebration marker per claimed challenge', async () => {
+    const transaction = installTransaction()
+
+    await claimChallenge('family-1', 'challenge-1', 100, ['child-1', 'child-2'], 'Weekly Warriors')
+
+    const notif = notificationWrite(transaction)
+    expect(notif).toMatchObject({
+      type: 'challenge_completed',
+      recipientIds: ['child-1', 'child-2'],
+      title: 'Challenge complete!',
+      body: 'You earned +100 points',
+      entityType: 'challenge',
+      entityId: 'challenge-1',
+    })
+    // Deterministic id => a retried claim can never create a second marker.
+    const ref = transaction.set.mock.calls.find(([r]) => r.path.includes('/notifications'))?.[0]!
+    expect(ref.id).toBe('challenge_completed_challenge-1')
+    // Exactly one marker for all rewarded children.
+    expect(transaction.set.mock.calls.filter(([r]) => r.path.includes('/notifications'))).toHaveLength(1)
+  })
+
+  it('is idempotent: an existing celebration marker is never rewritten', async () => {
+    const transaction = installTransaction({ existingNotification: true })
+
+    await claimChallenge('family-1', 'challenge-1', 100, ['child-1'], 'Weekly Warriors')
+
+    expect(notificationWrite(transaction)).toBeUndefined()
+    // The reward is still distributed exactly once.
+    expect(transaction.update.mock.calls.filter(([ref]) => ref.path.startsWith('users/'))).toHaveLength(1)
   })
 })

@@ -26,6 +26,7 @@ import {
   taskApprovedKey,
   taskRejectedKey,
   rewardRequestedKey,
+  challengeCompletedKey,
   behaviourKey,
   walletDepositKey,
   walletWithdrawalKey,
@@ -985,23 +986,62 @@ export const claimChallenge = async (familyId: string, challengeId: string, rewa
   const challengeRef = doc(db, `families/${familyId}/challenges`, challengeId);
 
   await runTransaction(db, async (transaction) => {
+    // ---------------------------------------------------------------- READS
+    // Firestore transactions require ALL reads to happen before ANY write.
+    // The previous implementation updated the challenge document first and only
+    // then read each child user document, so the SDK rejected the transaction
+    // with "Firestore transactions require all reads to be executed before all
+    // writes" — the Claim reward button therefore always failed. Every read is
+    // now resolved up-front and the write stage performs ZERO reads.
     const challengeDoc = await transaction.get(challengeRef);
     if (!challengeDoc.exists() || !challengeDoc.data().isActive) throw new Error("Challenge not active");
 
+    const rewardedChildren: { ref: ReturnType<typeof doc>; rewardPoints: number; lifetimeXP: number }[] = [];
+    for (const childId of childrenIds) {
+      const userRef = doc(db, 'users', childId);
+      const userDoc = await transaction.get(userRef);
+      if (userDoc.exists()) {
+        rewardedChildren.push({
+          ref: userRef,
+          rewardPoints: userDoc.data().rewardPoints || 0,
+          lifetimeXP: userDoc.data().lifetimeXP || 0,
+        });
+      }
+    }
+
+    // Presentation-only marker so each rewarded child gets exactly ONE
+    // celebration for this claim. It reuses the existing notification +
+    // per-user read-state mechanism and carries no reward semantics.
+    const notifPlan = rewardedChildren.length > 0
+      ? await loadNotificationRecipientsInTransaction(transaction, familyId, {
+          type: 'challenge_completed',
+          actorId,
+          recipientIds: childrenIds.filter(id =>
+            rewardedChildren.some(c => c.ref.id === id),
+          ),
+          title: 'Challenge complete!',
+          body: `You earned +${rewardPoints} points`,
+          entityType: 'challenge',
+          entityId: challengeId,
+          actionUrl: '/family',
+          dedupeKey: challengeCompletedKey(challengeId),
+          metadata: { challengeTitle, rewardPoints },
+        })
+      : ({ ref: null, data: null } as Awaited<ReturnType<typeof loadNotificationRecipientsInTransaction>>);
+
+    // --------------------------------------------------------------- WRITES
     transaction.update(challengeRef, {
       isActive: false,
       completedAt: serverTimestamp()
     });
 
-    for (const childId of childrenIds) {
-      const userRef = doc(db, 'users', childId);
-      const userDoc = await transaction.get(userRef);
-      if (userDoc.exists()) {
-        transaction.update(userRef, {
-          rewardPoints: (userDoc.data().rewardPoints || 0) + rewardPoints,
-          lifetimeXP: (userDoc.data().lifetimeXP || 0) + rewardPoints
-        });
-      }
+    // Unchanged reward distribution: the same +rewardPoints applied once per
+    // existing child, from the values read above.
+    for (const child of rewardedChildren) {
+      transaction.update(child.ref, {
+        rewardPoints: child.rewardPoints + rewardPoints,
+        lifetimeXP: child.lifetimeXP + rewardPoints
+      });
     }
 
     const feedRef = doc(collection(db, `families/${familyId}/feed`));
@@ -1010,6 +1050,8 @@ export const claimChallenge = async (familyId: string, challengeId: string, rewa
       text: `Family Challenge Completed: ${challengeTitle}! Everyone got +${rewardPoints} pts!`,
       timestamp: serverTimestamp()
     });
+
+    applyNotificationWrites(transaction, notifPlan);
   });
 };
 

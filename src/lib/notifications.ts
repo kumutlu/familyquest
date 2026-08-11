@@ -52,7 +52,12 @@ export type NotificationType =
   | 'petbox_expense'
   | 'profile_update_requested'
   | 'profile_update_approved'
-  | 'profile_update_rejected';
+  | 'profile_update_rejected'
+  // Presentation-only marker for the one-time child Family Challenge
+  // celebration. It carries NO reward semantics: the reward is distributed by
+  // the authoritative claimChallenge transaction, and this row's per-user read
+  // state is the only thing the celebration consumes/updates.
+  | 'challenge_completed';
 
 export interface NotificationInput {
   type: NotificationType;
