@@ -13,6 +13,8 @@ const baseStore = {
   currentUser: { id: 'u-1', familyId: 'f-1', role: 'child', displayName: 'Kid' },
   tasks: [] as any[],
   taskCompletions: [] as any[],
+  bootstrapStatus: { tasks: 'ready' } as any,
+  retryFeature: vi.fn(),
 };
 
 vi.mock('../../store/useStore', () => ({
@@ -33,6 +35,7 @@ describe('TaskSummaryCard', () => {
     baseStore.currentUser = { id: 'u-1', familyId: 'f-1', role: 'child', displayName: 'Kid' };
     baseStore.tasks = [];
     baseStore.taskCompletions = [];
+    baseStore.bootstrapStatus = { tasks: 'ready' };
   });
 
   it('shows active task count and completion summary', () => {
@@ -73,6 +76,19 @@ describe('TaskSummaryCard', () => {
   it('shows a friendly empty state when there are no active tasks', () => {
     render(<MemoryRouter><TaskSummaryCard /></MemoryRouter>);
     expect(screen.getByText('No active tasks yet.')).toBeInTheDocument();
+  });
+
+  it('shows a local skeleton instead of an empty state while tasks load', () => {
+    baseStore.bootstrapStatus = { tasks: 'loading' };
+    render(<MemoryRouter><TaskSummaryCard /></MemoryRouter>);
+    expect(screen.getByTestId('task-summary-loading')).toBeInTheDocument();
+    expect(screen.queryByText('No active tasks yet.')).not.toBeInTheDocument();
+  });
+
+  it('shows a local recoverable state when tasks fail', () => {
+    baseStore.bootstrapStatus = { tasks: 'error' };
+    render(<MemoryRouter><TaskSummaryCard /></MemoryRouter>);
+    expect(screen.getByTestId('task-summary-error')).toBeInTheDocument();
   });
 
   it('whole card links to /tasks and is keyboard accessible', () => {
