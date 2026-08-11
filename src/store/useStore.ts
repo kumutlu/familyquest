@@ -301,6 +301,7 @@ export const useStore = create<AppState>((set, get) => ({
         const profileId = managedChildId || user.uid;
         const profileReference = doc(db, 'users', profileId);
         let profileResolved = false;
+        let profileServerConfirmed = false;
 
         const handleProfileSnapshot = (profileSnapshot: any) => {
           if (generation !== authGeneration || get().authUser?.uid !== user.uid) return;
@@ -408,12 +409,13 @@ export const useStore = create<AppState>((set, get) => ({
           { includeMetadataChanges: true },
           profileSnapshot => {
             if (generation !== authGeneration || get().authUser?.uid !== user.uid) return;
-            // Cached snapshots are ignored for the authoritative resolve, but we
-            // must NOT leave loading stuck if the only event we ever receive is a
-            // cached one — the getDocFromServer fallback below guarantees a
-            // server-resolution path. We still skip fromCache here to avoid
-            // flashing stale data.
-            if (profileSnapshot.metadata?.fromCache) return;
+            // Auth fixed `profileId` for this generation before this listener
+            // was attached, so a cache hit for this exact document is safe for
+            // a fast render. It is provisional only: the server listener/read
+            // below remains authoritative and can replace it or surface an
+            // auth/permission failure. Generation checks prevent cross-account
+            // callbacks after sign-out or account switching.
+            if (!profileSnapshot.metadata?.fromCache) profileServerConfirmed = true;
             handleProfileSnapshot(profileSnapshot);
           },
           error => {
@@ -431,10 +433,11 @@ export const useStore = create<AppState>((set, get) => ({
         logAuthTrace('profile-request-started', { uid: user.uid });
         void getDocFromServer(profileReference)
           .then(snapshot => {
-            if (!profileResolved) handleProfileSnapshot(snapshot);
+            profileServerConfirmed = true;
+            handleProfileSnapshot(snapshot);
           })
           .catch(error => {
-            if (generation !== authGeneration || profileResolved) return;
+            if (generation !== authGeneration || profileServerConfirmed) return;
             logAuthTrace('profile-request-failed', { code: error?.code });
             set({
               profileLoading: false,
@@ -605,8 +608,10 @@ export const useStore = create<AppState>((set, get) => ({
       critical = requiredResources.includes(resource),
       readyOnSnapshot = true,
     ) => {
+      let serverConfirmed = false;
       const acceptSnapshot = (snapshot: any) => {
         if (!isCurrent()) return;
+        if (!snapshot.metadata?.fromCache) serverConfirmed = true;
         applySnapshot(snapshot);
         if (readyOnSnapshot) markReady(resource);
       };
@@ -615,7 +620,12 @@ export const useStore = create<AppState>((set, get) => ({
         { includeMetadataChanges: true },
         snapshot => {
           if (!isCurrent()) return;
-          if (snapshot.metadata?.fromCache) return;
+          // A cached family document is safe for a fast render only because the
+          // profile already fixed the authenticated identity and exact family
+          // generation. The server read/listener remains authoritative and may
+          // revoke readiness on permission/auth failure below. Optional cached
+          // collections stay ignored to avoid presenting stale feature data.
+          if (snapshot.metadata?.fromCache && !critical) return;
           acceptSnapshot(snapshot);
         },
         error => {
@@ -628,10 +638,10 @@ export const useStore = create<AppState>((set, get) => ({
       familyListeners.set(listenerName, { critical, unsubscribe });
       void serverRead(target)
         .then(snapshot => {
-          if (get().bootstrapStatus[resource] !== 'ready') acceptSnapshot(snapshot);
+          if (!serverConfirmed || get().bootstrapStatus[resource] !== 'ready') acceptSnapshot(snapshot);
         })
         .catch(error => {
-          if (get().bootstrapStatus[resource] !== 'ready') {
+          if (!serverConfirmed && (critical || get().bootstrapStatus[resource] !== 'ready')) {
             logDevError(context, error, { collection: String(target?.type || "query") });
             if (critical) handleCriticalListenerError(resource, context, error);
             else handleOptionalListenerError(listenerName, resource, context, error);
