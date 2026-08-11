@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Link, Outlet, useLocation, Navigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { AppWindow } from 'lucide-react';
@@ -11,6 +11,7 @@ import { MandatoryChildPasswordChange } from '../auth/MandatoryChildPasswordChan
 import { StartupScreen } from './StartupScreen';
 import { deriveStartupPhase } from './startupState';
 import { signOut } from '../../lib/api';
+import { markStartupStage } from '../../startupDiagnostics';
 
 export function AppLayout() {
   const { t } = useTranslation('common');
@@ -36,6 +37,10 @@ export function AppLayout() {
     appReady,
     bootstrapError,
   });
+
+  useEffect(() => {
+    if (startupPhase === 'ready') markStartupStage('ROUTE_RENDERED');
+  }, [startupPhase]);
 
   if (startupPhase !== 'ready') {
     return (

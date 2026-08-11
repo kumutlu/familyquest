@@ -19,6 +19,12 @@ import {
   type BootstrapRole,
 } from '../lib/bootstrapQueries';
 import i18n, { applyDocumentDirection, applyLanguage, resolveProfileLanguage } from '../i18n';
+import {
+  finishStartupResource,
+  markStartupStage,
+  startStartupResource,
+  type OptionalStartupResource,
+} from '../startupDiagnostics';
 
 export type BootstrapStatus = 'idle' | 'loading' | 'ready' | 'error';
 
@@ -237,6 +243,7 @@ export const useStore = create<AppState>((set, get) => ({
 
   initAuth: () => {
     if (authUnsubscribe) return;
+    markStartupStage('AUTH_LISTENER_ATTACHED');
     logAuthTrace('auth-listener-registered');
 
     authUnsubscribe = onAuthStateChanged(auth, async user => {
@@ -244,6 +251,7 @@ export const useStore = create<AppState>((set, get) => ({
       stopProfileListener();
       stopFamilyListeners();
       logAuthTrace('auth-listener-fired', { signedIn: Boolean(user), generation });
+      markStartupStage('AUTH_RESOLVED');
 
       if (!user) {
         set({
@@ -300,6 +308,7 @@ export const useStore = create<AppState>((set, get) => ({
             : null;
         const profileId = managedChildId || user.uid;
         const profileReference = doc(db, 'users', profileId);
+        markStartupStage('PROFILE_START');
         let profileResolved = false;
         let profileServerConfirmed = false;
 
@@ -415,7 +424,11 @@ export const useStore = create<AppState>((set, get) => ({
             // below remains authoritative and can replace it or surface an
             // auth/permission failure. Generation checks prevent cross-account
             // callbacks after sign-out or account switching.
-            if (!profileSnapshot.metadata?.fromCache) profileServerConfirmed = true;
+            if (profileSnapshot.metadata?.fromCache) markStartupStage('PROFILE_CACHE_RESULT');
+            else {
+              profileServerConfirmed = true;
+              markStartupStage('PROFILE_SERVER_CONFIRMED');
+            }
             handleProfileSnapshot(profileSnapshot);
           },
           error => {
@@ -434,6 +447,7 @@ export const useStore = create<AppState>((set, get) => ({
         void getDocFromServer(profileReference)
           .then(snapshot => {
             profileServerConfirmed = true;
+            markStartupStage('PROFILE_SERVER_CONFIRMED');
             handleProfileSnapshot(snapshot);
           })
           .catch(error => {
@@ -537,6 +551,7 @@ export const useStore = create<AppState>((set, get) => ({
       loading: true,
     });
     logAuthTrace('family-load-started', { familyId, role });
+    markStartupStage('FAMILY_START');
 
     const isCurrent = () =>
       familyGeneration === generation &&
@@ -555,10 +570,15 @@ export const useStore = create<AppState>((set, get) => ({
       set(current => ({
         bootstrapStatus: { ...current.bootstrapStatus, [resource]: 'ready' },
       }));
+      const optionalMetric = ({
+        members: 'MEMBERS', tasks: 'TASKS', rewards: 'REWARDS', wallets: 'WALLETS',
+      } as Partial<Record<BootstrapResource, OptionalStartupResource>>)[resource];
+      if (optionalMetric) finishStartupResource(optionalMetric);
 
       if (requiredResources.every(key => get().bootstrapStatus[key] === 'ready')) {
         logAuthTrace('family-load-completed', { requiredCount: requiredResources.length, role });
         set({ familyLoading: false, appReady: true, loading: false });
+        markStartupStage('CRITICAL_BOOTSTRAP_COMPLETE');
         startNonCriticalBootstrap();
       }
 
@@ -764,6 +784,10 @@ export const useStore = create<AppState>((set, get) => ({
         // Dashboard resources hydrate independently after family access has
         // been validated. None of them decides authentication, role, family
         // identity or route access, so none may hold the global shell hostage.
+        startStartupResource('TASKS');
+        startStartupResource('REWARDS');
+        startStartupResource('MEMBERS');
+        startStartupResource('WALLETS');
         subscribePlanned('tasks', 'Tasks', snapshot => set({ tasks: docs(snapshot) }));
         subscribePlanned('rewards', 'Rewards', snapshot => set({ rewards: docs(snapshot) }));
         subscribePlanned('members', 'Members', snapshot => set({ familyMembers: docs(snapshot) }));
@@ -899,6 +923,8 @@ export const useStore = create<AppState>((set, get) => ({
     // ------------------------------------------------------------------
     try {
       subscribePlanned('family', 'Family', snapshot => {
+        if (snapshot.metadata?.fromCache) markStartupStage('FAMILY_CACHE_RESULT');
+        else markStartupStage('FAMILY_SERVER_CONFIRMED');
         if (!snapshot.exists()) {
           handleCriticalListenerError('family', 'Family', { code: 'not-found', message: 'Family document does not exist' });
           return;

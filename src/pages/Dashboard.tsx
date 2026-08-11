@@ -19,8 +19,11 @@ import { GamificationSummaryCard } from '../components/dashboard/GamificationSum
 import { adaptGamificationSummary } from '../lib/gamificationAdapters';
 import { isPetBoxEnabled } from '../lib/familyFeatures';
 import { FamilyBulletin } from '../components/bulletin/FamilyBulletin';
+import { useEffect } from 'react';
+import { markStartupStage } from '../startupDiagnostics';
 
 export function Dashboard() {
+  useEffect(() => { markStartupStage('DASHBOARD_FIRST_RENDER'); }, []);
   const { t } = useTranslation('dashboard');
   const {
     currentUser,

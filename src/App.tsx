@@ -31,11 +31,13 @@ import { initForegroundMessaging } from './lib/pushNotifications';
 import { RequestDetailProvider } from './components/requests/RequestDetailContext';
 import { useEffect } from 'react';
 import { consumeGoogleRedirectResult } from './lib/googleRedirectAuth';
+import { markStartupStage } from './startupDiagnostics';
 
 function App() {
   const initAuth = useStore(state => state.initAuth);
 
   useEffect(() => {
+    markStartupStage('REACT_MOUNTED');
     logAuthTrace('app-mount');
     initAuth();
     void consumeGoogleRedirectResult()
