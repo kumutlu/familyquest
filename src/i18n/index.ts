@@ -74,17 +74,14 @@ export async function applyLanguage(language: SupportedLanguage): Promise<void> 
 }
 
 /**
- * Initialize language + document direction once, before the app renders.
+ * Initialize language + document direction without preloading feature routes.
  * Safe to call a single time from the application entry point.
  *
- * All UI namespaces are preloaded here so the very first React render already
- * has every translation resource available. Without this, `useSuspense: false`
- * causes components to paint raw keys (e.g. `send.title`) until the lazy
- * namespace import resolves.
+ * `common` and `startup` are bundled for the first paint. Route/feature
+ * namespaces remain lazy and must never delay mounting the application shell.
  */
 export async function bootstrapI18n(): Promise<typeof i18n> {
   const language = resolveInitialLanguage();
   await applyLanguage(language);
-  await i18n.loadNamespaces([...NAMESPACES]);
   return i18n;
 }

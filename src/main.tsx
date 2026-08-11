@@ -26,14 +26,14 @@ console.info('[FamilyQuest Build]', {
   createTaskAtomic: true,
 })
 
-// Resolve language (user preference -> browser -> English) and set <html>
-// direction before the first render so there is no locale flash.
-bootstrapI18n().then(() => {
-  createRoot(document.getElementById('root')!).render(
-    <StrictMode>
-      <I18nextProvider i18n={i18n}>
-        <App />
-      </I18nextProvider>
-    </StrictMode>,
-  )
-})
+// Common/startup strings for both supported languages are already bundled.
+// Begin language selection without making React wait for any feature namespace.
+void bootstrapI18n()
+
+createRoot(document.getElementById('root')!).render(
+  <StrictMode>
+    <I18nextProvider i18n={i18n}>
+      <App />
+    </I18nextProvider>
+  </StrictMode>,
+)
