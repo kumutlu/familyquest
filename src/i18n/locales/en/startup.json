@@ -4,8 +4,14 @@
   "stepAuth": "Checking your sign-in",
   "stepProfile": "Loading your profile",
   "stepFamily": "Preparing your family data",
-  "errorTitle": "Connection problem",
-  "timeoutBody": "Startup is taking longer than expected. Check your connection and try again.",
+  "slowTitle": "Still preparing your dashboard",
+  "timeoutBody": "Startup is taking longer than expected. You can retry, or wait while Queki continues working.",
+  "offlineTitle": "Connection problem",
+  "offlineBody": "You appear to be offline. Reconnect and try again.",
+  "criticalTitle": "We couldn't open your dashboard",
+  "identityErrorBody": "We couldn't verify your sign-in or profile. Try again or sign out.",
+  "familyErrorBody": "We couldn't verify your family access. Try again or sign out.",
+  "criticalErrorBody": "A required startup step failed. Try again or sign out.",
   "retry": "Retry",
   "signOut": "Sign out"
 }
