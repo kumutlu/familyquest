@@ -5,6 +5,7 @@ import { defineConfig } from 'vitest/config'
 import { loadEnv } from 'vite'
 import { execFileSync } from 'node:child_process'
 import { readFileSync } from 'node:fs'
+import { firebaseReservedNavigationDenylist } from './pwaNavigation.js'
 
 // Build metadata is resolved once, at config load time, and injected as
 // compile-time constants. Git may be unavailable (e.g. CI tarball builds), so
@@ -137,6 +138,10 @@ export default defineConfig(({ mode }) => {
         skipWaiting: false,
         clientsClaim: false,
         cleanupOutdatedCaches: true,
+        // Firebase Hosting reserves `/__/` for Auth helpers and other platform
+        // endpoints. Let those navigations reach Hosting rather than serving
+        // the cached React shell through Workbox's SPA fallback.
+        navigateFallbackDenylist: firebaseReservedNavigationDenylist,
         // The main app bundle exceeds Workbox's 2 MiB default precache limit.
         // Raise it so the real SW can precache the app shell for offline use.
         maximumFileSizeToCacheInBytes: 4 * 1024 * 1024,
