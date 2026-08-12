@@ -10,6 +10,7 @@ vi.mock('react-router-dom', async () => {
 
 const baseStore = {
   savingsGoals: [] as any[],
+  bootstrapStatus: { savingsGoals: 'ready' } as any,
 };
 
 vi.mock('../../store/useStore', () => ({
@@ -22,6 +23,7 @@ describe('GoalSummaryCard', () => {
   beforeEach(() => {
     h.navigate.mockClear();
     baseStore.savingsGoals = [];
+    baseStore.bootstrapStatus = { savingsGoals: 'ready' };
   });
 
   it('loads and shows active goals count and saved total', () => {
@@ -65,5 +67,17 @@ describe('GoalSummaryCard', () => {
   it('shows empty state when no active goals', () => {
     render(<MemoryRouter><GoalSummaryCard /></MemoryRouter>);
     expect(screen.getByText('No active goals yet.')).toBeInTheDocument();
+  });
+
+  it('keeps pending and failed goal data local to the card', () => {
+    baseStore.bootstrapStatus = { savingsGoals: 'loading' };
+    const loading = render(<MemoryRouter><GoalSummaryCard /></MemoryRouter>);
+    expect(screen.getByTestId('goal-summary-loading')).toBeInTheDocument();
+    expect(screen.queryByText('No active goals yet.')).not.toBeInTheDocument();
+    loading.unmount();
+
+    baseStore.bootstrapStatus = { savingsGoals: 'error' };
+    render(<MemoryRouter><GoalSummaryCard /></MemoryRouter>);
+    expect(screen.getByTestId('goal-summary-error')).toBeInTheDocument();
   });
 });

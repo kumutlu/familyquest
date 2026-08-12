@@ -28,21 +28,21 @@ vi.mock('./components/history/TransactionHistoryScreen', () => ({
 import App from './App';
 
 describe('application routes', () => {
-  it('mounts the fund dashboard at /pet-box', () => {
+  it('mounts the fund dashboard at /pet-box', async () => {
     window.history.pushState({}, '', '/pet-box');
     render(<App />);
-    expect(screen.getByText('Pet Box funds')).toBeInTheDocument();
+    expect(await screen.findByText('Pet Box funds')).toBeInTheDocument();
   });
 
-  it('mounts the notifications page at /notifications (no white screen)', () => {
+  it('mounts the notifications page at /notifications (no white screen)', async () => {
     window.history.pushState({}, '', '/notifications');
     render(<App />);
-    expect(screen.getByText('Notifications page')).toBeInTheDocument();
+    expect(await screen.findByText('Notifications page')).toBeInTheDocument();
   });
 
-  it('mounts the transaction history screen at /history', () => {
+  it('mounts the transaction history screen at /history', async () => {
     window.history.pushState({}, '', '/history');
     render(<App />);
-    expect(screen.getByText('Transaction history page')).toBeInTheDocument();
+    expect(await screen.findByText('Transaction history page')).toBeInTheDocument();
   });
 });

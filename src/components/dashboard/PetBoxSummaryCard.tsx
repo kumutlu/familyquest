@@ -16,7 +16,7 @@ import { isPetBoxEnabled } from '../../lib/familyFeatures';
  */
 export function PetBoxSummaryCard() {
   const navigate = useNavigate();
-  const { funds, familyData } = useStore();
+  const { funds, familyData, bootstrapStatus } = useStore();
 
   const { fundCount, totalBalance, totalEmergencyGoal, pct } = useMemo(() => {
     const list = funds || [];
@@ -34,6 +34,12 @@ export function PetBoxSummaryCard() {
   const goToPetBox = () => navigate('/pet-box');
 
   if (!isPetBoxEnabled(familyData)) return null;
+  if (bootstrapStatus?.funds === 'loading') {
+    return <Card data-testid="petbox-summary-loading" aria-busy="true" className="h-36 animate-pulse bg-gray-100" />;
+  }
+  if (bootstrapStatus?.funds === 'error') {
+    return <Card data-testid="petbox-summary-error" role="status" className="p-4 text-sm text-gray-500">Pet Box is temporarily unavailable.</Card>;
+  }
 
   const cardProps = {
     role: 'button' as const,

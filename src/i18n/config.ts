@@ -70,9 +70,9 @@ i18n
       escapeValue: false,
     },
     react: {
-      // Infrastructure phase: avoid Suspense boundaries. Components re-render
-      // automatically once a lazily-loaded namespace becomes available.
-      useSuspense: false,
+      // Feature namespaces suspend behind route-local boundaries. This keeps
+      // them off the application mount path without ever painting raw keys.
+      useSuspense: true,
     },
     // Never return null from `t` so callers can rely on a string type.
     returnNull: false,

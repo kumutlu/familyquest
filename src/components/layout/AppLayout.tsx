@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { Suspense, useEffect, useState } from 'react';
 import { Link, Outlet, useLocation, Navigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { AppWindow } from 'lucide-react';
@@ -11,6 +11,7 @@ import { MandatoryChildPasswordChange } from '../auth/MandatoryChildPasswordChan
 import { StartupScreen } from './StartupScreen';
 import { deriveStartupPhase } from './startupState';
 import { signOut } from '../../lib/api';
+import { markStartupStage } from '../../startupDiagnostics';
 
 export function AppLayout() {
   const { t } = useTranslation('common');
@@ -36,6 +37,10 @@ export function AppLayout() {
     appReady,
     bootstrapError,
   });
+
+  useEffect(() => {
+    if (startupPhase === 'ready') markStartupStage('ROUTE_RENDERED');
+  }, [startupPhase]);
 
   if (startupPhase !== 'ready') {
     return (
@@ -133,7 +138,9 @@ export function AppLayout() {
 
       {/* Main Content Area */}
       <main className="flex-1 max-w-5xl mx-auto w-full p-4 pb-[calc(4rem+env(safe-area-inset-bottom))] md:pb-8">
-        <Outlet />
+        <Suspense fallback={<div data-testid="route-translations-loading" aria-busy="true" className="h-40 animate-pulse rounded-2xl bg-gray-100" />}>
+          <Outlet />
+        </Suspense>
       </main>
 
       {/* Bottom Navigation (Mobile Only).

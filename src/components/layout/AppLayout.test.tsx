@@ -162,7 +162,8 @@ describe('AppLayout — global startup gate', () => {
   it('shows a recoverable error with Retry wired to the store, not an endless spinner', async () => {
     const retryBootstrap = vi.fn();
     renderWith({ appReady: false, bootstrapError: '[Family] permission-denied: nope', retryBootstrap });
-    expect(screen.getByRole('alert')).toHaveTextContent('[Family] permission-denied: nope');
+    expect(screen.getByRole('alert')).toHaveTextContent('family access');
+    expect(screen.getByRole('alert')).not.toHaveTextContent('permission-denied');
     await act(async () => { screen.getByRole('button', { name: 'Retry' }).click(); });
     expect(retryBootstrap).toHaveBeenCalledTimes(1);
   });

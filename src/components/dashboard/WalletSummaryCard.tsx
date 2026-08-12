@@ -19,9 +19,20 @@ import { Wallet as WalletIcon } from 'lucide-react';
  */
 export function WalletSummaryCard() {
   const navigate = useNavigate();
-  const { currentUser, myWallet, childWallets, familyMembers } = useStore();
+  const { currentUser, myWallet, childWallets, familyMembers, bootstrapStatus } = useStore();
 
   if (!currentUser) return null;
+
+  if (bootstrapStatus?.wallets === 'loading' || bootstrapStatus?.members === 'loading') {
+    return <Card data-testid="wallet-summary-loading" aria-busy="true" className="h-36 animate-pulse bg-gray-100" />;
+  }
+  if (bootstrapStatus?.wallets === 'error' || bootstrapStatus?.members === 'error') {
+    return (
+      <Card data-testid="wallet-summary-error" role="status" className="p-4 text-sm text-gray-500">
+        Wallet details are temporarily unavailable.
+      </Card>
+    );
+  }
 
   const isParent = isParentRole(currentUser.role);
 

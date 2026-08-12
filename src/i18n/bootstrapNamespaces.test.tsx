@@ -42,6 +42,7 @@ function stripLazyNamespaces(): void {
     if (ns === 'common' || ns === 'startup') continue;
     for (const lng of ['en', 'tr']) {
       i18n.removeResourceBundle(lng, ns);
+      delete (i18n.services.backendConnector.state as Record<string, number>)[`${lng}|${ns}`];
     }
   }
 }
@@ -66,28 +67,25 @@ afterEach(async () => {
   await i18n.changeLanguage('en');
 });
 
-describe('bootstrapI18n namespace preloading', () => {
-  it('resolves only after the wallet namespace is loaded', async () => {
+describe('bootstrapI18n startup resources', () => {
+  it('does not await a feature namespace before application mount', async () => {
     expect(i18n.hasResourceBundle('en', 'wallet')).toBe(false);
 
     await bootstrapI18n();
 
-    expect(i18n.hasResourceBundle('en', 'wallet')).toBe(true);
-    expect(i18n.t('wallet:send.title')).toBe('Send Money');
+    expect(i18n.hasResourceBundle('en', 'wallet')).toBe(false);
   });
 
-  it('preloads every declared namespace', async () => {
+  it('keeps only the synchronously bundled startup namespaces ready', async () => {
     await bootstrapI18n();
     for (const ns of NAMESPACES) {
-      expect(
-        i18n.hasResourceBundle('en', ns),
-        `namespace "${ns}" was not preloaded`,
-      ).toBe(true);
+      expect(i18n.hasResourceBundle('en', ns)).toBe(ns === 'common' || ns === 'startup');
     }
   });
 
-  it('never renders raw keys on the first paint of the wallet screen', async () => {
+  it('loads a route namespace on demand after startup initialization', async () => {
     await bootstrapI18n();
+    expect(i18n.hasResourceBundle('en', 'wallet')).toBe(false);
 
     render(
       <>
@@ -97,17 +95,21 @@ describe('bootstrapI18n namespace preloading', () => {
       </>,
     );
 
-    // Assert on the very first synchronous paint — no waitFor / act flushing.
+    // The namespace is still loading on the synchronous paint, but untranslated
+    // implementation keys must never be shown to the user.
+    for (const key of RAW_KEYS) {
+      expect(document.body.innerHTML, `raw key "${key}" leaked into the first paint`).not.toContain(key);
+    }
+    expect(await screen.findByText('Available balance')).toBeInTheDocument();
     const html = document.body.innerHTML;
     for (const key of RAW_KEYS) {
       expect(html, `raw key "${key}" leaked into the first paint`).not.toContain(key);
     }
-    expect(screen.getByText('Available balance')).toBeInTheDocument();
     expect(screen.getAllByText('Send Money').length).toBeGreaterThan(0);
     expect(screen.getByText('Pending transfers')).toBeInTheDocument();
   });
 
-  it('shows translated labels in a modal opened immediately after first render', async () => {
+  it('shows translated labels in a modal after its namespace loads on demand', async () => {
     await bootstrapI18n();
 
     function Harness() {
@@ -123,11 +125,11 @@ describe('bootstrapI18n namespace preloading', () => {
       </>,
     );
 
+    expect(await screen.findByRole('heading', { name: 'Send Money' })).toBeInTheDocument();
     const html = document.body.innerHTML;
     for (const key of RAW_KEYS) {
       expect(html, `raw key "${key}" leaked into the modal`).not.toContain(key);
     }
-    expect(screen.getByRole('heading', { name: 'Send Money' })).toBeInTheDocument();
   });
 
   it('renders translations after a namespace import fails once and then succeeds', async () => {
@@ -185,7 +187,7 @@ describe('bootstrapI18n namespace preloading', () => {
       </>,
     );
 
-    expect(screen.getByText('Kullanılabilir bakiye')).toBeInTheDocument();
+    expect(await screen.findByText('Kullanılabilir bakiye')).toBeInTheDocument();
     expect(screen.getAllByText('Para Gönder').length).toBeGreaterThan(0);
     expect(screen.getByText('Bekleyen transferler')).toBeInTheDocument();
   });

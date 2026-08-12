@@ -4,11 +4,17 @@ import {
   getStartupPhase,
   logStartupDiagnostic,
   type StartupDiagnosticCode,
+  markStartupStage,
+  startStartupResource,
+  finishStartupResource,
+  getStartupMetrics,
+  resetStartupMetrics,
 } from './startupDiagnostics';
 
 describe('startupDiagnostics', () => {
   beforeEach(() => {
     vi.spyOn(console, 'error').mockImplementation(() => {});
+    resetStartupMetrics();
   });
 
   afterEach(() => {
@@ -45,5 +51,32 @@ describe('startupDiagnostics', () => {
     expect(logged[2]).not.toHaveProperty('email');
     expect(logged[2]).not.toHaveProperty('familyId');
     expect(logged[2]).not.toHaveProperty('token');
+  });
+
+  it('captures ordered startup marks and derived durations without identifiers', () => {
+    markStartupStage('APP_SCRIPT_READY', 10);
+    markStartupStage('REACT_MOUNT_START', 15);
+    markStartupStage('REACT_MOUNTED', 21);
+    markStartupStage('CRITICAL_BOOTSTRAP_COMPLETE', 80);
+    markStartupStage('DASHBOARD_FIRST_RENDER', 90);
+
+    expect(getStartupMetrics()).toEqual(expect.objectContaining({
+      marks: expect.objectContaining({ APP_SCRIPT_READY: 10, REACT_MOUNTED: 21 }),
+      durations: expect.objectContaining({
+        REACT_MOUNT: 6,
+        CRITICAL_BOOTSTRAP: 70,
+        DASHBOARD_FIRST_RENDER: 80,
+      }),
+    }));
+    expect(JSON.stringify(getStartupMetrics())).not.toMatch(/uid|familyId|email/i);
+  });
+
+  it('records optional resource durations independently', () => {
+    startStartupResource('MEMBERS', 100);
+    finishStartupResource('MEMBERS', 145);
+    startStartupResource('TASKS', 110);
+    finishStartupResource('TASKS', 170);
+
+    expect(getStartupMetrics().optional).toEqual({ MEMBERS: 45, TASKS: 60 });
   });
 });

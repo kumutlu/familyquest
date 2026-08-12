@@ -29,13 +29,15 @@ import { HelpSearchResults } from './help/pages/HelpSearchResults';
 import { useStore, logAuthTrace } from './store/useStore';
 import { initForegroundMessaging } from './lib/pushNotifications';
 import { RequestDetailProvider } from './components/requests/RequestDetailContext';
-import { useEffect } from 'react';
+import { Suspense, useEffect } from 'react';
 import { consumeGoogleRedirectResult } from './lib/googleRedirectAuth';
+import { markStartupStage } from './startupDiagnostics';
 
 function App() {
   const initAuth = useStore(state => state.initAuth);
 
   useEffect(() => {
+    markStartupStage('REACT_MOUNTED');
     logAuthTrace('app-mount');
     initAuth();
     void consumeGoogleRedirectResult()
@@ -59,9 +61,10 @@ function App() {
   }, []);
 
   return (
-    <Router>
-      <RequestDetailProvider>
-        <Routes>
+    <Suspense fallback={<div data-testid="route-translations-loading" aria-busy="true" className="min-h-screen bg-gray-50" />}>
+      <Router>
+        <RequestDetailProvider>
+          <Routes>
           <Route path="/login" element={<Login />} />
           <Route path="/signup" element={<Signup />} />
           <Route path="/join-family" element={<JoinFamily />} />
@@ -99,9 +102,10 @@ function App() {
             <Route path="help/category/:categoryId" element={<HelpCategoryPage />} />
             <Route path="help/:articleId" element={<HelpArticlePage />} />
           </Route>
-        </Routes>
-      </RequestDetailProvider>
-    </Router>
+          </Routes>
+        </RequestDetailProvider>
+      </Router>
+    </Suspense>
   );
 }
 

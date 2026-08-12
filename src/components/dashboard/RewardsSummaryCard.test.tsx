@@ -8,6 +8,7 @@ const store = vi.hoisted(() => ({
   state: {
     currentUser: { id: 'owner-1', familyId: 'family-1', role: 'owner' },
     rewards: [] as any[],
+    bootstrapStatus: { rewards: 'ready' } as any,
   },
 }));
 
@@ -28,6 +29,7 @@ describe('RewardsSummaryCard', () => {
     store.state = {
       currentUser: { id: 'owner-1', familyId: 'family-1', role: 'owner' },
       rewards: [],
+      bootstrapStatus: { rewards: 'ready' },
     };
   });
 
@@ -64,6 +66,19 @@ describe('RewardsSummaryCard', () => {
       </MemoryRouter>,
     );
     expect(screen.getByText('0')).toBeInTheDocument();
+  });
+
+  it('shows a local skeleton while rewards load', () => {
+    store.state.bootstrapStatus = { rewards: 'loading' };
+    render(<MemoryRouter><RewardsSummaryCard /></MemoryRouter>);
+    expect(screen.getByTestId('rewards-summary-loading')).toBeInTheDocument();
+    expect(screen.queryByText('0')).not.toBeInTheDocument();
+  });
+
+  it('shows a local error when rewards fail', () => {
+    store.state.bootstrapStatus = { rewards: 'error' };
+    render(<MemoryRouter><RewardsSummaryCard /></MemoryRouter>);
+    expect(screen.getByTestId('rewards-summary-error')).toBeInTheDocument();
   });
 
   it('navigates to /rewards when clicked', () => {
