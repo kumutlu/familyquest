@@ -126,8 +126,11 @@ export function Family() {
     if (!currentUser || !activeChallenge) return;
     setIsSubmitting(true);
     try {
-      const childIds = children.map(c => c.id);
-      await claimChallenge(currentUser.familyId, activeChallenge.id, activeChallenge.rewardPoints, childIds, activeChallenge.title);
+      // The server is authoritative for the reward: it verifies the parent,
+      // family ownership, challenge active/target state, eligible children, and
+      // distributes the reward exactly once. The client only supplies the
+      // family + challenge ids.
+      await claimChallenge(currentUser.familyId, activeChallenge.id);
     } catch (e) {
       // A failed claim used to be swallowed entirely, which is why the broken
       // button looked like it simply "did nothing". The failure is now visible.

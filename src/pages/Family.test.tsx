@@ -293,16 +293,12 @@ describe('Family Challenge card', () => {
 
     await user.click(claimBtn);
 
-    // The EXISTING authoritative completion/reward action is invoked, reusing
-    // the existing rewardPoints + child ids (no client-side reward calc).
+    // The client delegates to the trusted server callable with ONLY the family
+    // + challenge ids. All reward distribution (points, eligible children,
+    // completion state) is server-authoritative — the client never writes
+    // rewardPoints / lifetimeXP itself.
     await waitFor(() =>
-      expect(claimChallenge).toHaveBeenCalledWith(
-        'f1',
-        'ch-ready',
-        100,
-        ['c1'],
-        'Weekly Warriors',
-      ),
+      expect(claimChallenge).toHaveBeenCalledWith('f1', 'ch-ready'),
     );
   });
 

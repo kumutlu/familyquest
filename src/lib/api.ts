@@ -10,6 +10,7 @@ import {
 } from 'firebase/auth';
 import { db, auth } from './firebase';
 import { startGoogleAuthentication } from './googleRedirectAuth';
+import { claimFamilyChallenge } from './challengeClaimApi';
 import { FAMILYQUEST_BUILD } from '../buildInfo';
 import { calculateBehaviourEffect, DEFAULT_DEBT_LIMIT_PENCE } from './behaviour';
 import type { BehaviourEventInput } from './behaviour';
@@ -26,7 +27,6 @@ import {
   taskApprovedKey,
   taskRejectedKey,
   rewardRequestedKey,
-  challengeCompletedKey,
   behaviourKey,
   walletDepositKey,
   walletWithdrawalKey,
@@ -979,80 +979,20 @@ export const createChallenge = async (familyId: string, title: string, targetXP:
   });
 };
 
-export const claimChallenge = async (familyId: string, challengeId: string, rewardPoints: number, childrenIds: string[], challengeTitle: string) => {
-  // Stage 7 pre-cutover routing: single authoritative route, fail-closed.
-  await requireLegacyClientRoute('challenge_claim', familyId)
-  const actorId = requireActorId();
-  const challengeRef = doc(db, `families/${familyId}/challenges`, challengeId);
-
-  await runTransaction(db, async (transaction) => {
-    // ---------------------------------------------------------------- READS
-    // Firestore transactions require ALL reads to happen before ANY write.
-    // The previous implementation updated the challenge document first and only
-    // then read each child user document, so the SDK rejected the transaction
-    // with "Firestore transactions require all reads to be executed before all
-    // writes" — the Claim reward button therefore always failed. Every read is
-    // now resolved up-front and the write stage performs ZERO reads.
-    const challengeDoc = await transaction.get(challengeRef);
-    if (!challengeDoc.exists() || !challengeDoc.data().isActive) throw new Error("Challenge not active");
-
-    const rewardedChildren: { ref: ReturnType<typeof doc>; rewardPoints: number; lifetimeXP: number }[] = [];
-    for (const childId of childrenIds) {
-      const userRef = doc(db, 'users', childId);
-      const userDoc = await transaction.get(userRef);
-      if (userDoc.exists()) {
-        rewardedChildren.push({
-          ref: userRef,
-          rewardPoints: userDoc.data().rewardPoints || 0,
-          lifetimeXP: userDoc.data().lifetimeXP || 0,
-        });
-      }
-    }
-
-    // Presentation-only marker so each rewarded child gets exactly ONE
-    // celebration for this claim. It reuses the existing notification +
-    // per-user read-state mechanism and carries no reward semantics.
-    const notifPlan = rewardedChildren.length > 0
-      ? await loadNotificationRecipientsInTransaction(transaction, familyId, {
-          type: 'challenge_completed',
-          actorId,
-          recipientIds: childrenIds.filter(id =>
-            rewardedChildren.some(c => c.ref.id === id),
-          ),
-          title: 'Challenge complete!',
-          body: `You earned +${rewardPoints} points`,
-          entityType: 'challenge',
-          entityId: challengeId,
-          actionUrl: '/family',
-          dedupeKey: challengeCompletedKey(challengeId),
-          metadata: { challengeTitle, rewardPoints },
-        })
-      : ({ ref: null, data: null } as Awaited<ReturnType<typeof loadNotificationRecipientsInTransaction>>);
-
-    // --------------------------------------------------------------- WRITES
-    transaction.update(challengeRef, {
-      isActive: false,
-      completedAt: serverTimestamp()
-    });
-
-    // Unchanged reward distribution: the same +rewardPoints applied once per
-    // existing child, from the values read above.
-    for (const child of rewardedChildren) {
-      transaction.update(child.ref, {
-        rewardPoints: child.rewardPoints + rewardPoints,
-        lifetimeXP: child.lifetimeXP + rewardPoints
-      });
-    }
-
-    const feedRef = doc(collection(db, `families/${familyId}/feed`));
-    transaction.set(feedRef, {
-      actorId,
-      text: `Family Challenge Completed: ${challengeTitle}! Everyone got +${rewardPoints} pts!`,
-      timestamp: serverTimestamp()
-    });
-
-    applyNotificationWrites(transaction, notifPlan);
-  });
+export const claimChallenge = async (familyId: string, challengeId: string) => {
+  // The client must be authenticated before it even attempts the trusted call.
+  // This mirrors the original behaviour (reject unauthenticated callers before
+  // any write) and avoids an unnecessary server round-trip.
+  requireActorId();
+  // Route the Family Challenge reward distribution through the trusted server
+  // callable. The server is authoritative for parent verification, family
+  // ownership, challenge active/target state, eligible children, and the
+  // exactly-once reward. The client NEVER writes rewardPoints / lifetimeXP —
+  // those writes are server-only (Admin SDK), which is exactly why Firestore
+  // rules correctly reject them from the client and previously broke the Claim
+  // button. The existing ChildChallengeCelebration / read-state implementation
+  // is preserved: the server creates the `challenge_completed` notification.
+  return claimFamilyChallenge(familyId, challengeId);
 };
 
 // ---------------------------

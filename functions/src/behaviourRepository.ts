@@ -16,6 +16,15 @@ export interface ProcessBehaviourEventArgs {
   readonly processingAt: number
 }
 
+export interface ProcessChallengeClaimArgs {
+  readonly familyId: string
+  readonly childId: string
+  readonly challengeId: string
+  /** Reward points granted to the child for this challenge (>= 0). */
+  readonly points: number
+  readonly processingAt: number
+}
+
 export interface BehaviourProcessResult {
   readonly status: 'processed' | 'duplicate' | 'ignored'
   readonly reason?: string
@@ -166,6 +175,119 @@ export class AdminBehaviourRepository {
       // Pure write, no reads: atomic with the authoritative writes above.
       // Duplicate processing is idempotent — readV3ShadowState returns
       // undefined when the event already exists, and applyV3Shadow no-ops.
+      applyV3Shadow(transaction, preparedShadow)
+      return { status: 'processed' }
+    })
+  }
+
+  /**
+   * Server-authoritative Family Challenge reward distribution.
+   *
+   * Reuses the EXACT same award pipeline as `processBehaviourEvent` (the
+   * existing authoritative gamification/write mechanism): `planBehaviourAward`
+   * for the delta math, the same `users.rewardPoints` + `users.lifetimeXP`
+   * compatibility mirror, the `gamification_summaries` projection, the
+   * immutable `gamification_events` ledger, and the V3 shadow. No parallel
+   * reward engine is introduced — this is the behaviour processor applied to a
+   * challenge award with a deterministic, challenge-scoped event anchor.
+   *
+   * Idempotency: the award is anchored on a deterministic event id derived from
+   * the challenge + child, so a retried claim (or a concurrent double-tap) can
+   * never double-award a child. The caller (the challenge-claim callable) is
+   * responsible for the challenge-level idempotency (closing the challenge).
+   */
+  async processChallengeClaim(args: ProcessChallengeClaimArgs): Promise<BehaviourProcessResult> {
+    const familyRef = this.db.doc(`families/${args.familyId}`)
+    // Deterministic, collision-free anchor for this challenge→child award.
+    // Uses `__` (not `:`) because the V3 shadow event id validator rejects
+    // ':', '/', and whitespace; `__` is also safe for the idempotency key and
+    // is not present in real challenge/child ids, so it cannot collide.
+    const syntheticId = `challenge_reward__${args.challengeId}__${args.childId}`
+    const childRef = this.db.doc(`users/${args.childId}`)
+    const summaryRef = familyRef.collection('gamification_summaries').doc(args.childId)
+    return this.db.runTransaction(async transaction => {
+      const [childDocument, summaryDocument] = await Promise.all([
+        transaction.get(childRef), transaction.get(summaryRef),
+      ])
+      if (!childDocument.exists) return { status: 'ignored', reason: 'child_missing' }
+      const child = childDocument.data() as DocumentData
+      if (child.familyId !== args.familyId || child.role !== 'child'
+        || child.status === 'deleted' || child.status === 'disabled' || child.disabled === true) {
+        return { status: 'ignored', reason: 'child_not_active_in_family' }
+      }
+
+      const gamificationEventRef = familyRef.collection('gamification_events').doc(behaviourGamificationEventId(syntheticId))
+      const existingEvent = await transaction.get(gamificationEventRef)
+      const alreadyProcessed = existingEvent.exists
+
+      const summary = summaryDocument.exists ? summaryDocument.data() as DocumentData : undefined
+      const plan = planBehaviourAward({
+        familyId: args.familyId,
+        childId: args.childId,
+        behaviourEventId: syntheticId,
+        type: 'positive',
+        pointsDelta: integer(args.points),
+        effectiveAt: args.processingAt,
+        processingAt: args.processingAt,
+        currentRewardPoints: integer(child.rewardPoints),
+        currentXpTotal: integer(summary?.xpTotal),
+        currentLifetimeXP: integer(child.lifetimeXP),
+        alreadyProcessed,
+      })
+      if (plan.status === 'duplicate') return { status: 'duplicate' }
+
+      // ---- V3 shadow READ PHASE ----
+      // All shadow reads happen before the first write (Firestore aborts the
+      // whole transaction if a read follows a write). Mirrors processBehaviourEvent.
+      let preparedShadow: PreparedV3Shadow | undefined
+      try {
+        preparedShadow = await readV3ShadowState(transaction, (path) => this.db.doc(path), {
+          familyId: args.familyId,
+          memberId: args.childId,
+          event: mapBehaviour({
+            familyId: args.familyId,
+            memberId: args.childId,
+            behaviourEventId: syntheticId,
+            type: 'positive',
+            pointsDelta: plan.rewardPointsDelta,
+            effectiveAt: new Date(plan.event.effectiveAt).toISOString(),
+            createdAt: new Date(args.processingAt).toISOString(),
+          }),
+          weeklyContext: DEFAULT_WEEKLY_CONTEXT,
+          asOf: new Date(args.processingAt).toISOString(),
+        })
+      } catch (error) {
+        if (error instanceof BaselineMissingErrorV3) {
+          console.warn('[gamification-v3-shadow-skipped]', JSON.stringify({
+            familyId: args.familyId, memberId: args.childId, processor: 'processChallengeClaim',
+          }))
+        } else {
+          throw error
+        }
+      }
+
+      if (plan.rewardPointsDelta !== 0 || plan.xpDelta !== 0) {
+        transaction.update(childRef, {
+          rewardPoints: plan.nextRewardPoints,
+          // Compatibility-only mirror; authoritative XP is summary.xpTotal.
+          lifetimeXP: plan.nextLifetimeXP,
+        })
+      }
+      transaction.set(summaryRef, {
+        schemaVersion: 1,
+        familyId: args.familyId,
+        childId: args.childId,
+        xpTotal: plan.nextXpTotal,
+        level: plan.level,
+        updatedAt: new Date(args.processingAt),
+      }, { merge: true })
+      transaction.create(gamificationEventRef, {
+        ...plan.event,
+        effectiveAt: new Date(plan.event.effectiveAt),
+        createdAt: new Date(plan.event.createdAt),
+      })
+      // ---- V3 shadow WRITE PHASE ----
+      // Pure write, no reads: atomic with the authoritative writes above.
       applyV3Shadow(transaction, preparedShadow)
       return { status: 'processed' }
     })
