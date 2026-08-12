@@ -21,6 +21,7 @@ describe('StartupScreen', () => {
   });
 
   afterEach(() => {
+    Object.defineProperty(navigator, 'onLine', { configurable: true, value: true });
     vi.runOnlyPendingTimers();
     vi.useRealTimers();
   });
@@ -188,7 +189,13 @@ describe('StartupScreen', () => {
     render(<StartupScreen phase="family" onRetry={vi.fn()} />);
     await advance(STARTUP_TIMEOUT_MS);
     expect(screen.getByRole('alert')).toHaveTextContent('Connection problem');
-    Object.defineProperty(navigator, 'onLine', { configurable: true, value: true });
+  });
+
+  it('labels an immediate bootstrap failure as offline when the browser confirms it', () => {
+    Object.defineProperty(navigator, 'onLine', { configurable: true, value: false });
+    render(<StartupScreen phase="error" error="[Profile] unavailable: offline" onRetry={vi.fn()} />);
+    expect(screen.getByRole('alert')).toHaveTextContent('Connection problem');
+    expect(screen.getByRole('alert')).toHaveTextContent('You appear to be offline');
   });
 
   it('18. leaves no pending timers once the app becomes ready', async () => {

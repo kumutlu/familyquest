@@ -111,7 +111,7 @@ export function StartupScreen({ phase, error, onRetry, onSignOut, attempt = 0 }:
   if (phase === 'ready') return null;
 
   if (failed) {
-    const offline = timedOut && typeof navigator !== 'undefined' && navigator.onLine === false;
+    const offline = typeof navigator !== 'undefined' && navigator.onLine === false;
     const errorKind = error?.startsWith('[Family]')
       ? 'family'
       : error?.startsWith('[Profile]') || error?.startsWith('[Auth')
