@@ -25,6 +25,7 @@ const firestore = vi.hoisted(() => {
   }
 })
 const authState = vi.hoisted(() => ({ currentUser: { uid: 'owner-1' } as any }))
+const challengeApi = vi.hoisted(() => ({ claimFamilyChallenge: vi.fn() }))
 
 vi.mock('firebase/firestore', () => ({
   ...firestore,
@@ -35,6 +36,9 @@ vi.mock('firebase/auth', () => ({
   createUserWithEmailAndPassword: vi.fn(), signInWithEmailAndPassword: vi.fn(), signInWithPopup: vi.fn(), signOut: vi.fn(),
 }))
 vi.mock('./firebase', () => ({ db: { name: 'db' }, auth: authState, googleProvider: {} }))
+vi.mock('./challengeClaimApi', () => ({
+  claimFamilyChallenge: (...args: unknown[]) => challengeApi.claimFamilyChallenge(...args),
+}))
 
 import { createTask, createReward, claimChallenge } from './api'
 
@@ -115,112 +119,53 @@ describe('createReward atomic feed actor', () => {
   })
 })
 
-describe('claimChallenge (completeChallenge) feed actor', () => {
+describe('claimChallenge delegates to the trusted server callable', () => {
   beforeEach(() => {
     vi.clearAllMocks()
     firestore.resetIds()
     authState.currentUser = { uid: 'owner-1' }
+    challengeApi.claimFamilyChallenge.mockResolvedValue({ claimed: true, rewardedChildren: ['child-1'] })
   })
 
-  // Faithful transaction double: Firestore REJECTS a transaction that performs
-  // a read after a write. The old permissive mock hid the production failure of
-  // the Claim reward button, so the double now enforces the real rule.
-  function installTransaction(options: { existingNotification?: boolean } = {}) {
-    let hasWritten = false
-    const transaction = {
-      get: vi.fn(async (ref: { path?: string }) => {
-        if (hasWritten) {
-          throw new Error('Firestore transactions require all reads to be executed before all writes.')
-        }
-        if (ref?.path?.includes('/notifications')) {
-          return { exists: () => options.existingNotification === true, data: () => ({}) }
-        }
-        return { exists: () => true, data: () => ({ isActive: true, rewardPoints: 0, lifetimeXP: 0 }) }
-      }),
-      update: vi.fn((_ref: { path: string; id: string }, _data?: Record<string, unknown>) => { hasWritten = true }),
-      set: vi.fn((_ref: { path: string; id: string }, _data?: Record<string, unknown>) => { hasWritten = true }),
-    }
-    firestore.runTransaction.mockImplementation(async (_db: unknown, callback: (tx: typeof transaction) => unknown) => callback(transaction))
-    return transaction
-  }
+  // The client is no longer responsible for the reward math or the per-child
+  // rewardPoints/lifetimeXP writes — those are server-authoritative. The client
+  // only forwards (familyId, challengeId) to the callable.
+  it('forwards familyId + challengeId to the claim callable and returns its result', async () => {
+    const result = await claimChallenge('family-1', 'challenge-1')
 
-  const notificationWrite = (transaction: { set: { mock: { calls: any[][] } } }) =>
-    transaction.set.mock.calls.find(([ref]) => ref.path.includes('/notifications'))?.[1]
-
-  // E. claimChallenge uses the authenticated actor
-  it('records the authenticated actor in the challenge-completion feed entry', async () => {
-    const transaction = installTransaction()
-
-    await claimChallenge('family-1', 'challenge-1', 50, ['child-1'], 'Read a book')
-
-    const feed = transaction.set.mock.calls.find(([ref]) => ref.path.includes('/feed/'))?.[1]
-    expect(feed).toMatchObject({
-      actorId: 'owner-1',
-      text: 'Family Challenge Completed: Read a book! Everyone got +50 pts!',
-    })
+    expect(challengeApi.claimFamilyChallenge).toHaveBeenCalledTimes(1)
+    expect(challengeApi.claimFamilyChallenge).toHaveBeenCalledWith('family-1', 'challenge-1')
+    expect(result).toEqual({ claimed: true, rewardedChildren: ['child-1'] })
   })
 
-  // E. claimChallenge does not leave partial primary records when the feed fails
-  it('rolls back all writes if the transaction fails', async () => {
-    firestore.runTransaction.mockRejectedValueOnce(new Error('permission-denied'))
+  // REGRESSION (P0): the client must NEVER write rewardPoints / lifetimeXP.
+  // Those writes are server-only (Admin SDK); Firestore rules correctly reject
+  // them from the client, which is exactly what broke the production Claim
+  // button. The client now performs no transaction/batch writes of its own.
+  it('does NOT write rewardPoints / lifetimeXP (no client-side reward transaction)', async () => {
+    await claimChallenge('family-1', 'challenge-1')
 
-    await expect(claimChallenge('family-1', 'challenge-1', 50, ['child-1'], 'Read a book')).rejects.toThrow(/permission-denied/)
-    expect(firestore.runTransaction).toHaveBeenCalledTimes(1)
-  })
-
-  it('rejects unauthenticated callers before starting the transaction', async () => {
-    authState.currentUser = null
-    await expect(claimChallenge('family-1', 'challenge-1', 50, ['child-1'], 'Read a book')).rejects.toThrow(/Authentication required/)
+    // No Firestore transaction is opened by the client for the claim.
     expect(firestore.runTransaction).not.toHaveBeenCalled()
+    // No batch is created/committed by the client for the claim.
+    expect(firestore.writeBatch).not.toHaveBeenCalled()
+    expect(firestore.batch.set).not.toHaveBeenCalled()
+    expect(firestore.batch.commit).not.toHaveBeenCalled()
   })
 
-  // REGRESSION (P0): the Claim reward button always failed because the
-  // challenge document was updated BEFORE the per-child user documents were
-  // read, which Firestore rejects. All reads must now precede all writes.
-  it('performs every read before any write so the claim transaction is legal', async () => {
-    const transaction = installTransaction()
+  // Unauthenticated callers are rejected before any server call is made.
+  it('rejects unauthenticated callers before invoking the callable', async () => {
+    authState.currentUser = null
 
-    await expect(
-      claimChallenge('family-1', 'challenge-1', 100, ['child-1', 'child-2'], 'Weekly Warriors'),
-    ).resolves.toBeUndefined()
-
-    // Reward distribution unchanged: exactly one update per existing child.
-    const childUpdates = transaction.update.mock.calls.filter(([ref]) => ref.path.startsWith('users/'))
-    expect(childUpdates).toHaveLength(2)
-    expect(childUpdates[0][1]).toEqual({ rewardPoints: 100, lifetimeXP: 100 })
-    expect(childUpdates[1][1]).toEqual({ rewardPoints: 100, lifetimeXP: 100 })
+    await expect(claimChallenge('family-1', 'challenge-1')).rejects.toThrow(/Authentication required/)
+    expect(challengeApi.claimFamilyChallenge).not.toHaveBeenCalled()
   })
 
-  // The one-time child celebration is derived from a single presentation
-  // notification written inside the SAME authoritative claim transaction.
-  it('creates one deterministic child celebration marker per claimed challenge', async () => {
-    const transaction = installTransaction()
+  // A server-side failure is surfaced to the caller (it must not be swallowed,
+  // which is why the broken button previously looked like it "did nothing").
+  it('surfaces a server-side claim failure to the caller', async () => {
+    challengeApi.claimFamilyChallenge.mockRejectedValueOnce(new Error('failed-precondition: target not reached'))
 
-    await claimChallenge('family-1', 'challenge-1', 100, ['child-1', 'child-2'], 'Weekly Warriors')
-
-    const notif = notificationWrite(transaction)
-    expect(notif).toMatchObject({
-      type: 'challenge_completed',
-      recipientIds: ['child-1', 'child-2'],
-      title: 'Challenge complete!',
-      body: 'You earned +100 points',
-      entityType: 'challenge',
-      entityId: 'challenge-1',
-    })
-    // Deterministic id => a retried claim can never create a second marker.
-    const ref = transaction.set.mock.calls.find(([r]) => r.path.includes('/notifications'))?.[0]!
-    expect(ref.id).toBe('challenge_completed_challenge-1')
-    // Exactly one marker for all rewarded children.
-    expect(transaction.set.mock.calls.filter(([r]) => r.path.includes('/notifications'))).toHaveLength(1)
-  })
-
-  it('is idempotent: an existing celebration marker is never rewritten', async () => {
-    const transaction = installTransaction({ existingNotification: true })
-
-    await claimChallenge('family-1', 'challenge-1', 100, ['child-1'], 'Weekly Warriors')
-
-    expect(notificationWrite(transaction)).toBeUndefined()
-    // The reward is still distributed exactly once.
-    expect(transaction.update.mock.calls.filter(([ref]) => ref.path.startsWith('users/'))).toHaveLength(1)
+    await expect(claimChallenge('family-1', 'challenge-1')).rejects.toThrow(/target not reached/)
   })
 })

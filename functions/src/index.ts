@@ -281,3 +281,7 @@ export {
   rejectChildJoinRequest,
   purgeExpiredChildJoinRequests,
 } from './childJoinRequest';
+
+// Family Challenge claim — trusted server path. The client only invokes this
+// callable; all reward distribution is server-authoritative (Admin SDK).
+export { claimFamilyChallenge } from './challengeClaim';

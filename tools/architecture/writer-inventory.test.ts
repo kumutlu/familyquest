@@ -9,7 +9,7 @@
  *   3. day_finalization   -> functions/src/gamificationRepository.ts finalizeChildDay
  *   4. behaviour          -> functions/src/behaviourRepository.ts    processBehaviourEvent
  *   5. reward_redemption   -> src/lib/api.ts                         redeemReward
- *   6. challenge_claim    -> src/lib/api.ts                         claimChallenge
+ *   6. challenge_claim    -> functions/src/challengeClaim.ts         claimFamilyChallenge
  *   7. avatar_unlock      -> src/lib/api.ts                         unlockAvatar
  *
  * The audit:
@@ -42,7 +42,7 @@ const WRITERS: readonly DeclaredWriter[] = [
   { writer: 'day_finalization', file: 'functions/src/gamificationRepository.ts', fn: 'finalizeChildDay' },
   { writer: 'behaviour', file: 'functions/src/behaviourRepository.ts', fn: 'processBehaviourEvent' },
   { writer: 'reward_redemption', file: 'src/lib/api.ts', fn: 'redeemReward' },
-  { writer: 'challenge_claim', file: 'src/lib/api.ts', fn: 'claimChallenge' },
+  { writer: 'challenge_claim', file: 'functions/src/challengeClaim.ts', fn: 'claimFamilyChallenge' },
   { writer: 'avatar_unlock', file: 'src/lib/api.ts', fn: 'unlockAvatar' },
 ]
 
@@ -52,6 +52,7 @@ const ALLOWED_WRITER_FILES = new Set([
   'gamificationProcessor.ts',
   'gamificationRepository.ts',
   'behaviourRepository.ts',
+  'challengeClaim.ts',
   'api.ts',
   'reversalApi.ts',
   'childJoinRequest.ts',
