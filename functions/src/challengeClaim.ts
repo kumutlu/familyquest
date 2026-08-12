@@ -110,12 +110,26 @@ export async function processChallengeClaimRequest(
   })
 
   // 5. Verify the target has actually been reached, using the SAME family-XP
-  //    definition the client uses to show the Claim button (sum of children's
-  //    lifetimeXP). This is server-computed; the client cannot fake completion.
-  const totalFamilyXP = eligible.reduce(
-    (acc, d) => acc + integer((d.data() as { lifetimeXP?: number }).lifetimeXP),
-    0,
-  )
+  //    definition the client uses to show the Claim button. The authoritative XP
+  //    source is `gamification_summaries.xpTotal` — `users.lifetimeXP` is only a
+  //    compatibility mirror and must never be treated as authoritative (see
+  //    behaviourRepository). We read the family's summaries once and sum the
+  //    authoritative xpTotal per eligible child. This is server-computed; the
+  //    client cannot fake completion.
+  const summarySnap = await db
+    .collection(`families/${input.familyId}/gamification_summaries`)
+    .get()
+  const xpByChild = new Map<string, number>()
+  for (const d of summarySnap.docs) {
+    xpByChild.set(d.id, integer((d.data() as { xpTotal?: number }).xpTotal))
+  }
+  const totalFamilyXP = eligible.reduce((acc, d) => {
+    const summaryXp = xpByChild.get(d.id)
+    // Fall back to the lifetimeXP mirror only if a summary is missing, so a
+    // transient gap can never make the server over-reject a legitimately
+    // completed challenge.
+    return acc + (typeof summaryXp === 'number' ? summaryXp : integer((d.data() as { lifetimeXP?: number }).lifetimeXP))
+  }, 0)
   const earnedSinceStart = Math.max(0, totalFamilyXP - integer(challenge.startXP))
   if (earnedSinceStart < integer(challenge.targetXP)) {
     throw new HttpsError('failed-precondition', 'Challenge target has not been reached yet.')
