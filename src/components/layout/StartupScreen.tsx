@@ -111,7 +111,26 @@ export function StartupScreen({ phase, error, onRetry, onSignOut, attempt = 0 }:
   if (phase === 'ready') return null;
 
   if (failed) {
-    const body = phase === 'error' && error ? error : t('timeoutBody');
+    const offline = typeof navigator !== 'undefined' && navigator.onLine === false;
+    const errorKind = error?.startsWith('[Family]')
+      ? 'family'
+      : error?.startsWith('[Profile]') || error?.startsWith('[Auth')
+        ? 'identity'
+        : 'critical';
+    const title = offline
+      ? t('offlineTitle')
+      : timedOut
+        ? t('slowTitle')
+        : t('criticalTitle');
+    const body = offline
+      ? t('offlineBody')
+      : timedOut
+        ? t('timeoutBody')
+        : errorKind === 'family'
+          ? t('familyErrorBody')
+          : errorKind === 'identity'
+            ? t('identityErrorBody')
+            : t('criticalErrorBody');
     return (
       <div className="min-h-screen bg-gray-50 flex flex-col items-center justify-center p-4">
         <div
@@ -121,7 +140,7 @@ export function StartupScreen({ phase, error, onRetry, onSignOut, attempt = 0 }:
           <div className="w-12 h-12 bg-danger-50 text-danger-500 rounded-full flex items-center justify-center mx-auto mb-4">
             <span className="text-2xl font-bold" aria-hidden="true">!</span>
           </div>
-          <h2 className="text-xl font-bold text-gray-900 mb-2">{t('errorTitle')}</h2>
+          <h2 className="text-xl font-bold text-gray-900 mb-2">{title}</h2>
           <p className="text-gray-500 mb-6 text-sm">{body}</p>
           <div className="space-y-2">
             <Button onClick={onRetry} fullWidth>{t('retry')}</Button>

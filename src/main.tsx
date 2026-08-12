@@ -7,6 +7,10 @@ import App from './App.tsx'
 import { installServiceWorkerControllerListener } from './serviceWorkerUpdate'
 import { installChunkLoadErrorMonitor } from './chunkLoadErrorMonitor'
 import i18n, { bootstrapI18n } from './i18n'
+import { markStartupStage, resetStartupMetrics } from './startupDiagnostics'
+
+resetStartupMetrics()
+markStartupStage('APP_SCRIPT_READY')
 
 // Observe (but never auto-reload on) service-worker controller changes. This
 // records a diagnostic if a takeover happens mid-bootstrap instead of masking
@@ -26,14 +30,15 @@ console.info('[FamilyQuest Build]', {
   createTaskAtomic: true,
 })
 
-// Resolve language (user preference -> browser -> English) and set <html>
-// direction before the first render so there is no locale flash.
-bootstrapI18n().then(() => {
-  createRoot(document.getElementById('root')!).render(
-    <StrictMode>
-      <I18nextProvider i18n={i18n}>
-        <App />
-      </I18nextProvider>
-    </StrictMode>,
-  )
-})
+// Common/startup strings for both supported languages are already bundled.
+// Begin language selection without making React wait for any feature namespace.
+void bootstrapI18n()
+
+markStartupStage('REACT_MOUNT_START')
+createRoot(document.getElementById('root')!).render(
+  <StrictMode>
+    <I18nextProvider i18n={i18n}>
+      <App />
+    </I18nextProvider>
+  </StrictMode>,
+)

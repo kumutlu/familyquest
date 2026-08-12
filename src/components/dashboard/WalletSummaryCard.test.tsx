@@ -15,6 +15,7 @@ const baseStore = {
   myWallet: { id: 'w-1', balance: 1234 },
   childWallets: [] as any[],
   familyMembers: [] as any[],
+  bootstrapStatus: { wallets: 'ready', members: 'ready' } as any,
 };
 
 vi.mock('../../store/useStore', () => ({
@@ -28,6 +29,7 @@ describe('WalletSummaryCard', () => {
     baseStore.myWallet = { id: 'w-1', balance: 1234 };
     baseStore.childWallets = [];
     baseStore.familyMembers = [];
+    baseStore.bootstrapStatus = { wallets: 'ready', members: 'ready' };
   });
 
   it('child sees own balance and the full card links to /wallet', () => {
@@ -43,6 +45,19 @@ describe('WalletSummaryCard', () => {
     expect(card).toHaveAttribute('tabindex', '0');
     fireEvent.click(card);
     expect(h.navigate).toHaveBeenCalledWith('/wallet');
+  });
+
+  it('shows a local skeleton while wallet data loads', () => {
+    baseStore.bootstrapStatus = { wallets: 'loading', members: 'ready' };
+    render(<MemoryRouter><WalletSummaryCard /></MemoryRouter>);
+    expect(screen.getByTestId('wallet-summary-loading')).toBeInTheDocument();
+    expect(screen.queryByText('£12.34')).not.toBeInTheDocument();
+  });
+
+  it('shows a local error without replacing the dashboard when wallets fail', () => {
+    baseStore.bootstrapStatus = { wallets: 'error', members: 'ready' };
+    render(<MemoryRouter><WalletSummaryCard /></MemoryRouter>);
+    expect(screen.getByTestId('wallet-summary-error')).toBeInTheDocument();
   });
 
   it('child card is keyboard accessible', () => {

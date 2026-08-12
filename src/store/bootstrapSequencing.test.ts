@@ -20,6 +20,8 @@ type Deferred = { resolve: (value: any) => void; reject: (error: any) => void };
 const harness = vi.hoisted(() => ({
   subscribedPaths: [] as string[],
   serverReads: new Map<string, Deferred[]>(),
+  snapshotNext: new Map<string, (snapshot: any) => void>(),
+  snapshotError: new Map<string, (error: any) => void>(),
 }));
 
 const pathOf = (target: any): string => (target && target.path) || 'unknown';
@@ -54,8 +56,10 @@ vi.mock('firebase/firestore', () => ({
   getFirestore: vi.fn(() => ({})),
   getDocFromServer: vi.fn((target: any) => deferredFor(target)),
   getDocsFromServer: vi.fn((target: any) => deferredFor(target)),
-  onSnapshot: vi.fn((target: any) => {
+  onSnapshot: vi.fn((target: any, _options: any, next: any, error: any) => {
     harness.subscribedPaths.push(pathOf(target));
+    harness.snapshotNext.set(pathOf(target), next);
+    harness.snapshotError.set(pathOf(target), error);
     return () => {};
   }),
 }));
@@ -65,8 +69,8 @@ vi.mock('../lib/firebase', () => ({ app: {}, auth: {}, db: {}, googleProvider: {
 import { useStore } from './useStore';
 import { criticalBootstrapResources } from '../lib/bootstrapQueries';
 
-const CRITICAL_PATHS = [
-  'families/f1',
+const FAMILY_PATH = 'families/f1';
+const OPTIONAL_DASHBOARD_PATHS = [
   'families/f1/tasks',
   'families/f1/rewards',
   'families/f1/wallets',
@@ -97,15 +101,8 @@ const rejectRead = async (path: string, error: any) => {
   await Promise.resolve();
 };
 
-const resolveAllCritical = async () => {
-  await resolveRead('families/f1', documentSnapshot('f1'));
-  for (const path of CRITICAL_PATHS.filter(candidate => candidate !== 'families/f1')) {
-    await resolveRead(path, querySnapshot());
-  }
-};
-
-const nonCriticalPaths = () =>
-  harness.subscribedPaths.filter(path => !CRITICAL_PATHS.includes(path));
+const optionalPaths = () =>
+  harness.subscribedPaths.filter(path => path !== FAMILY_PATH);
 
 const signedInFamilyState = () => ({
   authStatus: 'authenticated' as const,
@@ -126,54 +123,94 @@ describe('two-stage family bootstrap sequencing', () => {
   beforeEach(() => {
     harness.subscribedPaths = [];
     harness.serverReads = new Map();
+    harness.snapshotNext = new Map();
+    harness.snapshotError = new Map();
     useStore.setState(signedInFamilyState() as any);
   });
 
-  it('starts only the critical resources in stage 1', () => {
+  it('starts only family validation on the global critical path', () => {
     useStore.getState().loadFamilyData('u1', 'f1');
 
-    expect(new Set(harness.subscribedPaths)).toEqual(new Set(CRITICAL_PATHS));
-    expect(nonCriticalPaths()).toEqual([]);
-    // The critical set is the single existing definition, not a copy.
-    expect(criticalBootstrapResources).toEqual(['family', 'members', 'tasks', 'rewards', 'wallets']);
+    expect(harness.subscribedPaths).toEqual([FAMILY_PATH]);
+    expect(criticalBootstrapResources).toEqual(['family']);
   });
 
-  it('does not start non-critical reads until every critical resource resolved', async () => {
+  it('starts optional dashboard reads after family access is validated', async () => {
     useStore.getState().loadFamilyData('u1', 'f1');
 
-    await resolveRead('families/f1', documentSnapshot('f1'));
-    await resolveRead('families/f1/tasks', querySnapshot());
-    await resolveRead('families/f1/rewards', querySnapshot());
-    await resolveRead('families/f1/wallets', querySnapshot());
+    await resolveRead(FAMILY_PATH, documentSnapshot('f1'));
 
-    // Members still outstanding → stage 2 must not have started.
-    expect(nonCriticalPaths()).toEqual([]);
-    expect(useStore.getState().appReady).toBe(false);
-
-    await resolveRead('users', querySnapshot());
-
-    expect(nonCriticalPaths().length).toBeGreaterThan(0);
+    expect(harness.subscribedPaths).toEqual(expect.arrayContaining([FAMILY_PATH, ...OPTIONAL_DASHBOARD_PATHS]));
+    expect(optionalPaths().length).toBeGreaterThan(OPTIONAL_DASHBOARD_PATHS.length);
   });
 
-  it('sets appReady as soon as the five critical resources complete', async () => {
+  it('sets appReady as soon as family access is validated', async () => {
     useStore.getState().loadFamilyData('u1', 'f1');
-    await resolveAllCritical();
+    await resolveRead(FAMILY_PATH, documentSnapshot('f1'));
 
     expect(useStore.getState().appReady).toBe(true);
     expect(useStore.getState().familyLoading).toBe(false);
     expect(useStore.getState().loading).toBe(false);
   });
 
-  it('does not wait for non-critical resources before appReady', async () => {
+  it('uses a matching cached family for fast render while server validation remains pending', async () => {
     useStore.getState().loadFamilyData('u1', 'f1');
-    await resolveAllCritical();
+    harness.snapshotNext.get(FAMILY_PATH)?.({
+      ...documentSnapshot('f1'),
+      metadata: { fromCache: true },
+    });
+    await Promise.resolve();
 
-    // Stage 2 reads are still outstanding at this point.
-    const outstanding = [...harness.serverReads.entries()].filter(
-      ([path, pending]) => !CRITICAL_PATHS.includes(path) && pending.length > 0,
-    );
-    expect(outstanding.length).toBeGreaterThan(0);
     expect(useStore.getState().appReady).toBe(true);
+    expect(useStore.getState().familyData).toMatchObject({ id: 'f1', name: 'Family' });
+    expect((harness.serverReads.get(FAMILY_PATH) ?? []).length).toBeGreaterThan(0);
+  });
+
+  it('revokes cached family readiness when server permission validation fails', async () => {
+    useStore.getState().loadFamilyData('u1', 'f1');
+    harness.snapshotNext.get(FAMILY_PATH)?.({
+      ...documentSnapshot('f1'),
+      metadata: { fromCache: true },
+    });
+    await Promise.resolve();
+    expect(useStore.getState().appReady).toBe(true);
+
+    await rejectRead(FAMILY_PATH, { code: 'permission-denied', message: 'denied' });
+    expect(useStore.getState().appReady).toBe(false);
+    expect(useStore.getState().bootstrapError).toContain('permission-denied');
+  });
+
+  it.each(OPTIONAL_DASHBOARD_PATHS)(
+    'does not gate an existing parent dashboard when %s never resolves',
+    async stalledPath => {
+      useStore.getState().loadFamilyData('u1', 'f1');
+      await resolveRead(FAMILY_PATH, documentSnapshot('f1'));
+
+      for (const path of OPTIONAL_DASHBOARD_PATHS) {
+        if (path !== stalledPath) await resolveRead(path, querySnapshot());
+      }
+
+      expect(useStore.getState().appReady).toBe(true);
+      expect(useStore.getState().bootstrapStatus[
+        stalledPath === 'users' ? 'members' : stalledPath.split('/').at(-1) as 'tasks' | 'rewards' | 'wallets'
+      ]).toBe('loading');
+    },
+  );
+
+  it('does not gate an existing child dashboard on optional family resources', async () => {
+    useStore.setState({
+      ...signedInFamilyState(),
+      currentUser: { id: 'c1', familyId: 'f1', role: 'child' },
+    } as any);
+
+    useStore.getState().loadFamilyData('c1', 'f1');
+    await resolveRead(FAMILY_PATH, documentSnapshot('f1'));
+
+    expect(useStore.getState().appReady).toBe(true);
+    expect(useStore.getState().bootstrapStatus.members).toBe('loading');
+    expect(useStore.getState().bootstrapStatus.tasks).toBe('loading');
+    expect(useStore.getState().bootstrapStatus.rewards).toBe('loading');
+    expect(useStore.getState().bootstrapStatus.wallets).toBe('loading');
   });
 
   it('preserves critical failure behaviour', async () => {
@@ -184,15 +221,15 @@ describe('two-stage family bootstrap sequencing', () => {
     expect(state.appReady).toBe(false);
     expect(state.bootstrapError).toContain('Family');
     expect(state.activeFamilyId).toBeNull();
-    expect(nonCriticalPaths()).toEqual([]);
+    expect(optionalPaths()).toEqual([]);
   });
 
   it('does not revert appReady when a non-critical resource fails', async () => {
     useStore.getState().loadFamilyData('u1', 'f1');
-    await resolveAllCritical();
+    await resolveRead(FAMILY_PATH, documentSnapshot('f1'));
     expect(useStore.getState().appReady).toBe(true);
 
-    const [failingPath] = nonCriticalPaths();
+    const [failingPath] = optionalPaths();
     await rejectRead(failingPath, { code: 'unavailable', message: 'offline' });
 
     const state = useStore.getState();
@@ -210,10 +247,10 @@ describe('two-stage family bootstrap sequencing', () => {
     harness.subscribedPaths = [];
     useStore.getState().retryBootstrap();
 
-    expect(new Set(harness.subscribedPaths)).toEqual(new Set(CRITICAL_PATHS));
+    expect(harness.subscribedPaths).toEqual([FAMILY_PATH]);
     expect(useStore.getState().bootstrapError).toBeNull();
 
-    await resolveAllCritical();
+    await resolveRead(FAMILY_PATH, documentSnapshot('f1'));
     expect(useStore.getState().appReady).toBe(true);
   });
 
@@ -227,15 +264,15 @@ describe('two-stage family bootstrap sequencing', () => {
       appReady: false,
     } as any);
 
-    await resolveAllCritical();
+    await resolveRead(FAMILY_PATH, documentSnapshot('f1'));
 
     expect(useStore.getState().appReady).toBe(false);
-    expect(nonCriticalPaths()).toEqual([]);
+    expect(optionalPaths()).toEqual([]);
   });
 
   it('keeps loaded data behaviour intact across both stages', async () => {
     useStore.getState().loadFamilyData('u1', 'f1');
-    await resolveAllCritical();
+    await resolveRead(FAMILY_PATH, documentSnapshot('f1'));
 
     expect(useStore.getState().familyData).toMatchObject({ id: 'f1', name: 'Family' });
 

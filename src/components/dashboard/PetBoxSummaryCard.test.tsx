@@ -10,6 +10,8 @@ vi.mock('react-router-dom', async () => {
 
 const baseStore = {
   funds: [] as any[],
+  familyData: { features: { petBoxEnabled: true } } as any,
+  bootstrapStatus: { funds: 'ready' } as any,
 };
 
 vi.mock('../../store/useStore', () => ({
@@ -22,6 +24,7 @@ describe('PetBoxSummaryCard', () => {
   beforeEach(() => {
     h.navigate.mockClear();
     baseStore.funds = [];
+    baseStore.bootstrapStatus = { funds: 'ready' };
   });
 
   it('loads and shows active funds and combined balance', () => {
@@ -56,5 +59,17 @@ describe('PetBoxSummaryCard', () => {
   it('shows empty state when no funds', () => {
     render(<MemoryRouter><PetBoxSummaryCard /></MemoryRouter>);
     expect(screen.getByText('No pets added yet.')).toBeInTheDocument();
+  });
+
+  it('keeps pending and failed Pet Box data local to the card', () => {
+    baseStore.bootstrapStatus = { funds: 'loading' };
+    const loading = render(<MemoryRouter><PetBoxSummaryCard /></MemoryRouter>);
+    expect(screen.getByTestId('petbox-summary-loading')).toBeInTheDocument();
+    expect(screen.queryByText('No pets added yet.')).not.toBeInTheDocument();
+    loading.unmount();
+
+    baseStore.bootstrapStatus = { funds: 'error' };
+    render(<MemoryRouter><PetBoxSummaryCard /></MemoryRouter>);
+    expect(screen.getByTestId('petbox-summary-error')).toBeInTheDocument();
   });
 });

@@ -19,6 +19,12 @@ import {
   type BootstrapRole,
 } from '../lib/bootstrapQueries';
 import i18n, { applyDocumentDirection, applyLanguage, resolveProfileLanguage } from '../i18n';
+import {
+  finishStartupResource,
+  markStartupStage,
+  startStartupResource,
+  type OptionalStartupResource,
+} from '../startupDiagnostics';
 
 export type BootstrapStatus = 'idle' | 'loading' | 'ready' | 'error';
 
@@ -237,6 +243,7 @@ export const useStore = create<AppState>((set, get) => ({
 
   initAuth: () => {
     if (authUnsubscribe) return;
+    markStartupStage('AUTH_LISTENER_ATTACHED');
     logAuthTrace('auth-listener-registered');
 
     authUnsubscribe = onAuthStateChanged(auth, async user => {
@@ -244,6 +251,7 @@ export const useStore = create<AppState>((set, get) => ({
       stopProfileListener();
       stopFamilyListeners();
       logAuthTrace('auth-listener-fired', { signedIn: Boolean(user), generation });
+      markStartupStage('AUTH_RESOLVED');
 
       if (!user) {
         set({
@@ -300,9 +308,13 @@ export const useStore = create<AppState>((set, get) => ({
             : null;
         const profileId = managedChildId || user.uid;
         const profileReference = doc(db, 'users', profileId);
+        markStartupStage('PROFILE_START');
         let profileResolved = false;
+        let profileServerConfirmed = false;
+        let profileSnapshotRevision = 0;
 
         const handleProfileSnapshot = (profileSnapshot: any) => {
+          const snapshotRevision = ++profileSnapshotRevision;
           if (generation !== authGeneration || get().authUser?.uid !== user.uid) return;
 
           if (!profileSnapshot.exists()) {
@@ -353,7 +365,11 @@ export const useStore = create<AppState>((set, get) => ({
           profileResolved = true;
           const language = resolveProfileLanguage(profile.language);
           const finishProfileHydration = () => {
-            if (generation !== authGeneration || get().authUser?.uid !== user.uid) return;
+            if (
+              generation !== authGeneration ||
+              get().authUser?.uid !== user.uid ||
+              snapshotRevision !== profileSnapshotRevision
+            ) return;
             const validatedProfile = {
               ...profile,
               language,
@@ -408,16 +424,22 @@ export const useStore = create<AppState>((set, get) => ({
           { includeMetadataChanges: true },
           profileSnapshot => {
             if (generation !== authGeneration || get().authUser?.uid !== user.uid) return;
-            // Cached snapshots are ignored for the authoritative resolve, but we
-            // must NOT leave loading stuck if the only event we ever receive is a
-            // cached one — the getDocFromServer fallback below guarantees a
-            // server-resolution path. We still skip fromCache here to avoid
-            // flashing stale data.
-            if (profileSnapshot.metadata?.fromCache) return;
+            // Auth fixed `profileId` for this generation before this listener
+            // was attached, so a cache hit for this exact document is safe for
+            // a fast render. It is provisional only: the server listener/read
+            // below remains authoritative and can replace it or surface an
+            // auth/permission failure. Generation checks prevent cross-account
+            // callbacks after sign-out or account switching.
+            if (profileSnapshot.metadata?.fromCache) markStartupStage('PROFILE_CACHE_RESULT');
+            else {
+              profileServerConfirmed = true;
+              markStartupStage('PROFILE_SERVER_CONFIRMED');
+            }
             handleProfileSnapshot(profileSnapshot);
           },
           error => {
             if (generation !== authGeneration) return;
+            profileSnapshotRevision += 1;
             logAuthTrace('profile-request-failed', { code: error?.code });
             set({
               profileLoading: false,
@@ -431,10 +453,13 @@ export const useStore = create<AppState>((set, get) => ({
         logAuthTrace('profile-request-started', { uid: user.uid });
         void getDocFromServer(profileReference)
           .then(snapshot => {
-            if (!profileResolved) handleProfileSnapshot(snapshot);
+            profileServerConfirmed = true;
+            markStartupStage('PROFILE_SERVER_CONFIRMED');
+            handleProfileSnapshot(snapshot);
           })
           .catch(error => {
-            if (generation !== authGeneration || profileResolved) return;
+            if (generation !== authGeneration || profileServerConfirmed) return;
+            profileSnapshotRevision += 1;
             logAuthTrace('profile-request-failed', { code: error?.code });
             set({
               profileLoading: false,
@@ -534,6 +559,7 @@ export const useStore = create<AppState>((set, get) => ({
       loading: true,
     });
     logAuthTrace('family-load-started', { familyId, role });
+    markStartupStage('FAMILY_START');
 
     const isCurrent = () =>
       familyGeneration === generation &&
@@ -552,10 +578,15 @@ export const useStore = create<AppState>((set, get) => ({
       set(current => ({
         bootstrapStatus: { ...current.bootstrapStatus, [resource]: 'ready' },
       }));
+      const optionalMetric = ({
+        members: 'MEMBERS', tasks: 'TASKS', rewards: 'REWARDS', wallets: 'WALLETS',
+      } as Partial<Record<BootstrapResource, OptionalStartupResource>>)[resource];
+      if (optionalMetric) finishStartupResource(optionalMetric);
 
       if (requiredResources.every(key => get().bootstrapStatus[key] === 'ready')) {
         logAuthTrace('family-load-completed', { requiredCount: requiredResources.length, role });
         set({ familyLoading: false, appReady: true, loading: false });
+        markStartupStage('CRITICAL_BOOTSTRAP_COMPLETE');
         startNonCriticalBootstrap();
       }
 
@@ -605,8 +636,10 @@ export const useStore = create<AppState>((set, get) => ({
       critical = requiredResources.includes(resource),
       readyOnSnapshot = true,
     ) => {
+      let serverConfirmed = false;
       const acceptSnapshot = (snapshot: any) => {
         if (!isCurrent()) return;
+        if (!snapshot.metadata?.fromCache) serverConfirmed = true;
         applySnapshot(snapshot);
         if (readyOnSnapshot) markReady(resource);
       };
@@ -615,7 +648,12 @@ export const useStore = create<AppState>((set, get) => ({
         { includeMetadataChanges: true },
         snapshot => {
           if (!isCurrent()) return;
-          if (snapshot.metadata?.fromCache) return;
+          // A cached family document is safe for a fast render only because the
+          // profile already fixed the authenticated identity and exact family
+          // generation. The server read/listener remains authoritative and may
+          // revoke readiness on permission/auth failure below. Optional cached
+          // collections stay ignored to avoid presenting stale feature data.
+          if (snapshot.metadata?.fromCache && !critical) return;
           acceptSnapshot(snapshot);
         },
         error => {
@@ -628,10 +666,10 @@ export const useStore = create<AppState>((set, get) => ({
       familyListeners.set(listenerName, { critical, unsubscribe });
       void serverRead(target)
         .then(snapshot => {
-          if (get().bootstrapStatus[resource] !== 'ready') acceptSnapshot(snapshot);
+          if (!serverConfirmed || get().bootstrapStatus[resource] !== 'ready') acceptSnapshot(snapshot);
         })
         .catch(error => {
-          if (get().bootstrapStatus[resource] !== 'ready') {
+          if (!serverConfirmed && (critical || get().bootstrapStatus[resource] !== 'ready')) {
             logDevError(context, error, { collection: String(target?.type || "query") });
             if (critical) handleCriticalListenerError(resource, context, error);
             else handleOptionalListenerError(listenerName, resource, context, error);
@@ -751,6 +789,31 @@ export const useStore = create<AppState>((set, get) => ({
       nonCriticalStarted = true;
       logAuthTrace('family-background-load-started', { familyId, role });
       try {
+        // Dashboard resources hydrate independently after family access has
+        // been validated. None of them decides authentication, role, family
+        // identity or route access, so none may hold the global shell hostage.
+        startStartupResource('TASKS');
+        startStartupResource('REWARDS');
+        startStartupResource('MEMBERS');
+        startStartupResource('WALLETS');
+        subscribePlanned('tasks', 'Tasks', snapshot => set({ tasks: docs(snapshot) }));
+        subscribePlanned('rewards', 'Rewards', snapshot => set({ rewards: docs(snapshot) }));
+        subscribePlanned('members', 'Members', snapshot => set({ familyMembers: docs(snapshot) }));
+
+        if (currentUser?.role === 'parent' || currentUser?.role === 'owner') {
+          subscribePlanned('wallets', 'Wallets', snapshot => set({ childWallets: docs(snapshot) }));
+        } else if (currentUser?.role === 'child') {
+          subscribePlanned('wallets', 'Wallets', snapshot => {
+            set({
+              myWallet: snapshot.exists()
+                ? { id: snapshot.id, ...snapshot.data() }
+                : { id: currentUser.id, balance: 0 },
+            });
+          });
+        } else {
+          markReady('wallets');
+        }
+
         if (currentUser?.role === 'parent' || currentUser?.role === 'owner') {
           subscribePlanned('joinRequests', 'Join requests', snapshot => set({ joinRequests: docs(snapshot) }));
           subscribePlanned('childJoinRequests', 'Child join requests', snapshot => set({ childJoinRequests: docs(snapshot) }));
@@ -868,6 +931,8 @@ export const useStore = create<AppState>((set, get) => ({
     // ------------------------------------------------------------------
     try {
       subscribePlanned('family', 'Family', snapshot => {
+        if (snapshot.metadata?.fromCache) markStartupStage('FAMILY_CACHE_RESULT');
+        else markStartupStage('FAMILY_SERVER_CONFIRMED');
         if (!snapshot.exists()) {
           handleCriticalListenerError('family', 'Family', { code: 'not-found', message: 'Family document does not exist' });
           return;
@@ -875,24 +940,6 @@ export const useStore = create<AppState>((set, get) => ({
         set({ familyData: { id: snapshot.id, ...snapshot.data() } });
       });
 
-      subscribePlanned('tasks', 'Tasks', snapshot => set({ tasks: docs(snapshot) }));
-      subscribePlanned('rewards', 'Rewards', snapshot => set({ rewards: docs(snapshot) }));
-
-      if (currentUser?.role === 'parent' || currentUser?.role === 'owner') {
-        subscribePlanned('wallets', 'Wallets', snapshot => set({ childWallets: docs(snapshot) }));
-      } else if (currentUser?.role === 'child') {
-      subscribePlanned('wallets', 'Wallets', snapshot => {
-        set({
-          myWallet: snapshot.exists()
-            ? { id: snapshot.id, ...snapshot.data() }
-            : { id: currentUser.id, balance: 0 },
-        });
-      });
-      } else {
-        markReady('wallets');
-      }
-
-      subscribePlanned('members', 'Members', snapshot => set({ familyMembers: docs(snapshot) }));
     } catch (error: any) {
       handleCriticalListenerError('family', 'Bootstrap', error);
     }

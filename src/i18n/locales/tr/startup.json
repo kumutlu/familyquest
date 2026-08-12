@@ -4,8 +4,14 @@
   "stepAuth": "Oturumunuz kontrol ediliyor",
   "stepProfile": "Profiliniz yükleniyor",
   "stepFamily": "Aile verileriniz hazırlanıyor",
-  "errorTitle": "Bağlantı sorunu",
-  "timeoutBody": "Başlatma beklenenden uzun sürüyor. Bağlantınızı kontrol edip tekrar deneyin.",
+  "slowTitle": "Paneliniz hâlâ hazırlanıyor",
+  "timeoutBody": "Başlatma beklenenden uzun sürüyor. Tekrar deneyebilir veya Queki çalışırken bekleyebilirsiniz.",
+  "offlineTitle": "Bağlantı sorunu",
+  "offlineBody": "Çevrimdışı görünüyorsunuz. Yeniden bağlanıp tekrar deneyin.",
+  "criticalTitle": "Panelinizi açamadık",
+  "identityErrorBody": "Oturumunuzu veya profilinizi doğrulayamadık. Tekrar deneyin ya da çıkış yapın.",
+  "familyErrorBody": "Aile erişiminizi doğrulayamadık. Tekrar deneyin ya da çıkış yapın.",
+  "criticalErrorBody": "Gerekli bir başlatma adımı başarısız oldu. Tekrar deneyin ya da çıkış yapın.",
   "retry": "Tekrar dene",
   "signOut": "Çıkış yap"
 }

@@ -17,7 +17,7 @@ import { Target } from 'lucide-react';
  */
 export function GoalSummaryCard() {
   const navigate = useNavigate();
-  const { savingsGoals } = useStore();
+  const { savingsGoals, bootstrapStatus } = useStore();
 
   const { activeGoals, totalSaved, overallPct } = useMemo(() => {
     const goals = (savingsGoals || []).map(normalizeGoalDoc).filter(g => g.status === 'active');
@@ -26,6 +26,13 @@ export function GoalSummaryCard() {
     const pct = target > 0 ? Math.min(100, (saved / target) * 100) : 0;
     return { activeGoals: goals, totalSaved: saved, overallPct: pct };
   }, [savingsGoals]);
+
+  if (bootstrapStatus?.savingsGoals === 'loading') {
+    return <Card data-testid="goal-summary-loading" aria-busy="true" className="h-36 animate-pulse bg-gray-100" />;
+  }
+  if (bootstrapStatus?.savingsGoals === 'error') {
+    return <Card data-testid="goal-summary-error" role="status" className="p-4 text-sm text-gray-500">Goals are temporarily unavailable.</Card>;
+  }
 
   const goToGoals = () => navigate('/goals');
 

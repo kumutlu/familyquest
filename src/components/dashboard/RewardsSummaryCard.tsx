@@ -10,7 +10,18 @@ import { Gift } from 'lucide-react';
  */
 export function RewardsSummaryCard() {
   const navigate = useNavigate();
-  const { rewards } = useStore();
+  const { rewards, bootstrapStatus } = useStore();
+
+  if (bootstrapStatus?.rewards === 'loading') {
+    return <Card data-testid="rewards-summary-loading" aria-busy="true" className="h-36 animate-pulse bg-gray-100" />;
+  }
+  if (bootstrapStatus?.rewards === 'error') {
+    return (
+      <Card data-testid="rewards-summary-error" role="status" className="p-4 text-sm text-gray-500">
+        Rewards are temporarily unavailable.
+      </Card>
+    );
+  }
 
   const rewardCount = (rewards || []).length;
 

@@ -72,7 +72,7 @@ beforeEach(async () => {
   await i18n.loadNamespaces([
     'common', 'auth', 'family', 'tasks', 'wallet', 'goals', 'rewards',
     'dashboard', 'approvals', 'settings', 'notifications', 'errors',
-    'behaviour', 'profile', 'funds', 'requests', 'reversals',
+    'behaviour', 'profile', 'funds', 'requests', 'reversals', 'bulletin',
   ]);
   await i18n.changeLanguage('en');
 });
@@ -143,6 +143,19 @@ describe('ParentDashboard', () => {
     store.state = { ...baseState(), joinRequests: [] };
     render(<MemoryRouter><ParentDashboard /></MemoryRouter>);
     expect(screen.getByRole('dialog', { name: 'Set up your family' })).toBeInTheDocument();
+  });
+
+  it('does not enter focus mode while setup resources are still loading', () => {
+    store.state = {
+      ...baseState(),
+      familyMembers: [{ id: 'child-1', role: 'child', displayName: 'Existing Child' }],
+      bootstrapStatus: {
+        family: 'ready', members: 'ready', tasks: 'loading', rewards: 'loading', wallets: 'ready',
+      },
+    };
+    render(<MemoryRouter><ParentDashboard /></MemoryRouter>);
+    expect(screen.queryByTestId('dashboard-focus-mode')).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'New Task' })).toBeInTheDocument();
   });
 
   it('hides the first-child prompt while members load or when member loading fails', () => {
