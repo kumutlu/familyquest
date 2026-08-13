@@ -23,9 +23,9 @@ describe('production Functions deploy provenance guard', () => {
     expect(() => validateFunctionsProductionDeploy(context)).toThrow(message)
   })
 
-  it('builds Functions and deploys Functions only through pinned entry points', () => {
-    expect(productionFunctionsBuildCommand('/node')).toEqual({
-      command: '/node', args: ['node_modules/npm/bin/npm-cli.js', '--prefix', 'functions', 'run', 'build'],
+  it('builds Functions with the available npm executable and deploys Functions only through the pinned entry point', () => {
+    expect(productionFunctionsBuildCommand('/npm')).toEqual({
+      command: '/npm', args: ['--prefix', 'functions', 'run', 'build'],
     })
     expect(productionFunctionsDeployCommand('/node')).toEqual({
       command: '/node',
