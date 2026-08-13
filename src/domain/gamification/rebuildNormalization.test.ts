@@ -80,6 +80,17 @@ describe('historical XP rebuild normalization', () => {
     })).toThrowError(new UnknownXpEventError('mystery-xp', 'unsupported XP-bearing event shape'))
   })
 
+  it('normalizes the optional legacy baseline migratedAt timestamp for repository serialization', () => {
+    const document = baseline(ALISYA, 86)
+    const migratedAt = at(1_800_000_000_002)
+    const [normalized] = normalizeXpLedger({
+      familyId: FAMILY,
+      documents: [{ ...document, data: { ...document.data, migratedAt } }],
+    })
+
+    expect(normalized.event.migratedAt).toBe(1_800_000_000_002)
+  })
+
   it.each(['behaviour_negative', 'behaviour_financial'])('normalizes known zero-XP %s events without changing XP', eventType => {
     const [document] = normalizeXpLedger({
       familyId: FAMILY,

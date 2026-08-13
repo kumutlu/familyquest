@@ -71,6 +71,7 @@ function canonical(document: RawXpDocument): NormalizedXpDocument {
       transitionRank,
       effectiveAt,
       createdAt,
+      ...(data.migratedAt === undefined ? {} : { migratedAt: timestamp(data.migratedAt, id, 'migratedAt') }),
     } as GamificationEventV1,
   }
 }
