@@ -124,7 +124,9 @@ export interface GamificationSummaryV1 {
   readonly foldedThrough: SemanticCursorV1 | null
   readonly rebuildRequired: boolean
   readonly earliestDirtyCursor: SemanticCursorV1 | null
-  readonly projectionStatus: 'ready' | 'rebuilding'
+  readonly projectionStatus: 'ready' | 'rebuild_required' | 'rebuilding' | 'failed'
+  readonly rebuildGenerationId?: string | null
+  readonly rebuildFailure?: string | null
   readonly updatedAt: EngineTimestamp
 }
 

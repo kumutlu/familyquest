@@ -27,6 +27,7 @@
     "gamification:backfill": "tsx scripts/backfill-gamification-xp.firestore.ts --execute",
     "test:backfill:gamification": "vitest run scripts/backfill-gamification-xp.test.ts",
     "gamification:repair:dry-run": "tsx scripts/repair-gamification-migration.ts --dry-run",
+    "gamification:integrity:dry-run": "tsx scripts/dry-run-gamification-rebuild.ts",
     "gamification:repair": "tsx scripts/repair-gamification-migration.ts --execute",
     "data:export": "tsx scripts/export-family-data.ts",
     "data:reset:dry-run": "tsx scripts/reset-family-data.ts --dry-run",

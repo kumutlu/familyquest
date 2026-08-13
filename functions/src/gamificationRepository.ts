@@ -56,6 +56,8 @@ import {
   type ProcessorFailureRecord,
 } from './gamificationProcessor'
 import {
+  activeRebuildState,
+  failedRebuildState,
   type GamificationRepairRepository,
   type RebuildRecord,
   type RepairGamificationPageArgs,
@@ -484,7 +486,7 @@ function projectSummary(
     foldedThrough: historical ? base.foldedThrough : (last ?? base.foldedThrough),
     rebuildRequired: dirty,
     earliestDirtyCursor: dirtyCursor,
-    projectionStatus: dirty ? 'rebuilding' : 'ready',
+    projectionStatus: dirty ? 'rebuild_required' : 'ready',
     updatedAt: processingAt,
   }
 }
@@ -1009,17 +1011,30 @@ export class AdminGamificationRepository implements
   async repairGamificationPage(args: RepairGamificationPageArgs): Promise<RepairPageResult> {
     const familyRef = this.db.doc(`families/${args.familyId}`)
     const checkpointRef = familyRef.collection('gamification_checkpoints').doc(args.childId)
+    const summaryRef = familyRef.collection('gamification_summaries').doc(args.childId)
+    const childRef = this.db.doc(`users/${args.childId}`)
     let checkpointDocument = await checkpointRef.get()
     let checkpoint: StoredCheckpoint
     let restarted = false
     if (!checkpointDocument.exists || checkpointDocument.data()!.dirty === true) {
+      const existingSummary = await summaryRef.get()
+      if (!checkpointDocument.exists && existingSummary.exists
+        && existingSummary.data()!.projectionStatus === 'ready'
+        && existingSummary.data()!.rebuildRequired !== true) {
+        return { status: 'current', recordsRead: 0 }
+      }
       const generationId = `generation:${args.processingAt}:${args.childId}`
       checkpoint = {
         schemaVersion: 1, familyId: args.familyId, childId: args.childId, generationId,
         watermarkAt: timestamp(args.processingAt), dirty: false, eligibilityCursor: null, eventCursor: null,
         pendingRecords: [], accumulatedEligibility: [], accumulatedEvents: [],
       }
-      await checkpointRef.set(checkpoint)
+      await this.db.runTransaction(async transaction => {
+        const latest = await transaction.get(checkpointRef)
+        if (latest.exists && latest.data()!.dirty !== true) return
+        transaction.set(checkpointRef, checkpoint)
+        transaction.set(summaryRef, { ...activeRebuildState(generationId), updatedAt: timestamp(args.processingAt) }, { merge: true })
+      })
       checkpointDocument = await checkpointRef.get()
       restarted = true
     }
@@ -1032,10 +1047,23 @@ export class AdminGamificationRepository implements
     const watermarkAt = millis(checkpoint.watermarkAt, 'rebuild watermarkAt')
     const eligibilityRecords = eligibilityPage.docs.map(document => this.rebuildRecord(document, 'eligibility'))
       .filter(record => record.effectiveAt <= watermarkAt)
-    const eventRecords = normalizeXpLedger({
-      familyId: args.familyId,
-      documents: eventPage.docs.map(document => ({ id: document.id, data: document.data() })),
-    }).map(document => ({
+    let normalizedEvents
+    try {
+      normalizedEvents = normalizeXpLedger({
+        familyId: args.familyId,
+        documents: eventPage.docs.map(document => ({ id: document.id, data: document.data() })),
+      })
+    } catch (error) {
+      const failure = error instanceof Error ? error.message : 'unknown rebuild normalization failure'
+      await this.db.runTransaction(async transaction => {
+        const latest = await transaction.get(checkpointRef)
+        if (!latest.exists || latest.data()!.generationId !== checkpoint.generationId) return
+        transaction.set(summaryRef, { ...failedRebuildState(checkpoint.generationId, failure), updatedAt: timestamp(args.processingAt) }, { merge: true })
+        transaction.update(checkpointRef, { dirty: true, failure })
+      })
+      return { status: 'failed', recordsRead, generationId: checkpoint.generationId }
+    }
+    const eventRecords = normalizedEvents.map(document => ({
       id: document.id,
       effectiveAt: document.event.effectiveAt,
       causalGroupId: document.event.causalGroupId,
@@ -1061,15 +1089,21 @@ export class AdminGamificationRepository implements
     const summary = eligibility.length === 0 && events.length === 0
       ? defaultSummary(args.familyId, args.childId, args.processingAt)
       : rebuildGamificationSummary({ eligibilitySnapshots: eligibility, events, processingAt: args.processingAt })
-    await this.db.runTransaction(async transaction => {
+    const published = await this.db.runTransaction(async transaction => {
       const latest = await transaction.get(checkpointRef)
-      if (!latest.exists || latest.data()!.generationId !== checkpoint.generationId || latest.data()!.dirty === true) return
-      const summaryRef = familyRef.collection('gamification_summaries').doc(args.childId)
-      const prior = await transaction.get(summaryRef)
-      transaction.set(summaryRef, summaryToData({ ...summary, projectionRevision: (prior.data()?.projectionRevision ?? 0) + 1 }))
+      const [prior, child] = await Promise.all([transaction.get(summaryRef), transaction.get(childRef)])
+      if (!latest.exists || latest.data()!.generationId !== checkpoint.generationId || latest.data()!.dirty === true) return false
+      if (!child.exists) throw new Error(`Child ${args.childId} does not exist`)
+      transaction.set(summaryRef, summaryToData({
+        ...summary,
+        projectionRevision: (prior.data()?.projectionRevision ?? 0) + 1,
+        projectionStatus: 'ready', rebuildRequired: false, rebuildGenerationId: null, rebuildFailure: null,
+      }))
+      transaction.update(childRef, { lifetimeXP: summary.xpTotal })
       transaction.delete(checkpointRef)
+      return true
     })
-    return { status: 'published', recordsRead, generationId: checkpoint.generationId }
+    return { status: published ? 'published' : 'invalidated', recordsRead, generationId: checkpoint.generationId }
   }
 
   private rebuildQuery(collection: FirebaseFirestore.CollectionReference, childId: string, cursor: StoredCursor | null) {

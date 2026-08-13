@@ -23,9 +23,21 @@ export interface RepairPostCutoverPageArgs {
 }
 
 export interface RepairPageResult {
-  readonly status: 'checkpointed' | 'published' | 'restarted' | 'active' | 'waiting'
+  readonly status: 'checkpointed' | 'published' | 'restarted' | 'active' | 'waiting' | 'current' | 'invalidated' | 'failed'
   readonly recordsRead: number
   readonly generationId?: string
+}
+
+export function requiredRebuildState() {
+  return { projectionStatus: 'rebuild_required' as const, rebuildRequired: true, rebuildGenerationId: null }
+}
+
+export function activeRebuildState(generationId: string) {
+  return { projectionStatus: 'rebuilding' as const, rebuildRequired: true, rebuildGenerationId: generationId }
+}
+
+export function failedRebuildState(generationId: string, rebuildFailure: string) {
+  return { projectionStatus: 'failed' as const, rebuildRequired: true, rebuildGenerationId: generationId, rebuildFailure }
 }
 
 export interface GamificationRepairRepository {
