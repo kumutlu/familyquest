@@ -141,7 +141,7 @@ describe('Family page', () => {
     }, now);
 
     // Weekly XP should be 15 from the task completion
-    expect(screen.getByText(/15 pts this week/)).toBeInTheDocument();
+    expect(screen.getByText(/15 task pts this week/)).toBeInTheDocument();
   });
 
   it('children rank correctly by weekly XP', () => {
@@ -168,8 +168,8 @@ describe('Family page', () => {
     expect(alice).toBeInTheDocument();
     expect(bob).toBeInTheDocument();
     expect(screen.getByText('1')).toBeInTheDocument();
-    expect(screen.getByText(/20 pts this week/)).toBeInTheDocument();
-    expect(screen.getByText(/10 pts this week/)).toBeInTheDocument();
+    expect(screen.getByText(/20 task pts this week/)).toBeInTheDocument();
+    expect(screen.getByText(/10 task pts this week/)).toBeInTheDocument();
   });
 
   // Regression: the Family Hub header actions were silently disconnected —
