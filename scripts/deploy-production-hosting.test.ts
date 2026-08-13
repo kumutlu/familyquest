@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { validateProductionDeploy } from './deploy-production-hosting.mjs';
+import { productionHostingDeployCommand, validateProductionDeploy } from './deploy-production-hosting.mjs';
 
 const approved = {
   branch: 'todo-theme',
@@ -10,6 +10,20 @@ const approved = {
 };
 
 describe('production Hosting deploy provenance guard', () => {
+  it('invokes the installed Firebase CLI directly with Hosting-only scope', () => {
+    expect(productionHostingDeployCommand('/usr/local/bin/node')).toEqual({
+      command: '/usr/local/bin/node',
+      args: [
+        'node_modules/firebase-tools/lib/bin/firebase.js',
+        'deploy',
+        '--only',
+        'hosting',
+        '--project',
+        'familyquest-beta-402cb',
+      ],
+    });
+  });
+
   it('accepts only the clean approved branch at the acknowledged remote SHA', () => {
     expect(validateProductionDeploy(approved)).toEqual({
       sha: approved.head,

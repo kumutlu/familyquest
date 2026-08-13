@@ -5,6 +5,14 @@ import { readdirSync, readFileSync } from 'node:fs';
 
 const APPROVED_BRANCH = 'todo-theme';
 const PRODUCTION_PROJECT = 'familyquest-beta-402cb';
+const FIREBASE_CLI = 'node_modules/firebase-tools/lib/bin/firebase.js';
+
+export function productionHostingDeployCommand(nodeExecutable = process.execPath) {
+  return {
+    command: nodeExecutable,
+    args: [FIREBASE_CLI, 'deploy', '--only', 'hosting', '--project', PRODUCTION_PROJECT],
+  };
+}
 
 export function validateProductionDeploy(context) {
   if (!context.clean) throw new Error('Refusing production deploy: worktree is not clean');
@@ -58,7 +66,8 @@ export function runProductionHostingDeploy(argv = process.argv.slice(2)) {
   run('npm', ['run', 'build']);
   verifyEmbeddedBuildSha(result.shortSha);
   console.log(`Deploying Hosting only for ${result.sha}`);
-  run('npx', ['firebase', 'deploy', '--only', 'hosting', '--project', PRODUCTION_PROJECT]);
+  const deploy = productionHostingDeployCommand();
+  run(deploy.command, deploy.args);
 }
 
 if (process.argv[1] && import.meta.url === new URL(`file://${process.argv[1]}`).href) {
