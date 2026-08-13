@@ -124,7 +124,7 @@ describe('Family page', () => {
     expect(screen.getByText('Child')).toBeInTheDocument();
   });
 
-  it('weekly XP is based only on approved task completions', () => {
+  it('weekly XP is based only on approved task completions', async () => {
     const now = new Date();
     const task = { id: 't-1', title: 'Test', pointsReward: 15, isActive: true };
 
@@ -141,10 +141,10 @@ describe('Family page', () => {
     }, now);
 
     // Weekly XP should be 15 from the task completion
-    expect(screen.getByText(/15 task pts this week/)).toBeInTheDocument();
+    expect(await screen.findByText(/15 task pts this week/)).toBeInTheDocument();
   });
 
-  it('children rank correctly by weekly XP', () => {
+  it('children rank correctly by weekly XP', async () => {
     const now = new Date();
     const task = { id: 't-1', title: 'Test', pointsReward: 10, isActive: true };
     const task2 = { id: 't-2', title: 'Test2', pointsReward: 20, isActive: true };
@@ -163,7 +163,7 @@ describe('Family page', () => {
       behaviourEvents: []
     }, now);
 
-    const alice = screen.getByText('Alice');
+    const alice = await screen.findByText('Alice');
     const bob = screen.getByText('Bob');
     expect(alice).toBeInTheDocument();
     expect(bob).toBeInTheDocument();
