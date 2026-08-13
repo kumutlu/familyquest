@@ -124,7 +124,7 @@ describe('Family page', () => {
     expect(screen.getByText('Child')).toBeInTheDocument();
   });
 
-  it('weekly XP is based only on approved task completions', () => {
+  it('weekly XP is based only on approved task completions', async () => {
     const now = new Date();
     const task = { id: 't-1', title: 'Test', pointsReward: 15, isActive: true };
 
@@ -141,10 +141,10 @@ describe('Family page', () => {
     }, now);
 
     // Weekly XP should be 15 from the task completion
-    expect(screen.getByText(/15 pts this week/)).toBeInTheDocument();
+    expect(await screen.findByText(/15 task pts this week/)).toBeInTheDocument();
   });
 
-  it('children rank correctly by weekly XP', () => {
+  it('children rank correctly by weekly XP', async () => {
     const now = new Date();
     const task = { id: 't-1', title: 'Test', pointsReward: 10, isActive: true };
     const task2 = { id: 't-2', title: 'Test2', pointsReward: 20, isActive: true };
@@ -163,13 +163,13 @@ describe('Family page', () => {
       behaviourEvents: []
     }, now);
 
-    const alice = screen.getByText('Alice');
+    const alice = await screen.findByText('Alice');
     const bob = screen.getByText('Bob');
     expect(alice).toBeInTheDocument();
     expect(bob).toBeInTheDocument();
     expect(screen.getByText('1')).toBeInTheDocument();
-    expect(screen.getByText(/20 pts this week/)).toBeInTheDocument();
-    expect(screen.getByText(/10 pts this week/)).toBeInTheDocument();
+    expect(screen.getByText(/20 task pts this week/)).toBeInTheDocument();
+    expect(screen.getByText(/10 task pts this week/)).toBeInTheDocument();
   });
 
   // Regression: the Family Hub header actions were silently disconnected —
@@ -293,16 +293,12 @@ describe('Family Challenge card', () => {
 
     await user.click(claimBtn);
 
-    // The EXISTING authoritative completion/reward action is invoked, reusing
-    // the existing rewardPoints + child ids (no client-side reward calc).
+    // The client delegates to the trusted server callable with ONLY the family
+    // + challenge ids. All reward distribution (points, eligible children,
+    // completion state) is server-authoritative — the client never writes
+    // rewardPoints / lifetimeXP itself.
     await waitFor(() =>
-      expect(claimChallenge).toHaveBeenCalledWith(
-        'f1',
-        'ch-ready',
-        100,
-        ['c1'],
-        'Weekly Warriors',
-      ),
+      expect(claimChallenge).toHaveBeenCalledWith('f1', 'ch-ready'),
     );
   });
 

@@ -8,6 +8,7 @@ import { getNavItems } from '../../config/navigation';
 import { ProfileDropdown } from './ProfileDropdown';
 import { NotificationCenter } from './NotificationCenter';
 import { MandatoryChildPasswordChange } from '../auth/MandatoryChildPasswordChange';
+import { ChildChallengeCelebration } from '../challenges/ChildChallengeCelebration';
 import { StartupScreen } from './StartupScreen';
 import { deriveStartupPhase } from './startupState';
 import { signOut } from '../../lib/api';
@@ -135,6 +136,11 @@ export function AppLayout() {
           </div>
         </div>
       </header>
+
+      {/* One-time child celebration for a claimed Family Challenge.
+          Presentation only — driven by the persisted notification + its
+          existing per-user read state. Renders nothing for parents. */}
+      <ChildChallengeCelebration />
 
       {/* Main Content Area */}
       <main className="flex-1 max-w-5xl mx-auto w-full p-4 pb-[calc(4rem+env(safe-area-inset-bottom))] md:pb-8">

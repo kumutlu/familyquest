@@ -56,6 +56,15 @@ export function transferRejectedKey(requestId: string): string {
   return `transfer_reject_${requestId}`;
 }
 
+/**
+ * One notification per claimed challenge (all rewarded children are recipients,
+ * each with independent read state). Deterministic so a retried claim can never
+ * create a second celebration row.
+ */
+export function challengeCompletedKey(challengeId: string): string {
+  return `challenge_completed_${challengeId}`;
+}
+
 export function profileUpdateRequestedKey(requestId: string): string {
   return `profile_update_request_${requestId}`;
 }

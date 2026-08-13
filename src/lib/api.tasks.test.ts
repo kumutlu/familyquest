@@ -25,6 +25,7 @@ const firestore = vi.hoisted(() => {
   }
 })
 const authState = vi.hoisted(() => ({ currentUser: { uid: 'owner-1' } as any }))
+const challengeApi = vi.hoisted(() => ({ claimFamilyChallenge: vi.fn() }))
 
 vi.mock('firebase/firestore', () => ({
   ...firestore,
@@ -35,6 +36,9 @@ vi.mock('firebase/auth', () => ({
   createUserWithEmailAndPassword: vi.fn(), signInWithEmailAndPassword: vi.fn(), signInWithPopup: vi.fn(), signOut: vi.fn(),
 }))
 vi.mock('./firebase', () => ({ db: { name: 'db' }, auth: authState, googleProvider: {} }))
+vi.mock('./challengeClaimApi', () => ({
+  claimFamilyChallenge: (...args: unknown[]) => challengeApi.claimFamilyChallenge(...args),
+}))
 
 import { createTask, createReward, claimChallenge } from './api'
 
@@ -115,47 +119,53 @@ describe('createReward atomic feed actor', () => {
   })
 })
 
-describe('claimChallenge (completeChallenge) feed actor', () => {
+describe('claimChallenge delegates to the trusted server callable', () => {
   beforeEach(() => {
     vi.clearAllMocks()
     firestore.resetIds()
     authState.currentUser = { uid: 'owner-1' }
+    challengeApi.claimFamilyChallenge.mockResolvedValue({ claimed: true, rewardedChildren: ['child-1'] })
   })
 
-  function installTransaction() {
-    const transaction = {
-      get: vi.fn(async () => ({ exists: () => true, data: () => ({ isActive: true, rewardPoints: 0, lifetimeXP: 0 }) })),
-      update: vi.fn(),
-      set: vi.fn(),
-    }
-    firestore.runTransaction.mockImplementation(async (_db: unknown, callback: (tx: typeof transaction) => unknown) => callback(transaction))
-    return transaction
-  }
+  // The client is no longer responsible for the reward math or the per-child
+  // rewardPoints/lifetimeXP writes — those are server-authoritative. The client
+  // only forwards (familyId, challengeId) to the callable.
+  it('forwards familyId + challengeId to the claim callable and returns its result', async () => {
+    const result = await claimChallenge('family-1', 'challenge-1')
 
-  // E. claimChallenge uses the authenticated actor
-  it('records the authenticated actor in the challenge-completion feed entry', async () => {
-    const transaction = installTransaction()
-
-    await claimChallenge('family-1', 'challenge-1', 50, ['child-1'], 'Read a book')
-
-    const feed = transaction.set.mock.calls.find(([ref]) => ref.path.includes('/feed/'))?.[1]
-    expect(feed).toMatchObject({
-      actorId: 'owner-1',
-      text: 'Family Challenge Completed: Read a book! Everyone got +50 pts!',
-    })
+    expect(challengeApi.claimFamilyChallenge).toHaveBeenCalledTimes(1)
+    expect(challengeApi.claimFamilyChallenge).toHaveBeenCalledWith('family-1', 'challenge-1')
+    expect(result).toEqual({ claimed: true, rewardedChildren: ['child-1'] })
   })
 
-  // E. claimChallenge does not leave partial primary records when the feed fails
-  it('rolls back all writes if the transaction fails', async () => {
-    firestore.runTransaction.mockRejectedValueOnce(new Error('permission-denied'))
+  // REGRESSION (P0): the client must NEVER write rewardPoints / lifetimeXP.
+  // Those writes are server-only (Admin SDK); Firestore rules correctly reject
+  // them from the client, which is exactly what broke the production Claim
+  // button. The client now performs no transaction/batch writes of its own.
+  it('does NOT write rewardPoints / lifetimeXP (no client-side reward transaction)', async () => {
+    await claimChallenge('family-1', 'challenge-1')
 
-    await expect(claimChallenge('family-1', 'challenge-1', 50, ['child-1'], 'Read a book')).rejects.toThrow(/permission-denied/)
-    expect(firestore.runTransaction).toHaveBeenCalledTimes(1)
-  })
-
-  it('rejects unauthenticated callers before starting the transaction', async () => {
-    authState.currentUser = null
-    await expect(claimChallenge('family-1', 'challenge-1', 50, ['child-1'], 'Read a book')).rejects.toThrow(/Authentication required/)
+    // No Firestore transaction is opened by the client for the claim.
     expect(firestore.runTransaction).not.toHaveBeenCalled()
+    // No batch is created/committed by the client for the claim.
+    expect(firestore.writeBatch).not.toHaveBeenCalled()
+    expect(firestore.batch.set).not.toHaveBeenCalled()
+    expect(firestore.batch.commit).not.toHaveBeenCalled()
+  })
+
+  // Unauthenticated callers are rejected before any server call is made.
+  it('rejects unauthenticated callers before invoking the callable', async () => {
+    authState.currentUser = null
+
+    await expect(claimChallenge('family-1', 'challenge-1')).rejects.toThrow(/Authentication required/)
+    expect(challengeApi.claimFamilyChallenge).not.toHaveBeenCalled()
+  })
+
+  // A server-side failure is surfaced to the caller (it must not be swallowed,
+  // which is why the broken button previously looked like it "did nothing").
+  it('surfaces a server-side claim failure to the caller', async () => {
+    challengeApi.claimFamilyChallenge.mockRejectedValueOnce(new Error('failed-precondition: target not reached'))
+
+    await expect(claimChallenge('family-1', 'challenge-1')).rejects.toThrow(/target not reached/)
   })
 })

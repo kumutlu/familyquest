@@ -70,7 +70,10 @@ export function ChildSummaryCard({ child, walletBalance, pendingTaskCount, gamif
           {summary && (
             <div className="mt-3">
               <div className="flex justify-between text-[10px] font-medium text-gray-500">
-                <span>{t('childCard.xpTotal')}</span>
+                <span className="flex flex-col">
+                  <span>{t('childCard.xpTotal')}</span>
+                  <span className="text-xs font-bold text-gray-900">{t('childCard.xpTotalValue', { xp: summary.xpTotal })}</span>
+                </span>
                 <span aria-label={t('childCard.xpToNext', { xp: xpToNextLevel, level: (level as number) + 1 })}>
                   {t('childCard.xpToNext', { xp: xpToNextLevel, level: (level as number) + 1 })}
                 </span>

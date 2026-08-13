@@ -10,6 +10,7 @@ import {
 } from 'firebase/auth';
 import { db, auth } from './firebase';
 import { startGoogleAuthentication } from './googleRedirectAuth';
+import { claimFamilyChallenge } from './challengeClaimApi';
 import { FAMILYQUEST_BUILD } from '../buildInfo';
 import { calculateBehaviourEffect, DEFAULT_DEBT_LIMIT_PENCE } from './behaviour';
 import type { BehaviourEventInput } from './behaviour';
@@ -978,39 +979,20 @@ export const createChallenge = async (familyId: string, title: string, targetXP:
   });
 };
 
-export const claimChallenge = async (familyId: string, challengeId: string, rewardPoints: number, childrenIds: string[], challengeTitle: string) => {
-  // Stage 7 pre-cutover routing: single authoritative route, fail-closed.
-  await requireLegacyClientRoute('challenge_claim', familyId)
-  const actorId = requireActorId();
-  const challengeRef = doc(db, `families/${familyId}/challenges`, challengeId);
-
-  await runTransaction(db, async (transaction) => {
-    const challengeDoc = await transaction.get(challengeRef);
-    if (!challengeDoc.exists() || !challengeDoc.data().isActive) throw new Error("Challenge not active");
-
-    transaction.update(challengeRef, {
-      isActive: false,
-      completedAt: serverTimestamp()
-    });
-
-    for (const childId of childrenIds) {
-      const userRef = doc(db, 'users', childId);
-      const userDoc = await transaction.get(userRef);
-      if (userDoc.exists()) {
-        transaction.update(userRef, {
-          rewardPoints: (userDoc.data().rewardPoints || 0) + rewardPoints,
-          lifetimeXP: (userDoc.data().lifetimeXP || 0) + rewardPoints
-        });
-      }
-    }
-
-    const feedRef = doc(collection(db, `families/${familyId}/feed`));
-    transaction.set(feedRef, {
-      actorId,
-      text: `Family Challenge Completed: ${challengeTitle}! Everyone got +${rewardPoints} pts!`,
-      timestamp: serverTimestamp()
-    });
-  });
+export const claimChallenge = async (familyId: string, challengeId: string) => {
+  // The client must be authenticated before it even attempts the trusted call.
+  // This mirrors the original behaviour (reject unauthenticated callers before
+  // any write) and avoids an unnecessary server round-trip.
+  requireActorId();
+  // Route the Family Challenge reward distribution through the trusted server
+  // callable. The server is authoritative for parent verification, family
+  // ownership, challenge active/target state, eligible children, and the
+  // exactly-once reward. The client NEVER writes rewardPoints / lifetimeXP —
+  // those writes are server-only (Admin SDK), which is exactly why Firestore
+  // rules correctly reject them from the client and previously broke the Claim
+  // button. The existing ChildChallengeCelebration / read-state implementation
+  // is preserved: the server creates the `challenge_completed` notification.
+  return claimFamilyChallenge(familyId, challengeId);
 };
 
 // ---------------------------

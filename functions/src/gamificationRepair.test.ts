@@ -1,6 +1,9 @@
 import { describe, expect, it, vi } from 'vitest'
 import {
   compareRebuildRecord,
+  activeRebuildState,
+  failedRebuildState,
+  requiredRebuildState,
   mergeRebuildStreams,
   repairGamificationPage,
   repairPostCutoverPage,
@@ -14,6 +17,14 @@ function record(id: string, effectiveAt: number, causalGroupId = id, transitionR
 }
 
 describe('bounded gamification repair', () => {
+  it('distinguishes required, actively owned, and failed rebuild states', () => {
+    expect(requiredRebuildState()).toEqual({ projectionStatus: 'rebuild_required', rebuildRequired: true, rebuildGenerationId: null })
+    expect(activeRebuildState('generation:1')).toEqual({ projectionStatus: 'rebuilding', rebuildRequired: true, rebuildGenerationId: 'generation:1' })
+    expect(failedRebuildState('generation:1', 'unknown_event')).toEqual({
+      projectionStatus: 'failed', rebuildRequired: true, rebuildGenerationId: 'generation:1', rebuildFailure: 'unknown_event',
+    })
+  })
+
   it('merges child-scoped streams by the full semantic tuple', () => {
     const merged = mergeRebuildStreams(
       [record('z', 1, 'a', 0, 'eligibility'), record('a', 3, 'a', 0, 'eligibility')],

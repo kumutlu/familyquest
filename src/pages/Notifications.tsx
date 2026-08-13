@@ -15,6 +15,7 @@ import {
   User,
   Inbox,
   AlertTriangle,
+  Trophy,
   type LucideIcon,
 } from 'lucide-react';
 import { useStore } from '../store/useStore';
@@ -50,6 +51,7 @@ const ICONS: Record<NotificationType, LucideIcon> = {
   profile_update_requested: User,
   profile_update_approved: CheckCircle,
   profile_update_rejected: XCircle,
+  challenge_completed: Trophy,
 };
 
 function iconFor(type: NotificationType): LucideIcon {

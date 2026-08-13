@@ -25,7 +25,7 @@ import { InviteMemberCard } from '../components/dashboard/InviteMemberCard';
 export function Family() {
   const { t } = useTranslation('family');
   const { t: tCommon } = useTranslation('common');
-  const { currentUser, familyMembers, loading, tasks, taskCompletions, challenges } = useStore();
+  const { currentUser, familyMembers, loading, tasks, taskCompletions, challenges, gamificationSummaries } = useStore();
   const [activeTab, setActiveTab] = useState<'current' | 'history'>('current');
   
   const [editingMember, setEditingMember] = useState<any>(null);
@@ -89,8 +89,21 @@ export function Family() {
         .sort((a, b) => (b.completedAt?.toMillis?.() || 0) - (a.completedAt?.toMillis?.() || 0))[0]
     : undefined;
 
-  // Calculate Family XP (total of all children)
-  const totalFamilyXP = children.reduce((acc, child) => acc + (child.lifetimeXP || 0), 0);
+  // Eligible children for the challenge = role 'child' AND not deleted/disabled.
+  // This MUST match the server's `eligible` filter in challengeClaim.ts; otherwise
+  // the UI can show "READY TO CLAIM" for a total the server rejects (the bug that
+  // made the Claim button silently fail).
+  const eligibleChildren = children.filter(
+    c => c.status !== 'deleted' && c.status !== 'disabled' && !c.disabled,
+  )
+  // Authoritative family XP = sum of each eligible child's gamification_summaries.xpTotal
+  // (users.lifetimeXP is only a compatibility mirror and must not be used — see
+  // behaviourRepository). This matches the server's target-reached calculation.
+  const xpByChild = new Map((gamificationSummaries || []).map((s: any) => [s.id, s.xpTotal ?? 0]))
+  const totalFamilyXP = eligibleChildren.reduce((acc, child) => {
+    const summaryXp = xpByChild.get(child.id)
+    return acc + (typeof summaryXp === 'number' ? summaryXp : (child.lifetimeXP || 0))
+  }, 0)
 
   let challengeProgress = 0;
   let challengeEarnedXP = 0;
@@ -126,10 +139,16 @@ export function Family() {
     if (!currentUser || !activeChallenge) return;
     setIsSubmitting(true);
     try {
-      const childIds = children.map(c => c.id);
-      await claimChallenge(currentUser.familyId, activeChallenge.id, activeChallenge.rewardPoints, childIds, activeChallenge.title);
+      // The server is authoritative for the reward: it verifies the parent,
+      // family ownership, challenge active/target state, eligible children, and
+      // distributes the reward exactly once. The client only supplies the
+      // family + challenge ids.
+      await claimChallenge(currentUser.familyId, activeChallenge.id);
     } catch (e) {
+      // A failed claim used to be swallowed entirely, which is why the broken
+      // button looked like it simply "did nothing". The failure is now visible.
       console.error(e);
+      showToast(t('challenge.claimFailed'), 'error');
     }
     setIsSubmitting(false);
   };

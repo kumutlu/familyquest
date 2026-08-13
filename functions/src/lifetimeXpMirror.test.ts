@@ -295,6 +295,20 @@ function finalize(repository: AdminGamificationRepository): Promise<unknown> {
 }
 
 describe('BUG 2 — lifetimeXP mirror', () => {
+  it('finalizes a legacy summary with missing streak fields without serializing undefined', async () => {
+    const db = fakeDb(buildStore({ tasks: { a: 100, b: 100 }, dailyGoalPercentage: 100, completionTaskId: 'a' }))
+    const legacySummary = { ...db.store[summaryPath()] }
+    delete legacySummary.currentStreak
+    delete legacySummary.bestStreak
+    db.store[summaryPath()] = legacySummary
+
+    await finalize(new AdminGamificationRepository(db as never))
+
+    expect(db.store[summaryPath()].currentStreak).toBe(0)
+    expect(db.store[summaryPath()].bestStreak).toBe(0)
+    expect(Object.values(db.store[summaryPath()])).not.toContain(undefined)
+  })
+
   it('task approval: rewardPoints +10, xpTotal +10, lifetimeXP +10 (same transaction)', async () => {
     // A 10-point task plus an unapproved 100-point task keeps the daily goal
     // (100% of 110 eligible points) unreachable, so only the +10 task XP lands.
