@@ -361,6 +361,10 @@ function thresholdEventIds(familyId: string, childId: string, dayKey: string): r
 function summaryFromData(data: DocumentData): GamificationSummaryV1 {
   return {
     ...data,
+    currentStreak: Number.isSafeInteger(data.currentStreak) && data.currentStreak >= 0 ? data.currentStreak : 0,
+    bestStreak: Number.isSafeInteger(data.bestStreak) && data.bestStreak >= 0 ? data.bestStreak : 0,
+    perfectDayCount: Number.isSafeInteger(data.perfectDayCount) && data.perfectDayCount >= 0 ? data.perfectDayCount : 0,
+    projectionRevision: Number.isSafeInteger(data.projectionRevision) && data.projectionRevision >= 0 ? data.projectionRevision : 0,
     foldedThrough: cursorFromData(data.foldedThrough),
     earliestDirtyCursor: cursorFromData(data.earliestDirtyCursor),
     updatedAt: millis(data.updatedAt, 'summary updatedAt'),
@@ -368,12 +372,12 @@ function summaryFromData(data: DocumentData): GamificationSummaryV1 {
 }
 
 function summaryToData(summary: GamificationSummaryV1): DocumentData {
-  return {
+  return withoutUndefined({
     ...summary,
     foldedThrough: cursorToData(summary.foldedThrough),
     earliestDirtyCursor: cursorToData(summary.earliestDirtyCursor),
     updatedAt: timestamp(summary.updatedAt),
-  }
+  }) as DocumentData
 }
 
 function compareCursor(left: SemanticCursorV1, right: SemanticCursorV1): number {
