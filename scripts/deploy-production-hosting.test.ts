@@ -1,5 +1,9 @@
 import { describe, expect, it } from 'vitest';
-import { productionHostingDeployCommand, validateProductionDeploy } from './deploy-production-hosting.mjs';
+import {
+  productionBuildCommands,
+  productionHostingDeployCommand,
+  validateProductionDeploy,
+} from './deploy-production-hosting.mjs';
 
 const approved = {
   branch: 'todo-theme',
@@ -22,6 +26,19 @@ describe('production Hosting deploy provenance guard', () => {
         'familyquest-beta-402cb',
       ],
     });
+  });
+
+  it('runs the production build through repository-pinned Node entry points', () => {
+    expect(productionBuildCommands('/usr/local/bin/node')).toEqual([
+      {
+        command: '/usr/local/bin/node',
+        args: ['node_modules/typescript/bin/tsc', '-b'],
+      },
+      {
+        command: '/usr/local/bin/node',
+        args: ['node_modules/vite/bin/vite.js', 'build'],
+      },
+    ]);
   });
 
   it('accepts only the clean approved branch at the acknowledged remote SHA', () => {
