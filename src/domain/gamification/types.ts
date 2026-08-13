@@ -12,6 +12,8 @@ export type GamificationEventTypeV1 =
   | 'perfect_day_qualification_changed'
   | 'legacy_xp_baseline'
   | 'behaviour_positive'
+  | 'behaviour_negative'
+  | 'behaviour_financial'
 
 export type GamificationSourceTypeV1 = 'task_completion' | 'daily_progress' | 'migration' | 'behaviour_event'
 export type GamificationCreatedByV1 =

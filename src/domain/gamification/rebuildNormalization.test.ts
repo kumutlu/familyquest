@@ -49,12 +49,12 @@ describe('historical XP rebuild normalization', () => {
       behaviour(`challenge_reward__challenge__${MNALIUM}`, MNALIUM, 100),
       {
         id: 'behaviour_xp_backfill:SXkg6R4vxWTJowdJXdLA',
-        data: { childId: MNALIUM, eventType: 'xp_backfill', sourceId: 'SXkg6R4vxWTJowdJXdLA', xpDelta: 20,
+        data: { childId: MNALIUM, eventType: 'xp_backfill', xpDelta: 20,
           effectiveAt: at(1_800_000_000_200), createdAt: at(1_800_000_000_200) },
       },
       {
         id: `task_xp:task_v1|${MNALIUM}|c3WmeyXGkvhwVe7mWTiq|2026-08-03`,
-        data: { childId: MNALIUM, eventType: 'task_completion', sourceId: `${MNALIUM}__c3WmeyXGkvhwVe7mWTiq__2026-08-03`, xpDelta: 20,
+        data: { childId: MNALIUM, eventType: 'task_completion', xpDelta: 20,
           effectiveAt: at(1_800_000_000_201), createdAt: at(1_800_000_000_201) },
       },
     ]
@@ -78,5 +78,18 @@ describe('historical XP rebuild normalization', () => {
       familyId: FAMILY,
       documents: [{ id: 'mystery-xp', data: { childId: ALISYA, eventType: 'surprise', xpDelta: 9, createdAt: at(123) } }],
     })).toThrowError(new UnknownXpEventError('mystery-xp', 'unsupported XP-bearing event shape'))
+  })
+
+  it.each(['behaviour_negative', 'behaviour_financial'])('normalizes known zero-XP %s events without changing XP', eventType => {
+    const [document] = normalizeXpLedger({
+      familyId: FAMILY,
+      documents: [{
+        id: `behaviour_xp:${eventType}`,
+        data: { schemaVersion: 1, familyId: FAMILY, childId: ALISYA, eventType, xpDelta: 0,
+          sourceType: 'behaviour_event', sourceBehaviourEventId: eventType, idempotencyKey: `key:${eventType}`,
+          effectiveAt: at(100), createdAt: at(101), configSchemaVersion: 1, createdBy: 'behaviour-processor-v1' },
+      }],
+    })
+    expect(document.event).toMatchObject({ eventType, xpDelta: 0, causalGroupId: `key:${eventType}`, transitionRank: 0 })
   })
 })

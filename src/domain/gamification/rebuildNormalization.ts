@@ -79,6 +79,7 @@ function knownBehaviour(document: RawXpDocument, familyId: string): NormalizedXp
   const { id, data } = document
   const effectiveAt = timestamp(data.effectiveAt, id, 'effectiveAt')
   const idempotencyKey = string(data.idempotencyKey, id, 'idempotencyKey')
+  const sourceId = string(data.sourceId ?? data.sourceBehaviourEventId, id, 'sourceId/sourceBehaviourEventId')
   return {
     id,
     normalization: 'canonical',
@@ -87,10 +88,10 @@ function knownBehaviour(document: RawXpDocument, familyId: string): NormalizedXp
       schemaVersion: 1,
       familyId,
       childId: string(data.childId, id, 'childId'),
-      eventType: 'behaviour_positive',
+      eventType: string(data.eventType, id, 'eventType') as 'behaviour_positive' | 'behaviour_negative' | 'behaviour_financial',
       xpDelta: xp(data.xpDelta, id),
       sourceType: 'behaviour_event',
-      sourceId: string(data.sourceId, id, 'sourceId'),
+      sourceId,
       idempotencyKey,
       causalGroupId: idempotencyKey,
       transitionRank: 0,
@@ -108,6 +109,9 @@ function knownLegacy(document: RawXpDocument, familyId: string): NormalizedXpDoc
   const isTaskCompletion = /^task_xp:task_v1\|[^|]+\|[^|]+\|\d{4}-\d{2}-\d{2}$/.test(id) && data.eventType === 'task_completion'
   if (!isBehaviourBackfill && !isTaskCompletion) return undefined
   const effectiveAt = timestamp(data.effectiveAt, id, 'effectiveAt')
+  const sourceId = typeof data.sourceId === 'string' && data.sourceId.length > 0
+    ? data.sourceId
+    : isBehaviourBackfill ? id.slice('behaviour_xp_backfill:'.length) : id.slice('task_xp:'.length)
   return {
     id,
     normalization: 'legacy',
@@ -118,7 +122,7 @@ function knownLegacy(document: RawXpDocument, familyId: string): NormalizedXpDoc
       eventType: 'xp_awarded',
       xpDelta: xp(data.xpDelta, id),
       sourceType: isBehaviourBackfill ? 'behaviour_event' : 'task_completion',
-      sourceId: string(data.sourceId, id, 'sourceId'),
+      sourceId,
       idempotencyKey: id,
       causalGroupId: id,
       transitionRank: 0,
@@ -137,7 +141,8 @@ export function normalizeXpLedger(input: {
   return input.documents.map(document => {
     const value = document.data
     xp(value.xpDelta, document.id)
-    if (value.eventType === 'behaviour_positive' && value.schemaVersion === 1) return knownBehaviour(document, input.familyId)
+    if (['behaviour_positive', 'behaviour_negative', 'behaviour_financial'].includes(String(value.eventType))
+      && value.schemaVersion === 1) return knownBehaviour(document, input.familyId)
     const legacy = knownLegacy(document, input.familyId)
     if (legacy !== undefined) return legacy
     return canonical(document)
