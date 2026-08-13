@@ -8,8 +8,8 @@ const APPROVED_BRANCH = 'todo-theme'
 const PRODUCTION_PROJECT = 'familyquest-beta-402cb'
 const FIREBASE_CLI = 'node_modules/firebase-tools/lib/bin/firebase.js'
 
-export function productionFunctionsBuildCommand(nodeExecutable = process.execPath) {
-  return { command: nodeExecutable, args: ['node_modules/npm/bin/npm-cli.js', '--prefix', 'functions', 'run', 'build'] }
+export function productionFunctionsBuildCommand(npmExecutable = 'npm') {
+  return { command: npmExecutable, args: ['--prefix', 'functions', 'run', 'build'] }
 }
 
 export function productionFunctionsDeployCommand(nodeExecutable = process.execPath) {
