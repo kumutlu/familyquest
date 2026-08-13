@@ -1,6 +1,11 @@
 import { initializeApp } from 'firebase/app';
 import { getAuth, GoogleAuthProvider, connectAuthEmulator } from 'firebase/auth';
-import { getFirestore, connectFirestoreEmulator } from 'firebase/firestore';
+import {
+  connectFirestoreEmulator,
+  initializeFirestore,
+  persistentLocalCache,
+  persistentMultipleTabManager,
+} from 'firebase/firestore';
 import { getFunctions, connectFunctionsEmulator } from 'firebase/functions';
 
 // Required VITE_FIREBASE_* variables. If any are missing the app must fail
@@ -49,7 +54,13 @@ const firebaseConfig = validateFirebaseEnv();
 
 export const app = initializeApp(firebaseConfig);
 export const auth = getAuth(app);
-export const db = getFirestore(app);
+// Preserve the already-authorized profile/family snapshots across a page
+// replacement (including Safari's first launch after a Hosting deployment).
+// The startup store accepts only the authenticated user's exact profile and
+// family generation, while live listeners/server reads remain authoritative.
+export const db = initializeFirestore(app, {
+  localCache: persistentLocalCache({ tabManager: persistentMultipleTabManager() }),
+});
 export const googleProvider = new GoogleAuthProvider();
 // All callable functions are deployed with setGlobalOptions({ region:
 // 'europe-west1' }). The Functions client otherwise defaults to us-central1,
