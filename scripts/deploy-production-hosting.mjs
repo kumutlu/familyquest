@@ -7,6 +7,13 @@ const APPROVED_BRANCH = 'todo-theme';
 const PRODUCTION_PROJECT = 'familyquest-beta-402cb';
 const FIREBASE_CLI = 'node_modules/firebase-tools/lib/bin/firebase.js';
 
+export function productionBuildCommands(nodeExecutable = process.execPath) {
+  return [
+    { command: nodeExecutable, args: ['node_modules/typescript/bin/tsc', '-b'] },
+    { command: nodeExecutable, args: ['node_modules/vite/bin/vite.js', 'build'] },
+  ];
+}
+
 export function productionHostingDeployCommand(nodeExecutable = process.execPath) {
   return {
     command: nodeExecutable,
@@ -63,7 +70,7 @@ export function runProductionHostingDeploy(argv = process.argv.slice(2)) {
   });
 
   console.log(`Building approved production SHA ${result.sha}`);
-  run('npm', ['run', 'build']);
+  for (const build of productionBuildCommands()) run(build.command, build.args);
   verifyEmbeddedBuildSha(result.shortSha);
   console.log(`Deploying Hosting only for ${result.sha}`);
   const deploy = productionHostingDeployCommand();
