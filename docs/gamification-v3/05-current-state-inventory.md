@@ -3384,9 +3384,9 @@ Occurrences: **3744** across **301** files.
 
 | Line | Term | Operation | Source | Semantic meaning | Code |
 |---|---|---|---|---|---|
-| 117 | `xpTotal` | read | summary.xpTotal | Projection lifetime XP counter (authoritative today) | `readonly xpTotal: number` |
-| 119 | `currentStreak` | read | users.currentStreak | Consecutive qualifying days | `readonly currentStreak: number` |
-| 120 | `bestStreak` | read | summary.bestStreak | Projection best-streak counter | `readonly bestStreak: number` |
+| 119 | `xpTotal` | read | summary.xpTotal | Projection lifetime XP counter (authoritative today) | `readonly xpTotal: number` |
+| 121 | `currentStreak` | read | users.currentStreak | Consecutive qualifying days | `readonly currentStreak: number` |
+| 122 | `bestStreak` | read | summary.bestStreak | Projection best-streak counter | `readonly bestStreak: number` |
 
 #### `src/domain/gamification/v3/contract.test.ts` — KEEP · Phase 1 · risk Low
 
