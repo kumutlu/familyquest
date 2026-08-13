@@ -39,6 +39,7 @@ import {
   type GamificationMigrationStatus,
 } from '../../src/domain/gamification/migrationState'
 import { logicalCompletionKey, taskXpEventId, taskXpReversalEventId } from '../../src/domain/gamification/xp'
+import { normalizeXpLedger } from '../../src/domain/gamification/rebuildNormalization'
 import {
   authoritativePeriodKey,
   buildDailyEligibilitySnapshot,
@@ -55,8 +56,6 @@ import {
   type ProcessorFailureRecord,
 } from './gamificationProcessor'
 import {
-  mergeRebuildStreams,
-  takeCompleteCausalGroups,
   type GamificationRepairRepository,
   type RebuildRecord,
   type RepairGamificationPageArgs,
@@ -93,9 +92,6 @@ interface StoredCheckpoint {
 }
 
 interface StoredCursor {
-  readonly effectiveAt: Date | FirebaseFirestore.Timestamp
-  readonly causalGroupId: string
-  readonly transitionRank: number
   readonly documentId: string
 }
 
@@ -1024,47 +1020,35 @@ export class AdminGamificationRepository implements
       restarted = true
     }
     checkpoint = checkpointDocument.data() as StoredCheckpoint
-    const eligibilityQuery = this.rebuildQuery(familyRef.collection('daily_eligibility'), args.childId, checkpoint.watermarkAt, checkpoint.eligibilityCursor)
-    const eventQuery = this.rebuildQuery(familyRef.collection('gamification_events'), args.childId, checkpoint.watermarkAt, checkpoint.eventCursor)
+    const eligibilityQuery = this.rebuildQuery(familyRef.collection('daily_eligibility'), args.childId, checkpoint.eligibilityCursor)
+    const eventQuery = this.rebuildQuery(familyRef.collection('gamification_events'), args.childId, checkpoint.eventCursor)
     const [eligibilityPage, eventPage] = await Promise.all([eligibilityQuery.get(), eventQuery.get()])
     const recordsRead = eligibilityPage.size + eventPage.size
     if (recordsRead > args.maxRecords) throw new Error('Rebuild page exceeded the 250-record hard limit')
+    const watermarkAt = millis(checkpoint.watermarkAt, 'rebuild watermarkAt')
     const eligibilityRecords = eligibilityPage.docs.map(document => this.rebuildRecord(document, 'eligibility'))
-    const eventRecords = eventPage.docs.map(document => this.rebuildRecord(document, 'event'))
-    const pending = checkpoint.pendingRecords.map(record => ({
-      ...record, effectiveAt: millis(record.effectiveAt, 'pending rebuild effectiveAt'), value: record.value,
-    } as RebuildRecord))
-    const merged = mergeRebuildStreams(pending, mergeRebuildStreams(eligibilityRecords, eventRecords))
+      .filter(record => record.effectiveAt <= watermarkAt)
+    const eventRecords = normalizeXpLedger({
+      familyId: args.familyId,
+      documents: eventPage.docs.map(document => ({ id: document.id, data: document.data() })),
+    }).map(document => ({
+      id: document.id,
+      effectiveAt: document.event.effectiveAt,
+      causalGroupId: document.event.causalGroupId,
+      transitionRank: document.event.transitionRank,
+      stream: 'event' as const,
+      value: eventToData(document.event),
+    })).filter(record => record.effectiveAt <= watermarkAt)
     const exhausted = eligibilityPage.size < REBUILD_STREAM_LIMIT && eventPage.size < REBUILD_STREAM_LIMIT
-    const uncertainBoundaries = [
-      ...(eligibilityPage.size === REBUILD_STREAM_LIMIT ? [eligibilityRecords.at(-1)!] : []),
-      ...(eventPage.size === REBUILD_STREAM_LIMIT ? [eventRecords.at(-1)!] : []),
-    ].sort((left, right) => left.effectiveAt - right.effectiveAt
-      || (left.causalGroupId < right.causalGroupId ? -1 : left.causalGroupId > right.causalGroupId ? 1 : 0)
-      || left.transitionRank - right.transitionRank
-      || (left.id < right.id ? -1 : left.id > right.id ? 1 : 0))
-    const safeBoundary = uncertainBoundaries[0]
-    const safe = safeBoundary === undefined ? merged : merged.filter(record =>
-      record.effectiveAt < safeBoundary.effectiveAt
-      || (record.effectiveAt === safeBoundary.effectiveAt && (
-        record.causalGroupId < safeBoundary.causalGroupId
-        || (record.causalGroupId === safeBoundary.causalGroupId && (
-          record.transitionRank < safeBoundary.transitionRank
-          || (record.transitionRank === safeBoundary.transitionRank && record.id <= safeBoundary.id))))))
-    const deferred = safeBoundary === undefined ? [] : merged.slice(safe.length)
-    const grouped = takeCompleteCausalGroups(safe, exhausted && deferred.length === 0)
-    const pendingNext = mergeRebuildStreams(grouped.pending, deferred)
-    const completeEligibility = grouped.complete.filter(record => record.stream === 'eligibility').map(record => record.value as DocumentData)
-    const completeEvents = grouped.complete.filter(record => record.stream === 'event').map(record => ({ id: record.id, event: record.value as DocumentData }))
     const next: StoredCheckpoint = {
       ...checkpoint,
       eligibilityCursor: eligibilityPage.empty ? checkpoint.eligibilityCursor : this.storedCursor(eligibilityPage.docs.at(-1)!),
       eventCursor: eventPage.empty ? checkpoint.eventCursor : this.storedCursor(eventPage.docs.at(-1)!),
-      pendingRecords: pendingNext.map(record => ({ ...record, effectiveAt: timestamp(record.effectiveAt), value: record.value as DocumentData })),
-      accumulatedEligibility: [...checkpoint.accumulatedEligibility, ...completeEligibility],
-      accumulatedEvents: [...checkpoint.accumulatedEvents, ...completeEvents],
+      pendingRecords: [],
+      accumulatedEligibility: [...checkpoint.accumulatedEligibility, ...eligibilityRecords.map(record => record.value as DocumentData)],
+      accumulatedEvents: [...checkpoint.accumulatedEvents, ...eventRecords.map(record => ({ id: record.id, event: record.value as DocumentData }))],
     }
-    if (!exhausted || pendingNext.length > 0) {
+    if (!exhausted) {
       await checkpointRef.set(next)
       return { status: restarted ? 'restarted' : 'checkpointed', recordsRead, generationId: checkpoint.generationId }
     }
@@ -1084,15 +1068,11 @@ export class AdminGamificationRepository implements
     return { status: 'published', recordsRead, generationId: checkpoint.generationId }
   }
 
-  private rebuildQuery(collection: FirebaseFirestore.CollectionReference, childId: string, watermark: Date | FirebaseFirestore.Timestamp, cursor: StoredCursor | null) {
+  private rebuildQuery(collection: FirebaseFirestore.CollectionReference, childId: string, cursor: StoredCursor | null) {
     let query: FirebaseFirestore.Query = collection
       .where('childId', '==', childId)
-      .where('effectiveAt', '<=', watermark)
-      .orderBy('effectiveAt')
-      .orderBy('causalGroupId')
-      .orderBy('transitionRank')
       .orderBy('__name__')
-    if (cursor !== null) query = query.startAfter(cursor.effectiveAt, cursor.causalGroupId, cursor.transitionRank, cursor.documentId)
+    if (cursor !== null) query = query.startAfter(cursor.documentId)
     return query.limit(REBUILD_STREAM_LIMIT)
   }
 
@@ -1105,8 +1085,7 @@ export class AdminGamificationRepository implements
   }
 
   private storedCursor(document: QueryDocumentSnapshot): StoredCursor {
-    const data = document.data()
-    return { effectiveAt: data.effectiveAt, causalGroupId: data.causalGroupId, transitionRank: data.transitionRank, documentId: document.id }
+    return { documentId: document.id }
   }
 
   async repairPostCutoverPage(args: RepairPostCutoverPageArgs): Promise<RepairPageResult> {

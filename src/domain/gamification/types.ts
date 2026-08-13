@@ -11,9 +11,14 @@ export type GamificationEventTypeV1 =
   | 'perfect_day_revoked'
   | 'perfect_day_qualification_changed'
   | 'legacy_xp_baseline'
+  | 'behaviour_positive'
 
-export type GamificationSourceTypeV1 = 'task_completion' | 'daily_progress' | 'migration'
-export type GamificationCreatedByV1 = 'gamification-engine-v1' | 'legacy-xp-migration-v1'
+export type GamificationSourceTypeV1 = 'task_completion' | 'daily_progress' | 'migration' | 'behaviour_event'
+export type GamificationCreatedByV1 =
+  | 'gamification-engine-v1'
+  | 'legacy-xp-migration-v1'
+  | 'legacy-xp-normalizer-v1'
+  | 'behaviour-processor-v1'
 export type QualificationStateV1 = 'qualified' | 'unqualified'
 export type TaskCompletionStatus = 'pending_approval' | 'approved' | 'rejected' | 'cancelled' | 'invalidated'
 export type GamificationMigrationStatusV1 = 'inactive' | 'prepared' | 'baseline_complete' | 'active'
