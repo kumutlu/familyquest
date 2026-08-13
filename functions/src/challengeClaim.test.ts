@@ -310,6 +310,27 @@ describe('claimFamilyChallenge — idempotency', () => {
   })
 })
 
+describe('claimFamilyChallenge — complete reward confirmation', () => {
+  it('keeps the challenge active and suppresses success side effects when an initially eligible child is ignored', async () => {
+    const repository = {
+      processChallengeClaim: vi.fn(async ({ childId }: { childId: string }) => childId === CHILD_2
+        ? { status: 'ignored' as const, reason: 'child_missing' }
+        : { status: 'processed' as const }),
+    }
+
+    await expect(processChallengeClaimRequest(
+      { db: harness.db, behaviourRepository: repository as never },
+      OWNER_ID,
+      { familyId: FAMILY_ID, challengeId: CHALLENGE_ID },
+    )).rejects.toMatchObject({ code: 'failed-precondition' })
+
+    expect(repository.processChallengeClaim).toHaveBeenCalledTimes(2)
+    expect(challengeDoc()?.isActive).toBe(true)
+    expect(Array.from(harness.store.keys()).filter(key => key.includes('/notifications/challenge_completed_'))).toHaveLength(0)
+    expect(Array.from(harness.store.keys()).filter(key => key.includes('/feed/'))).toHaveLength(0)
+  })
+})
+
 describe('Firestore rules regression — client reward writes remain blocked', () => {
   const rules = readFileSync(resolve(__dirname, '../../firestore.rules'), 'utf8')
 
