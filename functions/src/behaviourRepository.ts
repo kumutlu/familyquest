@@ -1,6 +1,7 @@
 import type { DocumentData, Firestore } from 'firebase-admin/firestore'
 import {
   BEHAVIOUR_PROCESSOR_VERSION,
+  behaviourEventIdempotencyKey,
   behaviourGamificationEventId,
   planBehaviourAward,
   type BehaviourEventType,
@@ -219,6 +220,18 @@ export class AdminBehaviourRepository {
       const gamificationEventRef = familyRef.collection('gamification_events').doc(behaviourGamificationEventId(syntheticId))
       const existingEvent = await transaction.get(gamificationEventRef)
       const alreadyProcessed = existingEvent.exists
+      if (existingEvent.exists) {
+        const existing = existingEvent.data() as DocumentData
+        const verified = existing.schemaVersion === 1
+          && existing.familyId === args.familyId
+          && existing.childId === args.childId
+          && existing.sourceBehaviourEventId === syntheticId
+          && existing.eventType === 'behaviour_positive'
+          && existing.rewardPointsDelta === integer(args.points)
+          && existing.xpDelta === integer(args.points)
+          && existing.idempotencyKey === behaviourEventIdempotencyKey(args.familyId, args.childId, syntheticId)
+        if (!verified) return { status: 'ignored', reason: 'challenge_reward_event_unverified' }
+      }
 
       const summary = summaryDocument.exists ? summaryDocument.data() as DocumentData : undefined
       const plan = planBehaviourAward({
