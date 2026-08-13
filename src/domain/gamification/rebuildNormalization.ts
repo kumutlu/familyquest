@@ -12,9 +12,12 @@ export interface NormalizedXpDocument {
 }
 
 export class UnknownXpEventError extends Error {
-  constructor(readonly documentId: string, reason: string) {
+  readonly documentId: string
+
+  constructor(documentId: string, reason: string) {
     super(`Unknown XP event ${documentId}: ${reason}`)
     this.name = 'UnknownXpEventError'
+    this.documentId = documentId
   }
 }
 
