@@ -47,6 +47,8 @@
   "history": "History",
   "managed": "Managed",
   "ptsThisWeek": "{{value}} task pts this week",
+  "ptsThatWeek": "{{value}} task pts that week",
+  "weekOf": "Week of {{value}}",
   "noPastChampions": {
     "title": "No Past Champions",
     "subtitle": "Check back next week to see who won this week's leaderboard!"
