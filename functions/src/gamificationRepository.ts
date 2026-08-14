@@ -39,6 +39,7 @@ import {
   type GamificationMigrationStatus,
 } from '../../src/domain/gamification/migrationState'
 import { logicalCompletionKey, taskXpEventId, taskXpReversalEventId } from '../../src/domain/gamification/xp'
+import { normalizeXpLedger } from '../../src/domain/gamification/rebuildNormalization'
 import {
   authoritativePeriodKey,
   buildDailyEligibilitySnapshot,
@@ -55,8 +56,8 @@ import {
   type ProcessorFailureRecord,
 } from './gamificationProcessor'
 import {
-  mergeRebuildStreams,
-  takeCompleteCausalGroups,
+  activeRebuildState,
+  failedRebuildState,
   type GamificationRepairRepository,
   type RebuildRecord,
   type RepairGamificationPageArgs,
@@ -93,9 +94,6 @@ interface StoredCheckpoint {
 }
 
 interface StoredCursor {
-  readonly effectiveAt: Date | FirebaseFirestore.Timestamp
-  readonly causalGroupId: string
-  readonly transitionRank: number
   readonly documentId: string
 }
 
@@ -365,6 +363,10 @@ function thresholdEventIds(familyId: string, childId: string, dayKey: string): r
 function summaryFromData(data: DocumentData): GamificationSummaryV1 {
   return {
     ...data,
+    currentStreak: Number.isSafeInteger(data.currentStreak) && data.currentStreak >= 0 ? data.currentStreak : 0,
+    bestStreak: Number.isSafeInteger(data.bestStreak) && data.bestStreak >= 0 ? data.bestStreak : 0,
+    perfectDayCount: Number.isSafeInteger(data.perfectDayCount) && data.perfectDayCount >= 0 ? data.perfectDayCount : 0,
+    projectionRevision: Number.isSafeInteger(data.projectionRevision) && data.projectionRevision >= 0 ? data.projectionRevision : 0,
     foldedThrough: cursorFromData(data.foldedThrough),
     earliestDirtyCursor: cursorFromData(data.earliestDirtyCursor),
     updatedAt: millis(data.updatedAt, 'summary updatedAt'),
@@ -372,12 +374,12 @@ function summaryFromData(data: DocumentData): GamificationSummaryV1 {
 }
 
 function summaryToData(summary: GamificationSummaryV1): DocumentData {
-  return {
+  return withoutUndefined({
     ...summary,
     foldedThrough: cursorToData(summary.foldedThrough),
     earliestDirtyCursor: cursorToData(summary.earliestDirtyCursor),
     updatedAt: timestamp(summary.updatedAt),
-  }
+  }) as DocumentData
 }
 
 function compareCursor(left: SemanticCursorV1, right: SemanticCursorV1): number {
@@ -484,7 +486,7 @@ function projectSummary(
     foldedThrough: historical ? base.foldedThrough : (last ?? base.foldedThrough),
     rebuildRequired: dirty,
     earliestDirtyCursor: dirtyCursor,
-    projectionStatus: dirty ? 'rebuilding' : 'ready',
+    projectionStatus: dirty ? 'rebuild_required' : 'ready',
     updatedAt: processingAt,
   }
 }
@@ -1009,62 +1011,76 @@ export class AdminGamificationRepository implements
   async repairGamificationPage(args: RepairGamificationPageArgs): Promise<RepairPageResult> {
     const familyRef = this.db.doc(`families/${args.familyId}`)
     const checkpointRef = familyRef.collection('gamification_checkpoints').doc(args.childId)
+    const summaryRef = familyRef.collection('gamification_summaries').doc(args.childId)
+    const childRef = this.db.doc(`users/${args.childId}`)
     let checkpointDocument = await checkpointRef.get()
     let checkpoint: StoredCheckpoint
     let restarted = false
     if (!checkpointDocument.exists || checkpointDocument.data()!.dirty === true) {
+      const existingSummary = await summaryRef.get()
+      if (!checkpointDocument.exists && existingSummary.exists
+        && existingSummary.data()!.projectionStatus === 'ready'
+        && existingSummary.data()!.rebuildRequired !== true) {
+        return { status: 'current', recordsRead: 0 }
+      }
       const generationId = `generation:${args.processingAt}:${args.childId}`
       checkpoint = {
         schemaVersion: 1, familyId: args.familyId, childId: args.childId, generationId,
         watermarkAt: timestamp(args.processingAt), dirty: false, eligibilityCursor: null, eventCursor: null,
         pendingRecords: [], accumulatedEligibility: [], accumulatedEvents: [],
       }
-      await checkpointRef.set(checkpoint)
+      await this.db.runTransaction(async transaction => {
+        const latest = await transaction.get(checkpointRef)
+        if (latest.exists && latest.data()!.dirty !== true) return
+        transaction.set(checkpointRef, checkpoint)
+        transaction.set(summaryRef, { ...activeRebuildState(generationId), updatedAt: timestamp(args.processingAt) }, { merge: true })
+      })
       checkpointDocument = await checkpointRef.get()
       restarted = true
     }
     checkpoint = checkpointDocument.data() as StoredCheckpoint
-    const eligibilityQuery = this.rebuildQuery(familyRef.collection('daily_eligibility'), args.childId, checkpoint.watermarkAt, checkpoint.eligibilityCursor)
-    const eventQuery = this.rebuildQuery(familyRef.collection('gamification_events'), args.childId, checkpoint.watermarkAt, checkpoint.eventCursor)
+    const eligibilityQuery = this.rebuildQuery(familyRef.collection('daily_eligibility'), args.childId, checkpoint.eligibilityCursor)
+    const eventQuery = this.rebuildQuery(familyRef.collection('gamification_events'), args.childId, checkpoint.eventCursor)
     const [eligibilityPage, eventPage] = await Promise.all([eligibilityQuery.get(), eventQuery.get()])
     const recordsRead = eligibilityPage.size + eventPage.size
     if (recordsRead > args.maxRecords) throw new Error('Rebuild page exceeded the 250-record hard limit')
+    const watermarkAt = millis(checkpoint.watermarkAt, 'rebuild watermarkAt')
     const eligibilityRecords = eligibilityPage.docs.map(document => this.rebuildRecord(document, 'eligibility'))
-    const eventRecords = eventPage.docs.map(document => this.rebuildRecord(document, 'event'))
-    const pending = checkpoint.pendingRecords.map(record => ({
-      ...record, effectiveAt: millis(record.effectiveAt, 'pending rebuild effectiveAt'), value: record.value,
-    } as RebuildRecord))
-    const merged = mergeRebuildStreams(pending, mergeRebuildStreams(eligibilityRecords, eventRecords))
+      .filter(record => record.effectiveAt <= watermarkAt)
+    let normalizedEvents
+    try {
+      normalizedEvents = normalizeXpLedger({
+        familyId: args.familyId,
+        documents: eventPage.docs.map(document => ({ id: document.id, data: document.data() })),
+      })
+    } catch (error) {
+      const failure = error instanceof Error ? error.message : 'unknown rebuild normalization failure'
+      await this.db.runTransaction(async transaction => {
+        const latest = await transaction.get(checkpointRef)
+        if (!latest.exists || latest.data()!.generationId !== checkpoint.generationId) return
+        transaction.set(summaryRef, { ...failedRebuildState(checkpoint.generationId, failure), updatedAt: timestamp(args.processingAt) }, { merge: true })
+        transaction.update(checkpointRef, { dirty: true, failure })
+      })
+      return { status: 'failed', recordsRead, generationId: checkpoint.generationId }
+    }
+    const eventRecords = normalizedEvents.map(document => ({
+      id: document.id,
+      effectiveAt: document.event.effectiveAt,
+      causalGroupId: document.event.causalGroupId,
+      transitionRank: document.event.transitionRank,
+      stream: 'event' as const,
+      value: eventToData(document.event),
+    })).filter(record => record.effectiveAt <= watermarkAt)
     const exhausted = eligibilityPage.size < REBUILD_STREAM_LIMIT && eventPage.size < REBUILD_STREAM_LIMIT
-    const uncertainBoundaries = [
-      ...(eligibilityPage.size === REBUILD_STREAM_LIMIT ? [eligibilityRecords.at(-1)!] : []),
-      ...(eventPage.size === REBUILD_STREAM_LIMIT ? [eventRecords.at(-1)!] : []),
-    ].sort((left, right) => left.effectiveAt - right.effectiveAt
-      || (left.causalGroupId < right.causalGroupId ? -1 : left.causalGroupId > right.causalGroupId ? 1 : 0)
-      || left.transitionRank - right.transitionRank
-      || (left.id < right.id ? -1 : left.id > right.id ? 1 : 0))
-    const safeBoundary = uncertainBoundaries[0]
-    const safe = safeBoundary === undefined ? merged : merged.filter(record =>
-      record.effectiveAt < safeBoundary.effectiveAt
-      || (record.effectiveAt === safeBoundary.effectiveAt && (
-        record.causalGroupId < safeBoundary.causalGroupId
-        || (record.causalGroupId === safeBoundary.causalGroupId && (
-          record.transitionRank < safeBoundary.transitionRank
-          || (record.transitionRank === safeBoundary.transitionRank && record.id <= safeBoundary.id))))))
-    const deferred = safeBoundary === undefined ? [] : merged.slice(safe.length)
-    const grouped = takeCompleteCausalGroups(safe, exhausted && deferred.length === 0)
-    const pendingNext = mergeRebuildStreams(grouped.pending, deferred)
-    const completeEligibility = grouped.complete.filter(record => record.stream === 'eligibility').map(record => record.value as DocumentData)
-    const completeEvents = grouped.complete.filter(record => record.stream === 'event').map(record => ({ id: record.id, event: record.value as DocumentData }))
     const next: StoredCheckpoint = {
       ...checkpoint,
       eligibilityCursor: eligibilityPage.empty ? checkpoint.eligibilityCursor : this.storedCursor(eligibilityPage.docs.at(-1)!),
       eventCursor: eventPage.empty ? checkpoint.eventCursor : this.storedCursor(eventPage.docs.at(-1)!),
-      pendingRecords: pendingNext.map(record => ({ ...record, effectiveAt: timestamp(record.effectiveAt), value: record.value as DocumentData })),
-      accumulatedEligibility: [...checkpoint.accumulatedEligibility, ...completeEligibility],
-      accumulatedEvents: [...checkpoint.accumulatedEvents, ...completeEvents],
+      pendingRecords: [],
+      accumulatedEligibility: [...checkpoint.accumulatedEligibility, ...eligibilityRecords.map(record => record.value as DocumentData)],
+      accumulatedEvents: [...checkpoint.accumulatedEvents, ...eventRecords.map(record => ({ id: record.id, event: record.value as DocumentData }))],
     }
-    if (!exhausted || pendingNext.length > 0) {
+    if (!exhausted) {
       await checkpointRef.set(next)
       return { status: restarted ? 'restarted' : 'checkpointed', recordsRead, generationId: checkpoint.generationId }
     }
@@ -1073,26 +1089,28 @@ export class AdminGamificationRepository implements
     const summary = eligibility.length === 0 && events.length === 0
       ? defaultSummary(args.familyId, args.childId, args.processingAt)
       : rebuildGamificationSummary({ eligibilitySnapshots: eligibility, events, processingAt: args.processingAt })
-    await this.db.runTransaction(async transaction => {
+    const published = await this.db.runTransaction(async transaction => {
       const latest = await transaction.get(checkpointRef)
-      if (!latest.exists || latest.data()!.generationId !== checkpoint.generationId || latest.data()!.dirty === true) return
-      const summaryRef = familyRef.collection('gamification_summaries').doc(args.childId)
-      const prior = await transaction.get(summaryRef)
-      transaction.set(summaryRef, summaryToData({ ...summary, projectionRevision: (prior.data()?.projectionRevision ?? 0) + 1 }))
+      const [prior, child] = await Promise.all([transaction.get(summaryRef), transaction.get(childRef)])
+      if (!latest.exists || latest.data()!.generationId !== checkpoint.generationId || latest.data()!.dirty === true) return false
+      if (!child.exists) throw new Error(`Child ${args.childId} does not exist`)
+      transaction.set(summaryRef, summaryToData({
+        ...summary,
+        projectionRevision: (prior.data()?.projectionRevision ?? 0) + 1,
+        projectionStatus: 'ready', rebuildRequired: false, rebuildGenerationId: null, rebuildFailure: null,
+      }))
+      transaction.update(childRef, { lifetimeXP: summary.xpTotal })
       transaction.delete(checkpointRef)
+      return true
     })
-    return { status: 'published', recordsRead, generationId: checkpoint.generationId }
+    return { status: published ? 'published' : 'invalidated', recordsRead, generationId: checkpoint.generationId }
   }
 
-  private rebuildQuery(collection: FirebaseFirestore.CollectionReference, childId: string, watermark: Date | FirebaseFirestore.Timestamp, cursor: StoredCursor | null) {
+  private rebuildQuery(collection: FirebaseFirestore.CollectionReference, childId: string, cursor: StoredCursor | null) {
     let query: FirebaseFirestore.Query = collection
       .where('childId', '==', childId)
-      .where('effectiveAt', '<=', watermark)
-      .orderBy('effectiveAt')
-      .orderBy('causalGroupId')
-      .orderBy('transitionRank')
       .orderBy('__name__')
-    if (cursor !== null) query = query.startAfter(cursor.effectiveAt, cursor.causalGroupId, cursor.transitionRank, cursor.documentId)
+    if (cursor !== null) query = query.startAfter(cursor.documentId)
     return query.limit(REBUILD_STREAM_LIMIT)
   }
 
@@ -1105,8 +1123,7 @@ export class AdminGamificationRepository implements
   }
 
   private storedCursor(document: QueryDocumentSnapshot): StoredCursor {
-    const data = document.data()
-    return { effectiveAt: data.effectiveAt, causalGroupId: data.causalGroupId, transitionRank: data.transitionRank, documentId: document.id }
+    return { documentId: document.id }
   }
 
   async repairPostCutoverPage(args: RepairPostCutoverPageArgs): Promise<RepairPageResult> {

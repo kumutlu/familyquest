@@ -1,6 +1,9 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const getFunctions = vi.fn(() => ({ kind: 'functions' }));
+const initializeFirestore = vi.fn(() => ({ kind: 'firestore' }));
+const persistentLocalCache = vi.fn(() => ({ kind: 'persistent-cache' }));
+const persistentMultipleTabManager = vi.fn(() => ({ kind: 'multi-tab' }));
 
 vi.mock('firebase/app', () => ({
   initializeApp: vi.fn(() => ({ kind: 'app' })),
@@ -11,7 +14,10 @@ vi.mock('firebase/auth', () => ({
   connectAuthEmulator: vi.fn(),
 }));
 vi.mock('firebase/firestore', () => ({
-  getFirestore: vi.fn(() => ({ kind: 'firestore' })),
+  getFirestore: vi.fn(() => ({ kind: 'memory-firestore' })),
+  initializeFirestore,
+  persistentLocalCache,
+  persistentMultipleTabManager,
   connectFirestoreEmulator: vi.fn(),
 }));
 vi.mock('firebase/functions', () => ({
@@ -22,6 +28,9 @@ vi.mock('firebase/functions', () => ({
 beforeEach(() => {
   vi.resetModules();
   getFunctions.mockClear();
+  initializeFirestore.mockClear();
+  persistentLocalCache.mockClear();
+  persistentMultipleTabManager.mockClear();
   vi.stubEnv('VITE_FIREBASE_API_KEY', 'api-key');
   vi.stubEnv('VITE_FIREBASE_AUTH_DOMAIN', 'queki.app');
   vi.stubEnv('VITE_FIREBASE_PROJECT_ID', 'familyquest-beta-402cb');
@@ -37,6 +46,19 @@ describe('Firebase Functions configuration', () => {
     expect(getFunctions).toHaveBeenCalledWith(
       expect.objectContaining({ kind: 'app' }),
       'europe-west1',
+    );
+  });
+});
+
+describe('Firestore deployment-transition cache', () => {
+  it('persists trusted profile/family snapshots across a Safari page replacement', async () => {
+    await import('./firebase');
+
+    expect(persistentMultipleTabManager).toHaveBeenCalledOnce();
+    expect(persistentLocalCache).toHaveBeenCalledWith({ tabManager: { kind: 'multi-tab' } });
+    expect(initializeFirestore).toHaveBeenCalledWith(
+      expect.objectContaining({ kind: 'app' }),
+      { localCache: { kind: 'persistent-cache' } },
     );
   });
 });

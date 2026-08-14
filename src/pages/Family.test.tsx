@@ -124,7 +124,7 @@ describe('Family page', () => {
     expect(screen.getByText('Child')).toBeInTheDocument();
   });
 
-  it('weekly XP is based only on approved task completions', () => {
+  it('weekly XP is based only on approved task completions', async () => {
     const now = new Date();
     const task = { id: 't-1', title: 'Test', pointsReward: 15, isActive: true };
 
@@ -141,10 +141,10 @@ describe('Family page', () => {
     }, now);
 
     // Weekly XP should be 15 from the task completion
-    expect(screen.getByText(/15 pts this week/)).toBeInTheDocument();
+    expect(await screen.findByText(/15 task pts this week/)).toBeInTheDocument();
   });
 
-  it('children rank correctly by weekly XP', () => {
+  it('children rank correctly by weekly XP', async () => {
     const now = new Date();
     const task = { id: 't-1', title: 'Test', pointsReward: 10, isActive: true };
     const task2 = { id: 't-2', title: 'Test2', pointsReward: 20, isActive: true };
@@ -163,13 +163,35 @@ describe('Family page', () => {
       behaviourEvents: []
     }, now);
 
-    const alice = screen.getByText('Alice');
+    const alice = await screen.findByText('Alice');
     const bob = screen.getByText('Bob');
     expect(alice).toBeInTheDocument();
     expect(bob).toBeInTheDocument();
     expect(screen.getByText('1')).toBeInTheDocument();
-    expect(screen.getByText(/20 pts this week/)).toBeInTheDocument();
-    expect(screen.getByText(/10 pts this week/)).toBeInTheDocument();
+    expect(screen.getByText(/20 task pts this week/)).toBeInTheDocument();
+    expect(screen.getByText(/10 task pts this week/)).toBeInTheDocument();
+  });
+
+  it('renders prior approved weeks in History instead of the empty state', async () => {
+    const user = userEvent.setup();
+    renderFamily({
+      currentUser: { id: 'p', role: 'parent', familyId: 'f1' },
+      familyMembers: [{ id: 'c1', displayName: 'Alice', role: 'child', lifetimeXP: 0 }],
+      tasks: [{ id: 't-1', title: 'Test', pointsReward: 15, isActive: true }],
+      taskCompletions: [{
+        id: 'c-1',
+        taskId: 't-1',
+        assigneeId: 'c1',
+        status: 'approved',
+        approvedAt: { toDate: () => new Date(2026, 7, 5, 12) },
+      }],
+    }, new Date(2026, 7, 10, 12));
+
+    await user.click(await screen.findByRole('button', { name: 'History' }));
+
+    expect(screen.getByText('Week of 2026-08-03')).toBeInTheDocument();
+    expect(screen.getByText('15 task pts that week')).toBeInTheDocument();
+    expect(screen.queryByText('No Past Champions')).not.toBeInTheDocument();
   });
 
   // Regression: the Family Hub header actions were silently disconnected —

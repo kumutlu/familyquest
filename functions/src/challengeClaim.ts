@@ -142,6 +142,7 @@ export async function processChallengeClaimRequest(
   // 6. Distribute the reward exactly once per eligible child. Each child's award
   //    is idempotent via a deterministic event id inside processChallengeClaim.
   const rewardedChildren: string[] = []
+  const unconfirmedChildren: string[] = []
   for (const childDoc of eligible) {
     const res = await behaviourRepository.processChallengeClaim({
       familyId: input.familyId,
@@ -150,7 +151,14 @@ export async function processChallengeClaimRequest(
       points: rewardPoints,
       processingAt,
     })
-    if (res.status !== 'ignored') rewardedChildren.push(childDoc.id)
+    if (res.status === 'processed' || res.status === 'duplicate') rewardedChildren.push(childDoc.id)
+    else unconfirmedChildren.push(childDoc.id)
+  }
+  if (unconfirmedChildren.length > 0 || rewardedChildren.length !== eligible.length) {
+    throw new HttpsError(
+      'failed-precondition',
+      'Challenge rewards are not yet confirmed for every eligible child; retry is safe.',
+    )
   }
 
   // 7. Close the challenge + write the celebration notification + feed entry.

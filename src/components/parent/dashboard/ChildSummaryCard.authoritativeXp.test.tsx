@@ -28,6 +28,24 @@ beforeEach(async () => {
 });
 
 describe('ChildSummaryCard — authoritative XP reads', () => {
+  it.each([
+    [866, 134],
+    [595, 405],
+    [797, 203],
+  ])('shows authoritative total %i XP separately from %i XP to the next level', (xpTotal, xpToNextLevel) => {
+    render(withRouter(
+      <ChildSummaryCard
+        child={{ id: 'c1', displayName: 'Child', lifetimeXP: 1, rewardPoints: 0 }}
+        walletBalance={0}
+        pendingTaskCount={0}
+        gamificationSummary={summaryView({ xpTotal, xpToNextLevel, xpProgressInLevel: xpTotal })}
+      />
+    ));
+
+    expect(screen.getByText(`${xpTotal} XP`)).toBeInTheDocument();
+    expect(screen.getByText(`${xpToNextLevel} XP to Level 2`)).toBeInTheDocument();
+  });
+
   it('renders level/progress from the projection even when users.lifetimeXP is stale', () => {
     const child = { id: 'c1', displayName: 'Alice', lifetimeXP: 9999, rewardPoints: 0 };
     render(withRouter(
