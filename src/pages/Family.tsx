@@ -14,6 +14,7 @@ import { createChallenge, claimChallenge } from '../lib/api';
 import { isChildRole, isParentRole, isOwnerRole, getRoleLabel } from '../lib/roles';
 import { formatNumber } from '../i18n/format';
 import { localWeekKey } from '../lib/taskRecurrence';
+import { buildWeeklyLeaderboard, buildWeeklyLeaderboardHistory } from '../lib/weeklyLeaderboard';
 import { useRecurrenceClock } from '../lib/useRecurrenceClock';
 import { EditMemberModal } from '../components/family/EditMemberModal';
 import { ChildLoginSection, type ChildLoginMember } from '../components/family/ChildLoginSection';
@@ -56,25 +57,9 @@ export function Family() {
   const currentWeekKey = localWeekKey(now);
 
   const children = familyMembers.filter(m => isChildRole(m.role));
-  const membersWithWeeklyXP = children.map(member => {
-    let weeklyXP = 0;
-
-    // Add approved task points earned this week
-    const memberTasks = taskCompletions.filter(c =>
-      c.assigneeId === member.id &&
-      c.status === 'approved' &&
-      c.approvedAt &&
-      localWeekKey(c.approvedAt.toDate()) === currentWeekKey
-    );
-    memberTasks.forEach(c => {
-      const task = tasks.find(t => t.id === c.taskId);
-      if (task) weeklyXP += (task.pointsReward || 0);
-    });
-
-    return { ...member, weeklyXP };
-  });
-
-  const sortedMembers = [...membersWithWeeklyXP].sort((a, b) => b.weeklyXP - a.weeklyXP);
+  const leaderboardInput = { members: children, tasks, taskCompletions };
+  const sortedMembers = buildWeeklyLeaderboard(leaderboardInput, currentWeekKey);
+  const leaderboardHistory = buildWeeklyLeaderboardHistory({ ...leaderboardInput, currentWeekKey });
   // Only declare someone a champion if they actually earned points
   const champion = sortedMembers.length > 0 && sortedMembers[0].weeklyXP > 0 ? sortedMembers[0] : null;
 
@@ -389,11 +374,43 @@ export function Family() {
             );
           })}
         </div>
-      ) : (
+      ) : leaderboardHistory.length === 0 ? (
         <div className="bg-white rounded-2xl border border-gray-100 p-8 text-center text-gray-500 shadow-sm mt-4">
           <Trophy size={48} className="mx-auto text-gray-300 mb-4" />
           <h4 className="text-lg font-bold text-gray-900 mb-1">{t('noPastChampions.title')}</h4>
           <p className="text-sm">{t('noPastChampions.subtitle')}</p>
+        </div>
+      ) : (
+        <div className="space-y-6">
+          {leaderboardHistory.map(week => (
+            <section key={week.weekKey} className="space-y-3">
+              <h4 className="text-sm font-semibold text-gray-500">{t('weekOf', { value: week.weekKey })}</h4>
+              {week.rankings.map((member, idx) => {
+                const isChampion = idx === 0 && member.weeklyXP > 0;
+                return (
+                  <Link key={`${week.weekKey}-${member.id}`} to={`/family/${member.id}`} className="block">
+                    <Card className={isChampion ? 'border-reward-400 shadow-md ring-1 ring-reward-400' : ''}>
+                      <CardContent className="p-4">
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center gap-4">
+                            <div className="font-bold text-gray-400 w-4 text-center">{idx + 1}</div>
+                            <Avatar src={member.avatarUrl} fallback={member.displayName[0]} />
+                            <div>
+                              <h4 className="font-semibold text-gray-900">{member.displayName}</h4>
+                              <p className="text-sm text-gray-500 font-medium mt-0.5">
+                                {t('ptsThatWeek', { value: formatNumber(member.weeklyXP) })}
+                              </p>
+                            </div>
+                          </div>
+                          {isChampion && <Crown size={20} className="text-reward-500 fill-reward-500" />}
+                        </div>
+                      </CardContent>
+                    </Card>
+                  </Link>
+                );
+              })}
+            </section>
+          ))}
         </div>
       )}
 

@@ -172,6 +172,28 @@ describe('Family page', () => {
     expect(screen.getByText(/10 task pts this week/)).toBeInTheDocument();
   });
 
+  it('renders prior approved weeks in History instead of the empty state', async () => {
+    const user = userEvent.setup();
+    renderFamily({
+      currentUser: { id: 'p', role: 'parent', familyId: 'f1' },
+      familyMembers: [{ id: 'c1', displayName: 'Alice', role: 'child', lifetimeXP: 0 }],
+      tasks: [{ id: 't-1', title: 'Test', pointsReward: 15, isActive: true }],
+      taskCompletions: [{
+        id: 'c-1',
+        taskId: 't-1',
+        assigneeId: 'c1',
+        status: 'approved',
+        approvedAt: { toDate: () => new Date(2026, 7, 5, 12) },
+      }],
+    }, new Date(2026, 7, 10, 12));
+
+    await user.click(await screen.findByRole('button', { name: 'History' }));
+
+    expect(screen.getByText('Week of 2026-08-03')).toBeInTheDocument();
+    expect(screen.getByText('15 task pts that week')).toBeInTheDocument();
+    expect(screen.queryByText('No Past Champions')).not.toBeInTheDocument();
+  });
+
   // Regression: the Family Hub header actions were silently disconnected —
   // "Invite Member" queried a `[data-invite-code]` node that no longer exists,
   // so tapping it did nothing. These tests fail if the handlers stop opening

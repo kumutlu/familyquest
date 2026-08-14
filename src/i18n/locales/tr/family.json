@@ -47,6 +47,8 @@
   "history": "Geçmiş",
   "managed": "Yönetilen",
   "ptsThisWeek": "Bu hafta {{value}} görev puanı",
+  "ptsThatWeek": "O hafta {{value}} görev puanı",
+  "weekOf": "{{value}} haftası",
   "noPastChampions": {
     "title": "Geçmiş Şampiyon Yok",
     "subtitle": "Bu haftanın liderini görmek için gelecek hafta tekrar bakın!"
