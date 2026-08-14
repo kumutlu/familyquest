@@ -49,7 +49,9 @@ vi.mock('firebase/auth', () => ({
 vi.mock('./firebase', () => ({ db: { name: 'db' }, auth: authState, googleProvider: {} }))
 
 // Control recipient resolution and spy on the authoritative notification helpers.
-const getActiveFamilyMembers = vi.fn(async () => [])
+type ActiveMember = { id: string; role: string }
+
+const getActiveFamilyMembers = vi.fn(async (): Promise<ActiveMember[]> => [])
 const loadNotificationRecipientsInTransaction = vi.fn(async (_tx: any, _familyId: string, input: any) => ({
   ref: { path: `families/family-1/notifications/${input.dedupeKey}` },
   data: { type: input.type, recipientIds: input.recipientIds },
@@ -57,9 +59,9 @@ const loadNotificationRecipientsInTransaction = vi.fn(async (_tx: any, _familyId
 const applyNotificationWrites = vi.fn(() => {})
 
 vi.mock('./notifications', () => ({
-  getActiveFamilyMembers: (...args: any[]) => getActiveFamilyMembers(...args),
-  loadNotificationRecipientsInTransaction: (...args: any[]) => loadNotificationRecipientsInTransaction(...args),
-  applyNotificationWrites: (...args: any[]) => applyNotificationWrites(...args),
+  getActiveFamilyMembers: (...args: any[]) => (getActiveFamilyMembers as (...a: any[]) => any)(...args),
+  loadNotificationRecipientsInTransaction: (...args: any[]) => (loadNotificationRecipientsInTransaction as (...a: any[]) => any)(...args),
+  applyNotificationWrites: (...args: any[]) => (applyNotificationWrites as (...a: any[]) => any)(...args),
 }))
 
 import { createGoal } from './api'
