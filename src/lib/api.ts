@@ -21,6 +21,7 @@ import {
   applyNotificationWrites,
   getApproverIds,
   getChildIds,
+  getActiveFamilyMembers,
 } from './notifications';
 import {
   taskSubmittedKey,
@@ -39,6 +40,7 @@ import {
   profileUpdateRequestedKey,
   profileUpdateApprovedKey,
   profileUpdateRejectedKey,
+  goalCreatedKey,
 } from './notificationDedupe';
 import { useStore } from '../store/useStore';
 import { unregisterCurrentDevice } from './pushNotifications';
@@ -1520,6 +1522,45 @@ export const createGoal = async (familyId: string, input: CreateGoalInput) => {
     assertParent(actorRole, familyId);
   }
 
+  // --- Notification recipients + copy (resolved up-front, outside the transaction) ---
+  // The notification is written atomically inside the goal-create transaction
+  // below, so a failed goal creation can never produce a notification, and an
+  // idempotent replay (see below) never creates a duplicate.
+  const actorName = actorSnap.exists()
+    ? ((actorSnap.data() as { displayName?: string }).displayName ?? 'Someone')
+    : 'Someone';
+
+  // For child goals, resolve the target child's display name for the copy, e.g.
+  // "Kemal created a new goal for Osman: New Bike".
+  let childName: string | undefined;
+  if (input.kind === 'child' && input.childId) {
+    const childSnap = await getDoc(doc(db, 'users', input.childId));
+    childName = childSnap.exists()
+      ? (childSnap.data() as { displayName?: string }).displayName
+      : undefined;
+  }
+
+  // Resolve recipients from the active family membership.
+  const members = await getActiveFamilyMembers(familyId);
+  let recipientIds: string[];
+  if (input.kind === 'child' && input.childId) {
+    // Child goal: the relevant parents/owners + the target child (never the creator).
+    const parentIds = members
+      .filter(m => (m.role === 'owner' || m.role === 'parent') && m.id !== actorId)
+      .map(m => m.id);
+    const includesTargetChild = members.some(m => m.id === input.childId);
+    const childRecipient = includesTargetChild ? [input.childId as string] : [];
+    recipientIds = Array.from(new Set([...parentIds, ...childRecipient])).filter(id => id !== actorId);
+  } else {
+    // Family goal: every other active family member (parents AND children).
+    recipientIds = members.filter(m => m.id !== actorId).map(m => m.id);
+  }
+
+  const goalCreatedBody =
+    input.kind === 'child' && childName
+      ? `${actorName} created a new goal for ${childName}: ${input.title}`
+      : `${actorName} created a new family goal: ${input.title}`;
+
   // Idempotency / trust-boundary design (fix(goals): enforce seeded goal creation
   // at trust boundary). The goal CREATE rule in firestore.rules now enforces the
   // atomic seed linkage at the RULES layer using getAfter()/existsAfter() on
@@ -1595,6 +1636,26 @@ export const createGoal = async (familyId: string, input: CreateGoalInput) => {
       return;
     }
 
+    // Phase A (reads): resolve the notification dedupe read BEFORE any write so
+    // Firestore's reads-before-writes rule is honoured. Skipped entirely on an
+    // idempotent replay (above) and when there are no recipients.
+    let goalNotifPlan = { ref: null, data: null } as Awaited<
+      ReturnType<typeof loadNotificationRecipientsInTransaction>
+    >;
+    if (recipientIds.length > 0) {
+      goalNotifPlan = await loadNotificationRecipientsInTransaction(transaction, familyId, {
+        type: 'goal_created',
+        actorId,
+        recipientIds,
+        title: 'New goal',
+        body: goalCreatedBody,
+        entityType: 'goal',
+        entityId: goalDocRef.id,
+        actionUrl: '/goals',
+        dedupeKey: goalCreatedKey(goalDocRef.id),
+      });
+    }
+
     transaction.set(goalDocRef, goal);
 
     if (parentPence > 0) {
@@ -1625,6 +1686,12 @@ export const createGoal = async (familyId: string, input: CreateGoalInput) => {
       amountPence: parentPence,
       clientReqId,
     }, idemRef);
+
+    // Notification is written atomically with the goal. If the transaction aborts
+    // (e.g. a rule rejection) the whole batch rolls back, so no notification is
+    // created on a failed goal creation. The dedupe key (goal_created_<goalId>)
+    // guarantees a retried creation never writes a second row.
+    applyNotificationWrites(transaction, goalNotifPlan);
   });
 
   return replayRef ?? goalDocRef;

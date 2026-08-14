@@ -36,6 +36,7 @@ import {
   applyNotificationWrites,
   getApproverIds,
   getChildIds,
+  getActiveFamilyMembers,
   getNotificationTitle,
   getNotificationBody,
   markNotificationRead,
@@ -445,5 +446,42 @@ describe('markAllNotificationsRead chunking (regression for rules document-acces
     } finally {
       firestore.writeBatch.mockImplementation(original!);
     }
+  });
+});
+
+describe('getActiveFamilyMembers', () => {
+  const memberDoc = (id: string, data: Record<string, unknown>) => ({ id, data: () => data });
+
+  it('returns every active member (parents AND children) of the family', async () => {
+    firestore.getDocs.mockResolvedValue({
+      docs: [
+        memberDoc('p1', { role: 'parent', familyId: 'fam1', displayName: 'P1' }),
+        memberDoc('p2', { role: 'owner', familyId: 'fam1', displayName: 'P2' }),
+        memberDoc('c1', { role: 'child', familyId: 'fam1', displayName: 'C1' }),
+      ],
+    });
+    const members = await getActiveFamilyMembers('fam1');
+    expect(members.map(m => m.id).sort()).toEqual(['c1', 'p1', 'p2']);
+  });
+
+  it('excludes deleted and disabled members', async () => {
+    firestore.getDocs.mockResolvedValue({
+      docs: [
+        memberDoc('p1', { role: 'parent', familyId: 'fam1' }),
+        memberDoc('c-deleted', { role: 'child', familyId: 'fam1', status: 'deleted' }),
+        memberDoc('c-disabled', { role: 'child', familyId: 'fam1', status: 'disabled' }),
+        memberDoc('c-flag', { role: 'child', familyId: 'fam1', disabled: true }),
+        memberDoc('other', { role: 'parent', familyId: 'another-family' }),
+        memberDoc('partial', { familyId: 'fam1' }), // missing role
+      ],
+    });
+    const members = await getActiveFamilyMembers('fam1');
+    expect(members.map(m => m.id).sort()).toEqual(['p1']);
+  });
+
+  it('returns an empty list when resolution fails (non-fatal)', async () => {
+    firestore.getDocs.mockRejectedValue(new Error('boom'));
+    const members = await getActiveFamilyMembers('fam1');
+    expect(members).toEqual([]);
   });
 });

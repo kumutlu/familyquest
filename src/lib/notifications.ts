@@ -54,10 +54,14 @@ export type NotificationType =
   | 'profile_update_approved'
   | 'profile_update_rejected'
   // Presentation-only marker for the one-time child Family Challenge
-  // celebration. It carries NO reward semantics: the reward is distributed by
+ // celebration. It carries NO reward semantics: the reward is distributed by
   // the authoritative claimChallenge transaction, and this row's per-user read
   // state is the only thing the celebration consumes/updates.
-  | 'challenge_completed';
+ | 'challenge_completed'
+ // A new savings goal was created. Family goals notify the other active family
+ // members; child goals notify the relevant parents/owners + the target child.
+ // The creator is never a recipient.
+ | 'goal_created';
 
 export interface NotificationInput {
   type: NotificationType;
@@ -184,6 +188,46 @@ export async function getChildIds(familyId: string): Promise<string[]> {
       .map(d => d.id);
   } catch {
     devLog('getChildIds', `recipient resolution failed for family ${familyId}; skipping notifications`);
+    return [];
+  }
+}
+
+/**
+ * Resolves the set of ACTIVE family members (any role) in a family. Used to
+ * address family-wide goal-created notifications. Unlike `getApproverIds` /
+ * `getChildIds` this returns every active member (parents AND children) and
+ * explicitly excludes deleted / disabled members so a notification is never
+ * addressed to a user that cannot receive it. Failures are non-fatal: returns an
+ * empty list so the caller skips the notification rather than corrupting the
+ * underlying business event.
+ */
+export interface ActiveFamilyMember {
+  id: string;
+  role: string;
+}
+
+export async function getActiveFamilyMembers(familyId: string): Promise<ActiveFamilyMember[]> {
+  try {
+    const snap = await getDocs(
+      query(collection(db, 'users'), where('familyId', '==', familyId)),
+    );
+    const members: ActiveFamilyMember[] = [];
+    for (const d of snap?.docs ?? []) {
+      const data = d.data() as {
+        role?: string;
+        familyId?: string;
+        status?: string;
+        disabled?: boolean;
+      } | undefined;
+      if (!data || typeof data.role !== 'string' || data.familyId !== familyId) continue;
+      // Exclude deleted / disabled members (mirrors the client-side eligibility
+      // filter used for challenges in Family.tsx).
+      if (data.status === 'deleted' || data.status === 'disabled' || data.disabled === true) continue;
+      members.push({ id: d.id, role: data.role });
+    }
+    return members;
+  } catch {
+    devLog('getActiveFamilyMembers', `recipient resolution failed for family ${familyId}; skipping notifications`);
     return [];
   }
 }

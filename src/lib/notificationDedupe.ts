@@ -74,3 +74,13 @@ export function profileUpdateApprovedKey(requestId: string): string {
 export function profileUpdateRejectedKey(requestId: string): string {
   return `profile_update_reject_${requestId}`;
 }
+
+/**
+ * One notification per created goal. Deterministic on the goal id so a retried
+ * (idempotent) goal creation can never create a second notification row, and the
+ * existing notification de-duplication read in `loadNotificationRecipientsInTransaction`
+ * skips the write when the doc already exists.
+ */
+export function goalCreatedKey(goalId: string): string {
+  return `goal_created_${goalId}`;
+}

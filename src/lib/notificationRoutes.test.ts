@@ -6,7 +6,7 @@ const ALL_TYPES: NotificationType[] = [
   'task_submitted', 'task_approved', 'task_rejected', 'reward_requested', 'reward_approved',
   'reward_rejected', 'transfer_requested', 'transfer_approved', 'transfer_rejected',
   'wallet_deposit', 'wallet_withdrawal', 'behaviour_positive', 'behaviour_negative',
-  'petbox_contribution', 'petbox_expense',
+  'petbox_contribution', 'petbox_expense', 'goal_created',
 ];
 
 describe('getNotificationRoute', () => {
