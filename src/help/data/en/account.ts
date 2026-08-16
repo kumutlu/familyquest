@@ -35,7 +35,7 @@ export const accountSecurity: HelpArticle = {
     ]),
     section('who', [
       p(
-        'Everyone manages their own account. Children cannot delete their own account when it is managed by a parent — a parent removes them from Family settings instead.'
+        'Everyone manages their own account. Children cannot delete their own account when it is managed by a parent — a parent archives them from Family Settings instead, or permanently deletes the managed child through the Danger Zone.'
       ),
     ]),
     section('how', [

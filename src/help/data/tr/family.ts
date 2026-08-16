@@ -132,7 +132,7 @@ export const familyManagement: HelpArticle = {
   id: 'family-management',
   title: 'Aile yönetimi',
   description:
-    'Üye ekleyip çıkarın, davet kodunu paylaşın, çocuk profillerini yönetin ve sahipliği anlayın.',
+    'Üye ekleyin, yetişkin üyeleri arşivleyin ya da çıkarın, çocuk profillerini yönetin ve sahipliği anlayın.',
   category: 'family',
   keywords: [
     'aile',
@@ -189,7 +189,7 @@ export const familyManagement: HelpArticle = {
     section('mistakes', [
       ul([
         'Davet kodunu, amacından uzun süre yaşayan bir grup sohbetine yazmak.',
-        'Bir üyeyi “sıfırlamak” için çıkarmak — geçmiş de onunla gider.',
+        'Bir yetişkin üyeyi “sıfırlamak” için çıkarmak — geçmişleri korunur, yani bu bir temizlik yapmaz. Çocuklar arşivlenir, asla çıkarılmaz.',
         'Çocuğun profil değişikliğinin anında uygulandığını sanmak. Onay bekler.',
       ]),
       soon('Eski kodu geçersiz kılmak için davet kodunu yenileme.'),

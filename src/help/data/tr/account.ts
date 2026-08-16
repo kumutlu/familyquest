@@ -35,7 +35,7 @@ export const accountSecurity: HelpArticle = {
     ]),
     section('who', [
       p(
-        'Herkes kendi hesabını yönetir. Bir ebeveyn tarafından yönetilen çocuklar kendi hesaplarını silemez — bunun yerine ebeveyn onları Aile ayarlarından çıkarır.'
+        'Herkes kendi hesabını yönetir. Bir ebeveyn tarafından yönetilen çocuklar kendi hesaplarını silemez — bunun yerine ebeveyn onları Aile Ayarları’ndan arşivler ya da yönetilen çocuğu Tehlike Bölgesi üzerinden kalıcı olarak siler.'
       ),
     ]),
     section('how', [

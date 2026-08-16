@@ -6,7 +6,7 @@ import { Button } from '../ui/Button';
 import { Avatar } from '../ui/Avatar';
 import { Users, Globe, AlertTriangle, Copy, Save, Edit, CheckCircle, Loader2, Shield } from 'lucide-react';
 import { useStore } from '../../store/useStore';
-import { isOwnerRole, isParentRole, isChildRole } from '../../lib/roles';
+import { isOwnerRole, isParentRole, isChildRole, isAdultRole } from '../../lib/roles';
 import { getRoleLabel } from '../../lib/roles';
 import { updateFamilySettings, approveJoinRequest, rejectJoinRequest } from '../../lib/api';
 import { regenerateFamilyCode } from '../../lib/familyMembershipApi';
@@ -19,12 +19,28 @@ import { CreateChildLoginDialog } from './CreateChildLoginDialog';
 import { getTimezoneOptions } from '../../lib/timezones';
 import { isPetBoxEnabled } from '../../lib/familyFeatures';
 import { DeleteFamilyDialog } from './DeleteFamilyDialog';
-import { leaveFamily } from '../../lib/familyDeletionApi';
+import { leaveFamily, generateClientReqId } from '../../lib/familyDeletionApi';
 import { signOut } from '../../lib/api';
+import {
+  archiveMember,
+  restoreMember,
+  removeMemberFromFamily,
+  changeMemberRole,
+  transferOwnership,
+} from '../../lib/memberLifecycleApi';
+import { ConfirmLifecycleDialog } from './ConfirmLifecycleDialog';
 
 interface FamilySettingsProps {
   onSectionChange?: (section: string) => void;
 }
+
+type LifecycleAction =
+  | { kind: 'archive'; member: any }
+  | { kind: 'remove'; member: any }
+  | { kind: 'changeRole'; member: any; newRole: 'adult' | 'parent' }
+  | { kind: 'transfer'; member: any }
+  | { kind: 'restore'; member: any }
+  | null;
 
 const CURRENCY_OPTIONS = [
   { code: 'GBP', labelKey: 'familySettings.currencies.gbp' },
@@ -61,7 +77,7 @@ export function FamilySettings({ onSectionChange }: FamilySettingsProps) {
   const [showAdultInvite, setShowAdultInvite] = useState(false);
   const [editingMember, setEditingMember] = useState<any>(null);
   const [createLoginFor, setCreateLoginFor] = useState<ChildLoginMember | null>(null);
-  const [approvalRoles, setApprovalRoles] = useState<Record<string, 'child' | 'parent'>>({});
+  const [approvalRoles, setApprovalRoles] = useState<Record<string, 'child' | 'parent' | 'adult'>>({});
 
   // Regional settings state
   const [regionalSettings, setRegionalSettings] = useState({
@@ -85,6 +101,10 @@ export function FamilySettings({ onSectionChange }: FamilySettingsProps) {
   const [isLeavingFamily, setIsLeavingFamily] = useState(false);
   const [leaveError, setLeaveError] = useState<string | null>(null);
 
+  // Member lifecycle (archive / remove / change role / transfer / restore) state
+  const [confirmAction, setConfirmAction] = useState<LifecycleAction>(null);
+  const [busyUid, setBusyUid] = useState<string | null>(null);
+
   const showToast = (message: string, type: 'success' | 'error' | 'info' = 'success') =>
     setToast({ id: Date.now(), message, type });
 
@@ -94,6 +114,9 @@ export function FamilySettings({ onSectionChange }: FamilySettingsProps) {
 
   const inviteCode = familyData?.inviteCode;
   const memberCount = familyMembers?.length ?? 0;
+
+  // Archived members keep their familyId but are filtered out of active lists.
+  const archivedMembers = (familyMembers || []).filter(m => m.lifecycle === 'archived');
 
   // Get pending join requests (only for owners)
   const pendingJoinRequests = joinRequests?.filter(r => r.status === 'pending') || [];
@@ -278,6 +301,107 @@ export function FamilySettings({ onSectionChange }: FamilySettingsProps) {
       showToast(error.message || t('familySettings.rejectJoinRequestError'), 'error');
     }
   };
+
+  // ----- Member lifecycle actions -----
+  const canOwnerManage = (m: any) => owner && m.id !== currentUser?.id && !isOwnerRole(m.role);
+  const canManageChild = (m: any) => isParentOrOwner && isChildRole(m.role) && m.id !== currentUser?.id;
+
+  const openArchive = (member: any) => setConfirmAction({ kind: 'archive', member });
+  const openRemove = (member: any) => setConfirmAction({ kind: 'remove', member });
+  const openChangeRole = (member: any) => setConfirmAction({
+    kind: 'changeRole',
+    member,
+    newRole: isAdultRole(member.role) ? 'parent' : 'adult',
+  });
+  const openTransfer = (member: any) => setConfirmAction({ kind: 'transfer', member });
+  const openRestore = (member: any) => setConfirmAction({ kind: 'restore', member });
+
+  const closeConfirm = () => {
+    if (busyUid) return;
+    setConfirmAction(null);
+  };
+
+  const runLifecycleAction = async () => {
+    const action = confirmAction;
+    if (!action || busyUid) return;
+    const target = action.member;
+    setBusyUid(target.id);
+    const reqId = generateClientReqId();
+    try {
+      switch (action.kind) {
+        case 'archive':
+          await archiveMember(target.id, reqId);
+          showToast(t('familySettings.memberArchive') + ' ✓');
+          break;
+        case 'remove':
+          await removeMemberFromFamily(target.id, reqId);
+          showToast(t('familySettings.memberRemove') + ' ✓');
+          break;
+        case 'changeRole':
+          await changeMemberRole(target.id, action.newRole, reqId);
+          showToast(t('familySettings.memberChangeRole') + ' ✓');
+          break;
+        case 'transfer':
+          await transferOwnership(target.id, reqId);
+          showToast(t('familySettings.memberMakeOwner') + ' ✓');
+          break;
+        case 'restore':
+          await restoreMember(target.id, reqId);
+          showToast(t('familySettings.memberRestore') + ' ✓');
+          break;
+      }
+      setConfirmAction(null);
+    } catch (error: any) {
+      console.error('Lifecycle action failed:', error);
+      showToast(error?.message || t('familySettings.approveJoinRequestError'), 'error');
+    } finally {
+      setBusyUid(null);
+    }
+  };
+
+  const confirmConfig = (() => {
+    if (!confirmAction) return null;
+    const name = confirmAction.member.displayName;
+    switch (confirmAction.kind) {
+      case 'archive':
+        return {
+          title: t('familySettings.archiveConfirmTitle', { name }),
+          message: t('familySettings.archiveConfirmBody', { name }),
+          confirmLabel: t('familySettings.memberArchive'),
+          danger: false,
+        };
+      case 'remove':
+        return {
+          title: t('familySettings.removeConfirmTitle', { name }),
+          message: t('familySettings.removeConfirmBody', { name }),
+          confirmLabel: t('familySettings.memberRemove'),
+          danger: true,
+        };
+      case 'changeRole':
+        return {
+          title: t('familySettings.changeRoleConfirmTitle', { name }),
+          message: t('familySettings.changeRoleConfirmBody', { name, role: getRoleLabel(confirmAction.newRole) || confirmAction.newRole }),
+          confirmLabel: t('familySettings.memberChangeRole'),
+          danger: false,
+        };
+      case 'transfer':
+        return {
+          title: t('familySettings.transferConfirmTitle', { name }),
+          message: t('familySettings.transferConfirmBody', { name }),
+          confirmLabel: t('familySettings.memberMakeOwner'),
+          danger: true,
+        };
+      case 'restore':
+        return {
+          title: t('familySettings.restoreConfirmTitle', { name }),
+          message: t('familySettings.restoreConfirmBody', { name }),
+          confirmLabel: t('familySettings.memberRestore'),
+          danger: false,
+        };
+      default:
+        return null;
+    }
+  })();
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === 'Enter' && !e.shiftKey) {
@@ -528,9 +652,11 @@ export function FamilySettings({ onSectionChange }: FamilySettingsProps) {
                   {t('familySettings.parents')}
                 </h3>
                 <div className="space-y-3">
-                  {familyMembers.filter(m => isParentRole(m.role)).map(member => (
+                  {familyMembers
+                    .filter(m => (isParentRole(m.role) || isAdultRole(m.role)) && m.lifecycle !== 'archived')
+                    .map(member => (
                     <Card key={member.id}>
-                      <CardContent className="p-4 flex items-center justify-between">
+                      <CardContent className="p-4 flex items-center justify-between gap-3">
                         <div className="flex items-center gap-4">
                           <Avatar src={member.avatarUrl} fallback={member.displayName[0]} />
                           <div>
@@ -544,6 +670,22 @@ export function FamilySettings({ onSectionChange }: FamilySettingsProps) {
                             </h4>
                           </div>
                         </div>
+                        {canOwnerManage(member) && (
+                          <div className="flex flex-wrap items-center justify-end gap-2">
+                            <Button variant="ghost" size="sm" className="text-gray-500 hover:text-gray-700" onClick={() => openArchive(member)}>
+                              {t('familySettings.memberArchive')}
+                            </Button>
+                            <Button variant="ghost" size="sm" className="text-gray-500 hover:text-gray-700" onClick={() => openChangeRole(member)}>
+                              {t('familySettings.memberChangeRole')}
+                            </Button>
+                            <Button variant="ghost" size="sm" className="text-amber-600 hover:text-amber-700" onClick={() => openTransfer(member)}>
+                              {t('familySettings.memberMakeOwner')}
+                            </Button>
+                            <Button variant="ghost" size="sm" className="text-red-600 hover:text-red-700" onClick={() => openRemove(member)}>
+                              {t('familySettings.memberRemove')}
+                            </Button>
+                          </div>
+                        )}
                       </CardContent>
                     </Card>
                   ))}
@@ -594,7 +736,7 @@ export function FamilySettings({ onSectionChange }: FamilySettingsProps) {
                   {t('familySettings.children')}
                 </h3>
                 <div className="space-y-3">
-                  {familyMembers.filter(m => isChildRole(m.role)).map(member => (
+                  {familyMembers.filter(m => isChildRole(m.role) && m.lifecycle !== 'archived').map(member => (
                     <Card key={member.id}>
                       <CardContent className="p-4">
                         <div className="flex items-center justify-between gap-3">
@@ -612,9 +754,16 @@ export function FamilySettings({ onSectionChange }: FamilySettingsProps) {
                             </div>
                           </div>
                           {isParentOrOwner && (
-                            <Button variant="ghost" size="sm" className="text-gray-500 hover:text-gray-700" onClick={() => setEditingMember(member)}>
-                              {t('common:edit')}
-                            </Button>
+                            <div className="flex items-center gap-2">
+                              <Button variant="ghost" size="sm" className="text-gray-500 hover:text-gray-700" onClick={() => setEditingMember(member)}>
+                                {t('common:edit')}
+                              </Button>
+                              {canManageChild(member) && (
+                                <Button variant="ghost" size="sm" className="text-gray-500 hover:text-gray-700" onClick={() => openArchive(member)}>
+                                  {t('familySettings.memberArchive')}
+                                </Button>
+                              )}
+                            </div>
                           )}
                         </div>
                         {member.isManaged && isParentOrOwner && (
@@ -654,15 +803,16 @@ export function FamilySettings({ onSectionChange }: FamilySettingsProps) {
                             <div className="flex gap-2">
                               <select
                                 aria-label={`Approval role for ${request.displayName}`}
-                                value={approvalRoles[request.id] ?? 'child'}
+                                value={approvalRoles[request.id] ?? 'adult'}
                                 onChange={event => setApprovalRoles(previous => ({
                                   ...previous,
-                                  [request.id]: event.target.value as 'child' | 'parent',
+                                  [request.id]: event.target.value as 'child' | 'parent' | 'adult',
                                 }))}
                                 className="rounded-lg border border-gray-200 px-2 text-sm"
                               >
-                                <option value="child">{t('familySettings.approveAsChild')}</option>
+                                <option value="adult">{t('familySettings.approveAsAdult')}</option>
                                 <option value="parent">{t('familySettings.approveAsParent')}</option>
+                                <option value="child">{t('familySettings.approveAsChild')}</option>
                               </select>
                               <Button
                                 size="sm"
@@ -670,9 +820,11 @@ export function FamilySettings({ onSectionChange }: FamilySettingsProps) {
                                 onClick={() => handleApproveJoinRequest(request.id)}
                               >
                                 {t(
-                                  (approvalRoles[request.id] ?? 'child') === 'parent'
+                                  (approvalRoles[request.id] ?? 'adult') === 'parent'
                                     ? 'familySettings.confirmParent'
-                                    : 'familySettings.confirmChild',
+                                    : (approvalRoles[request.id] ?? 'adult') === 'adult'
+                                      ? 'familySettings.confirmAdult'
+                                      : 'familySettings.confirmChild',
                                 )}
                               </Button>
                               <Button
@@ -696,6 +848,49 @@ export function FamilySettings({ onSectionChange }: FamilySettingsProps) {
                   )}
                 </div>
               </section>
+
+              {/* Archived Members Section */}
+              {archivedMembers.length > 0 && (
+                <section aria-labelledby="family-settings-archived-heading">
+                  <h3 id="family-settings-archived-heading" className="text-lg font-bold text-gray-900 mb-3 flex items-center gap-2">
+                    {t('familySettings.archivedMembers')}
+                  </h3>
+                  <p className="text-sm text-gray-500 mb-3">{t('familySettings.archivedNote')}</p>
+                  <div className="space-y-3">
+                    {archivedMembers.map(member => {
+                      const canRestore = owner || (isParentRole(role) && isChildRole(member.role));
+                      return (
+                        <Card key={member.id}>
+                          <CardContent className="p-4 flex items-center justify-between gap-3">
+                            <div className="flex items-center gap-4">
+                              <Avatar src={member.avatarUrl} fallback={member.displayName[0]} />
+                              <div>
+                                <h4 className="font-semibold text-gray-900 flex items-center gap-2">
+                                  {member.displayName}
+                                  {getRoleLabel(member.role) && (
+                                    <span className="text-xs font-medium text-gray-500 bg-gray-100 px-2 py-1 rounded-full">
+                                      {getRoleLabel(member.role)}
+                                    </span>
+                                  )}
+                                  <span className="text-xs font-medium text-gray-400 bg-gray-100 px-2 py-1 rounded-full">
+                                    {t('familySettings.archivedMembers')}
+                                  </span>
+                                </h4>
+                              </div>
+                            </div>
+                            {canRestore && (
+                              <Button variant="ghost" size="sm" className="text-primary-600 hover:text-primary-700" onClick={() => openRestore(member)}>
+                                {t('familySettings.memberRestore')}
+                              </Button>
+                            )}
+                          </CardContent>
+                        </Card>
+                      );
+                    })}
+                  </div>
+                </section>
+              )}
+
             </div>
           </Section>
         </div>
@@ -1047,6 +1242,19 @@ export function FamilySettings({ onSectionChange }: FamilySettingsProps) {
           showToast(t('family:loginCreated', { name }));
         }}
       />
+
+      {confirmConfig && (
+        <ConfirmLifecycleDialog
+          open={!!confirmAction}
+          title={confirmConfig.title}
+          message={confirmConfig.message}
+          confirmLabel={confirmConfig.confirmLabel}
+          danger={confirmConfig.danger}
+          busy={!!busyUid}
+          onConfirm={runLifecycleAction}
+          onClose={closeConfirm}
+        />
+      )}
 
     </div>
   );

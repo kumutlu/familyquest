@@ -38,6 +38,7 @@
   "roles": {
     "owner": "Owner",
     "parent": "Parent",
+    "adult": "Adult",
     "child": "Child"
   }
 }

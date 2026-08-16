@@ -38,6 +38,7 @@
   "roles": {
     "owner": "Sahip",
     "parent": "Ebeveyn",
+    "adult": "Yetişkin",
     "child": "Çocuk"
   }
 }

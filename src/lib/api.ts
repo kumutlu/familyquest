@@ -340,8 +340,8 @@ export const completeFamilyWelcomeSetup = async (familyId: string, uid: string) 
  * but cannot change the role the invitation granted. Firestore rules enforce
  * the same invariant, so a tampered client cannot bypass it either.
  */
-export const approveJoinRequest = async (familyId: string, requestId: string, role: 'parent' | 'child') => {
-  if (role !== 'child' && role !== 'parent') throw new Error('Unsupported approval role');
+export const approveJoinRequest = async (familyId: string, requestId: string, role: 'parent' | 'child' | 'adult' = 'adult') => {
+  if (role !== 'child' && role !== 'parent' && role !== 'adult') throw new Error('Unsupported approval role');
   const reviewerUid = auth.currentUser?.uid;
   if (!reviewerUid) throw new Error('Not authenticated');
   await runTransaction(db, async (transaction) => {
@@ -357,10 +357,12 @@ export const approveJoinRequest = async (familyId: string, requestId: string, ro
     // Invitation-derived requests carry a server-written intendedRole which
     // overrides whatever the reviewer picked. `owner` is never grantable.
     const intendedRole = requestDoc.data().intendedRole;
-    if (intendedRole !== undefined && intendedRole !== 'parent' && intendedRole !== 'child') {
+    if (intendedRole !== undefined && intendedRole !== 'parent' && intendedRole !== 'child' && intendedRole !== 'adult') {
       throw new Error('Join request role is invalid');
     }
-    const effectiveRole: 'parent' | 'child' = intendedRole ?? role;
+    // Default to Adult where ambiguity exists; an invitation's intendedRole
+    // (when present) always wins over the reviewer's suggestion.
+    const effectiveRole: 'parent' | 'child' | 'adult' = intendedRole ?? role;
     const userRef = doc(db, 'users', uid);
 
     if (effectiveRole === 'child') {
@@ -374,7 +376,7 @@ export const approveJoinRequest = async (familyId: string, requestId: string, ro
       familyId,
       role: effectiveRole,
       displayName,
-      avatarUrl: `https://api.dicebear.com/7.x/${effectiveRole === 'parent' ? 'avataaars' : 'bottts'}/svg?seed=${displayName}`,
+      avatarUrl: `https://api.dicebear.com/7.x/${effectiveRole === 'child' ? 'bottts' : 'avataaars'}/svg?seed=${displayName}`,
       rewardPoints: 0,
       lifetimeXP: 0,
       currentStreak: 0,

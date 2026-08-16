@@ -38,7 +38,7 @@ export const parentGuide: HelpArticle = {
         "Onay Merkezi'ndeki her şeyi onaylama veya reddetme.",
         'Aile Panosu’nda duyuru yayımlama.',
         'Evcil hayvan ekleme ve Pet Box gideri kaydetme.',
-        'Aile üyesi ekleme ve çıkarma.',
+        'Çocukları yönetilen hesap olarak ekleme ve arşivleme ya da geri yükleme — geçmişleri korunur. (Yetişkin bir üyeyi çıkarmak ve rolleri değiştirmek yalnızca sahibe aittir.)',
       ]),
       info(
         'Ebeveynler çocuklarla aynı dört sekmeyi görür. Ek araçlar bu sayfaların içinde belirir — örneğin Onay Merkezi ebeveyn panosunda, “Cüzdanı Yönet” ise Çocuk Cüzdanları ekranında yer alır.'

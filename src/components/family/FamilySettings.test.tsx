@@ -668,6 +668,8 @@ describe('FamilySettings — localization and accessibility', () => {
     expect(screen.getByText('1 istek onay bekliyor')).toBeInTheDocument();
     expect(screen.getByText('Bir çocuk hesabı için Çocuk seçin; aileyi yönetmesine güvendiğiniz bir yetişkin için Ebeveyn veya yetişkin seçin.')).toBeInTheDocument();
     expect(screen.getByText(/İstek tarihi:/)).toHaveTextContent('02.01.2026');
+    // Default role is Adult; explicitly choose Child to exercise that path.
+    await user.selectOptions(screen.getByRole('combobox', { name: 'Approval role for Yeni Çocuk' }), 'child');
     expect(screen.getByRole('button', { name: 'Çocuk rolünü onayla' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Reddet' })).toBeInTheDocument();
 
@@ -717,6 +719,9 @@ describe('FamilySettings — pending join requests', () => {
       ],
     });
     await user.click(screen.getByRole('button', { name: 'Members' }));
+    // Spec: a new join request defaults to the Adult role.
+    expect(screen.getByRole('button', { name: 'Confirm adult' })).toBeInTheDocument();
+    await user.selectOptions(screen.getByRole('combobox', { name: 'Approval role for Joining Child' }), 'child');
     await user.click(screen.getByRole('button', { name: 'Confirm child' }));
     expect(await screen.findByText('Join request approved')).toBeInTheDocument();
     expect(mockApproveJoinRequest).toHaveBeenCalledWith('fam1', 'req1', 'child');

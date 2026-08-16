@@ -1,10 +1,10 @@
 import { useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
-import { User, Settings, Shield, LogOut, HelpCircle } from 'lucide-react';
+import { User, Settings, LogOut, HelpCircle } from 'lucide-react';
 import { Avatar } from '../ui/Avatar';
 import { useStore } from '../../store/useStore';
-import { getRoleLabel, isOwnerRole } from '../../lib/roles';
+import { getRoleLabel } from '../../lib/roles';
 import { signOut } from '../../lib/api';
 import { ProfileEditorModal } from '../profile/ProfileEditorModal';
 
@@ -50,8 +50,6 @@ export function ProfileDropdown() {
   }, [isOpen]);
 
   if (!currentUser) return null;
-
-  const isOwner = isOwnerRole(currentUser.role);
 
   const close = () => setIsOpen(false);
 
@@ -164,19 +162,6 @@ export function ProfileDropdown() {
               <Settings size={18} className="text-gray-400" />
               <span>{t('menuSettings')}</span>
             </Link>
-
-            {isOwner && (
-              <Link
-                to="/settings"
-                role="menuitem"
-                tabIndex={0}
-                onClick={close}
-                className={menuItemClass}
-              >
-                <Shield size={18} className="text-gray-400" />
-                <span>{t('menuFamilySettings')}</span>
-              </Link>
-            )}
 
             <button
               type="button"

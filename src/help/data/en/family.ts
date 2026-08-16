@@ -150,7 +150,7 @@ export const familyManagement: HelpArticle = {
   id: 'family-management',
   title: 'Family management',
   description:
-    'Add and remove members, share the invite code, manage child profiles, and understand ownership.',
+    'Add members, archive or remove adult members, manage child profiles, and understand ownership.',
   category: 'family',
   keywords: [
     'family',
@@ -207,7 +207,7 @@ export const familyManagement: HelpArticle = {
     section('mistakes', [
       ul([
         'Posting the invite code in a group chat that outlives its purpose.',
-        'Removing a member to “reset” them — history goes with them.',
+        'Removing an adult member to “reset” them — their history is kept, so it does not wipe the slate. Children are archived, never removed.',
         'Assuming a child profile change applied instantly. It waits for approval.',
       ]),
       soon('Regenerating the invite code to invalidate an old one.'),

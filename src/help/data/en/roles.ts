@@ -38,7 +38,7 @@ export const parentGuide: HelpArticle = {
         'Approve or reject everything in the Approval Center.',
         'Publish announcements to the Family Bulletin.',
         'Add pets and record Pet Box expenses.',
-        'Add and remove family members.',
+        'Add children as managed accounts, and archive or restore them — their history is kept. (Removing an adult member and changing roles are owner-only.)',
       ]),
       info(
         'Parents see the same four tabs as children. The extra tools appear inside those pages — for example the Approval Center sits on the parent dashboard, and “Manage Wallet” appears on the Child Wallets screen.'
