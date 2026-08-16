@@ -50,6 +50,7 @@ import { FAMILYQUEST_BUILD } from '../buildInfo';
 import { ProfileEditorModal } from '../components/profile/ProfileEditorModal';
 import { FamilySettings } from '../components/family/FamilySettings';
 import { DeleteAccountDialog } from '../components/settings/DeleteAccountDialog';
+import { AppearanceSection } from '../components/settings/AppearanceSection';
 import { getLegalLinks } from '../config/legalLinks';
 
 interface SectionProps {
@@ -460,6 +461,9 @@ export function Settings() {
           </CardContent>
         </Card>
       </Section>
+
+      {/* 1.5 APPEARANCE */}
+      <AppearanceSection />
 
       {/* 2. FAMILY */}
       <Section
