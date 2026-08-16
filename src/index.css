@@ -1,5 +1,11 @@
 @import "tailwindcss";
 
+/* Class-based dark mode: the `dark` variant (and our CSS variable overrides)
+   activate when the root element carries the `dark` class. The class is set by
+   the inline bootstrap in index.html (before paint) and kept in sync by the
+   appearance store. */
+@custom-variant dark (&:where(.dark, .dark *));
+
 @theme {
   --color-primary-50: #eef2ff;
   --color-primary-100: #e0e7ff;
@@ -29,4 +35,134 @@
 
 body {
   @apply bg-gray-50 text-gray-900 font-sans antialiased;
+}
+
+/* ============================================================================
+   Dark theme
+   ----------------------------------------------------------------------------
+   Rather than annotate hundreds of components with `dark:` variants, we remap
+   the neutral palette tokens to theme-aware values inside the `.dark` scope.
+   Tailwind v4 utilities reference these CSS variables, so every existing
+   `bg-white`, `text-gray-900`, `border-gray-100`, etc. adapts automatically.
+
+   Hierarchy (not pure black — keeps Queki's friendly identity):
+     page background : gray-50  #0e1116  (very dark neutral)
+     subtle/insets   : gray-100 #14181f
+     surfaces/cards  : bg-white #1b212b  (slightly lighter)
+     elevated/modals : bg-white (same token; one step above page)
+     borders         : gray-200/300 (visible against surfaces)
+     primary text    : text-gray-900 #f1f5f9 (near white)
+     secondary text  : text-gray-400/500 (muted light gray)
+     disabled text   : text-gray-400 (lower contrast, still readable)
+   ========================================================================== */
+.dark {
+  /* Neutrals — page → surface → border */
+  --color-gray-50: #0e1116;
+  --color-gray-100: #14181f;
+  --color-gray-200: #262d38;
+  --color-gray-300: #36404d;
+  --color-gray-400: #8b94a3;
+  --color-gray-500: #a3adba;
+  --color-gray-600: #c2cad6;
+  --color-gray-700: #d6dce5;
+
+  /* Semantic tints become dark, muted versions of themselves so badges and
+     selected states stay readable without blinding light chips. */
+  --color-primary-50: #1b1830;
+  --color-primary-100: #241f44;
+  --color-primary-200: #322b5e;
+
+  --color-success-50: #0f2419;
+  --color-success-100: #143524;
+  --color-success-200: #1c4a32;
+
+  --color-warning-50: #2a1c0c;
+  --color-warning-100: #3a2710;
+  --color-warning-200: #4a3414;
+
+  --color-danger-50: #2a1414;
+  --color-danger-100: #3a1a1a;
+  --color-danger-200: #4a1f1f;
+
+  --color-reward-100: #2e2510;
+  --color-reward-200: #4a3c18;
+
+  --color-indigo-50: #1a1a33;
+  --color-indigo-100: #23234a;
+  --color-indigo-200: #2e2e5e;
+
+  --color-sky-100: #0c2233;
+
+  --color-green-100: #0f2419;
+  --color-red-100: #2a1414;
+  --color-red-200: #4a1f1f;
+  --color-amber-100: #2e2410;
+  --color-amber-200: #4a3414;
+  --color-yellow-100: #2e2510;
+}
+
+/* `gray-800` / `gray-900` are intentionally left as dark values because they
+   are used for dark surfaces (BalanceCard, toast, modal scrims via
+   `bg-gray-900`). Only their *text* roles need to flip to light. */
+.dark .text-gray-800 { color: #e2e8f0; }
+.dark .text-gray-900 { color: #f1f5f9; }
+
+/* `white` is used both as a surface (`bg-white`) and as text/border on colored
+   elements (`text-white`, `border-white`). We only remap the surface role so
+   colored buttons and badges keep their white text/border. */
+.dark .bg-white { background-color: #1b212b; }
+.dark .bg-white\/95 { background-color: #20272f; }
+
+/* Lighten the darker semantic *text* tokens so labels on dark tints stay
+   legible. Solid semantic button colours (e.g. `bg-success-500`) are untouched. */
+.dark .text-primary-600 { color: #a5b4fc; }
+.dark .text-primary-700 { color: #c7d2fe; }
+.dark .text-primary-800 { color: #ddd6fe; }
+.dark .text-success-700 { color: #4ade80; }
+.dark .text-warning-700 { color: #fbbf24; }
+.dark .text-danger-600 { color: #f87171; }
+.dark .text-danger-700 { color: #fca5a5; }
+.dark .text-reward-500 { color: #fbbf24; }
+.dark .text-reward-600 { color: #fcd34d; }
+.dark .text-blue-700 { color: #93c5fd; }
+.dark .text-indigo-600 { color: #a5b4fc; }
+.dark .text-indigo-700 { color: #c7d2fe; }
+.dark .text-sky-700 { color: #7dd3fc; }
+.dark .text-green-700 { color: #4ade80; }
+.dark .text-red-600 { color: #f87171; }
+.dark .text-red-700 { color: #fca5a5; }
+.dark .text-amber-600 { color: #fbbf24; }
+.dark .text-amber-700 { color: #fbbf24; }
+
+/* Body base colours (the `body` rule uses @apply, so force them explicitly). */
+.dark body {
+  background-color: var(--color-gray-50);
+  color: #f1f5f9;
+}
+
+/* Browser autofill must not paint an unreadable light rectangle in dark mode. */
+.dark input:-webkit-autofill,
+.dark input:-webkit-autofill:hover,
+.dark input:-webkit-autofill:focus,
+.dark textarea:-webkit-autofill,
+.dark select:-webkit-autofill {
+  -webkit-text-fill-color: #e2e8f0;
+  -webkit-box-shadow: 0 0 0 1000px #1b212b inset;
+  caret-color: #e2e8f0;
+  transition: background-color 9999s ease-in-out 0s;
+}
+
+.dark ::placeholder {
+  color: #6b7280;
+  opacity: 1;
+}
+
+/* Gentle, non-aggressive theme transition. Respects reduced-motion: the rule
+   is scoped to the no-preference query, so users who opt out get an instant
+   switch. Only the base layer transitions — component hover transitions are
+   untouched. */
+@media (prefers-reduced-motion: no-preference) {
+  body {
+    transition: background-color 150ms ease, color 150ms ease;
+  }
 }
