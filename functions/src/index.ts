@@ -258,6 +258,16 @@ export {
 } from './familyDeletion';
 export { deleteAccount } from './accountDeletion';
 
+// Server-authoritative member lifecycle (archive / restore / remove / changeRole
+// / transferOwnership). All authorization is enforced here, never in the client.
+export {
+  archiveMember,
+  restoreMember,
+  removeMemberFromFamily,
+  changeMemberRole,
+  transferOwnership,
+} from './memberLifecycle';
+
 export {
   requestFamilyJoin,
   regenerateFamilyCode,
