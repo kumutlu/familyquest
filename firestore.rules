@@ -1074,7 +1074,7 @@ service cloud.firestore {
         && req != null && req.data.status == 'pending' && req.data.uid == uid
         && reqAfter != null && reqAfter.data.status == 'approved' && reqAfter.data.assignedRole == data.get('role', 'null')
         && data.get('uid', 'null') == uid && data.get('displayName', 'null') == req.data.displayName
-        && data.get('role', 'null') in ['parent', 'child']
+        && data.get('role', 'null') in ['parent', 'child', 'adult']
         && data.diff(resource.data).affectedKeys().hasOnly(['uid', 'joinRequestId', 'familyId', 'role', 'displayName', 'avatarUrl', 'rewardPoints', 'lifetimeXP', 'currentStreak', 'longestStreak', 'lastActiveDate'])
         && data.get('rewardPoints', -1) == 0 && data.get('lifetimeXP', -1) == 0
         && data.get('currentStreak', -1) == 0 && data.get('longestStreak', -1) == 0 && data.get('lastActiveDate', 'null') == request.time;
@@ -1087,7 +1087,7 @@ service cloud.firestore {
       return user != null && user.data.get('uid', 'null') == oldData.get('uid', 'null') && user.data.get('joinRequestId', 'null') == requestId
         && user.data.get('familyId', 'null') == familyId && user.data.get('role', 'null') == data.get('assignedRole', 'null')
         && user.data.get('displayName', 'null') == oldData.get('displayName', 'null')
-        && (data.get('assignedRole', 'null') == 'parent' || (wallet != null && wallet.data.get('balance', -1) == 0))
+        && (data.get('assignedRole', 'null') in ['parent', 'adult'] || (wallet != null && wallet.data.get('balance', -1) == 0))
         && feed != null && feed.data.get('actorId', 'null') == authProfileId();
     }
 
@@ -1658,7 +1658,7 @@ service cloud.firestore {
           && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['language'])
           && isValidLanguage(request.resource.data.language)) ||
         (authProfileId() == uid && !request.resource.data.diff(resource.data).affectedKeys().hasAny([
-          'role', 'familyId', 'rewardPoints', 'lifetimeXP', 'walletBalance', 'balance', 'lastFundTxId',
+          'role', 'familyId', 'lifecycle', 'rewardPoints', 'lifetimeXP', 'walletBalance', 'balance', 'lastFundTxId',
           'displayName', 'avatarUrl', 'avatarId', 'language',
           // Phase 1 child-login linking fields: server-only (Admin SDK). A client
           // must never be able to set its own login link, username, or flags.
@@ -1672,7 +1672,12 @@ service cloud.firestore {
           || (request.resource.data.diff(resource.data).affectedKeys().hasAny(['lastTaskCompletionId']) && isValidTaskApprovalMutation(uid))
           || (request.resource.data.diff(resource.data).affectedKeys().hasAny(['lastBehaviourEventId']) && isValidBehaviourPointMutation(uid)) ||
         (!('familyId' in resource.data) && 'familyId' in request.resource.data ? isValidOwnerBootstrap(uid) || isValidJoinProfileUpdate(uid) : false) ||
-        ('familyId' in resource.data && isOwner(resource.data.familyId) && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['role']) && resource.data.get('role', 'null') != 'child' && request.resource.data.role != 'child') ||
+        // Owner may adjust a member's role via the client ONLY in the legacy
+        // join-approval path; the canonical, audited role change is the
+        // server-authoritative changeMemberRole callable. Clients may NEVER
+        // grant 'owner' (no self-escalation to family owner) and may NEVER
+        // touch 'lifecycle' (archive/remove/restore are server-only).
+        ('familyId' in resource.data && isOwner(resource.data.familyId) && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['role']) && resource.data.get('role', 'null') != 'child' && request.resource.data.role != 'child' && request.resource.data.role != 'owner') ||
         ('familyId' in resource.data && isParent(resource.data.familyId) && resource.data.get('role', 'null') == 'child' && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['displayName', 'avatarUrl', 'avatarId']))
       );
 
@@ -1712,6 +1717,13 @@ service cloud.firestore {
     match /families/{familyId} {
       allow read: if isFamilyMember(familyId);
       allow create: if isAuthenticated();
+      // Server-only membership + historical-identity projection. Written
+      // exclusively by Cloud Functions (join, lifecycle, deletion). Clients
+      // must never read or write it, so archived/removed history cannot be
+      // tampered with and active membership cannot be forged client-side.
+      match /users/{userId} {
+        allow read, write: if false;
+      }
       allow update: if isOwner(familyId)
         && !request.resource.data.diff(resource.data).affectedKeys().hasAny(['inviteCode'])
         && !request.resource.data.diff(resource.data).affectedKeys().hasAny([
