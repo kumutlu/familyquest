@@ -29,8 +29,11 @@ or role. Four outcomes:
    caller must type the exact, case-sensitive family name. The family is frozen
    and a family-deletion job is queued; the owner's account "rides" that job via
    `accountDeletionJobs/{uid}` and is purged in the job's `finalize` phase.
-4. **Managed child** — rejected (`MANAGED_CHILD_ACCOUNT`); a parent must remove
-   the child from Family Settings.
+4. **Managed child** — rejected (`MANAGED_CHILD_ACCOUNT`); a managed child is
+   removed only via the dedicated Danger Zone permanent child-deletion flow
+   (owner/parent) or archived (parent/owner) in Family Settings. A managed
+   child is **never** detached via "Remove from family" — see
+   `docs/member-lifecycle-contract.md`.
 
 **Recent-login requirement.** Deletion requires an authentication no older than
 five minutes. Otherwise the callable returns `RECENT_LOGIN_REQUIRED` and the
