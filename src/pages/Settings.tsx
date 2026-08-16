@@ -623,7 +623,7 @@ export function Settings() {
               >
                 <LogOut size={18} className="mr-2" aria-hidden="true" /> {t('signOut')}
               </Button>
-              {!currentUser?.isManaged && (
+              {!child && (
                 <div className="pt-2 border-t border-gray-50">
                   <h3 className="text-sm font-semibold text-red-700">{t('deleteAccount.title')}</h3>
                   <p className="text-sm text-gray-500 mt-1 mb-3">{t('deleteAccount.settingsDesc')}</p>

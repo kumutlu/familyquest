@@ -200,6 +200,7 @@ beforeEach(() => {
   db.store.set('users/parent-uid', { familyId: FAMILY_ID, role: 'parent', displayName: 'Parent' });
   db.store.set('users/teen-uid', { familyId: FAMILY_ID, role: 'child', displayName: 'Teen' });
   db.store.set('users/managed-uid', { familyId: FAMILY_ID, role: 'child', isManaged: true });
+  db.store.set('users/selfreg-uid', { familyId: FAMILY_ID, role: 'child', isManaged: false, displayName: 'SelfReg' });
   db.store.set(`families/${FAMILY_ID}/users/parent-uid`, { role: 'parent' });
   db.store.set(`families/${FAMILY_ID}/users/owner-uid`, { role: 'owner' });
   for (const uid of ['owner-uid', 'parent-uid', 'teen-uid']) {
@@ -222,6 +223,26 @@ describe('deleteAccountImpl — guards', () => {
   });
 });
 
+describe('deleteAccountImpl — children are blocked from self-deletion (regardless of isManaged)', () => {
+  it('rejects a managed child (role:child, isManaged: true)', async () => {
+    await expect(deleteAccountImpl(ctx, 'managed-uid', {}, FRESH_AUTH))
+      .rejects.toMatchObject({ code: 'permission-denied', message: 'MANAGED_CHILD_ACCOUNT' });
+    expect(db.store.has('users/managed-uid')).toBe(true);
+  });
+
+  it('rejects a self-registered child (role:child, isManaged: false)', async () => {
+    await expect(deleteAccountImpl(ctx, 'selfreg-uid', {}, FRESH_AUTH))
+      .rejects.toMatchObject({ code: 'permission-denied', message: 'MANAGED_CHILD_ACCOUNT' });
+    expect(db.store.has('users/selfreg-uid')).toBe(true);
+  });
+
+  it('rejects a legacy child (role:child, isManaged missing)', async () => {
+    await expect(deleteAccountImpl(ctx, 'teen-uid', {}, FRESH_AUTH))
+      .rejects.toMatchObject({ code: 'permission-denied', message: 'MANAGED_CHILD_ACCOUNT' });
+    expect(db.store.has('users/teen-uid')).toBe(true);
+  });
+});
+
 describe('deleteAccountImpl — non-owner adult', () => {
   it('deletes profile, membership projection, claims and Auth (last), preserving the family', async () => {
     const result = await deleteAccountImpl(ctx, 'parent-uid', {}, FRESH_AUTH);
@@ -235,11 +256,10 @@ describe('deleteAccountImpl — non-owner adult', () => {
     expect(db.store.get('users/owner-uid').role).toBe('owner');
   });
 
-  it('a self-registered child adult account can also delete itself', async () => {
-    const result = await deleteAccountImpl(ctx, 'teen-uid', {}, FRESH_AUTH);
-    expect(result.status).toBe('completed');
-    expect(db.store.has('users/teen-uid')).toBe(false);
-    expect(auth.deleted).toContain('teen-uid');
+  it('a legacy self-registered child (role:child, isManaged missing) is blocked from self-deletion', async () => {
+    await expect(deleteAccountImpl(ctx, 'teen-uid', {}, FRESH_AUTH))
+      .rejects.toMatchObject({ code: 'permission-denied', message: 'MANAGED_CHILD_ACCOUNT' });
+    expect(db.store.has('users/teen-uid')).toBe(true);
   });
 
   it('is idempotent: retry after profile deletion still deletes the Auth user', async () => {

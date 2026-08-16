@@ -109,8 +109,11 @@ export async function deleteAccountImpl(
   }
 
   const profile = profileSnap.data() as Record<string, any>;
-  if (profile.isManaged === true) {
-    // Managed children are deleted by a parent through the existing flow.
+  if (profile.role === 'child') {
+    // Children (role:'child') are deleted by a parent through the existing
+    // child-deletion flow, regardless of the isManaged flag. This blocks
+    // legacy self-registered children (isManaged missing/false) from
+    // self-deleting, which the previous isManaged-only check permitted.
     throw new HttpsError('permission-denied', 'MANAGED_CHILD_ACCOUNT');
   }
 

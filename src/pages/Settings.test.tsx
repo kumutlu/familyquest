@@ -178,11 +178,48 @@ describe('Settings — permanent account deletion', () => {
     expect(screen.getByLabelText('Sign out')).not.toBe(button);
   });
 
+  it('offers the action to an owner account', () => {
+    renderSettings('owner');
+    expect(screen.getByTestId('open-delete-account')).toBeInTheDocument();
+  });
+
   it('hides the action from managed child accounts', () => {
     seedStore('child');
     act(() => {
       useStore.setState({
         currentUser: { ...useStore.getState().currentUser, isManaged: true },
+      });
+    });
+    render(
+      <MemoryRouter>
+        <Settings />
+      </MemoryRouter>,
+    );
+    expect(screen.queryByTestId('open-delete-account')).not.toBeInTheDocument();
+  });
+
+  it('hides the action from a self-registered child (role:child, isManaged: false)', () => {
+    seedStore('child');
+    act(() => {
+      useStore.setState({
+        currentUser: { ...useStore.getState().currentUser, isManaged: false },
+      });
+    });
+    render(
+      <MemoryRouter>
+        <Settings />
+      </MemoryRouter>,
+    );
+    expect(screen.queryByTestId('open-delete-account')).not.toBeInTheDocument();
+  });
+
+  it('hides the action from a legacy child with isManaged missing (role:child)', () => {
+    seedStore('child');
+    act(() => {
+      const { currentUser, ...rest } = useStore.getState();
+      useStore.setState({
+        ...rest,
+        currentUser: { ...currentUser, isManaged: undefined },
       });
     });
     render(
