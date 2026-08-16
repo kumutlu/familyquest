@@ -134,6 +134,14 @@ body {
 .dark .text-amber-600 { color: #fbbf24; }
 .dark .text-amber-700 { color: #fbbf24; }
 
+/* `gray-300` is used as a *foreground* token for muted glyphs and labels
+   (chevrons, empty-state icons, the balance-card label, breadcrumbs). The
+   neutral remap above turns `gray-300` into a dark surface colour
+   (#36404d), which would make those glyphs disappear on dark surfaces. Keep
+   it a light, muted grey in dark mode (slightly lighter than `gray-400` so
+   the light-mode hierarchy is preserved). */
+.dark .text-gray-300 { color: #9aa4b2; }
+
 /* Body base colours (the `body` rule uses @apply, so force them explicitly). */
 .dark body {
   background-color: var(--color-gray-50);
