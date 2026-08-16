@@ -7,6 +7,31 @@
     <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
     <meta name="theme-color" content="#0f766e" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+
+    <!-- Appearance bootstrap: apply the persisted Light/Dark/System preference
+         BEFORE first paint to prevent a theme flash. System follows the OS
+         prefers-color-scheme. This runs synchronously in head and never depends
+         on the service worker. -->
+    <script>
+      (function () {
+        try {
+          var stored = null;
+          try { stored = localStorage.getItem('queki:appearance'); } catch (e) {}
+          var appearance = stored === 'light' || stored === 'dark' ? stored : 'system';
+          var systemDark = false;
+          try {
+            systemDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+          } catch (e) {}
+          var dark = appearance === 'dark' || (appearance === 'system' && systemDark);
+          var root = document.documentElement;
+          if (dark) root.classList.add('dark');
+          root.style.colorScheme = dark ? 'dark' : 'light';
+          var meta = document.querySelector('meta[name="theme-color"]');
+          if (meta) meta.setAttribute('content', dark ? '#0e1116' : '#0f766e');
+        } catch (e) {}
+      })();
+    </script>
+
     <title>Queki — Family tasks, rewards & pocket money</title>
     <meta name="description" content="Queki helps your family share tasks, earn rewards and track pocket money in one place." />
     <link rel="canonical" href="https://queki.app/" />

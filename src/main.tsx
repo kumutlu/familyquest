@@ -8,6 +8,7 @@ import { installServiceWorkerControllerListener } from './serviceWorkerUpdate'
 import { installChunkLoadErrorMonitor } from './chunkLoadErrorMonitor'
 import i18n, { bootstrapI18n } from './i18n'
 import { markStartupStage, resetStartupMetrics } from './startupDiagnostics'
+import { useAppearanceStore } from './store/appearanceStore'
 
 resetStartupMetrics()
 markStartupStage('APP_SCRIPT_READY')
@@ -20,6 +21,12 @@ installServiceWorkerControllerListener()
 // Classify chunk-load failures (e.g. a stale hashed asset after a deploy) as a
 // distinct, non-sensitive diagnostic rather than a generic timeout.
 installChunkLoadErrorMonitor()
+
+// Apply the persisted appearance (Light/Dark/System) and start listening for OS
+// changes. The inline bootstrap in index.html already set the root `dark` class
+// before first paint to avoid a flash; this mirrors that into React state and
+// keeps it live.
+useAppearanceStore.getState().initAppearance()
 
 // PART 1 — Runtime build identifier. Proves which bundle is actually running
 // in the browser so stale-deployment regressions can be diagnosed from the
