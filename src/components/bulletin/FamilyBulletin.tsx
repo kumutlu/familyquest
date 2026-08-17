@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState, type FormEvent } from 'react';
-import { AlertTriangle, BellRing, ChevronDown, Pin, Plus } from 'lucide-react';
+import { AlertTriangle, BellRing, ChevronDown, Megaphone, Pin, Plus, Star } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { useStore } from '../../store/useStore';
@@ -26,23 +26,34 @@ import { Button } from '../ui/Button';
 import { EmptyState } from '../ui/EmptyState';
 
 /**
- * Announcement surface tones.
+ * Announcement surface + accent.
  *
- * Light mode keeps the familiar tints. Dark mode needs an *explicit* treatment:
- * the announcement card is a large surface painted with the lightest palette
- * step (`bg-amber-50` is a cream, `bg-red-50` a near-white pink) while its title
- * and body use the neutral text tokens, which flip to near-white in dark mode.
- * Without a dark surface value the card renders light-on-light and becomes
- * unreadable. Pinning `dark:` values here keeps the announcement dark and
- * elevated regardless of future palette changes, while the saturated border and
- * warm/red tint preserve the semantic identity (warm = important, red =
- * urgent).
+ * Redesign goal: the bulletin should read as a *native* Queki dark-mode card,
+ * not a light semantic alert pasted onto the dashboard. The card therefore uses
+ * the same neutral elevated surface as the rest of the Dashboard (`bg-white`,
+ * which the global dark remap turns into #1b212b) and expresses priority through
+ * a thin left accent border + icon rather than a full coloured fill. Semantic
+ * identity stays obvious (warm = important, red = urgent, indigo = normal) while
+ * the surface itself never goes bright.
+ *
+ * `dark:bg-white` is kept on every tone entry so the dark surface is explicit
+ * and the dark-theme regression scan keeps catching any future light-tint
+ * regression.
  */
+const surface = 'rounded-2xl border border-gray-100 bg-white p-4';
+
 const tone: Record<AnnouncementPriority, string> = {
-  normal: 'border-primary-100 bg-primary-50 dark:border-primary-200 dark:bg-primary-100',
-  important: 'border-amber-200 bg-amber-50 dark:border-amber-500/50 dark:bg-amber-100',
-  urgent: 'border-red-200 bg-red-50 dark:border-red-500/60 dark:bg-red-100',
+  normal: 'border-l-4 border-l-primary-500 dark:bg-white',
+  important: 'border-l-4 border-l-amber-400 dark:bg-white',
+  urgent: 'border-l-4 border-l-red-500 dark:bg-white',
 };
+
+/**
+ * Read / archived announcements are visually quieter: a neutral, dimmed left
+ * border instead of the saturated priority accent, and no "New" badge. The
+ * surface stays the same neutral card so contrast is unaffected.
+ */
+const readAccent = 'border-l-4 border-l-gray-300';
 
 export function FamilyBulletin() {
   const { t } = useTranslation('bulletin');
@@ -124,16 +135,21 @@ export function FamilyBulletin() {
               data-testid="bulletin-announcement"
               data-priority={item.priority}
               data-read={readIds.has(item.id) ? 'true' : 'false'}
-              className={`rounded-2xl border p-4 ${tone[item.priority]}`}
+              className={`${surface} ${readIds.has(item.id) ? readAccent : tone[item.priority]}`}
             >
               <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between sm:gap-3">
                 <div className="min-w-0">
                   <p
                     data-testid="bulletin-title"
-                    className="flex flex-wrap items-center gap-2 font-bold text-gray-900"
+                    className={`flex flex-wrap items-center gap-2 text-gray-900 ${readIds.has(item.id) ? 'font-semibold' : 'font-bold'}`}
                   >
+                    {!readIds.has(item.id) && (
+                      <span className="rounded-full bg-gray-900 px-2 py-0.5 text-xs font-semibold text-white dark:bg-gray-100 dark:text-gray-900">
+                        {t('new')}
+                      </span>
+                    )}
+                    <PriorityGlyph priority={item.priority} />
                     {item.pinned && <Pin size={15} aria-label={t('pinned')} />}
-                    {item.priority === 'urgent' && <AlertTriangle size={16} className="text-red-600" />}
                     {item.title}
                   </p>
                   <p
@@ -142,6 +158,16 @@ export function FamilyBulletin() {
                   >
                     {item.message}
                   </p>
+                  {(item.type !== 'general' || item.pinned) && (
+                    <p className="mt-1.5 text-xs text-gray-500">
+                      {[
+                        item.type !== 'general' ? t(`types.${item.type}`) : null,
+                        item.pinned ? t('pinned') : null,
+                      ]
+                        .filter(Boolean)
+                        .join(' · ')}
+                    </p>
+                  )}
                 </div>
                 {!readIds.has(item.id) && (
                   <Button
@@ -170,9 +196,9 @@ export function FamilyBulletin() {
                   {/* `dark:border-gray-300` keeps the outline visible against the
                       tinted announcement surface in dark mode. */}
                   <div className="grid grid-cols-2 gap-1.5 sm:contents">
-                    <Button size="sm" variant="outline" onClick={() => setEditing(item)} className="min-h-[44px] w-full dark:border-gray-300 sm:w-auto">{t('edit')}</Button>
+                    <Button size="sm" variant="outline" onClick={() => setEditing(item)} className="min-h-[44px] w-full sm:w-auto">{t('edit')}</Button>
                     {item.status === 'active' ? (
-                      <Button size="sm" variant="outline" onClick={() => archiveAnnouncement(familyId, item.id)} className="min-h-[44px] w-full dark:border-gray-300 sm:w-auto">{t('archive')}</Button>
+                      <Button size="sm" variant="outline" onClick={() => archiveAnnouncement(familyId, item.id)} className="min-h-[44px] w-full sm:w-auto">{t('archive')}</Button>
                     ) : (
                       <span aria-hidden="true" className="sm:hidden" />
                     )}
@@ -184,7 +210,7 @@ export function FamilyBulletin() {
                     size="sm"
                     variant="ghost"
                     onClick={() => window.confirm(t('deleteConfirm')) && deleteAnnouncement(familyId, item.id)}
-                    className="min-h-[44px] w-full text-danger-500 hover:bg-red-50 hover:text-danger-600 dark:text-red-400 dark:hover:bg-red-200 dark:hover:text-red-300 sm:w-auto"
+                    className="min-h-[44px] w-full text-danger-500 hover:bg-red-50 hover:text-danger-600 dark:hover:bg-red-500/10 sm:w-auto"
                   >
                     {t('delete')}
                   </Button>
@@ -220,6 +246,20 @@ export function FamilyBulletin() {
       )}
     </section>
   );
+}
+
+/** Small priority glyph that reinforces the announcement's tone through shape
+ *  and colour. Decorative (`aria-hidden`) — priority is also conveyed by the
+ *  left accent border and (for unread) the "New" badge, so it is never the sole
+ *  indicator. */
+function PriorityGlyph({ priority }: { priority: AnnouncementPriority }) {
+  if (priority === 'important') {
+    return <Star size={16} className="text-amber-500 dark:text-amber-400" aria-hidden="true" />;
+  }
+  if (priority === 'urgent') {
+    return <AlertTriangle size={16} className="text-red-500" aria-hidden="true" />;
+  }
+  return <Megaphone size={16} className="text-primary-500" aria-hidden="true" />;
 }
 
 function AnnouncementForm({

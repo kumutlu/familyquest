@@ -331,4 +331,61 @@ describe('Family Bulletin — dark mode', () => {
     expect(colour, 'no base (light) surface on the announcement').not.toBeNull();
     expect(relativeLuminance(colour as Rgb)).toBeGreaterThan(0.6);
   });
+
+  it('paints a distinct semantic left accent border per priority (native dark card, not a coloured fill)', () => {
+    const expected: Record<string, string> = {
+      normal: 'border-l-primary-500',
+      important: 'border-l-amber-400',
+      urgent: 'border-l-red-500',
+    };
+    for (const priority of ['normal', 'important', 'urgent'] as const) {
+      state.items = [announcement({ priority, id: priority })];
+      const { container } = render(
+        <MemoryRouter>
+          <FamilyBulletin />
+        </MemoryRouter>,
+      );
+      const card = container.querySelector('[data-testid="bulletin-announcement"]') as HTMLElement;
+      expect(card.className, `${priority} should carry its accent border`).toContain(expected[priority]);
+      // The card surface itself stays neutral — no full coloured fill.
+      expect(card.className).toContain('bg-white');
+      expect(card.className).not.toMatch(/bg-(amber|red|primary)-50/);
+    }
+  });
+
+  it('shows a "New" badge on unread cards', () => {
+    state.items = [announcement({ id: 'unread1' })];
+    state.readIds = new Set();
+    render(
+      <MemoryRouter>
+        <FamilyBulletin />
+      </MemoryRouter>,
+    );
+    expect(screen.getByText('New')).toBeInTheDocument();
+  });
+
+  it('hides the "New" badge on read cards', () => {
+    state.items = [announcement({ id: 'read1' })];
+    state.readIds = new Set(['read1']);
+    render(
+      <MemoryRouter>
+        <FamilyBulletin />
+      </MemoryRouter>,
+    );
+    expect(screen.queryByText('New')).not.toBeInTheDocument();
+  });
+
+  it('renders read announcements with a dimmed neutral border and stays readable', () => {
+    state.items = [announcement({ id: 'read1', priority: 'important' })];
+    state.readIds = new Set(['read1']);
+    render(
+      <MemoryRouter>
+        <FamilyBulletin />
+      </MemoryRouter>,
+    );
+    const card = screen.getByTestId('bulletin-announcement');
+    expect(card.className).toContain('border-l-gray-300');
+    expect(card.className).not.toContain('border-l-amber-400');
+    assertReadable(card, 'read (quiet) announcement');
+  });
 });
