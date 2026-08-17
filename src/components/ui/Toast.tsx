@@ -32,8 +32,13 @@ export function Toast({ toast, onDismiss, duration = 4000 }: ToastProps) {
 
   if (!toast) return null;
 
+  // Solid toast surfaces carry white text/icons, so the background must clear
+  // WCAG AA (4.5:1) for the message. `success-500` (#22c55e) only reached
+  // ~2.28:1; `success-700` (#15803d) reaches ~5.01:1 while keeping the green
+  // success identity. The toast is a transient surface, not a control, so it
+  // has no hover/active states.
   const tone = {
-    success: 'bg-success-500',
+    success: 'bg-success-700',
     error: 'bg-danger-500',
     info: 'bg-gray-900',
   }[toast.type];
