@@ -25,10 +25,23 @@ import {
 import { Button } from '../ui/Button';
 import { EmptyState } from '../ui/EmptyState';
 
-const tone = {
-  normal: 'border-primary-100 bg-primary-50',
-  important: 'border-amber-200 bg-amber-50',
-  urgent: 'border-red-200 bg-red-50',
+/**
+ * Announcement surface tones.
+ *
+ * Light mode keeps the familiar tints. Dark mode needs an *explicit* treatment:
+ * the announcement card is a large surface painted with the lightest palette
+ * step (`bg-amber-50` is a cream, `bg-red-50` a near-white pink) while its title
+ * and body use the neutral text tokens, which flip to near-white in dark mode.
+ * Without a dark surface value the card renders light-on-light and becomes
+ * unreadable. Pinning `dark:` values here keeps the announcement dark and
+ * elevated regardless of future palette changes, while the saturated border and
+ * warm/red tint preserve the semantic identity (warm = important, red =
+ * urgent).
+ */
+const tone: Record<AnnouncementPriority, string> = {
+  normal: 'border-primary-100 bg-primary-50 dark:border-primary-200 dark:bg-primary-100',
+  important: 'border-amber-200 bg-amber-50 dark:border-amber-500/50 dark:bg-amber-100',
+  urgent: 'border-red-200 bg-red-50 dark:border-red-500/60 dark:bg-red-100',
 };
 
 export function FamilyBulletin() {
@@ -106,15 +119,29 @@ export function FamilyBulletin() {
       ) : (
         <div className="space-y-3">
           {shown.map(item => (
-            <article key={item.id} className={`rounded-2xl border p-4 ${tone[item.priority]}`}>
+            <article
+              key={item.id}
+              data-testid="bulletin-announcement"
+              data-priority={item.priority}
+              data-read={readIds.has(item.id) ? 'true' : 'false'}
+              className={`rounded-2xl border p-4 ${tone[item.priority]}`}
+            >
               <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between sm:gap-3">
                 <div className="min-w-0">
-                  <p className="flex flex-wrap items-center gap-2 font-bold text-gray-900">
+                  <p
+                    data-testid="bulletin-title"
+                    className="flex flex-wrap items-center gap-2 font-bold text-gray-900"
+                  >
                     {item.pinned && <Pin size={15} aria-label={t('pinned')} />}
                     {item.priority === 'urgent' && <AlertTriangle size={16} className="text-red-600" />}
                     {item.title}
                   </p>
-                  <p className="mt-1 whitespace-pre-wrap text-sm text-gray-700">{item.message}</p>
+                  <p
+                    data-testid="bulletin-message"
+                    className="mt-1 whitespace-pre-wrap text-sm text-gray-700"
+                  >
+                    {item.message}
+                  </p>
                 </div>
                 {!readIds.has(item.id) && (
                   <Button
@@ -140,20 +167,24 @@ export function FamilyBulletin() {
               {canManage && (
                 <div className="mt-2 space-y-1.5 sm:flex sm:items-center sm:gap-2 sm:space-y-0">
                   {/* Edit + Archive share one row on mobile */}
+                  {/* `dark:border-gray-300` keeps the outline visible against the
+                      tinted announcement surface in dark mode. */}
                   <div className="grid grid-cols-2 gap-1.5 sm:contents">
-                    <Button size="sm" variant="outline" onClick={() => setEditing(item)} className="min-h-[44px] w-full sm:w-auto">{t('edit')}</Button>
+                    <Button size="sm" variant="outline" onClick={() => setEditing(item)} className="min-h-[44px] w-full dark:border-gray-300 sm:w-auto">{t('edit')}</Button>
                     {item.status === 'active' ? (
-                      <Button size="sm" variant="outline" onClick={() => archiveAnnouncement(familyId, item.id)} className="min-h-[44px] w-full sm:w-auto">{t('archive')}</Button>
+                      <Button size="sm" variant="outline" onClick={() => archiveAnnouncement(familyId, item.id)} className="min-h-[44px] w-full dark:border-gray-300 sm:w-auto">{t('archive')}</Button>
                     ) : (
                       <span aria-hidden="true" className="sm:hidden" />
                     )}
                   </div>
-                  {/* Delete stays separate as a destructive action */}
+                  {/* Delete stays separate as a destructive action. It keeps its
+                      red semantics in dark mode but with a lighter red so it
+                      clears AA against the dark tint. */}
                   <Button
                     size="sm"
                     variant="ghost"
                     onClick={() => window.confirm(t('deleteConfirm')) && deleteAnnouncement(familyId, item.id)}
-                    className="min-h-[44px] w-full text-danger-500 hover:bg-red-50 hover:text-danger-600 sm:w-auto"
+                    className="min-h-[44px] w-full text-danger-500 hover:bg-red-50 hover:text-danger-600 dark:text-red-400 dark:hover:bg-red-200 dark:hover:text-red-300 sm:w-auto"
                   >
                     {t('delete')}
                   </Button>

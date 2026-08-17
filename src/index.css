@@ -99,6 +99,30 @@ body {
   --color-amber-100: #2e2410;
   --color-amber-200: #4a3414;
   --color-yellow-100: #2e2510;
+
+  /* The raw-palette `-50` steps are the *lightest* tints in Tailwind's default
+     theme (e.g. `amber-50` is #fffbeb, a cream). They are used across the app as
+     tinted card/banner surfaces (Family Bulletin announcements, inline warnings,
+     validation errors, help callouts). Without a dark value they stay light
+     while the neutral *text* tokens flip to near-white — producing an
+     unreadable light-card/light-text surface. Map every `-50`/`-100` step that
+     is used as a surface to a dark, hue-preserving tint so the tint keeps its
+     semantic identity (warm = warning, red = urgent, green = success) while the
+     surface itself stays dark. */
+  --color-red-50: #241111;
+  --color-amber-50: #251c0a;
+  --color-yellow-50: #251f0a;
+  --color-green-50: #0d2016;
+  --color-emerald-50: #0c2019;
+  --color-blue-50: #0e1b2e;
+  --color-blue-100: #14243d;
+  --color-sky-50: #0b1f2e;
+  --color-violet-50: #1c1633;
+  --color-violet-100: #241c45;
+  --color-purple-50: #1f1533;
+  --color-purple-100: #291a45;
+  --color-orange-50: #2a1a0c;
+  --color-orange-100: #35200f;
 }
 
 /* `gray-800` / `gray-900` are intentionally left as dark values because they
@@ -133,6 +157,30 @@ body {
 .dark .text-red-700 { color: #fca5a5; }
 .dark .text-amber-600 { color: #fbbf24; }
 .dark .text-amber-700 { color: #fbbf24; }
+
+/* The `-500` and `-800/-900` semantic *text* steps were missed by the first
+   pass. On a dark surface `text-danger-500` (#ef4444) only reaches 4.3:1 and the
+   `-900` steps (used for emphasis inside tinted callouts: child-login dialog,
+   profile-editor hints, help callouts, avatar picker) are near-black, i.e.
+   invisible on the dark tints. Lighten them so every semantic label clears WCAG
+   AA (4.5:1) while keeping its hue — red stays red, amber stays amber. */
+.dark .text-primary-500 { color: #818cf8; }
+.dark .text-primary-900 { color: #e0e7ff; }
+.dark .text-indigo-500 { color: #818cf8; }
+.dark .text-danger-500 { color: #f87171; }
+.dark .text-red-500 { color: #f87171; }
+.dark .text-red-900 { color: #fecaca; }
+.dark .text-warning-600 { color: #fbbf24; }
+.dark .text-warning-800 { color: #fdba74; }
+.dark .text-amber-800 { color: #fcd34d; }
+.dark .text-amber-900 { color: #fde68a; }
+.dark .text-green-900 { color: #bbf7d0; }
+.dark .text-emerald-900 { color: #a7f3d0; }
+.dark .text-blue-800 { color: #93c5fd; }
+.dark .text-blue-900 { color: #bfdbfe; }
+.dark .text-purple-600 { color: #c084fc; }
+.dark .text-purple-900 { color: #e9d5ff; }
+.dark .text-violet-700 { color: #c4b5fd; }
 
 /* `gray-300` is used as a *foreground* token for muted glyphs and labels
    (chevrons, empty-state icons, the balance-card label, breadcrumbs). The
