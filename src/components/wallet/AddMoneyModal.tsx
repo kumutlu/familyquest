@@ -188,7 +188,7 @@ export function AddMoneyModal({ child, onClose, currencyCode = 'GBP' }: AddMoney
               aria-busy={isSubmitting}
               data-testid="manage-wallet-submit"
               className={`text-white ${
-                mode === 'add' ? 'bg-success-500 hover:opacity-90' : 'bg-warning-500 hover:opacity-90'
+                mode === 'add' ? 'bg-success-700 hover:bg-success-800 active:bg-success-900' : 'bg-warning-500 hover:opacity-90'
               }`}
             >
               {submitLabel}

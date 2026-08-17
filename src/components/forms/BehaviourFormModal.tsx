@@ -145,7 +145,7 @@ export function BehaviourFormModal({ isOpen, onClose, childrenList }: BehaviourF
             )}
 
             <div className="pt-4">
-              <Button type="submit" fullWidth disabled={isSubmitting} className={formData.type === 'positive' ? "bg-success-500 hover:bg-success-600" : formData.type === 'negative' ? "bg-danger-500 hover:bg-danger-600" : "bg-warning-500 hover:bg-warning-600 text-white"}>
+              <Button type="submit" fullWidth disabled={isSubmitting} className={formData.type === 'positive' ? "bg-success-700 hover:bg-success-800 active:bg-success-900" : formData.type === 'negative' ? "bg-danger-500 hover:bg-danger-600" : "bg-warning-500 hover:bg-warning-600 text-white"}>
                 {isSubmitting ? t('saving') : t('logEvent')}
               </Button>
             </div>

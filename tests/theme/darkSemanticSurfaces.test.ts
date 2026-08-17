@@ -43,12 +43,16 @@ const MIN_TEXT_CONTRAST = 4.5;
  * Background tokens with no `--color-*` entry, so Tailwind emits no declaration
  * and the element simply shows the surface behind it. These are pre-existing and
  * identical in both themes (`reward-50` tints on Rewards/Funds/QuickActions,
- * `hover:bg-success-600` / `hover:bg-reward-600` on solid action buttons), so
- * they carry no dark-mode contrast risk — the effective surface is the ancestor
- * card, which the checks above already cover. Listed explicitly so a genuine
- * typo in a new colour class cannot hide among them.
+ * `hover:bg-reward-600` on solid action buttons), so they carry no dark-mode
+ * contrast risk — the effective surface is the ancestor card, which the checks
+ * above already cover. Listed explicitly so a genuine typo in a new colour class
+ * cannot hide among them.
+ *
+ * Note: the success action scale (`success-600`/`700`/`800`/`900`) is now defined
+ * in the `@theme` block (see src/index.css) so solid success buttons resolve to a
+ * real, accessible colour — `success-600` is therefore no longer unresolved.
  */
-const KNOWN_UNRESOLVED_BACKGROUNDS = ['reward-50', 'reward-600', 'success-600'];
+const KNOWN_UNRESOLVED_BACKGROUNDS = ['reward-50', 'reward-600'];
 
 const CHUNKS = collectClassChunks();
 

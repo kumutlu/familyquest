@@ -260,12 +260,12 @@ export function ApprovalCenter() {
             </Button>
           )}
           {canAccept && (
-            <Button size="sm" className="bg-success-500 hover:bg-success-600 text-white" disabled={key in processing} onClick={() => handleAccept(item)}>
+            <Button size="sm" className="bg-success-700 hover:bg-success-800 active:bg-success-900 text-white" disabled={key in processing} onClick={() => handleAccept(item)}>
               {processing[key] === 'accept' ? t('accepting') : t('accept')}
             </Button>
           )}
           {canApprove && (
-            <Button size="sm" className="bg-success-500 hover:bg-success-600 text-white" disabled={key in processing} onClick={() => handleApprove(item)}>
+            <Button size="sm" className="bg-success-700 hover:bg-success-800 active:bg-success-900 text-white" disabled={key in processing} onClick={() => handleApprove(item)}>
               {processing[key] === 'approve' ? t('approving') : t('approve')}
             </Button>
           )}
@@ -398,7 +398,7 @@ export function ApprovalCenter() {
                 <Button size="sm" variant="danger" disabled={itemKey(item) in processing} onClick={() => handleReject(item)}>
                   {processing[itemKey(item)] === 'reject' ? t('rejecting') : t('reject')}
                 </Button>
-                <Button size="sm" className="bg-success-500 hover:bg-success-600 text-white" disabled={itemKey(item) in processing} onClick={() => handleApprove(item)}>
+                <Button size="sm" className="bg-success-700 hover:bg-success-800 active:bg-success-900 text-white" disabled={itemKey(item) in processing} onClick={() => handleApprove(item)}>
                   {processing[itemKey(item)] === 'approve' ? t('approving') : t('approve')}
                 </Button>
               </>

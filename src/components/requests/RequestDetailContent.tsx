@@ -223,7 +223,7 @@ export function RequestDetailContent({
             <div className="flex flex-col gap-2">
               {canAccept && (
                 <Button
-                  className="bg-success-500 hover:bg-success-600 text-white"
+                  className="bg-success-700 hover:bg-success-800 active:bg-success-900 text-white"
                   fullWidth
                   onClick={() => runAction('accept')}
                   disabled={processing}
@@ -247,7 +247,7 @@ export function RequestDetailContent({
               )}
               {canApprove && (
                 <Button
-                  className="bg-success-500 hover:bg-success-600 text-white"
+                  className="bg-success-700 hover:bg-success-800 active:bg-success-900 text-white"
                   fullWidth
                   onClick={() => setConfirm('approve')}
                 >
@@ -284,7 +284,7 @@ export function RequestDetailContent({
                   {t('requests:detail.back')}
                 </Button>
                 <Button
-                  className="bg-success-500 hover:bg-success-600 text-white"
+                  className="bg-success-700 hover:bg-success-800 active:bg-success-900 text-white"
                   fullWidth
                   onClick={() => runAction('approve')}
                   disabled={processing}
