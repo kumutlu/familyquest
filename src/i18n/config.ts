@@ -5,6 +5,8 @@ import enCommon from './locales/en/common.json';
 import trCommon from './locales/tr/common.json';
 import enStartup from './locales/en/startup.json';
 import trStartup from './locales/tr/startup.json';
+import enOnboarding from './locales/en/onboarding.json';
+import trOnboarding from './locales/tr/onboarding.json';
 
 export const SUPPORTED_LANGUAGES = ['en', 'tr'] as const;
 export type SupportedLanguage = (typeof SUPPORTED_LANGUAGES)[number];
@@ -38,6 +40,7 @@ export const NAMESPACES = [
   'bulletin',
   'legal',
   'help',
+  'onboarding',
 ] as const;
 export type Namespace = (typeof NAMESPACES)[number];
 
@@ -52,17 +55,18 @@ i18n
     supportedLngs: [...SUPPORTED_LANGUAGES],
     // Only the default namespace is loaded up-front; every other namespace is
     // fetched lazily on first use. This keeps the initial payload minimal.
-    // `startup` joins `common` here: the global loading screen is the very
-    // first thing painted, so its strings must never arrive asynchronously.
-    ns: ['common', 'startup'],
+    // `startup` and `onboarding` join `common` here: the global loading screen
+    // and the public pre-auth onboarding flow are the very first things painted,
+    // so their strings must never arrive asynchronously.
+    ns: ['common', 'startup', 'onboarding'],
     defaultNS: 'common',
     // Seed the default namespace for every supported language synchronously so
     // the very first paint never blocks on a dynamic import. `partialBundledLanguages`
     // tells i18next these resources are only a partial seed — all other
     // namespaces are still fetched lazily from ViteI18nBackend.
     resources: {
-      en: { common: enCommon, startup: enStartup },
-      tr: { common: trCommon, startup: trStartup },
+      en: { common: enCommon, startup: enStartup, onboarding: enOnboarding },
+      tr: { common: trCommon, startup: trStartup, onboarding: trOnboarding },
     },
     partialBundledLanguages: true,
     interpolation: {

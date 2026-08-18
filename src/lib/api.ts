@@ -246,11 +246,27 @@ export const createFamilyAndParent = async (uid: string, _name: string, familyNa
   const userRef = doc(db, 'users', uid);
   const inviteCode = Math.random().toString(36).substring(2, 8).toUpperCase();
 
+  // Captured when the family was already created by a prior (replayed/retried)
+  // call so we can return it instead of creating a second family.
+  let idempotentResult: { familyId: string; inviteCode: string; user: any } | null = null;
+
   await runTransaction(db, async (transaction) => {
     const userDoc = await transaction.get(userRef);
     if (!userDoc.exists()) throw new Error('User not found');
-    if ('familyId' in userDoc.data()) throw new Error('User already has a family');
-    if (userDoc.data().role !== 'parent') {
+    const userData = userDoc.data() as { familyId?: string; role?: string; inviteCode?: string } | undefined;
+    // Idempotent: if the family was already created (e.g. a refresh or effect
+    // replay during setup re-issued this call), return the existing family
+    // rather than throwing "User already has a family" or creating a duplicate.
+    // This keeps onboarding exactly-once even when the client re-issues the call.
+    if (userData && 'familyId' in userData && userData.familyId) {
+      idempotentResult = {
+        familyId: userData.familyId,
+        inviteCode: userData.inviteCode ?? inviteCode,
+        user: { id: userDoc.id, ...userData },
+      };
+      return;
+    }
+    if (userData?.role !== 'parent') {
       throw new Error('User is not in parent state for bootstrap');
     }
 
@@ -271,6 +287,8 @@ export const createFamilyAndParent = async (uid: string, _name: string, familyNa
       role: 'owner',
     });
   });
+
+  if (idempotentResult) return idempotentResult;
 
   const updatedUserSnap = await getDoc(userRef);
   if (!updatedUserSnap.exists()) {

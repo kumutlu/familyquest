@@ -1,0 +1,135 @@
+{
+  "meta": {
+    "title": "Ailenizi kurun",
+    "stepLabel": "{{total}} adımdan {{current}}. adım",
+    "continuationLabel": "Aileniz kuruluyor · {{total}} adımdan {{current}}. adım"
+  },
+  "s1": {
+    "eyebrow": "Queki",
+    "title": "Küçük başarılar. Büyük alışkanlıklar.",
+    "subtitle": "Queki, günlük sorumlulukları çocuğunuzun görebileceği ilerlemeye dönüştürür.",
+    "weeklySummary": "Bu hafta — {{count}} görev tamamlandı · {{points}} puan kazanıldı · {{saved}} tasarruf",
+    "cta": "Ailenizi kurun",
+    "secondary": "Zaten hesabım var"
+  },
+  "s2": {
+    "title": "Size nasıl hitap edelim?",
+    "label": "Adınız",
+    "placeholder": "ör. Kemal",
+    "continue": "Devam et",
+    "signOut": "Çıkış yap"
+  },
+  "s3": {
+    "title": "Siz…",
+    "reassurance": "Bu, Queki'nin size hitap etme şekli — ebeveyn kontrollerinizi değiştirmez.",
+    "continue": "Devam et",
+    "back": "Geri",
+    "options": {
+      "mum": "Anne",
+      "dad": "Baba",
+      "parent": "Ebeveyn",
+      "carer": "Bakıcı",
+      "grandparent": "Büyükanne/Büyükbaba",
+      "other": "Diğer"
+    }
+  },
+  "s4": {
+    "title": "Bunu sizin için kişiselleştirelim.",
+    "body": "Bir çocuğun adını ekleyin, Queki'nin aileniz için nasıl çalışabileceğini gösterelim.",
+    "label": "Çocuğun adı",
+    "placeholder": "ör. Osman",
+    "privacyNote": "Şimdilik sadece bir ad. Hesabınızı oluşturana kadar hiçbir şey kaydedilmez.",
+    "continue": "Devam et",
+    "back": "Geri"
+  },
+  "s5": {
+    "title": "İşte nasıl çalıştığı",
+    "step1": "{{child}}'a hedef vereceğiniz bir şey verin.",
+    "step1Card": "Odanı topla · +20 puan",
+    "step2": "{{child}} tamamladı!",
+    "step2Card": "Onayla · +20 puan",
+    "step3": "Harika. +20 puan kazanıldı.",
+    "step4": "Oyun zamanı · 20 / 100 puan",
+    "step4Card": "Bir görev daha yaklaştı.",
+    "model": "Görev → {{child}} tamamlar → siz onaylarsınız → puan → ödül.",
+    "teaser": "Hazır olduğunuzda daha fazlası var.",
+    "teaserBullets": {
+      "allowance": "Harçlık ve cüzdan",
+      "saving": "Tasarruf hedefleri",
+      "rewards": "Ödüller"
+    },
+    "continue": "Güzel görünüyor",
+    "back": "Geri"
+  },
+  "s6": {
+    "title": "Her ailenin bir adı olmalı.",
+    "label": "Aile adı",
+    "placeholder": "ör. Umutlu Ailesi",
+    "suggestion": "\"{{family}}\" nasıl olur?",
+    "continue": "Devam et",
+    "back": "Geri"
+  },
+  "s7": {
+    "title": "Aileniz hazır.",
+    "summaryParent": "{{parent}} · {{relationship}}",
+    "summaryChild": "{{child}} · Çocuk",
+    "summaryFamily": "{{family}}",
+    "body": "Hesap oluşturmak veya giriş yapmak bu kurulumu kaydeder.",
+    "google": "Google ile devam et",
+    "email": "E-posta ile devam et",
+    "back": "Geri",
+    "startOver": "Baştan başla"
+  },
+  "p1": {
+    "title": "Aileniz şekilleniyor.",
+    "membersHeading": "Üyeler",
+    "settingUp": "Aileniz kuruluyor…",
+    "errorTitle": "Aileniz kurulamadı",
+    "addChild": "Başka çocuk ekle",
+    "inviteParent": "Başka ebeveyn davet et",
+    "inviteCopied": "Davet bağlantısı kopyalandı",
+    "continue": "Devam et",
+    "skip": "Şimdilik atla"
+  },
+  "p2": {
+    "title": "{{child}}'a ilk galibiyetini verelim.",
+    "errorTitle": "Görev eklenemedi",
+    "subtitle": "Bir başlangıç görevi seçin — istediğiniz zaman değiştirebilirsiniz.",
+    "templates": {
+      "tidy": "Odanı topla — 20 puan",
+      "read": "20 dakika oku — 15 puan",
+      "help": "Toplanmaya yardım et — 10 puan",
+      "custom": "Kendim oluştur"
+    },
+    "customLabel": "Görev adı",
+    "customPointsLabel": "Puan",
+    "continue": "Görev ekle ve devam et",
+    "back": "Geri",
+    "skip": "Atla"
+  },
+  "p3": {
+    "title": "{{child}}'ın ilk görevi hazır.",
+    "subtitle": "Hazırsınız, {{parent}}.",
+    "checklistChild": "{{child}} eklendi",
+    "checklistTask": "İlk görev hazır",
+    "checklistApp": "Queki kullanıma hazır",
+    "support": "Ödülleri, harçlığı ve tasarruf hedeflerini istediğiniz zaman ekleyebilirsiniz.",
+    "cta": "Panoma git"
+  },
+  "errors": {
+    "offline": "Çevrimdışısınız. Lütfen bağlantınızı kontrol edip tekrar deneyin.",
+    "authCancelled": "Giriş iptal edildi. Lütfen tekrar deneyin.",
+    "authFailed": "Giriş yapamadık. Lütfen tekrar deneyin.",
+    "familyFailed": "Aileniz oluşturulamadı. Lütfen tekrar deneyin.",
+    "childFailed": "Çocuğunuz eklenemedi. Lütfen tekrar deneyin veya atlayın.",
+    "taskFailed": "Görev oluşturulamadı. Lütfen tekrar deneyin veya atlayın.",
+    "profileUnavailable": "Hesabınız yüklenemedi. Lütfen bağlantınızı kontrol edip tekrar deneyin.",
+    "setupTitle": "Bir şeyler ters gitti",
+    "retry": "Tekrar dene",
+    "back": "Geri",
+    "startOver": "Baştan başla"
+  },
+  "loading": {
+    "resuming": "Kurulumunuz sürdürülüyor…"
+  }
+}

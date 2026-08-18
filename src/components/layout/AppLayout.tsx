@@ -1,5 +1,5 @@
 import { Suspense, useEffect, useState } from 'react';
-import { Link, Outlet, useLocation, Navigate } from 'react-router-dom';
+import { Link, Outlet, useLocation, Navigate, useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { AppWindow } from 'lucide-react';
 import { cn } from '../../lib/utils';
@@ -20,6 +20,7 @@ export function AppLayout() {
   // asset fails to load — never a letter glyph.
   const [logoFailed, setLogoFailed] = useState(false);
   const location = useLocation();
+  const navigate = useNavigate();
   const authStatus = useStore(state => state.authStatus);
   const authUser = useStore(state => state.authUser);
   const currentUser = useStore(state => state.currentUser);
@@ -50,14 +51,26 @@ export function AppLayout() {
         attempt={bootstrapAttempt}
         error={bootstrapError}
         onRetry={retryBootstrap}
-        onSignOut={authUser ? () => { void signOut(); } : undefined}
+        onSignOut={
+          authUser
+            ? () => {
+                void signOut()
+                  .then(() => navigate('/login', { replace: true }))
+                  .catch(() => {});
+              }
+            : undefined
+        }
       />
     );
   }
 
-  // Not logged in -> Login
+  // Not logged in -> the bare root becomes the Refined Queki onboarding front
+  // door; every other unauthenticated route still falls through to Login so
+  // protected deep links are preserved. Auth is already resolved here (the
+  // startup gate above short-circuits while initializing), so we never
+  // prematurely redirect during bootstrap.
   if (authStatus === 'unauthenticated' || authUser === null) {
-    return <Navigate to="/login" replace />;
+    return <Navigate to={location.pathname === '/' ? '/onboarding' : '/login'} replace />;
   }
 
   // Logged in, user doc exists, but no familyId -> Onboarding (unless already there)

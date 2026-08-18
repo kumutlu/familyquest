@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { User, Settings, LogOut, HelpCircle } from 'lucide-react';
 import { Avatar } from '../ui/Avatar';
@@ -53,9 +53,14 @@ export function ProfileDropdown() {
 
   const close = () => setIsOpen(false);
 
+  const navigate = useNavigate();
+
   const handleSignOut = async () => {
     try {
       await signOut();
+      // Explicitly land on Login. Signed-out "/" now resolves to onboarding,
+      // so we must not rely on the AppLayout fallback to route us there.
+      navigate('/login', { replace: true });
     } catch (e) {
       console.error(e);
     }

@@ -18,7 +18,7 @@ vi.mock('./pages/Wallet', () => ({ Wallet: () => null }));
 vi.mock('./pages/Settings', () => ({ Settings: () => null }));
 vi.mock('./pages/Login', () => ({ Login: () => null }));
 vi.mock('./pages/Signup', () => ({ Signup: () => null }));
-vi.mock('./pages/Onboarding', () => ({ Onboarding: () => null }));
+vi.mock('./onboarding/OnboardingFlow', () => ({ OnboardingFlow: () => null }));
 vi.mock('./pages/FundsDashboard', () => ({ FundsDashboard: () => <span>Pet Box funds</span> }));
 vi.mock('./pages/Notifications', () => ({ Notifications: () => <span>Notifications page</span> }));
 vi.mock('./components/history/TransactionHistoryScreen', () => ({

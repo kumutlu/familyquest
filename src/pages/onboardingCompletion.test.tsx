@@ -1,33 +1,33 @@
 import { describe, expect, it, vi, beforeEach } from 'vitest';
-import { render, screen, waitFor } from '@testing-library/react';
-import userEvent from '@testing-library/user-event';
-import { MemoryRouter, Routes, Route } from 'react-router-dom';
-import { createElement } from 'react';
+import { ensureFamily, type SetupDeps } from '../onboarding/lib/onboardingSetup';
+import { createEmptyDraft } from '../onboarding/lib/onboardingDraft';
+import { useStore } from '../store/useStore';
 
 // ---------------------------------------------------------------------------
-// P0 regression: after a family is created successfully the user was bounced
-// back to the Create Family screen and a retry failed with "User already has a
-// family".
+// P0 regression: after a family is created successfully the user must NOT be
+// bounced back to onboarding with "User already has a family".
 //
-// Root cause: the onboarding completion path identified the user through the
-// denormalised `currentUser.uid` profile field instead of the authoritative
-// identity (auth uid / user document id). `refreshCurrentUser` silently
-// no-ops when the uid does not match `authUser.uid`, so the store kept
-// `currentUser.familyId === undefined` and AppLayout's guard redirected back
-// to /onboarding.
+// Root cause (historical): the onboarding completion path identified the user
+// through the denormalised `currentUser.uid` profile field instead of the
+// authoritative identity (auth uid / user document id). `refreshCurrentUser`
+// silently no-ops when the uid does not match `authUser.uid`, so the store kept
+// `currentUser.familyId === undefined` and the route guard redirected back to
+// /onboarding.
+//
+// The new flow calls `ensureFamily`, which uses the injected authoritative
+// `deps.uid` (auth uid) for BOTH `createFamilyAndParent` and
+// `refreshCurrentUser`. This pins that contract so the regression cannot
+// silently return.
 // ---------------------------------------------------------------------------
 
 const apiState = vi.hoisted(() => ({
   createFamilyAndParent: vi.fn(),
+  refreshCurrentUser: vi.fn(),
 }));
 
 vi.mock('../lib/api', () => ({
   createFamilyAndParent: apiState.createFamilyAndParent,
   signOut: vi.fn(),
-}));
-
-vi.mock('../lib/familyMembershipApi', () => ({
-  requestFamilyJoin: vi.fn(),
 }));
 
 vi.mock('../lib/firebase', () => ({ app: {}, auth: {}, db: {}, googleProvider: {} }));
@@ -52,38 +52,20 @@ vi.mock('firebase/firestore', () => ({
   getDocsFromServer: vi.fn(() => Promise.resolve({ docs: [] })),
 }));
 
-import { Onboarding } from './Onboarding';
-import { useStore } from '../store/useStore';
-
-const loadFamilyData = vi.fn();
-
-const renderOnboarding = () =>
-  render(
-    createElement(
-      MemoryRouter,
-      { initialEntries: ['/onboarding'] },
-      createElement(
-        Routes,
-        null,
-        createElement(Route, { path: '/onboarding', element: createElement(Onboarding) }),
-        createElement(Route, { path: '/', element: createElement('div', null, 'Parent Dashboard') }),
-      ),
-    ),
-  );
+function makeDeps(uid: string): SetupDeps {
+  return {
+    uid,
+    createFamilyAndParent: apiState.createFamilyAndParent,
+    createManagedMember: vi.fn().mockResolvedValue('child-1'),
+    createTask: vi.fn().mockResolvedValue({ id: 'task-1' }),
+    refreshCurrentUser: apiState.refreshCurrentUser,
+    getFamilyMembers: () => [],
+  };
+}
 
 describe('Onboarding — family creation completion (P0)', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    loadFamilyData.mockReset();
-    useStore.setState({
-      authStatus: 'authenticated',
-      authInitialized: true,
-      authUser: { uid: 'auth-uid-1' } as any,
-      // The profile document is the authoritative identity. It intentionally
-      // does NOT carry a denormalised `uid` field here.
-      currentUser: { id: 'auth-uid-1', displayName: 'Kemal', role: 'parent' } as any,
-      loadFamilyData: loadFamilyData as any,
-    });
     apiState.createFamilyAndParent.mockResolvedValue({
       familyId: 'family-1',
       inviteCode: 'ABC123',
@@ -91,36 +73,46 @@ describe('Onboarding — family creation completion (P0)', () => {
     });
   });
 
-  it('creates the family with the authoritative user id and lands on the dashboard', async () => {
-    const user = userEvent.setup();
-    renderOnboarding();
+  it('creates the family with the authoritative user id (never a denormalised field)', async () => {
+    const draft = {
+      ...createEmptyDraft('p1'),
+      parentFirstName: 'Kemal',
+      familyName: 'Kemal Family',
+    };
+    const result = await ensureFamily(draft, makeDeps('auth-uid-1'));
 
-    await user.click(screen.getAllByRole('button')[0]); // "Create family"
-    await user.type(screen.getByRole('textbox'), 'Kemal Family');
-    await user.click(screen.getByRole('button', { name: /continue/i }));
-
-    await waitFor(() => {
-      expect(apiState.createFamilyAndParent).toHaveBeenCalledWith(
-        'auth-uid-1',
-        'Kemal',
-        'Kemal Family',
-      );
+    // Authoritative uid is used for the server call...
+    expect(apiState.createFamilyAndParent).toHaveBeenCalledWith(
+      'auth-uid-1',
+      'Kemal',
+      'Kemal Family',
+    );
+    // ...and for publishing the family state to the store, so the route guard
+    // can never bounce the user back to onboarding.
+    expect(apiState.refreshCurrentUser).toHaveBeenCalledWith('auth-uid-1', {
+      familyId: 'family-1',
+      role: 'owner',
     });
+    expect(result.familyId).toBe('family-1');
+  });
 
-    // Authoritative family state must be applied to the store...
-    await waitFor(() => {
-      expect(useStore.getState().currentUser?.familyId).toBe('family-1');
-    });
-    expect(loadFamilyData).toHaveBeenCalledWith('auth-uid-1', 'family-1');
-
-    // ...and the user must never see the Create Family screen again.
-    await waitFor(() => {
-      expect(screen.getByText('Parent Dashboard')).toBeInTheDocument();
-    });
+  it('creates the family exactly once across a refresh/retry (no duplicate)', async () => {
+    const draft = {
+      ...createEmptyDraft('p1'),
+      parentFirstName: 'Kemal',
+      familyName: 'Kemal Family',
+    };
+    const deps = makeDeps('auth-uid-1');
+    const first = await ensureFamily(draft, deps);
+    const second = await ensureFamily(first, deps); // simulate retry/refresh
+    expect(apiState.createFamilyAndParent).toHaveBeenCalledTimes(1);
+    expect(second.familyId).toBe('family-1');
   });
 });
 
 describe('useStore.refreshCurrentUser — authoritative family state', () => {
+  const loadFamilyData = vi.fn();
+
   beforeEach(() => {
     loadFamilyData.mockReset();
     useStore.setState({

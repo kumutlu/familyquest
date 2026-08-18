@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link, useNavigate, useLocation } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { Button } from '../components/ui/Button';
 import { signUp, signInWithGoogle } from '../lib/api';
@@ -14,16 +14,24 @@ export function Signup() {
   const [error, setError] = useState('');
   const [signingIn, setSigningIn] = useState(false);
   const navigate = useNavigate();
+  const location = useLocation();
   const authStatus = useStore(state => state.authStatus);
+
+  // When the visitor reached signup from the pre-auth onboarding flow, return
+  // them to /onboarding after auth so the post-auth setup (P1–P3) resumes. The
+  // value is validated to avoid an open redirect.
+  const next = new URLSearchParams(location.search).get('next');
+  const returnTo = next === '/onboarding' ? '/onboarding' : null;
 
   // Once Firebase Auth reports the user as authenticated, the AppLayout route
   // guard performs the redirect to the correct protected route.
   useEffect(() => {
     if (authStatus === 'authenticated') {
-      // Resume a pending invitation when the visitor came from a /join link.
-      navigate(postAuthDestination('/'), { replace: true });
+      // Resume a pending invitation when the visitor came from a /join link,
+      // or return to onboarding when that was the entry point.
+      navigate(returnTo || postAuthDestination('/'), { replace: true });
     }
-  }, [authStatus, navigate]);
+  }, [authStatus, navigate, returnTo]);
 
   if (authStatus === 'authenticated') {
     return null;

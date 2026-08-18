@@ -107,6 +107,7 @@ interface AppState {
   authInitialized: boolean;
   authLoading: boolean;
   profileLoading: boolean;
+  profileServerConfirmed: boolean;
   familyLoading: boolean;
   appReady: boolean;
   loading: boolean;
@@ -227,6 +228,7 @@ export const useStore = create<AppState>((set, get) => ({
   authInitialized: false,
   authLoading: true,
   profileLoading: false,
+  profileServerConfirmed: false,
   familyLoading: false,
   appReady: false,
   loading: true,
@@ -260,6 +262,7 @@ export const useStore = create<AppState>((set, get) => ({
           authInitialized: true,
           authLoading: false,
           profileLoading: false,
+          profileServerConfirmed: false,
           familyLoading: false,
           currentUser: null,
           ...emptyFamilyState(),
@@ -281,6 +284,7 @@ export const useStore = create<AppState>((set, get) => ({
         authInitialized: true,
         authLoading: false,
         profileLoading: true,
+        profileServerConfirmed: false,
         familyLoading: false,
         currentUser: null,
         ...emptyFamilyState(),
@@ -321,6 +325,7 @@ export const useStore = create<AppState>((set, get) => ({
             set({
               currentUser: null,
               profileLoading: false,
+              profileServerConfirmed: false,
               bootstrapError: '[Profile] not-found: User profile is not available yet',
               appReady: false,
               loading: false,
@@ -342,6 +347,7 @@ export const useStore = create<AppState>((set, get) => ({
             set({
               currentUser: null,
               profileLoading: false,
+              profileServerConfirmed: false,
               bootstrapError: '[Profile] managed-child-link-invalid: Managed child identity could not be verified',
               appReady: false,
               loading: false,
@@ -355,6 +361,7 @@ export const useStore = create<AppState>((set, get) => ({
             set({
               currentUser: null,
               profileLoading: false,
+              profileServerConfirmed: false,
               bootstrapError: `[Profile] invalid-familyId: ${error.message}`,
               appReady: false,
               loading: false,
@@ -375,7 +382,7 @@ export const useStore = create<AppState>((set, get) => ({
               language,
               ...(familyId ? { familyId } : { familyId: undefined }),
             };
-            set({ currentUser: validatedProfile, profileLoading: false, bootstrapError: null });
+            set({ currentUser: validatedProfile, profileLoading: false, bootstrapError: null, profileServerConfirmed: !profileSnapshot.metadata?.fromCache ? true : get().profileServerConfirmed });
             logAuthTrace('profile-request-completed', { hasFamilyId: Boolean(familyId) });
 
             if (
@@ -1074,6 +1081,7 @@ export const useStore = create<AppState>((set, get) => ({
       authInitialized: false,
       authLoading: true,
       profileLoading: false,
+      profileServerConfirmed: false,
       familyLoading: false,
       authUser: undefined,
       currentUser: null,

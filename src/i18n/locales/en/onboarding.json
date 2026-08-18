@@ -1,0 +1,135 @@
+{
+  "meta": {
+    "title": "Set up your family",
+    "stepLabel": "Step {{current}} of {{total}}",
+    "continuationLabel": "Setting up your family · step {{current}} of {{total}}"
+  },
+  "s1": {
+    "eyebrow": "Queki",
+    "title": "Small wins. Big habits.",
+    "subtitle": "Queki turns everyday responsibilities into progress your child can see.",
+    "weeklySummary": "This week — {{count}} tasks done · {{points}} pts earned · {{saved}} saved",
+    "cta": "Set up your family",
+    "secondary": "I already have an account"
+  },
+  "s2": {
+    "title": "What should we call you?",
+    "label": "Your first name",
+    "placeholder": "e.g. Kemal",
+    "continue": "Continue",
+    "signOut": "Sign out"
+  },
+  "s3": {
+    "title": "And you're the…",
+    "reassurance": "This is just how Queki addresses you — it doesn't change your parental controls.",
+    "continue": "Continue",
+    "back": "Back",
+    "options": {
+      "mum": "Mum",
+      "dad": "Dad",
+      "parent": "Parent",
+      "carer": "Carer",
+      "grandparent": "Grandparent",
+      "other": "Other"
+    }
+  },
+  "s4": {
+    "title": "Let's make this yours.",
+    "body": "Add one child's first name and we'll show you how Queki could work for your family.",
+    "label": "Child's first name",
+    "placeholder": "e.g. Osman",
+    "privacyNote": "Just a first name for now. Nothing is saved until you create your account.",
+    "continue": "Continue",
+    "back": "Back"
+  },
+  "s5": {
+    "title": "Here's how it works",
+    "step1": "Give {{child}} something to aim for.",
+    "step1Card": "Tidy your room · +20 pts",
+    "step2": "{{child}} completed it!",
+    "step2Card": "Review · +20 pts",
+    "step3": "Nice. +20 points earned.",
+    "step4": "Gaming time · 20 / 100 pts",
+    "step4Card": "One task closer.",
+    "model": "Task → {{child}} completes → you approve → points → reward.",
+    "teaser": "And there's more when you're ready.",
+    "teaserBullets": {
+      "allowance": "Allowance & wallet",
+      "saving": "Saving goals",
+      "rewards": "Rewards"
+    },
+    "continue": "Looks good",
+    "back": "Back"
+  },
+  "s6": {
+    "title": "Every family needs a name.",
+    "label": "Family name",
+    "placeholder": "e.g. The Umutlu Family",
+    "suggestion": "How about \"{{family}}\"?",
+    "continue": "Continue",
+    "back": "Back"
+  },
+  "s7": {
+    "title": "Your family is ready.",
+    "summaryParent": "{{parent}} · {{relationship}}",
+    "summaryChild": "{{child}} · Child",
+    "summaryFamily": "{{family}}",
+    "body": "Creating or signing into an account will save this setup.",
+    "google": "Continue with Google",
+    "email": "Continue with Email",
+    "back": "Back",
+    "startOver": "Start over"
+  },
+  "p1": {
+    "title": "Your family is taking shape.",
+    "membersHeading": "Members",
+    "settingUp": "Setting up your family…",
+    "errorTitle": "We couldn't set up your family",
+    "addChild": "Add another child",
+    "inviteParent": "Invite another parent",
+    "inviteCopied": "Invite link copied",
+    "continue": "Continue",
+    "skip": "Skip for now"
+  },
+  "p2": {
+    "title": "Let's give {{child}} their first win.",
+    "errorTitle": "We couldn't add the task",
+    "subtitle": "Pick a starter task — you can change it anytime.",
+    "templates": {
+      "tidy": "Tidy bedroom — 20 pts",
+      "read": "Read for 20 minutes — 15 pts",
+      "help": "Help tidy up — 10 pts",
+      "custom": "Create my own"
+    },
+    "customLabel": "Task name",
+    "customPointsLabel": "Points",
+    "continue": "Add task & continue",
+    "back": "Back",
+    "skip": "Skip"
+  },
+  "p3": {
+    "title": "{{child}}'s first task is ready.",
+    "subtitle": "You're all set, {{parent}}.",
+    "checklistChild": "{{child}} added",
+    "checklistTask": "First task ready",
+    "checklistApp": "Queki is ready to go",
+    "support": "You can add rewards, allowance and saving goals anytime.",
+    "cta": "Go to my dashboard"
+  },
+  "errors": {
+    "offline": "You're offline. Please check your connection and try again.",
+    "authCancelled": "Sign-in was cancelled. Please try again.",
+    "authFailed": "We couldn't sign you in. Please try again.",
+    "familyFailed": "We couldn't create your family. Please try again.",
+    "childFailed": "We couldn't add your child. Please try again or skip.",
+    "taskFailed": "We couldn't create the task. Please try again or skip.",
+    "profileUnavailable": "We couldn't load your account. Check your connection and try again.",
+    "setupTitle": "Something went wrong",
+    "retry": "Retry",
+    "back": "Back",
+    "startOver": "Start over"
+  },
+  "loading": {
+    "resuming": "Resuming your setup…"
+  }
+}

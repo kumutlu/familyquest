@@ -13,7 +13,7 @@ import { Login } from './pages/Login';
 import { Signup } from './pages/Signup';
 import { JoinFamily } from './pages/JoinFamily';
 import { JoinInvite } from './pages/JoinInvite';
-import { Onboarding } from './pages/Onboarding';
+import { OnboardingFlow } from './onboarding/OnboardingFlow';
 import { PrivacyPolicy } from './pages/legal/PrivacyPolicy';
 import { TermsOfService } from './pages/legal/TermsOfService';
 import { AccountDeletion } from './pages/legal/AccountDeletion';
@@ -72,6 +72,11 @@ function App() {
               validated server-side before any family detail is rendered. */}
           <Route path="/join" element={<JoinInvite />} />
 
+          {/* Public pre-auth onboarding. Rendered OUTSIDE <AppLayout> so it is
+              reachable by unauthenticated visitors; it carries its own internal
+              guards (established-family owner / managed child → redirected). */}
+          <Route path="/onboarding" element={<OnboardingFlow />} />
+
           {/* Public legal surfaces — intentionally outside <AppLayout> so they
               render without authentication and without app navigation. */}
           <Route path="/privacy" element={<PrivacyPolicy />} />
@@ -80,7 +85,6 @@ function App() {
 
           <Route path="/" element={<AppLayout />}>
             <Route index element={<Dashboard />} />
-            <Route path="onboarding" element={<Onboarding />} />
             <Route path="family" element={<Family />} />
             <Route path="family/:id" element={<MemberProfile />} />
             <Route path="tasks" element={<Tasks />} />
