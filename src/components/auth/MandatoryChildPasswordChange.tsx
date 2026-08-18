@@ -1,5 +1,6 @@
 import { useState, type FormEvent } from 'react';
 import { signOut } from 'firebase/auth';
+import { useNavigate } from 'react-router-dom';
 import { auth } from '../../lib/firebase';
 import {
   completeChildPasswordChange,
@@ -13,6 +14,7 @@ export function MandatoryChildPasswordChange() {
   const [confirmation, setConfirmation] = useState('');
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
+  const navigate = useNavigate();
 
   const submit = async (event: FormEvent) => {
     event.preventDefault();
@@ -60,7 +62,17 @@ export function MandatoryChildPasswordChange() {
         <Button type="submit" className="w-full" disabled={busy}>
           {busy ? 'Saving…' : 'Save password and continue'}
         </Button>
-        <Button type="button" variant="ghost" className="w-full" disabled={busy} onClick={() => signOut(auth)}>
+        <Button
+          type="button"
+          variant="ghost"
+          className="w-full"
+          disabled={busy}
+          onClick={() => {
+            void signOut(auth)
+              .then(() => navigate('/login', { replace: true }))
+              .catch(() => {});
+          }}
+        >
           Sign out
         </Button>
       </form>
