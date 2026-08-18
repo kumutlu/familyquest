@@ -161,7 +161,7 @@ export function FirstTask({ draft, patch, goNext, goBack, deps }: FirstTaskProps
         </div>
       ) : null}
 
-      <div className="mt-6 flex items-center gap-3">
+      <div className="mt-6 flex flex-col gap-3 min-[400px]:flex-row min-[400px]:items-center">
         <Button variant="secondary" onClick={handleSkip} disabled={submitting}>
           {t('p2.skip')}
         </Button>

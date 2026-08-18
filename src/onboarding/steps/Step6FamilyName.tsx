@@ -62,7 +62,7 @@ export function Step6FamilyName({ draft, patch, onNext, onBack }: Step6Props) {
             {suggestion}
           </button>
         ) : null}
-        <div className="flex items-center gap-3">
+        <div className="flex flex-col gap-3 min-[400px]:flex-row min-[400px]:items-center">
           <Button variant="secondary" onClick={onBack}>
             {t('s6.back')}
           </Button>

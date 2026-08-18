@@ -55,7 +55,7 @@
     "teaser": "And there's more when you're ready.",
     "teaserBullets": {
       "allowance": "Allowance & wallet",
-      "saving": "Saving goals",
+      "saving": "Savings goals",
       "rewards": "Rewards"
     },
     "continue": "Looks good",
@@ -89,7 +89,9 @@
     "inviteParent": "Invite another parent",
     "inviteCopied": "Invite link copied",
     "continue": "Continue",
-    "skip": "Skip for now"
+    "skip": "Skip for now",
+    "roleParent": "Parent",
+    "roleChild": "Child"
   },
   "p2": {
     "title": "Let's give {{child}} their first win.",
@@ -113,7 +115,7 @@
     "checklistChild": "{{child}} added",
     "checklistTask": "First task ready",
     "checklistApp": "Queki is ready to go",
-    "support": "You can add rewards, allowance and saving goals anytime.",
+    "support": "You can add rewards, allowance and savings goals anytime.",
     "cta": "Go to my dashboard"
   },
   "errors": {

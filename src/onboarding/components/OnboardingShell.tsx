@@ -23,7 +23,13 @@ export function OnboardingShell({ children, progress, eyebrow }: OnboardingShell
           </div>
         ) : null}
         {progress}
-        <main className="flex-1 flex flex-col justify-center">{children}</main>
+        {/* `my-auto` (not `justify-center`) keeps the card vertically centred
+            when it fits, but — unlike justify-center — never clips the top when
+            the content is taller than the viewport (e.g. keyboard-open or very
+            small screens). The page scrolls instead. */}
+        <main className="flex-1 flex flex-col">
+          <div className="my-auto w-full">{children}</div>
+        </main>
       </div>
     </div>
   );

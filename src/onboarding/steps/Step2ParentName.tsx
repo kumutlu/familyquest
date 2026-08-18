@@ -48,7 +48,7 @@ export function Step2ParentName({ draft, patch, onNext, onSignOut }: Step2Props)
             className="mt-1 block w-full px-3 py-2.5 border border-gray-300 rounded-xl focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-500 focus-visible:ring-offset-2"
           />
         </div>
-        <div className="flex items-center gap-3">
+        <div className="flex flex-col gap-3 min-[400px]:flex-row min-[400px]:items-center">
           <Button type="submit" size="lg" className="flex-1" disabled={!canContinue}>
             {t('s2.continue')}
           </Button>

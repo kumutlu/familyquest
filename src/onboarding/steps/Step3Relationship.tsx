@@ -52,7 +52,7 @@ export function Step3Relationship({ draft, patch, onNext, onBack }: Step3Props) 
         })}
       </div>
       <p className="mt-4 text-sm text-gray-500">{t('s3.reassurance')}</p>
-      <div className="mt-6 flex items-center gap-3">
+      <div className="mt-6 flex flex-col gap-3 min-[400px]:flex-row min-[400px]:items-center">
         <Button variant="secondary" onClick={onBack}>
           {t('s3.back')}
         </Button>

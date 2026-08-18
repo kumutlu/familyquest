@@ -1,5 +1,6 @@
 import { useTranslation } from 'react-i18next';
 import { Button } from '../../components/ui/Button';
+import { GoogleButton } from '../../components/ui/GoogleButton';
 import { OnboardingCard } from '../components/OnboardingCard';
 import { OnboardingError } from '../components/OnboardingError';
 import type { OnboardingDraft } from '../lib/onboardingDraft';
@@ -49,9 +50,9 @@ export function Step7Account({ draft, onGoogle, onEmail, authError, onStartOver,
       <div className="mt-5 space-y-3">
         {/* Only the providers the app actually implements: Google + Email.
             Apple is intentionally NOT offered (deferred product decision). */}
-        <Button size="lg" fullWidth onClick={onGoogle}>
+        <GoogleButton onClick={onGoogle}>
           {t('s7.google')}
-        </Button>
+        </GoogleButton>
         <Button size="lg" variant="secondary" fullWidth onClick={onEmail}>
           {t('s7.email')}
         </Button>

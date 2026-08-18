@@ -52,7 +52,7 @@ export function Step4ChildName({ draft, patch, onNext, onBack }: Step4Props) {
         <p role="note" className="text-sm text-gray-500">
           {t('s4.privacyNote')}
         </p>
-        <div className="flex items-center gap-3">
+        <div className="flex flex-col gap-3 min-[400px]:flex-row min-[400px]:items-center">
           <Button variant="secondary" onClick={onBack}>
             {t('s4.back')}
           </Button>

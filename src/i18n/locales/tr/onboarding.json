@@ -89,7 +89,9 @@
     "inviteParent": "Başka ebeveyn davet et",
     "inviteCopied": "Davet bağlantısı kopyalandı",
     "continue": "Devam et",
-    "skip": "Şimdilik atla"
+    "skip": "Şimdilik atla",
+    "roleParent": "Ebeveyn",
+    "roleChild": "Çocuk"
   },
   "p2": {
     "title": "{{child}}'a ilk galibiyetini verelim.",

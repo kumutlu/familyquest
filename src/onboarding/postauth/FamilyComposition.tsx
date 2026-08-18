@@ -214,7 +214,7 @@ export function FamilyComposition({ draft, patch, goNext, deps }: FamilyComposit
             </span>
             <span className="text-sm font-semibold text-gray-800">{member.name}</span>
             <span className="ml-auto text-xs text-gray-400">
-              {member.role === 'child' ? t('s7.summaryChild', { child: '' }).trim() || 'Child' : 'Parent'}
+              {member.role === 'child' ? t('p1.roleChild') : t('p1.roleParent')}
             </span>
           </li>
         ))}
@@ -245,7 +245,7 @@ export function FamilyComposition({ draft, patch, goNext, deps }: FamilyComposit
         </Button>
       </div>
 
-      <div className="mt-6 flex items-center gap-3">
+      <div className="mt-6 flex flex-col gap-3 min-[400px]:flex-row min-[400px]:items-center">
         <Button variant="secondary" onClick={goNext} disabled={creating}>
           {t('p1.skip')}
         </Button>

@@ -18,7 +18,7 @@ export function Step5MiniJourney({ draft, onNext, onBack }: Step5Props) {
       <div className="mt-4">
         <MiniJourney childName={draft.childFirstName} />
       </div>
-      <div className="mt-6 flex items-center gap-3">
+      <div className="mt-6 flex flex-col gap-3 min-[400px]:flex-row min-[400px]:items-center">
         <Button variant="secondary" onClick={onBack}>
           {t('s5.back')}
         </Button>
