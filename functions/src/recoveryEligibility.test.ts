@@ -141,15 +141,29 @@ describe('classifyRecoveryCompletion — unit (mirrors processApprovedCompletion
 
   it('builds the expected snapshot when none is frozen yet (no false positive)', () => {
     // No snapshot exists: the classifier builds the expected snapshot from the
-    // current family tasks. A task that is NOT eligible on that day (created the
-    // same day) must still be excluded.
+    // current family tasks. A task that did NOT exist on the completion day
+    // (created the NEXT day) must still be excluded — the P0 fix only made a
+    // task eligible on its OWN creation day, not on days before it existed.
+    const result = classifyRecoveryCompletion(baseInput({
+      existingSnapshot: null,
+      task: task({ createdAt: COMPLETED_AT + 86400000 }),
+      familyTasks: [task({ createdAt: COMPLETED_AT + 86400000 })],
+    }))
+    expect(result.eligible).toBe(false)
+    expect(result.reason).toBe('not_in_immutable_snapshot')
+  })
+
+  it('P0 fix — a task created the same day as completion IS eligible (no false negative)', () => {
+    // Regression guard for the gamification-integrity bug: a freshly-created
+    // task (created on the completion day) must be predicted eligible, matching
+    // the corrected processApprovedCompletion behaviour.
     const result = classifyRecoveryCompletion(baseInput({
       existingSnapshot: null,
       task: task({ createdAt: COMPLETED_AT }),
       familyTasks: [task({ createdAt: COMPLETED_AT })],
     }))
-    expect(result.eligible).toBe(false)
-    expect(result.reason).toBe('not_in_immutable_snapshot')
+    expect(result.eligible).toBe(true)
+    expect(result.reason).toBe(null)
   })
 
   it('migration not ready is NOT eligible', () => {

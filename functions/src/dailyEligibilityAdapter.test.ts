@@ -32,10 +32,14 @@ describe('dailyEligibilityAdapter', () => {
     expect(snapshot).toMatchObject({ eligibleTaskCount: 1, eligiblePoints: 20, transitionRank: 0 })
   })
 
-  it('makes tasks created today first eligible on the next applicable local day', () => {
+  it('makes a daily task created today eligible the same day (P0 fix)', () => {
     const today = task({ createdAt: Date.parse('2026-07-23T09:00:00Z') })
-    expect(isTaskEligibleForDay(today, 'child-1', DAY, 'Europe/London')).toBe(false)
+    // A task created on the local creation day must be eligible that same day so a
+    // parent-created task can be completed and approved immediately.
+    expect(isTaskEligibleForDay(today, 'child-1', DAY, 'Europe/London')).toBe(true)
     expect(isTaskEligibleForDay(today, 'child-1', '2026-07-24', 'Europe/London')).toBe(true)
+    // A task is still NOT eligible on a day before it existed.
+    expect(isTaskEligibleForDay(today, 'child-1', '2026-07-22', 'Europe/London')).toBe(false)
   })
 
   it.each([

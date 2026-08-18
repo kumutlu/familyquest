@@ -106,7 +106,13 @@ export function isTaskEligibleForDay(
   if (task.effectiveTo !== undefined && dayKey > task.effectiveTo) return false
   if (task.effectiveFromAt !== undefined && dayKey < familyDayKey(task.effectiveFromAt, timezone)) return false
   if (task.effectiveToAt !== undefined && dayKey > familyDayKey(task.effectiveToAt, timezone)) return false
-  if (task.createdAt !== undefined && familyDayKey(task.createdAt, timezone) >= dayKey) return false
+  // A task cannot be eligible on a day BEFORE it was created, but it MUST be
+  // eligible on its creation day and afterwards: a parent can create a task and
+  // the child can complete + the parent approve it the very same day. The
+  // previous `>=` excluded the creation day, which silently dropped the award
+  // for every freshly-created task (the P0 gamification-integrity bug) while
+  // legacy tasks created on prior days kept awarding normally.
+  if (task.createdAt !== undefined && familyDayKey(task.createdAt, timezone) > dayKey) return false
   return dueOnDay(task, dayKey)
 }
 
