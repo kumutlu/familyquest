@@ -278,3 +278,71 @@ describe('P0 — freshly-created (same-day) task approval awards points', () => 
     expect(db.store[summaryPath()]).toMatchObject({ xpTotal: 210 })
   })
 })
+
+// ---------------------------------------------------------------------------
+// Production-equivalent regression — the REAL Mostum scenario.
+//
+// The previous `>=` -> `>` fix only changes the *freshly built* snapshot that
+// `processApprovedCompletion` computes when NO frozen `daily_eligibility` doc
+// exists yet (gamificationRepository.ts line 630 falls through to
+// `expectedSnapshot`). In production the daily eligibility snapshot is frozen
+// lazily on the FIRST approval of the day. If a parent approved ANY task
+// earlier that same day, today's snapshot already exists and does NOT contain
+// a task created afterwards. The processor then looks the new task up by id in
+// the frozen `taskWeights` map (line 636), finds `undefined`, and throws
+// "Approved completion is not eligible in the immutable daily snapshot"
+// (line 637) — silently dropping the award even though the `>` fix is present.
+//
+// This test freezes today's snapshot FIRST (simulating an earlier approval),
+// THEN creates a brand-new same-day task, completes it, and approves it. It
+// asserts the CORRECT behaviour and therefore FAILS on current code, proving
+// the previous fix is incomplete for the frozen-snapshot path.
+// ---------------------------------------------------------------------------
+describe('P0 — task created AFTER today\'s eligibility snapshot is already frozen', () => {
+  function buildStoreWithFrozenSnapshot(): Store {
+    const store = buildStore({ taskCreatedAtOffsetMs: 0 })
+    // Simulate an earlier-in-the-day approval that froze the daily eligibility
+    // snapshot BEFORE the new same-day task was created. The frozen snapshot
+    // therefore lists only the pre-existing task, never the new one.
+    store[`${FAMILY_PATH}/daily_eligibility/${CHILD_ID}:${DAY_KEY}`] = {
+      schemaVersion: 1,
+      familyId: FAMILY_ID,
+      childId: CHILD_ID,
+      dayKey: DAY_KEY,
+      timezone: 'Europe/London',
+      dailyGoalPercentage: 50,
+      taskWeights: { [OTHER_TASK_ID]: 1000 },
+      eligibleTaskCount: 1,
+      eligiblePoints: 1000,
+      effectiveAt: new Date(PROCESSING_AT),
+      causalGroupId: `eligibility_v1|${FAMILY_ID}|${CHILD_ID}|${DAY_KEY}`,
+      createdAt: new Date(PROCESSING_AT - 86400000),
+      createdBy: 'gamification-engine-v1',
+    }
+    return store
+  }
+
+  it('awards points for a same-day task even when today\'s snapshot was frozen earlier', async () => {
+    const db = fakeDb(buildStoreWithFrozenSnapshot())
+    const repository = new AdminGamificationRepository(db as never)
+    const result = await repository.processApprovedCompletion({
+      familyId: FAMILY_ID,
+      completionId: COMPLETION_ID,
+      processingAt: PROCESSING_AT,
+    })
+
+    expect(result.status).toBe('processed')
+    expect(result.logicalCompletionKey).toBe(LOGICAL_KEY)
+    // Authoritative spendable points increased by exactly the task value.
+    expect(db.store[childPath()]).toMatchObject({ rewardPoints: 110 })
+    // XP increased by exactly the task value.
+    expect(db.store[summaryPath()]).toMatchObject({ xpTotal: 210 })
+    // Idempotency / award ledger record created.
+    expect(Object.hasOwn(db.store, occurrencePath())).toBe(true)
+    // Notification created with the correct amount.
+    expect(db.store[notificationPath()]).toMatchObject({
+      type: 'task_approved',
+      body: 'Fresh task was approved. +10 points',
+    })
+  })
+})

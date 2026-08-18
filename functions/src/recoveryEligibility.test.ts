@@ -323,4 +323,42 @@ describe('scanner/processor parity (real processApprovedCompletion)', () => {
     expect(proc.status).toBe('duplicate')
     expect(classifyRecoveryCompletion(baseInput()).eligible).toBe(true)
   })
+
+  it('P0 parity — same-day post-freeze task: processor processed == scanner eligible', async () => {
+    // 1. Snapshot frozen BEFORE the task existed (does not list the task).
+    // 2. Task created later the SAME family-local day as the completion.
+    // 3. Live processApprovedCompletion considers it eligible (same-day fallback).
+    // 4. Recovery classifier also considers it eligible (parity).
+    const store: Store = {}
+    seedFamily(store, { snapshot: { 'other-task': 5 } })
+    // Task created later the same day (after the snapshot froze).
+    store[`families/${FAMILY}/tasks/${TASK}`].createdAt = new Date(COMPLETED_AT)
+    const proc = await runProcessor(store)
+    expect(proc.status).toBe('processed')
+    const scan = classifyRecoveryCompletion(baseInput({
+      existingSnapshot: { taskWeights: { 'other-task': 5 } },
+      task: task({ createdAt: COMPLETED_AT }),
+      familyTasks: [task({ createdAt: COMPLETED_AT })],
+    }))
+    expect(scan.eligible).toBe(true)
+    expect(scan.reason).toBe(null)
+  })
+
+  it('P0 parity — prior-day task absent from frozen snapshot: processor rejects == scanner ineligible', async () => {
+    // 5. A task created on a PRIOR day and absent from the immutable snapshot
+    //    must still be rejected by BOTH the live processor and the recovery
+    //    classifier (anti-forgery / immutable-history contract).
+    const store: Store = {}
+    seedFamily(store, { snapshot: { 'other-task': 5 } })
+    const proc = await runProcessor(store)
+    expect(proc.status).toBe('error')
+    expect(proc.error).toMatch(/immutable daily snapshot/)
+    const scan = classifyRecoveryCompletion(baseInput({
+      existingSnapshot: { taskWeights: { 'other-task': 5 } },
+      task: task({ createdAt: Date.parse('2026-07-01T00:00:00Z') }),
+      familyTasks: [task({ createdAt: Date.parse('2026-07-01T00:00:00Z') })],
+    }))
+    expect(scan.eligible).toBe(false)
+    expect(scan.reason).toBe('not_in_immutable_snapshot')
+  })
 })

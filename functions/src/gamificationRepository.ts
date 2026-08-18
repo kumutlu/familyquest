@@ -43,6 +43,7 @@ import { normalizeXpLedger } from '../../src/domain/gamification/rebuildNormaliz
 import {
   authoritativePeriodKey,
   buildDailyEligibilitySnapshot,
+  isTaskEligibleForDay,
   taskIsAwardableForChild,
   type RepositoryScheduledTask,
 } from './dailyEligibilityAdapter'
@@ -634,11 +635,30 @@ export class AdminGamificationRepository implements
         throw new Error(`Daily eligibility ${eligibilityRef.id} has conflicting immutable content`)
       }
       const frozenWeight = snapshot.taskWeights[taskId]
-      if (frozenWeight === undefined && task.pointsReward !== 0) throw new Error('Approved completion is not eligible in the immutable daily snapshot')
+      let effectiveWeight = frozenWeight
+      if (effectiveWeight === undefined && task.pointsReward !== 0) {
+        // The task is absent from the frozen daily-eligibility snapshot. This is
+        // legitimate when the task was created AFTER today's snapshot was
+        // already frozen (e.g. a parent adds a new task later the same day, the
+        // child completes it, and the parent approves it). A task created on the
+        // completion day is eligible, so award it using its live weight instead
+        // of throwing. Restrict to same-day tasks to preserve the
+        // immutable-history / anti-forgery contract: a prior-day task missing
+        // from the snapshot must still be rejected (it cannot be a legitimate
+        // same-day creation, so it would be a backdated forgery attempt).
+        if (
+          task.createdAt !== undefined
+          && familyDayKey(task.createdAt, timezone) === dayKey
+          && isTaskEligibleForDay(task, childId, dayKey, timezone)
+        ) {
+          effectiveWeight = task.pointsReward
+        }
+      }
+      if (effectiveWeight === undefined && task.pointsReward !== 0) throw new Error('Approved completion is not eligible in the immutable daily snapshot')
       const effect: TaskGamificationEffectV1 = {
         schemaVersion: 1, familyId: args.familyId, childId, taskId, logicalCompletionKey: logicalKey, periodKey, dayKey, timezone,
         pointsReward: task.pointsReward, xpAward: task.pointsReward, rewardPointsAward: task.pointsReward,
-        dailyWeight: frozenWeight ?? 0, requiresApproval: task.requiresApproval === true, approvedAt,
+        dailyWeight: effectiveWeight ?? 0, requiresApproval: task.requiresApproval === true, approvedAt,
       }
       if (completion.awardedPoints !== undefined && completion.awardedPoints !== effect.rewardPointsAward) {
         throw new Error('Existing completion awardedPoints conflicts with the trusted reward plan')

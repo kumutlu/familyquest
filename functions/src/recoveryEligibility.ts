@@ -115,7 +115,10 @@ export function classifyRecoveryCompletion(input: RecoveryEligibilityInput): Rec
   if (existingWeights && Object.prototype.hasOwnProperty.call(existingWeights, taskId)) {
     frozenWeight = existingWeights[taskId]
   } else if (existingWeights) {
-    // Snapshot exists but does not list this task → not eligible (frozen history).
+    // Snapshot exists but does not list this task → not eligible by default
+    // (frozen history). The one legitimate exception — a task created AFTER the
+    // snapshot was frozen, later the SAME family-local day — is handled by the
+    // same-day fallback below, mirroring processApprovedCompletion.
     frozenWeight = undefined
   } else {
     // No snapshot frozen yet: build the expected snapshot from current family tasks,
@@ -131,6 +134,26 @@ export function classifyRecoveryCompletion(input: RecoveryEligibilityInput): Rec
       createdAt: processingAt,
     })
     frozenWeight = expected.taskWeights[taskId]
+  }
+
+  // Same-day fallback (mirrors processApprovedCompletion EXACTLY). A task absent
+  // from the frozen snapshot is still awardable ONLY when it was created on the
+  // same family-local day as the completion/approval day AND passes
+  // isTaskEligibleForDay. This covers the case where the daily snapshot froze
+  // first and a parent created a new task later the same day, the child completed
+  // it, and the parent approved it. We use the task's authoritative points reward
+  // (taskPointsReward). Prior-day tasks missing from the immutable snapshot remain
+  // rejected — they cannot be a legitimate same-day creation, so allowing them
+  // would be a backdated forgery (anti-forgery / immutable-history contract).
+  if (frozenWeight === undefined && taskPointsReward !== 0) {
+    if (
+      task !== null
+      && task.createdAt !== undefined
+      && familyDayKey(task.createdAt, timezone) === dayKey
+      && isTaskEligibleForDay(task, childId, dayKey, timezone)
+    ) {
+      frozenWeight = taskPointsReward
+    }
   }
 
   if (frozenWeight === undefined && taskPointsReward !== 0) {
