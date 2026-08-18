@@ -1,316 +1,238 @@
-import { test, expect } from '@playwright/test';
-import { loginAs, logout } from './utils/auth';
+import { test, expect, type Page, type ConsoleMessage } from '@playwright/test';
 import { execSync } from 'child_process';
+import { loginAs, logout } from './utils/auth';
+import {
+  driveToStep,
+  signUpFromS7,
+  completePostAuth,
+  completeEmailOnboarding,
+  getOnboardingOutcome,
+  expectDashboard,
+  type OnboardingPersona,
+} from './utils/onboardingFlow';
 
-test.describe('Onboarding Flow', () => {
+/**
+ * Refined Queki onboarding — E2E contract.
+ *
+ * These tests assert the *approved* pre-auth (S1–S7) + post-auth (P1–P3) flow.
+ * They replace the legacy "Create family" / "Welcome to Queki" / "Step 2 of 3"
+ * assertions that belonged to the deleted legacy onboarding. The tests are
+ * strengthened (not weakened): they assert the authoritative Firestore outcome
+ * — exactly one family, exactly one first managed child, exactly one first
+ * task — and exercise refresh/recovery at meaningful boundaries.
+ */
+
+function uniqueEmail(prefix: string) {
+  return `${prefix}-${Date.now()}-${Math.floor(Math.random() * 10000)}@example.com`;
+}
+
+function collectErrors(page: Page) {
+  const errors: string[] = [];
+  page.on('console', (msg: ConsoleMessage) => {
+    if (msg.type() === 'error') errors.push(msg.text());
+  });
+  page.on('pageerror', (err) => errors.push(String(err)));
+  return errors;
+}
+
+function persona(overrides: Partial<OnboardingPersona> = {}): OnboardingPersona {
+  return {
+    parent: 'Kemal',
+    relationship: 'Dad',
+    child: 'Osman',
+    family: 'Umutlu Family',
+    email: uniqueEmail('onboard'),
+    password: 'password123',
+    ...overrides,
+  };
+}
+
+test.describe('Refined Queki onboarding', () => {
   test.beforeEach(async () => {
     execSync('npx tsx tests/e2e/utils/seed.ts', { stdio: 'ignore' });
   });
 
-  test('Complete onboarding flow with one child', async ({ page }) => {
-    // Create a new user for this test
-    await execSync('npx tsx tests/e2e/utils/seed.ts', { stdio: 'ignore' });
-    
-    // Sign up a new user
-    await page.goto('/signup');
-    await page.fill('input[type="email"]', 'newuser@test.com');
-    await page.fill('input[type="password"]', 'password123');
-    await page.fill('input[type="text"]', 'New User');
-    await page.click('button[type="submit"]');
-    
-    // Wait for onboarding to start
-    await expect(page.locator('text="Welcome to Queki"')).toBeVisible();
-    
-    // Step 1: Create family
-    await page.fill('input[type="text"]', 'Test Family');
-    await page.click('button[type="submit"]');
-    await expect(page.locator('text="Step 2 of 3"')).toBeVisible();
-    
-    // Step 2: Add family members
-    await page.fill('input[placeholder="Name"]', 'Child One');
-    await page.selectOption('select', 'child');
-    await page.click('button:has-text("+")');
-    
-    // Verify child was added
-    await expect(page.locator('text="Child One"')).toBeVisible();
-    
-    // Continue to step 3
-    await page.click('button:has-text("Continue to Invite Code")');
-    await expect(page.locator('text="Step 3 of 3"')).toBeVisible();
-    
-    // Verify invite code is displayed
-    await expect(page.locator('text="Your Invite Code"')).toBeVisible();
-    
-    // Finish setup
-    await page.click('button:has-text("Finish Setup")');
-    
-    // Should be redirected to dashboard
-    await expect(page.locator('text="Queki"')).toBeVisible();
+  test('New visitor lands on Refined Step 1 with the value proposition', async ({ page }) => {
+    await page.goto('/');
+    const heading = page.getByRole('heading', { name: /small wins\. big habits\./i });
+    await expect(heading).toBeVisible({ timeout: 15000 });
+    // The legacy "Welcome to Queki" copy must not appear.
+    await expect(page.getByText(/welcome to queki/i)).toHaveCount(0);
+    // Primary CTA + returning-user escape are present.
+    await expect(page.getByRole('button', { name: /set up your family/i })).toBeVisible();
+    await expect(page.getByRole('button', { name: /i already have an account/i })).toBeVisible();
   });
 
-  test('Onboarding with parent and child', async ({ page }) => {
-    await execSync('npx tsx tests/e2e/utils/seed.ts', { stdio: 'ignore' });
-    
-    // Sign up
-    await page.goto('/signup');
-    await page.fill('input[type="email"]', 'parentuser@test.com');
-    await page.fill('input[type="password"]', 'password123');
-    await page.fill('input[type="text"]', 'Parent User');
-    await page.click('button[type="submit"]');
-    
-    // Step 1: Create family
-    await page.fill('input[type="text"]', 'Parent-Child Family');
-    await page.click('button[type="submit"]');
-    
-    // Step 2: Add parent member
-    await page.fill('input[placeholder="Name"]', 'Parent User');
-    await page.selectOption('select', 'parent');
-    await page.click('button:has-text("+")');
-    
-    // Add child member
-    await page.fill('input[placeholder="Name"]', 'Child User');
-    await page.selectOption('select', 'child');
-    await page.click('button:has-text("+")');
-    
-    // Verify both members added
-    await expect(page.locator('text="Parent User"')).toBeVisible();
-    await expect(page.locator('text="Child User"')).toBeVisible();
-    
-    // Continue to step 3
-    await page.click('button:has-text("Continue to Invite Code")');
-    await expect(page.locator('text="Your Invite Code"')).toBeVisible();
-    
-    // Finish setup
-    await page.click('button:has-text("Finish Setup")');
-    await expect(page.locator('text="Queki"')).toBeVisible();
+  test('Returning user escapes Step 1 to the existing login UI', async ({ page }) => {
+    await page.goto('/');
+    await expect(page.getByRole('heading', { name: /small wins\. big habits\./i })).toBeVisible();
+    await page.getByRole('button', { name: /i already have an account/i }).click();
+    await expect(page).toHaveURL(/\/login/, { timeout: 15000 });
+    await expect(page.locator('input[type="email"]')).toBeVisible();
   });
 
-  test('Onboarding validation - empty name', async ({ page }) => {
-    await execSync('npx tsx tests/e2e/utils/seed.ts', { stdio: 'ignore' });
-    
-    // Sign up
-    await page.goto('/signup');
-    await page.fill('input[type="email"]', 'validationuser@test.com');
-    await page.fill('input[type="password"]', 'password123');
-    await page.fill('input[type="text"]', 'Validation User');
-    await page.click('button[type="submit"]');
-    
-    // Step 1: Create family
-    await page.fill('input[type="text"]', 'Validation Family');
-    await page.click('button[type="submit"]');
-    
-    // Try to add member with empty name
-    await page.click('button:has-text("+")');
-    
-    // Should show validation error
-    await expect(page.locator('text="Member name is required"')).toBeVisible();
-    
-    // Try to continue without members
-    await page.click('button:has-text("Continue to Invite Code")');
-    await expect(page.locator('text="Must add at least one member"')).toBeVisible();
+  test('Complete email onboarding creates exactly one family, child, and task', async ({ page }) => {
+    const data = persona();
+    await page.goto('/');
+    await completeEmailOnboarding(page, data);
+
+    const outcome = await getOnboardingOutcome(data.email);
+    expect(outcome.familyId, 'familyId should be set').toBeTruthy();
+    expect(outcome.familyCount, 'exactly one family').toBe(1);
+    expect(outcome.childCount, 'exactly one first managed child').toBe(1);
+    expect(outcome.taskCount, 'exactly one first task').toBe(1);
   });
 
-  test('Onboarding duplicate member prevention', async ({ page }) => {
-    await execSync('npx tsx tests/e2e/utils/seed.ts', { stdio: 'ignore' });
-    
-    // Sign up
-    await page.goto('/signup');
-    await page.fill('input[type="email"]', 'duplicateuser@test.com');
-    await page.fill('input[type="password"]', 'password123');
-    await page.fill('input[type="text"]', 'Duplicate User');
-    await page.click('button[type="submit"]');
-    
-    // Step 1: Create family
-    await page.fill('input[type="text"]', 'Duplicate Family');
-    await page.click('button[type="submit"]');
-    
-    // Add first member
-    await page.fill('input[placeholder="Name"]', 'First Child');
-    await page.click('button:has-text("+")');
-    
-    // Try to add duplicate member
-    await page.fill('input[placeholder="Name"]', 'First Child');
-    await page.click('button:has-text("+")');
-    
-    // Should show duplicate error
-    await expect(page.locator('text="Member already exists"')).toBeVisible();
-    
-    // Verify only one member was added
-    await expect(page.locator('text="First Child"')).toHaveCount(1);
-  });
+  test('Refresh during pre-auth preserves the draft and resumes at the same step', async ({ page }) => {
+    const data = persona();
+    await page.goto('/');
+    // Drive to S4 and enter the child name, then refresh before continuing.
+    await driveToStep(page, data, 's4');
+    // Enter the child name at S4, then refresh before continuing.
+    await page.getByLabel(/child's first name/i).fill(data.child);
+    await expect(page.getByLabel(/child's first name/i)).toHaveValue(data.child);
 
-  test('Onboarding Enter key behavior', async ({ page }) => {
-    await execSync('npx tsx tests/e2e/utils/seed.ts', { stdio: 'ignore' });
-    
-    // Sign up
-    await page.goto('/signup');
-    await page.fill('input[type="email"]', 'enterkeyuser@test.com');
-    await page.fill('input[type="password"]', 'password123');
-    await page.fill('input[type="text"]', 'Enter Key User');
-    await page.click('button[type="submit"]');
-    
-    // Step 1: Create family
-    await page.fill('input[type="text"]', 'Enter Key Family');
-    await page.click('button[type="submit"]');
-    
-    // Fill in member name and press Enter
-    await page.fill('input[placeholder="Name"]', 'Enter Key Child');
-    await page.press('input[placeholder="Name"]', 'Enter');
-    
-    // Should add member (Enter should not submit form or advance step)
-    await expect(page.locator('text="Enter Key Child"')).toBeVisible();
-    
-    // Should still be on step 2
-    await expect(page.locator('text="Step 2 of 3"')).toBeVisible();
-  });
+    // The draft save is an async effect; wait for it to be durably persisted
+    // (sessionStorage/localStorage mirror) before refreshing so the reload
+    // cannot race the write.
+    await page.waitForFunction(
+      (child: string) => {
+        const raw =
+          sessionStorage.getItem('queki.onboardingDraft') ||
+          localStorage.getItem('queki.onboardingDraft');
+        if (!raw) return false;
+        try {
+          return (JSON.parse(raw) as { childFirstName?: string }).childFirstName === child;
+        } catch {
+          return false;
+        }
+      },
+      data.child,
+      { timeout: 5000 },
+    );
 
-  test('Onboarding add child member', async ({ page }) => {
-    await execSync('npx tsx tests/e2e/utils/seed.ts', { stdio: 'ignore' });
-    
-    // Sign up
-    await page.goto('/signup');
-    await page.fill('input[type="email"]', 'childuser@test.com');
-    await page.fill('input[type="password"]', 'password123');
-    await page.fill('input[type="text"]', 'Child Test User');
-    await page.click('button[type="submit"]');
-    
-    // Step 1: Create family
-    await page.fill('input[type="text"]', 'Child Test Family');
-    await page.click('button[type="submit"]');
-    
-    // Step 2: Add child member
-    await page.fill('input[placeholder="Name"]', 'Test Child');
-    await page.selectOption('select', 'child');
-    await page.click('button:has-text("+")');
-    
-    // Verify child was added to the list
-    await expect(page.locator('text="Test Child"')).toBeVisible();
-    await expect(page.locator('text="Child"')).toBeVisible();
-    
-    // Verify input was cleared
-    await expect(page.locator('input[placeholder="Name"]')).toHaveValue('');
-  });
-
-  test('Onboarding add parent member', async ({ page }) => {
-    await execSync('npx tsx tests/e2e/utils/seed.ts', { stdio: 'ignore' });
-    
-    // Sign up
-    await page.goto('/signup');
-    await page.fill('input[type="email"]', 'parentuser@test.com');
-    await page.fill('input[type="password"]', 'password123');
-    await page.fill('input[type="text"]', 'Parent Test User');
-    await page.click('button[type="submit"]');
-    
-    // Step 1: Create family
-    await page.fill('input[type="text"]', 'Parent Test Family');
-    await page.click('button[type="submit"]');
-    
-    // Step 2: Add parent member
-    await page.fill('input[placeholder="Name"]', 'Test Parent');
-    await page.selectOption('select', 'parent');
-    await page.click('button:has-text("+")');
-    
-    // Verify parent was added to the list
-    await expect(page.locator('text="Test Parent"')).toBeVisible();
-    await expect(page.locator('text="Parent"')).toBeVisible();
-    
-    // Verify input was cleared
-    await expect(page.locator('input[placeholder="Name"]')).toHaveValue('');
-  });
-
-  test('Onboarding double-click prevention', async ({ page }) => {
-    await execSync('npx tsx tests/e2e/utils/seed.ts', { stdio: 'ignore' });
-    
-    // Sign up
-    await page.goto('/signup');
-    await page.fill('input[type="email"]', 'doubleclickuser@test.com');
-    await page.fill('input[type="password"]', 'password123');
-    await page.fill('input[type="text"]', 'Double Click User');
-    await page.click('button[type="submit"]');
-    
-    // Step 1: Create family
-    await page.fill('input[type="text"]', 'Double Click Family');
-    await page.click('button[type="submit"]');
-    
-    // Fill in member name
-    await page.fill('input[placeholder="Name"]', 'Double Click Child');
-    
-    // Double-click the + button
-    await page.dblclick('button:has-text("+")');
-    
-    // Should add member only once
-    await expect(page.locator('text="Double Click Child"')).toHaveCount(1);
-  });
-
-  test('Onboarding retry after partial setup', async ({ page }) => {
-    await execSync('npx tsx tests/e2e/utils/seed.ts', { stdio: 'ignore' });
-    
-    // Sign up
-    await page.goto('/signup');
-    await page.fill('input[type="email"]', 'retryuser@test.com');
-    await page.fill('input[type="password"]', 'password123');
-    await page.fill('input[type="text"]', 'Retry User');
-    await page.click('button[type="submit"]');
-    
-    // Step 1: Create family
-    await page.fill('input[type="text"]', 'Retry Family');
-    await page.click('button[type="submit"]');
-    
-    // Add one member
-    await page.fill('input[placeholder="Name"]', 'First Member');
-    await page.click('button:has-text("+")');
-    
-    // Refresh the page (simulating network issue)
     await page.reload();
-    
-    // Should resume with existing family
-    await expect(page.locator('text="First Member"')).toBeVisible();
-    
-    // Add second member
-    await page.fill('input[placeholder="Name"]', 'Second Member');
-    await page.click('button:has-text("+")');
-    
-    await expect(page.locator('text="Second Member"')).toBeVisible();
-    
-    // Complete setup
-    await page.click('button:has-text("Continue to Invite Code")');
-    await page.click('button:has-text("Finish Setup")');
-    await expect(page.locator('text="Queki"')).toBeVisible();
+    // Draft survives: still on S4 with the entered value intact.
+    await expect(page.getByRole('heading', { name: /let's make this yours/i })).toBeVisible();
+    await expect(page.getByLabel(/child's first name/i)).toHaveValue(data.child);
+
+    // Continue from the restored S4 (draft already holds parent/relationship/child)
+    // through to S7, then complete the post-auth setup.
+    await page.getByRole('button', { name: /^continue$/i }).click();
+    await expect(page.getByRole('heading', { name: /here's how it works/i })).toBeVisible();
+    await page.getByRole('button', { name: /looks good/i }).click();
+    await expect(page.getByRole('heading', { name: /every family needs a name/i })).toBeVisible();
+    await page.getByLabel(/family name/i).fill(data.family);
+    await page.getByRole('button', { name: /^continue$/i }).click();
+    await expect(page.getByRole('heading', { name: /your family is ready/i })).toBeVisible();
+
+    await signUpFromS7(page, data);
+    await completePostAuth(page, data);
+
+    const outcome = await getOnboardingOutcome(data.email);
+    expect(outcome.familyCount).toBe(1);
+    expect(outcome.childCount).toBe(1);
+    expect(outcome.taskCount).toBe(1);
   });
 
-  test('Onboarding no duplicate family on retry', async ({ page }) => {
-    await execSync('npx tsx tests/e2e/utils/seed.ts', { stdio: 'ignore' });
-    
-    // Sign up
-    await page.goto('/signup');
-    await page.fill('input[type="email"]', 'noduplicateuser@test.com');
-    await page.fill('input[type="password"]', 'password123');
-    await page.fill('input[type="text"]', 'No Duplicate User');
-    await page.click('button[type="submit"]');
-    
-    // Step 1: Create family
-    await page.fill('input[type="text"]', 'No Duplicate Family');
-    await page.click('button[type="submit"]');
-    
-    // Add members
-    await page.fill('input[placeholder="Name"]', 'Member One');
-    await page.click('button:has-text("+")');
-    
-    await page.fill('input[placeholder="Name"]', 'Member Two');
-    await page.click('button:has-text("+")');
-    
-    // Complete setup
-    await page.click('button:has-text("Continue to Invite Code")');
-    await page.click('button:has-text("Finish Setup")');
-    
-    // Logout
+  test('Refresh immediately after auth return (P1) does not duplicate the family', async ({ page }) => {
+    const data = persona();
+    await page.goto('/');
+    await driveToStep(page, data, 's7');
+    await signUpFromS7(page, data);
+
+    // Refresh the moment P1 appears (before/at family creation).
+    await page.reload();
+    await expect(page.getByRole('heading', { name: /your family is taking shape/i })).toBeVisible({
+      timeout: 20000,
+    });
+
+    await completePostAuth(page, data);
+
+    const outcome = await getOnboardingOutcome(data.email);
+    expect(outcome.familyCount, 'no duplicate family after P1 refresh').toBe(1);
+    expect(outcome.childCount).toBe(1);
+    expect(outcome.taskCount).toBe(1);
+  });
+
+  test('Refresh after family creation (before completion) resumes without duplicates', async ({ page }) => {
+    const data = persona();
+    await page.goto('/');
+    await driveToStep(page, data, 's7');
+    await signUpFromS7(page, data);
+
+    // Wait for P1 to create the family + child, then refresh before finishing.
+    await expect(page.getByRole('button', { name: /^continue$/i })).toBeEnabled({ timeout: 20000 });
+    await page.reload();
+    await expect(page.getByRole('heading', { name: /your family is taking shape/i })).toBeVisible({
+      timeout: 20000,
+    });
+
+    // Authoritative state already exists — no second family/child.
+    const mid = await getOnboardingOutcome(data.email);
+    expect(mid.familyCount).toBe(1);
+    expect(mid.childCount).toBe(1);
+
+    await completePostAuth(page, data);
+
+    const outcome = await getOnboardingOutcome(data.email);
+    expect(outcome.familyCount).toBe(1);
+    expect(outcome.childCount).toBe(1);
+    expect(outcome.taskCount).toBe(1);
+  });
+
+  test('Existing family owner never sees onboarding', async ({ page }) => {
+    await loginAs(page, 'owner@test.com');
+
+    // Bare root is the application, not onboarding.
+    await page.goto('/');
+    await expectDashboard(page);
+
+    // Direct deep link to /onboarding is redirected away.
+    await page.goto('/onboarding');
+    await page.waitForTimeout(1500);
+    await expect(page).not.toHaveURL(/\/onboarding/);
+    await expect(page.getByRole('heading', { name: /small wins\. big habits\./i })).toHaveCount(0);
+  });
+
+  test('Managed child never enters parent onboarding', async ({ page }) => {
+    await loginAs(page, 'child@test.com');
+    await page.goto('/onboarding');
+    await page.waitForTimeout(1500);
+    await expect(page).not.toHaveURL(/\/onboarding/);
+    await expect(page.getByRole('heading', { name: /small wins\. big habits\./i })).toHaveCount(0);
+    // The child reaches their own authenticated experience.
+    await expect(page.locator('[data-testid="mobile-bottom-nav"]')).toBeAttached();
+  });
+
+  test('Owner signs out and back in without re-onboarding', async ({ page }) => {
+    await loginAs(page, 'owner@test.com');
+    await expectDashboard(page);
+
     await logout(page);
-    
-    // Sign in again (simulating retry)
-    await loginAs(page, 'noduplicateuser@test.com');
-    
-    // Should be on dashboard, not onboarding
-    await expect(page.locator('text="Queki"')).toBeVisible();
-    await expect(page.locator('text="Welcome to Queki"')).not.toBeVisible();
+    await expect(page).toHaveURL(/\/login/, { timeout: 15000 });
+
+    await loginAs(page, 'owner@test.com');
+    await expectDashboard(page);
+    await expect(page.getByRole('button', { name: /set up your family/i })).toHaveCount(0);
+  });
+
+  test('Protected deep link routes a signed-out user to login, not onboarding', async ({ page }) => {
+    await page.goto('/wallet');
+    await expect(page).toHaveURL(/\/login/, { timeout: 15000 });
+    await expect(page.locator('input[type="email"]')).toBeVisible();
+    await expect(page.getByRole('heading', { name: /small wins\. big habits\./i })).toHaveCount(0);
+  });
+
+  test('No auth/routing/family console errors during a full onboarding run', async ({ page }) => {
+    const errors = collectErrors(page);
+    const data = persona();
+    await page.goto('/');
+    await completeEmailOnboarding(page, data);
+
+    const relevant = errors.filter((e) =>
+      /auth|route|router|family|permission|firestore|user not found/i.test(e),
+    );
+    expect(relevant, relevant.join('\n')).toEqual([]);
   });
 });

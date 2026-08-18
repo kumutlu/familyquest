@@ -1,8 +1,21 @@
 import { test, expect, type Page, type ConsoleMessage } from '@playwright/test';
+import { execSync } from 'child_process';
+import { loginAs, logout } from './utils/auth';
+import {
+  completeEmailOnboarding,
+  getOnboardingOutcome,
+  expectDashboard,
+  type OnboardingPersona,
+} from './utils/onboardingFlow';
 
 /**
- * P0 verification: creating a family must not bounce the parent back to the
- * Create Family screen (onboarding redirect loop).
+ * P0 verification: creating a family via the Refined Queki onboarding must not
+ * bounce the parent back to the onboarding (Create Family) screen — the
+ * redirect loop that previously existed on the legacy flow.
+ *
+ * The legacy assertions ("Create family" button, "Welcome to Queki") are
+ * removed; this now exercises the approved S1–S7 → P1–P3 flow and asserts the
+ * authoritative exactly-once outcome plus stable post-setup routing.
  */
 
 const PASSWORD = 'password123';
@@ -16,71 +29,54 @@ function collectErrors(page: Page) {
   page.on('console', (msg: ConsoleMessage) => {
     if (msg.type() === 'error') errors.push(msg.text());
   });
-  page.on('pageerror', err => errors.push(String(err)));
+  page.on('pageerror', (err) => errors.push(String(err)));
   return errors;
 }
 
-async function signUp(page: Page, email: string, name: string) {
-  await page.goto('/signup');
-  await page.locator('input[type="text"]').first().fill(name);
-  await page.locator('input[type="email"]').fill(email);
-  await page.locator('input[type="password"]').fill(PASSWORD);
-  await page.getByRole('button', { name: /sign up/i }).click();
-}
-
-async function createFamily(page: Page, familyName: string) {
-  await page.getByRole('button', { name: /create family/i }).click();
-  await page.locator('input[type="text"]').first().fill(familyName);
-  await page.getByRole('button', { name: /^continue$/i }).click();
-}
-
-async function expectDashboard(page: Page) {
-  await expect(page).toHaveURL(/\/$|\/#?$/, { timeout: 15000 });
-  await expect(page.getByRole('button', { name: /create family/i })).toHaveCount(0);
-  await expect(page.getByRole('navigation').first()).toBeVisible({ timeout: 15000 });
-}
-
-async function signOutFromApp(page: Page) {
-  await page.goto('/settings');
-  await page.getByRole('button', { name: /sign out|log out/i }).first().click();
-  await expect(page).toHaveURL(/\/login/, { timeout: 15000 });
-}
-
-async function signIn(page: Page, email: string) {
-  await page.goto('/login');
-  await page.locator('input[type="email"]').fill(email);
-  await page.locator('input[type="password"]').fill(PASSWORD);
-  await page.getByRole('button', { name: /sign in|log in/i }).first().click();
+function persona(): OnboardingPersona {
+  return {
+    parent: 'Loop Parent',
+    relationship: 'Parent',
+    child: 'Loop Child',
+    family: 'Loop Family',
+    email: uniqueEmail('loop'),
+    password: PASSWORD,
+  };
 }
 
 test('parent creates a family once and lands on the dashboard without a loop', async ({ page }) => {
   const errors = collectErrors(page);
-  const email = uniqueEmail('parent');
+  const data = persona();
 
-  await signUp(page, email, 'Loop Parent');
+  await page.goto('/');
+  await completeEmailOnboarding(page, data);
 
-  // Scenario 2: create family once
-  await expect(page.getByRole('button', { name: /create family/i })).toBeVisible({ timeout: 20000 });
-  await createFamily(page, 'Loop Family');
-
-  // Scenario 3: dashboard opens immediately
+  // Scenario 3: dashboard opens immediately, no onboarding loop.
   await expectDashboard(page);
 
-  // Scenario 4/5: refresh stays on dashboard
+  // Authoritative exactly-once outcome.
+  const outcome = await getOnboardingOutcome(data.email);
+  expect(outcome.familyCount).toBe(1);
+  expect(outcome.childCount).toBe(1);
+  expect(outcome.taskCount).toBe(1);
+
+  // Scenario 4/5: refresh stays on the dashboard (no re-onboarding).
   await page.reload();
   await expectDashboard(page);
 
-  // Scenario 6: sign out, sign back in -> no Create Family
-  await signOutFromApp(page);
-  await signIn(page, email);
+  // Scenario 6: sign out, sign back in -> still the dashboard, never onboarding.
+  await logout(page);
+  await loginAs(page, data.email);
   await expectDashboard(page);
+  await expect(page.getByRole('button', { name: /set up your family/i })).toHaveCount(0);
 
-  // Scenario 8: existing owner never sees onboarding, even if visited directly
+  // Scenario 8: an existing owner never sees onboarding, even via direct URL.
   await page.goto('/onboarding');
   await page.waitForTimeout(1500);
-  await expect(page.getByRole('button', { name: /create family/i })).toHaveCount(0);
+  await expect(page).not.toHaveURL(/\/onboarding/);
+  await expect(page.getByRole('heading', { name: /small wins\. big habits\./i })).toHaveCount(0);
 
-  // Scenario 9: no auth/routing/family-loading console errors
-  const relevant = errors.filter(e => /auth|route|router|family|permission|firestore/i.test(e));
+  // Scenario 9: no auth/routing/family-loading console errors.
+  const relevant = errors.filter((e) => /auth|route|router|family|permission|firestore/i.test(e));
   expect(relevant, relevant.join('\n')).toEqual([]);
 });
