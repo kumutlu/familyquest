@@ -660,7 +660,7 @@ export const useStore = create<AppState>((set, get) => ({
           // generation. The server read/listener remains authoritative and may
           // revoke readiness on permission/auth failure below. Optional cached
           // collections stay ignored to avoid presenting stale feature data.
-          if (snapshot.metadata?.fromCache && !critical) return;
+          if (snapshot.metadata?.fromCache && !snapshot.metadata?.hasPendingWrites && !critical) return;
           acceptSnapshot(snapshot);
         },
         error => {
