@@ -15,7 +15,7 @@
   "s2": {
     "title": "Size nasıl hitap edelim?",
     "label": "Adınız",
-    "placeholder": "ör. Kemal",
+    "placeholder": "Adınızı girin",
     "continue": "Devam et",
     "signOut": "Çıkış yap"
   },
@@ -37,7 +37,7 @@
     "title": "Bunu sizin için kişiselleştirelim.",
     "body": "Bir çocuğun adını ekleyin, Queki'nin aileniz için nasıl çalışabileceğini gösterelim.",
     "label": "Çocuğun adı",
-    "placeholder": "ör. Osman",
+    "placeholder": "Çocuğunuzun adını girin",
     "privacyNote": "Şimdilik sadece bir ad. Hesabınızı oluşturana kadar hiçbir şey kaydedilmez.",
     "continue": "Devam et",
     "back": "Geri"

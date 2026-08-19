@@ -32,7 +32,7 @@ const GOOGLE_CANCELLED_MESSAGE = 'Google sign-in could not be completed. Please 
 function BoundedLoading() {
   const { t } = useTranslation('onboarding');
   return (
-    <div className="min-h-dvh flex items-center justify-center bg-gradient-to-b from-amber-50 to-white">
+    <div className="light min-h-dvh flex items-center justify-center bg-gradient-to-b from-amber-50 to-white">
       <div className="text-center" role="status" aria-live="polite">
         <div className="mx-auto h-8 w-8 animate-spin rounded-full border-2 border-primary-200 border-t-primary-500" />
         <p className="mt-3 text-sm text-gray-500">{t('loading.resuming')}</p>

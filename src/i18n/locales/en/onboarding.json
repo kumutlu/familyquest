@@ -15,7 +15,7 @@
   "s2": {
     "title": "What should we call you?",
     "label": "Your first name",
-    "placeholder": "e.g. Kemal",
+    "placeholder": "Enter your first name",
     "continue": "Continue",
     "signOut": "Sign out"
   },
@@ -37,7 +37,7 @@
     "title": "Let's make this yours.",
     "body": "Add one child's first name and we'll show you how Queki could work for your family.",
     "label": "Child's first name",
-    "placeholder": "e.g. Osman",
+    "placeholder": "Enter child's first name",
     "privacyNote": "Just a first name for now. Nothing is saved until you create your account.",
     "continue": "Continue",
     "back": "Back"

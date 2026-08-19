@@ -226,3 +226,66 @@ body {
     transition: background-color 150ms ease, color 150ms ease;
   }
 }
+
+/* ============================================================================
+   Onboarding light override
+   ----------------------------------------------------------------------------
+   Onboarding is a public, pre-auth surface rendered OUTSIDE <AppLayout> but
+   still inside <html>. When the persisted appearance is dark (or the OS prefers
+   dark) the global `.dark` token remap above cascades to *every* descendant of
+   <html>, so the onboarding subtree would inherit dark styling. This scoped
+   override re-establishes the light visual tokens for the onboarding root only.
+
+   It is presentation-only: it does NOT touch the appearance store, localStorage,
+   or the document-level `dark` class, so an authenticated user's Light/Dark/
+   System preference is completely unaffected once they leave onboarding. The
+   `light` class is applied to the onboarding shell/root (see
+   src/onboarding/components/OnboardingShell.tsx and the BoundedLoading state in
+   src/onboarding/OnboardingFlow.tsx) and prevents the inherited/global dark
+   styling from affecting it while mounted.
+   ========================================================================== */
+.light {
+  color-scheme: light;
+
+  /* Reset the neutral + semantic token remaps to their light (Tailwind default)
+     values so every `var()`-based utility inside onboarding renders light. */
+  --color-gray-50: #f9fafb;
+  --color-gray-100: #f3f4f6;
+  --color-gray-200: #e5e7eb;
+  --color-gray-300: #d1d5db;
+  --color-gray-400: #9ca3af;
+  --color-gray-500: #6b7280;
+  --color-gray-600: #4b5563;
+  --color-gray-700: #374151;
+  --color-gray-800: #1f2937;
+  --color-gray-900: #111827;
+
+  --color-amber-50: #fffbeb;
+  --color-amber-100: #fef3c7;
+  --color-amber-200: #fde68a;
+
+  --color-primary-50: #eef2ff;
+  --color-primary-100: #e0e7ff;
+  --color-primary-200: #c7d2fe;
+
+  --color-green-100: #dcfce7;
+
+  --color-red-50: #fef2f2;
+  --color-red-100: #fee2e2;
+}
+
+/* Neutralize the explicit `.dark .<utility>` overrides for the onboarding
+   subtree. Those rules win over the variable remap (they set the property
+   directly), so they must be re-pinned to their light values here. Placed
+   after the `.dark` block so equal-specificity (0,2,0) rules resolve in our
+   favour by source order. */
+.light .text-gray-800 { color: #1f2937; }
+.light .text-gray-900 { color: #111827; }
+.light .text-gray-300 { color: #d1d5db; }
+.light .text-primary-600 { color: #4f46e5; }
+.light .text-primary-700 { color: #4338ca; }
+.light .text-primary-800 { color: #3730a3; }
+.light .text-red-700 { color: #b91c1c; }
+.light .text-amber-800 { color: #92400e; }
+.light .text-danger-500 { color: #ef4444; }
+.light .bg-white { background-color: #ffffff; }
