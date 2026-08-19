@@ -9,7 +9,7 @@ import { Button } from '../ui/Button';
 import { Card, CardContent } from '../ui/Card';
 import { ReversalActionModal } from './ReversalActionModal';
 import { attributeHistorySource } from '../../lib/activityAttribution';
-import { formatDate } from '../../i18n/format';
+import { formatDate, formatPence, resolveFamilyCurrencyCode } from '../../i18n/format';
 
 const sourceDate = (source: any) => {
   const value = source.createdAt || source.timestamp || source.completedAt || source.approvedAt || source.redeemedAt;
@@ -26,6 +26,30 @@ const entryTimestamp = (value: Date | null) => {
   return isToday ? time : `${formatDate(value)} • ${time}`;
 };
 
+/** Map a reversible-history source to a user-facing transaction-type label. */
+type ReversalTypeKey =
+  | 'type.cashWithdrawal' | 'type.cashDeposit' | 'type.transfer' | 'type.walletTransaction'
+  | 'type.fundExpense' | 'type.behaviourAdjustment' | 'type.taskCompletion'
+  | 'type.rewardRedemption' | 'type.siblingTransferRequest' | 'type.moneyRequest' | 'type.petboxRequest';
+
+const historyTypeKey = (sourceKind: string, source: any): ReversalTypeKey => {
+  switch (sourceKind) {
+    case 'wallet_transaction':
+      if (source?.type === 'withdrawal') return 'type.cashWithdrawal';
+      if (source?.type === 'deposit') return 'type.cashDeposit';
+      if (source?.type === 'transfer') return 'type.transfer';
+      return 'type.walletTransaction';
+    case 'fund_transaction': return 'type.fundExpense';
+    case 'behaviour_event': return 'type.behaviourAdjustment';
+    case 'task_completion': return 'type.taskCompletion';
+    case 'reward_redemption': return 'type.rewardRedemption';
+    case 'transfer_request': return 'type.siblingTransferRequest';
+    case 'money_request': return 'type.moneyRequest';
+    case 'petbox_request': return 'type.petboxRequest';
+    default: return 'type.walletTransaction';
+  }
+};
+
 export function ReversalHistoryPanel() {
   const { t } = useTranslation('reversals');
   const state = useStore();
@@ -33,6 +57,7 @@ export function ReversalHistoryPanel() {
   const [optimisticReversals, setOptimisticReversals] = useState<any[]>([]);
   const currentUser = state.currentUser;
   const isParent = currentUser && ['parent', 'owner'].includes(currentUser.role);
+  const currencyCode = resolveFamilyCurrencyCode(state.familyData);
 
   const actions = useMemo(() => {
     if (!isParent) return [];
@@ -86,6 +111,7 @@ export function ReversalHistoryPanel() {
             familyMembers: state.familyMembers,
           });
           const occurredAt = entryTimestamp(sourceDate(action.source));
+          const typeLabel = t(historyTypeKey(action.sourceKind, action.source));
           return (
           <Card key={`${action.sourceKind}:${action.sourceId}`}>
             <CardContent className="flex items-center justify-between gap-4 p-4">
@@ -101,8 +127,13 @@ export function ReversalHistoryPanel() {
                     {t('entry.points', { sign: attribution.points > 0 ? '+' : '−', points: Math.abs(attribution.points) })}
                   </p>
                 )}
+                {action.targets.some(target => target.unit === 'money') && (
+                  <p className="mt-0.5 text-sm font-bold text-gray-900">
+                    {action.targets.filter(target => target.unit === 'money').map(target => formatPence(Math.abs(target.originalDelta), currencyCode)).join(' · ')}
+                  </p>
+                )}
                 <p className="mt-1 text-xs text-gray-500">
-                  {action.sourceKind.replaceAll('_', ' ')}{occurredAt ? ` • ${occurredAt}` : ''}
+                  {typeLabel}{occurredAt ? ` • ${occurredAt}` : ''}
                 </p>
                 {attribution.approverName && (
                   <p className="text-xs text-gray-500">{t('entry.approvedBy', { name: attribution.approverName })}</p>

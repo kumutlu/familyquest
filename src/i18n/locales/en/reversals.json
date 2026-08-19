@@ -49,5 +49,18 @@
     "by": "{{name}} completed",
     "points": "{{sign}}{{points}} Points",
     "approvedBy": "Approved by {{name}}"
+  },
+  "type": {
+    "cashWithdrawal": "Cash withdrawal",
+    "cashDeposit": "Cash deposit",
+    "transfer": "Transfer",
+    "rewardRedemption": "Reward redemption",
+    "taskCompletion": "Task completion",
+    "behaviourAdjustment": "Behaviour adjustment",
+    "fundExpense": "Fund expense",
+    "moneyRequest": "Money request",
+    "siblingTransferRequest": "Sibling transfer request",
+    "petboxRequest": "Petbox request",
+    "walletTransaction": "Wallet transaction"
   }
 }

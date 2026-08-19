@@ -49,5 +49,18 @@
     "by": "{{name}} tamamladı",
     "points": "{{sign}}{{points}} Puan",
     "approvedBy": "{{name}} tarafından onayladı"
+  },
+  "type": {
+    "cashWithdrawal": "Nakit çekim",
+    "cashDeposit": "Nakit yatırma",
+    "transfer": "Transfer",
+    "rewardRedemption": "Ödül kullanımı",
+    "taskCompletion": "Görev tamamlama",
+    "behaviourAdjustment": "Davranış ayarlama",
+    "fundExpense": "Fon harcaması",
+    "moneyRequest": "Para isteme",
+    "siblingTransferRequest": "Kardeş transfer istemi",
+    "petboxRequest": "Petbox istemi",
+    "walletTransaction": "Cüzdan işlemi"
   }
 }
