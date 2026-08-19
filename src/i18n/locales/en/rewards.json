@@ -12,6 +12,7 @@
   "redemptionHistoryRedeemed": "{{name}} redeemed \"{{reward}}\"",
   "redemptionHistoryUnknownMember": "Unknown family member",
   "redeemedPoints": "{{value}} points redeemed",
+  "reversed": "Reversed",
   "redemption": "Reward redeemed",
   "details": {
     "title": "Reward Details",

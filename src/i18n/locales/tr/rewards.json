@@ -12,6 +12,7 @@
   "redemptionHistoryRedeemed": "{{name}} \"{{reward}}\" ödülünü kullandı",
   "redemptionHistoryUnknownMember": "Bilinilen aile üyesi",
   "redeemedPoints": "{{value}} puan kullanıldı",
+  "reversed": "İptal edildi",
   "redemption": "Ödül kullanıldı",
   "details": {
     "title": "Ödül Ayrıntıları",

@@ -194,7 +194,9 @@ describe('Rewards page — redemption history', () => {
       reversals: [{ sourceKind: 'reward_redemption', sourceId: 'rd1', reason: 'Duplicate', actorName: 'Parent', completedAt: { toDate: () => new Date('2026-07-30T13:00:00Z') } }],
     }));
     render(<Rewards />);
-    expect(screen.getByText('Reversed')).toBeInTheDocument();
+    // The reversed state is now presented in the main row body (reversal-status)
+    // as well as the HistoryActionControl detail, so expect at least one match.
+    expect(screen.getAllByText('Reversed').length).toBeGreaterThanOrEqual(1);
   });
 
   it('child view does not show redemption history', () => {

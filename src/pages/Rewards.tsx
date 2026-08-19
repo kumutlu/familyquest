@@ -16,10 +16,11 @@ import { isParentRole } from '../lib/roles';
 import { formatNumber, formatRelativeTime } from '../i18n/format';
 import { Avatar } from '../components/ui/Avatar';
 import { HistoryActionControl } from '../components/reversals/HistoryActionControl';
+import { findReversal } from '../lib/reversalHistory';
 
 export function Rewards() {
   const { t } = useTranslation(['rewards', 'errors']);
-  const { currentUser, rewards, redemptions, loading, familyMembers } = useStore();
+  const { currentUser, rewards, redemptions, loading, familyMembers, reversals } = useStore();
   const [selectedReward, setSelectedReward] = useState<any>(null);
   const isParent = currentUser?.role === 'parent' || currentUser?.role === 'owner';
 
@@ -221,6 +222,7 @@ export function Rewards() {
               const childName = child?.displayName || t('rewards:redemptionHistoryUnknownMember');
               const childAvatar = child?.avatarUrl;
               const dateTimeStr = formatRedemptionDateTime(redemption.redeemedAt || redemption.createdAt);
+              const reversal = findReversal(reversals || [], 'reward_redemption', redemption.id);
               return (
                 <Card key={redemption.id}>
                   <CardContent className="p-4">
@@ -229,11 +231,16 @@ export function Rewards() {
                         <div className="flex items-center gap-2 mb-1">
                           <Avatar src={childAvatar} fallback={childName[0] || '?'} size="sm" />
                           <p className="font-semibold text-gray-900 text-sm truncate">{childName}</p>
+                          {reversal && (
+                            <Badge variant="danger" data-testid="reversal-status">
+                              {t('rewards:reversed')}
+                            </Badge>
+                          )}
                         </div>
                         <p className="text-sm text-gray-600">
                           {t('rewards:redemptionHistoryRedeemed', { name: childName, reward: reward?.title || 'Reward' })}
                         </p>
-                        <p className="text-xs text-gray-500 mt-0.5">
+                        <p className={`text-xs text-gray-500 mt-0.5 ${reversal ? 'line-through decoration-gray-300' : ''}`}>
                           {t('rewards:redeemedPoints', { value: formatNumber(redemption.costPaid) })}
                         </p>
                         <p className="text-xs text-gray-400 mt-0.5">{dateTimeStr}</p>
