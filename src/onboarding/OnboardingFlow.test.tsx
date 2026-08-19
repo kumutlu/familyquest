@@ -231,3 +231,34 @@ describe('OnboardingFlow — Step 1 (Refined Queki front door)', () => {
     await waitFor(() => expect(navigate).toHaveBeenCalledWith('/login'));
   });
 });
+
+describe('OnboardingFlow — Sign out (S2 control)', () => {
+  it('signs out via Firebase and returns to /login (replace), so it is not a no-op', async () => {
+    const user = userEvent.setup();
+    renderFlow();
+
+    // Advance to Step 2, where the Sign out control lives.
+    await user.click(screen.getByRole('button', { name: /set up your family/i }));
+    const signOutButton = await screen.findByRole('button', { name: /sign out/i });
+    await user.click(signOutButton);
+
+    // 1) The canonical Firebase sign-out path is actually executed.
+    await waitFor(() => expect(api.signOut).toHaveBeenCalledTimes(1));
+    // 2) The user leaves onboarding and lands on the signed-out entry
+    //    experience. `replace` prevents Back from silently restoring the
+    //    authenticated onboarding session.
+    await waitFor(() => expect(navigate).toHaveBeenCalledWith('/login', { replace: true }));
+  });
+
+  it('does not strand the user if sign-out fails — still returns to /login', async () => {
+    const user = userEvent.setup();
+    api.signOut.mockRejectedValueOnce(new Error('network'));
+    renderFlow();
+    await user.click(screen.getByRole('button', { name: /set up your family/i }));
+    const signOutButton = await screen.findByRole('button', { name: /sign out/i });
+    await user.click(signOutButton);
+
+    await waitFor(() => expect(api.signOut).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(navigate).toHaveBeenCalledWith('/login', { replace: true }));
+  });
+});

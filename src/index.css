@@ -247,6 +247,16 @@ body {
 .light {
   color-scheme: light;
 
+  /* The inherited text colour for the whole onboarding subtree. The `.light`
+     scope above only resets CSS custom properties (design tokens), NOT the
+     `color` property itself. As a result the `.dark body` colour rule
+     (#f1f5f9) inherits into the onboarding subtree, and native form controls
+     — which inherit `color` — render near-white text on their light
+     (color-scheme: light) background, making typed input invisible. Pin a dark
+     neutral as the default inherited colour so unstyled text (and form
+     controls) stay dark. */
+  color: var(--color-gray-900);
+
   /* Reset the neutral + semantic token remaps to their light (Tailwind default)
      values so every `var()`-based utility inside onboarding renders light. */
   --color-gray-50: #f9fafb;
@@ -289,3 +299,45 @@ body {
 .light .text-amber-800 { color: #92400e; }
 .light .text-danger-500 { color: #ef4444; }
 .light .bg-white { background-color: #ffffff; }
+
+/* ----------------------------------------------------------------------------
+   Onboarding form-control contract
+   ----------------------------------------------------------------------------
+   The `.light` scope above resets design tokens but does NOT set the `color`
+   property, so the `.dark body { color: #f1f5f9 }` rule inherits into the
+   onboarding subtree. Native form controls inherit `color`, so typed text in a
+   white onboarding input would render near-white and become invisible under a
+   global `dark` <html>. These explicit rules guarantee readable form controls
+   inside onboarding regardless of the document-level theme:
+
+     - input background : light/white
+     - entered text     : dark neutral (#111827)
+     - caret            : visible (dark)
+     - placeholder      : muted grey, visually secondary
+     - label            : dark neutral (handled by text-gray-700 utilities)
+     - focus ring       : existing Queki purple (focus-visible:ring-primary-500)
+     - disabled         : visually distinct (muted, not-allowed cursor)
+   -------------------------------------------------------------------------- */
+.light input,
+.light textarea,
+.light select {
+  background-color: #ffffff;
+  color: #111827;
+  caret-color: #111827;
+  border-color: var(--color-gray-300);
+}
+
+.light input::placeholder,
+.light textarea::placeholder,
+.light select::placeholder {
+  color: #6b7280;
+  opacity: 1;
+}
+
+.light input:disabled,
+.light textarea:disabled,
+.light select:disabled {
+  background-color: #f3f4f6;
+  color: #9ca3af;
+  cursor: not-allowed;
+}

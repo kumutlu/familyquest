@@ -42,4 +42,32 @@ describe('onboarding light override — CSS contract', () => {
     expect(css).toMatch(/\.dark\s*\{[^}]*--color-gray-50\s*:\s*#0e1116/);
     expect(css).toMatch(/\.dark\s+\.bg-white\s*\{\s*background-color:\s*#1b212b/);
   });
+
+  it('pins a dark inherited text colour on the .light scope (root cause of the white-on-white input bug)', () => {
+    // Without this, `.dark body { color: #f1f5f9 }` inherits into the onboarding
+    // subtree and form controls render near-white text on a light input.
+    expect(css).toMatch(/\.light\s*\{[^}]*color:\s*var\(--color-gray-900\)/);
+  });
+});
+
+describe('onboarding light override — form-control contract', () => {
+  it('guarantees a light background and dark entered text for inputs under global dark mode', () => {
+    expect(css).toMatch(/\.light\s+input[^{]*\{[^}]*background-color:\s*#ffffff/);
+    expect(css).toMatch(/\.light\s+input[^{]*\{[^}]*color:\s*#111827/);
+    expect(css).toMatch(/\.light\s+input[^{]*\{[^}]*caret-color:\s*#111827/);
+  });
+
+  it('keeps placeholders muted but visible (visually secondary, not invisible)', () => {
+    expect(css).toMatch(/\.light\s+input::placeholder[^{]*\{[^}]*color:\s*#6b7280/);
+  });
+
+  it('keeps disabled controls visually distinct', () => {
+    expect(css).toMatch(/\.light\s+input:disabled[^{]*\{[^}]*background-color:\s*#f3f4f6/);
+    expect(css).toMatch(/\.light\s+input:disabled[^{]*\{[^}]*color:\s*#9ca3af/);
+  });
+
+  it('applies the same contract to textarea and select controls', () => {
+    expect(css).toMatch(/\.light\s+textarea[^{]*\{[^}]*color:\s*#111827/);
+    expect(css).toMatch(/\.light\s+select[^{]*\{[^}]*color:\s*#111827/);
+  });
 });

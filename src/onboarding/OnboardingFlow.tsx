@@ -164,6 +164,24 @@ export function OnboardingFlow() {
     navigate('/signup?next=/onboarding');
   };
 
+  // Canonical sign-out for the authenticated onboarding screen (Step 2).
+  // We must navigate away afterwards: calling `signOut()` alone signs the
+  // Firebase session out, but the onboarding draft step (e.g. S2) stays put and
+  // re-renders identically, so sign-out would appear to "do nothing". Navigating
+  // to /login (replace) returns the user to the signed-out entry experience and
+  // prevents browser Back from silently restoring an authenticated session.
+  const handleSignOut = async () => {
+    try {
+      await signOut();
+    } catch {
+      // The session is being torn down regardless; we still return the user to
+      // the signed-out entry experience below. Swallow so a failed sign-out
+      // never surfaces as an unhandled rejection.
+    } finally {
+      navigate('/login', { replace: true });
+    }
+  };
+
   const handleFinish = () => {
     recordOnboardingEvent('onboarding_completed');
     reset();
@@ -186,7 +204,7 @@ export function OnboardingFlow() {
         return <Step1ValueProposition onNext={goNext} onLogin={() => navigate('/login')} />;
       case 's2':
         return (
-          <Step2ParentName draft={draft} patch={patch} onNext={goNext} onSignOut={() => void signOut()} />
+          <Step2ParentName draft={draft} patch={patch} onNext={goNext} onSignOut={handleSignOut} />
         );
       case 's3':
         return <Step3Relationship draft={draft} patch={patch} onNext={goNext} onBack={goBack} />;

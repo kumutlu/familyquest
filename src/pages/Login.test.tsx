@@ -317,7 +317,7 @@ describe('Login — Parent login unaffected by child flow', () => {
 describe('Login — i18n (English + Turkish + switching)', () => {
   it('renders English strings by default', () => {
     renderLogin();
-    expect(screen.getByRole('heading', { name: /sign in to queki/i })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: /welcome back/i })).toBeInTheDocument();
     expect(screen.getByRole('tab', { name: 'Parent' })).toBeInTheDocument();
     expect(screen.getByRole('tab', { name: 'Child' })).toBeInTheDocument();
     expect(screen.getByLabelText(/email address/i)).toBeInTheDocument();
@@ -327,7 +327,7 @@ describe('Login — i18n (English + Turkish + switching)', () => {
   it('renders Turkish strings when the language is switched to tr', async () => {
     await act(async () => { await i18n.changeLanguage('tr'); });
     renderLogin();
-    expect(screen.getByRole('heading', { name: /queki'e giriş yap/i })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: /tekrar hoş geldin/i })).toBeInTheDocument();
     expect(screen.getByRole('tab', { name: 'Ebeveyn' })).toBeInTheDocument();
     expect(screen.getByRole('tab', { name: 'Çocuk' })).toBeInTheDocument();
     expect(screen.getByLabelText(/e-posta adresi/i)).toBeInTheDocument();
@@ -384,24 +384,30 @@ describe('Login — Queki brand logo', () => {
   });
 });
 
-describe('Login — product introduction (new marketing content)', () => {
-  it('renders the English headline, supporting text and three benefits', () => {
+describe('Login — product introduction (brand area)', () => {
+  it('renders the English brand headline and supporting copy', () => {
     renderLogin();
     expect(
-      screen.getByRole('heading', { name: /manage family tasks, allowances and rewards in one place/i }),
+      screen.getByRole('heading', { name: /small wins\. big habits\./i }),
     ).toBeInTheDocument();
     expect(
       screen.getByText(/queki helps families build better routines/i),
     ).toBeInTheDocument();
-    expect(screen.getByText('Create and track family tasks')).toBeInTheDocument();
-    expect(screen.getByText('Manage allowances and child wallets')).toBeInTheDocument();
-    expect(screen.getByText('Motivate children with points and rewards')).toBeInTheDocument();
   });
 
-  it('exposes the three benefits as an accessible list', () => {
+  it('visualises the Queki loop: Tasks → Points → Rewards → Savings', () => {
     renderLogin();
-    // The benefits are the only visible (non-aria-hidden) list on the page.
-    expect(screen.getAllByRole('listitem')).toHaveLength(3);
+    expect(screen.getByText('Tasks')).toBeInTheDocument();
+    expect(screen.getByText('Points')).toBeInTheDocument();
+    expect(screen.getByText('Rewards')).toBeInTheDocument();
+    expect(screen.getByText('Savings')).toBeInTheDocument();
+  });
+
+  it('shows tasteful example chips (decorative)', () => {
+    renderLogin();
+    expect(screen.getByText(/homework/i)).toBeInTheDocument();
+    expect(screen.getByText(/weekly goal/i)).toBeInTheDocument();
+    expect(screen.getByText(/saved/i)).toBeInTheDocument();
   });
 
   it('gives the introduction region an accessible name', () => {
@@ -409,13 +415,12 @@ describe('Login — product introduction (new marketing content)', () => {
     expect(screen.getByRole('complementary', { name: /about queki/i })).toBeInTheDocument();
   });
 
-  it('renders the intro copy in Turkish when the language is switched', async () => {
+  it('renders the brand headline in Turkish when the language is switched', async () => {
     await act(async () => { await i18n.changeLanguage('tr'); });
     renderLogin();
     expect(
-      screen.getByRole('heading', { name: /tek bir yerden yönetin/i }),
+      screen.getByRole('heading', { name: /küçük başarılar\. büyük alışkanlıklar\./i }),
     ).toBeInTheDocument();
-    expect(screen.getByText('Aile görevleri oluşturun ve takip edin')).toBeInTheDocument();
   });
 
   it('renders the intro without duplicating the Queki brand logo', () => {

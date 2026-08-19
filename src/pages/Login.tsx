@@ -1,6 +1,6 @@
-import { useEffect, useRef, useState } from 'react';
+import { Fragment, useEffect, useRef, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { AppWindow, ListChecks, Wallet, Gift } from 'lucide-react';
+import { AppWindow, ListChecks, Wallet, Gift, ArrowRight } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { Button } from '../components/ui/Button';
 import { GoogleButton } from '../components/ui/GoogleButton';
@@ -141,7 +141,7 @@ export function Login() {
   const brandMark = logoFailed ? (
     <span
       aria-hidden="true"
-      className="w-11 h-11 bg-white/15 rounded-xl flex items-center justify-center text-white"
+      className="flex h-11 w-11 items-center justify-center rounded-xl bg-white/15 text-white"
     >
       <AppWindow size={26} />
     </span>
@@ -149,127 +149,111 @@ export function Login() {
     <img
       src="/favicon.svg"
       alt="Queki"
-      className="w-11 h-11 rounded-xl bg-white/10 p-1"
+      className="h-11 w-11 rounded-xl bg-white/10 p-1"
       onError={() => setLogoFailed(true)}
     />
   );
 
-  const benefits = [
-    { icon: ListChecks, label: t('auth:intro.benefitTasks') },
-    { icon: Wallet, label: t('auth:intro.benefitWallets') },
-    { icon: Gift, label: t('auth:intro.benefitRewards') },
+  // Abstract representation of Queki's loop: effort becomes points, points
+  // unlock rewards, and rewards feed savings. Decorative only.
+  const systemNodes = [
+    { key: 'tasks', label: t('auth:intro.systemTasks'), icon: <ListChecks size={18} /> },
+    { key: 'points', label: t('auth:intro.systemPoints'), icon: <span className="text-base font-bold leading-none">★</span> },
+    { key: 'rewards', label: t('auth:intro.systemRewards'), icon: <Gift size={18} /> },
+    { key: 'savings', label: t('auth:intro.systemSavings'), icon: <Wallet size={18} /> },
   ];
 
   return (
-    <div className="min-h-screen bg-gray-50 lg:grid lg:grid-cols-2">
+    <div className="min-h-screen bg-gradient-to-b from-purple-50/70 via-white to-white lg:grid lg:grid-cols-2 lg:bg-gray-50">
       {/* ------------------------------------------------------------------ */}
-      {/* Left: product introduction. On mobile this collapses to a compact  */}
-      {/* intro above the form; the detailed preview cards are hidden.        */}
+      {/* Left: brand area (desktop only). A deliberate, premium composition   */}
+      {/* that makes the page feel intentionally designed rather than a form   */}
+      {/* floating in empty space.                                            */}
       {/* ------------------------------------------------------------------ */}
       <aside
         aria-label={t('auth:intro.aboutLabel')}
-        className="bg-gradient-to-br from-primary-600 to-primary-800 text-white px-6 py-5 sm:px-10 sm:py-6 lg:px-16 lg:py-12 flex flex-col justify-center"
+        className="relative hidden overflow-hidden bg-gradient-to-br from-purple-600 via-primary-600 to-indigo-700 px-6 py-10 text-white lg:flex lg:flex-col lg:justify-center lg:px-16 lg:py-12"
       >
-        <div className="mx-auto w-full max-w-md lg:max-w-lg">
+        {/* Soft glows for depth — restrained, not childish. */}
+        <div aria-hidden="true" className="pointer-events-none absolute -left-24 -top-24 h-72 w-72 rounded-full bg-white/20 blur-3xl" />
+        <div aria-hidden="true" className="pointer-events-none absolute -bottom-32 -right-16 h-80 w-80 rounded-full bg-purple-300/30 blur-3xl" />
+
+        <div className="relative mx-auto w-full max-w-lg">
           {/* Brand */}
           <div className="flex items-center gap-3">
             {brandMark}
             <span className="text-xl font-bold tracking-tight">{t('auth:intro.brand')}</span>
           </div>
 
-          {/* Headline + supporting copy. On phones the intro must stay compact
-              so the auth card remains near the top of the viewport, so the
-              supporting paragraph is desktop-only. */}
-          <h1 className="mt-3 lg:mt-10 text-lg sm:text-xl lg:text-4xl font-extrabold leading-tight">
-            {t('auth:intro.headline')}
+          {/* Headline + supporting copy */}
+          <h1 className="mt-10 text-4xl font-extrabold leading-tight lg:text-[2.75rem]">
+            {t('auth:intro.brandHeadline')}
           </h1>
-          <p className="mt-3 lg:mt-4 text-sm sm:text-base lg:text-lg text-primary-100 hidden lg:block">
-            {t('auth:intro.supporting')}
-          </p>
+          <p className="mt-4 text-lg text-white/80">{t('auth:intro.supporting')}</p>
 
-          {/* Benefits — desktop only; on phones they would push the sign-in
-              form below the fold. */}
-          <ul className="mt-6 lg:mt-8 space-y-3 lg:space-y-4 hidden lg:block">
-            {benefits.map(({ icon: Icon, label }) => (
-              <li key={label} className="flex items-start gap-3">
-                <span
-                  aria-hidden="true"
-                  className="mt-0.5 flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-lg bg-white/15"
-                >
-                  <Icon size={18} />
-                </span>
-                <span className="text-sm sm:text-base font-medium leading-snug">{label}</span>
-              </li>
-            ))}
-          </ul>
-
-          {/* Product preview — decorative, desktop only. Marked aria-hidden so
-              screen readers skip the illustrative sample data. */}
-          <div aria-hidden="true" className="mt-10 hidden lg:grid grid-cols-1 gap-4">
-            <div className="rounded-2xl bg-white/95 p-4 text-gray-900 shadow-lg">
-              <p className="text-xs font-semibold uppercase tracking-wider text-gray-400">
-                {t('auth:intro.previewTasksTitle')}
-              </p>
-              <div className="mt-3 space-y-2">
-                <div className="flex items-center justify-between rounded-lg bg-gray-50 px-3 py-2">
-                  <span className="flex items-center gap-2 text-sm font-medium">
-                    <ListChecks size={16} className="text-primary-500" />
-                    {t('auth:intro.previewTask1')}
-                  </span>
-                  <span className="text-sm font-semibold text-success-500">
-                    +10 {t('auth:intro.previewPointsSuffix')}
-                  </span>
-                </div>
-                <div className="flex items-center justify-between rounded-lg bg-gray-50 px-3 py-2">
-                  <span className="flex items-center gap-2 text-sm font-medium">
-                    <ListChecks size={16} className="text-primary-500" />
-                    {t('auth:intro.previewTask2')}
-                  </span>
-                  <span className="text-sm font-semibold text-success-500">
-                    +15 {t('auth:intro.previewPointsSuffix')}
-                  </span>
-                </div>
-              </div>
+          {/* System visualization: Tasks → Points → Rewards → Savings */}
+          <div aria-hidden="true" className="mt-10">
+            <p className="text-xs font-semibold uppercase tracking-wider text-white/70">
+              {t('auth:intro.systemCaption')}
+            </p>
+            <div className="mt-4 flex items-center gap-2">
+              {systemNodes.map((node, i) => (
+                <Fragment key={node.key}>
+                  <div className="flex-1 rounded-2xl bg-white/10 p-3 text-center backdrop-blur-sm">
+                    <div className="mx-auto mb-2 flex h-9 w-9 items-center justify-center rounded-xl bg-white/15 text-white">
+                      {node.icon}
+                    </div>
+                    <p className="text-xs font-semibold">{node.label}</p>
+                  </div>
+                  {i < systemNodes.length - 1 && (
+                    <ArrowRight size={16} className="shrink-0 text-white/60" aria-hidden="true" />
+                  )}
+                </Fragment>
+              ))}
             </div>
-
-            <div className="grid grid-cols-2 gap-4">
-              <div className="rounded-2xl bg-white/95 p-4 text-gray-900 shadow-lg">
-                <p className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wider text-gray-400">
-                  <Wallet size={14} /> {t('auth:intro.previewWalletTitle')}
-                </p>
-                <p className="mt-2 text-xs text-gray-500">{t('auth:intro.previewWalletLabel')}</p>
-                <p className="text-2xl font-extrabold text-gray-900">120</p>
-              </div>
-              <div className="rounded-2xl bg-white/95 p-4 text-gray-900 shadow-lg">
-                <p className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wider text-gray-400">
-                  <Gift size={14} /> {t('auth:intro.previewRewardsTitle')}
-                </p>
-                <div className="mt-3 flex items-center justify-between rounded-lg bg-reward-400/15 px-3 py-2">
-                  <span className="text-sm font-medium">{t('auth:intro.previewReward1')}</span>
-                  <span className="text-sm font-semibold text-reward-500">
-                    50 {t('auth:intro.previewPointsSuffix')}
-                  </span>
-                </div>
-              </div>
+            {/* Progress motif — abstract, not a cartoon. */}
+            <div className="mt-4 h-1.5 w-full overflow-hidden rounded-full bg-white/15">
+              <div className="h-full w-3/4 rounded-full bg-white/70" />
             </div>
+          </div>
+
+          {/* Tasteful example chips (decorative). */}
+          <div aria-hidden="true" className="mt-6 flex flex-wrap gap-2">
+            <span className="rounded-full bg-white/10 px-3 py-1.5 text-xs font-medium backdrop-blur-sm">
+              {t('auth:intro.exampleHomework')} · {t('auth:intro.exampleHomeworkPoints')}
+            </span>
+            <span className="rounded-full bg-white/10 px-3 py-1.5 text-xs font-medium backdrop-blur-sm">
+              {t('auth:intro.exampleGoal')} · {t('auth:intro.exampleGoalProgress')}
+            </span>
+            <span className="rounded-full bg-white/10 px-3 py-1.5 text-xs font-medium backdrop-blur-sm">
+              {t('auth:intro.exampleSaved')} · {t('auth:intro.exampleSavedAmount')}
+            </span>
           </div>
         </div>
       </aside>
 
       {/* ------------------------------------------------------------------ */}
-      {/* Right: existing authentication card (logic unchanged).             */}
+      {/* Right: authentication card (logic unchanged).                      */}
       {/* ------------------------------------------------------------------ */}
-      <main className="flex flex-col justify-center py-10 px-4 sm:px-6 lg:px-8">
-        <div className="sm:mx-auto sm:w-full sm:max-w-md text-center">
-          <h2 className="text-2xl sm:text-3xl font-extrabold text-gray-900">
-            {t('auth:signInTitle', { appName: t('common:appName') })}
-          </h2>
+      <main className="flex flex-col justify-center px-4 py-10 sm:px-6 lg:px-8">
+        {/* Compact brand header on mobile (the left panel is hidden). Text
+            wordmark only — the single logo <img> instance lives in the desktop
+            brand area to preserve the fallback-contract (exactly one logo). */}
+        <div className="mb-6 flex items-center gap-2 lg:hidden">
+          <span className="text-lg font-bold tracking-tight text-gray-900">{t('auth:intro.brand')}</span>
         </div>
 
-        <div className="mt-6 sm:mx-auto sm:w-full sm:max-w-md">
-          <div className="bg-white py-8 px-4 shadow sm:rounded-lg sm:px-10">
+        <div className="mx-auto w-full max-w-[420px]">
+          <div className="mb-6 text-center lg:text-left">
+            <h2 className="text-2xl font-extrabold text-gray-900 sm:text-3xl">
+              {t('auth:welcomeBack')}
+            </h2>
+            <p className="mt-2 text-sm text-gray-500">{t('auth:welcomeBackSubtitle')}</p>
+          </div>
+
+          <div className="rounded-2xl border border-gray-100 bg-white p-6 shadow-xl sm:p-8">
             {/* Tab switcher */}
-            <div role="tablist" aria-label={t('auth:chooseSignInMethod')} className="flex border-b border-gray-200 mb-6">
+            <div role="tablist" aria-label={t('auth:chooseSignInMethod')} className="mb-6 flex border-b border-gray-200">
               <button
                 type="button"
                 role="tab"
@@ -303,7 +287,7 @@ export function Login() {
             </div>
 
             {error && (
-              <div role="alert" className="mb-4 text-red-500 text-sm">
+              <div role="alert" className="mb-4 text-sm text-red-500">
                 {error}
               </div>
             )}
@@ -322,7 +306,7 @@ export function Login() {
                         required
                         value={email}
                         onChange={e => setEmail(e.target.value)}
-                        className="appearance-none block w-full min-h-[44px] px-3 py-2 border border-gray-300 rounded-md shadow-sm placeholder-gray-400 focus:outline-none focus:ring-primary-500 focus:border-primary-500 sm:text-sm"
+                        className="block w-full min-h-[44px] rounded-md border border-gray-300 px-3 py-2 text-gray-900 shadow-sm placeholder-gray-400 focus:border-primary-500 focus:outline-none focus:ring-primary-500 sm:text-sm"
                       />
                     </div>
                   </div>
@@ -337,7 +321,7 @@ export function Login() {
                         required
                         value={password}
                         onChange={e => setPassword(e.target.value)}
-                        className="appearance-none block w-full min-h-[44px] px-3 py-2 border border-gray-300 rounded-md shadow-sm placeholder-gray-400 focus:outline-none focus:ring-primary-500 focus:border-primary-500 sm:text-sm"
+                        className="block w-full min-h-[44px] rounded-md border border-gray-300 px-3 py-2 text-gray-900 shadow-sm placeholder-gray-400 focus:border-primary-500 focus:outline-none focus:ring-primary-500 sm:text-sm"
                       />
                     </div>
                   </div>
@@ -353,7 +337,7 @@ export function Login() {
                       <div className="w-full border-t border-gray-300" />
                     </div>
                     <div className="relative flex justify-center text-sm">
-                      <span className="px-2 bg-white text-gray-500">{t('auth:orContinueWith')}</span>
+                      <span className="bg-white px-2 text-gray-500">{t('auth:orContinueWith')}</span>
                     </div>
                   </div>
 
@@ -386,7 +370,7 @@ export function Login() {
                         required
                         value={familyCode}
                         onChange={e => setFamilyCode(e.target.value)}
-                        className="appearance-none block w-full min-h-[44px] px-3 py-2 border border-gray-300 rounded-md shadow-sm placeholder-gray-400 focus:outline-none focus:ring-primary-500 focus:border-primary-500 sm:text-sm"
+                        className="block w-full min-h-[44px] rounded-md border border-gray-300 px-3 py-2 text-gray-900 shadow-sm placeholder-gray-400 focus:border-primary-500 focus:outline-none focus:ring-primary-500 sm:text-sm"
                       />
                     </div>
                   </div>
@@ -401,7 +385,7 @@ export function Login() {
                         required
                         value={username}
                         onChange={e => setUsername(e.target.value)}
-                        className="appearance-none block w-full min-h-[44px] px-3 py-2 border border-gray-300 rounded-md shadow-sm placeholder-gray-400 focus:outline-none focus:ring-primary-500 focus:border-primary-500 sm:text-sm"
+                        className="block w-full min-h-[44px] rounded-md border border-gray-300 px-3 py-2 text-gray-900 shadow-sm placeholder-gray-400 focus:border-primary-500 focus:outline-none focus:ring-primary-500 sm:text-sm"
                       />
                     </div>
                   </div>
@@ -416,7 +400,7 @@ export function Login() {
                         required
                         value={childPassword}
                         onChange={e => setChildPassword(e.target.value)}
-                        className="appearance-none block w-full min-h-[44px] px-3 py-2 border border-gray-300 rounded-md shadow-sm placeholder-gray-400 focus:outline-none focus:ring-primary-500 focus:border-primary-500 sm:text-sm"
+                        className="block w-full min-h-[44px] rounded-md border border-gray-300 px-3 py-2 text-gray-900 shadow-sm placeholder-gray-400 focus:border-primary-500 focus:outline-none focus:ring-primary-500 sm:text-sm"
                       />
                     </div>
                   </div>
