@@ -4,35 +4,74 @@ import type { StartupPhase } from './components/layout/startupState';
 
 type ServiceWorkerUpdateSource = {
   controller: unknown;
-  addEventListener: (name: 'controllerchange', listener: () => void) => void;
+  addEventListener: (
+    name: 'controllerchange' | 'message',
+    listener: (event?: { data?: unknown }) => void,
+  ) => void;
 };
 
+export const LEGACY_SW_MIGRATION_ID = 'legacy-82422c8-2026-08';
+
+interface MigrationStorage {
+  getItem(key: string): string | null;
+  setItem(key: string, value: string): void;
+}
+
+export interface ServiceWorkerControllerListenerOptions {
+  migrationId?: string;
+  reload?: () => void;
+  storage?: MigrationStorage;
+  reloadDelayMs?: number;
+}
+
 /**
- * Observes service-worker `controllerchange` events WITHOUT auto-reloading.
+ * Observes service-worker `controllerchange` events. Normal releases omit the
+ * migration ID and install no listener; the one rescue release gets an
+ * explicitly guarded, at-most-once fallback reload.
  *
- * With the corrected PWA lifecycle (`registerType: 'prompt'`,
- * `clientsClaim: false`) a `controllerchange` should not fire while an open tab
- * is mid-bootstrap — the new worker stays in the `waiting` state and only
- * activates on a safe reload/new navigation. If a `controllerchange` *does*
- * occur during bootstrap, we record it as a diagnostic instead of reloading:
- * an automatic reload would mask the real failure and re-race the SW takeover,
- * which is exactly the bug we are removing.
+ * The migration worker posts before navigating legacy clients. That message
+ * cancels the fallback timer; sessionStorage keyed by migration ID suppresses
+ * duplicate controllerchange/navigation races and survives the navigation.
  */
 export function installServiceWorkerControllerListener(
   serviceWorker: ServiceWorkerUpdateSource | undefined = typeof navigator !== 'undefined'
     ? navigator.serviceWorker
     : undefined,
+  options: ServiceWorkerControllerListenerOptions = {},
 ): void {
-  if (!serviceWorker?.controller) return;
+  const migrationId = options.migrationId;
+  if (!serviceWorker?.controller || !migrationId) return;
+
+  const storage = options.storage ?? (typeof sessionStorage !== 'undefined' ? sessionStorage : undefined);
+  const reload = options.reload ?? defaultReload;
+  const reloadDelayMs = options.reloadDelayMs ?? 250;
+  const storageKey = `queki:sw-migration:${migrationId}`;
+  let reloadTimer: ReturnType<typeof setTimeout> | undefined;
+
+  serviceWorker.addEventListener('message', event => {
+    const data = event?.data as { type?: string; migrationId?: string } | undefined;
+    if (data?.type !== 'LEGACY_SW_MIGRATION_NAVIGATING' || data.migrationId !== migrationId) return;
+    if (reloadTimer !== undefined) clearTimeout(reloadTimer);
+    storage?.setItem(storageKey, 'navigating');
+  });
 
   serviceWorker.addEventListener('controllerchange', () => {
     const phase = getStartupPhase();
     if (phase !== 'ready') {
       logStartupDiagnostic('SERVICE_WORKER_CONTROLLER_CHANGE_DURING_BOOTSTRAP', { phase });
     }
-    // Intentionally no `window.location.reload()` here. The new version is
-    // applied on the user's next navigation/reload, which is safe and does not
-    // interrupt an in-flight bootstrap.
+
+    // This branch exists for one migration release only. Mark the migration
+    // before scheduling anything so duplicate controllerchange events cannot
+    // queue multiple reloads. The migration worker normally navigates legacy
+    // clients itself; its message cancels this guarded fallback reload.
+    if (storage?.getItem(storageKey)) return;
+    storage?.setItem(storageKey, 'pending');
+    reloadTimer = setTimeout(() => {
+      if (storage?.getItem(storageKey) === 'navigating') return;
+      storage?.setItem(storageKey, 'reloading');
+      reload();
+    }, reloadDelayMs);
   });
 }
 

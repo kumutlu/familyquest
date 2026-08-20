@@ -1,342 +1,184 @@
-/**
- * PRE-DEPLOY Playwright E2E gate — safe service-worker update lifecycle.
- *
- * Proves in a REAL browser (production-built preview output, not mocked SW
- * unit objects) that a stale, controlled client is upgraded to a new build ONLY
- * after bootstrap is ready:
- *
- *   1. OLD preview build is served and established as the controlling SW/client.
- *   2. Page executes OLD_SHA via window.__FAMILYQUEST_BUILD__.sha.
- *   3. Served build is swapped to NEW (different SHA + new sw.js precache).
- *   4. An update check is triggered so the new SW reaches `waiting`.
- *   5. While bootstrap is NOT ready: no reload, old client keeps running,
- *      waiting worker is NOT activated.
- *   6. Startup phase is transitioned to `ready` via the app's real observable
- *      mechanism (window.__reportStartupPhase — the exact function the
- *      StartupScreen effect calls in production).
- *   7. Assert: waiting worker receives SKIP_WAITING, activates, page reloads
- *      exactly once, after reload sha === NEW_SHA, new SW controls the page,
- *      no reload occurred during bootstrap.
- *   8. Also covers the already-ready case (waiting worker + app ready ->
- *      update activates and reloads safely, sha becomes NEW_SHA).
- *
- * The server (sw-lifecycle-server.mjs) serves either the OLD or NEW build from
- * the same origin/port and can be swapped at runtime, so the browser's native
- * SW update mechanism detects the new sw.js and parks it in `waiting`.
- */
-import { test, expect, type BrowserContext, type Page, chromium, devices } from '@playwright/test';
-import { startSwServer } from './sw-lifecycle-server.mjs';
+import { test, expect, type BrowserContext, type Page } from '@playwright/test';
 import { readFileSync } from 'node:fs';
-import { resolve, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
-
-const __dirname = dirname(fileURLToPath(import.meta.url));
+import { resolve, dirname } from 'node:path';
+import { startSwServer } from './sw-lifecycle-server.mjs';
 
 const PORT = 5175;
-
-interface ShaInfo {
-  old: string;
-  new: string;
-}
-const shaInfo: ShaInfo = JSON.parse(
-  readFileSync(resolve(__dirname, '../../e2e-artifacts/sha.json'), 'utf8'),
+const here = dirname(fileURLToPath(import.meta.url));
+const shaInfo: { old: string; new: string; normal: string } = JSON.parse(
+  readFileSync(resolve(here, '../../e2e-artifacts/sha.json'), 'utf8'),
 );
-
 let server: Awaited<ReturnType<typeof startSwServer>>;
 
 test.beforeAll(async () => {
   server = await startSwServer(
     PORT,
-    resolve(__dirname, '../../e2e-artifacts/old'),
-    resolve(__dirname, '../../e2e-artifacts/new'),
+    resolve(here, '../../e2e-artifacts/old'),
+    resolve(here, '../../e2e-artifacts/new'),
+    resolve(here, '../../e2e-artifacts/normal'),
   );
 });
+test.afterAll(async () => server?.close());
 
-test.afterAll(async () => {
-  await server?.close();
-});
-
-// Instrument every page (and every reload) with cross-reload counters so we can
-// prove exactly how many reloads occurred and what messages the SW received.
-async function installInstrumentation(context: BrowserContext): Promise<void> {
-  // Reload counter — survives reloads via sessionStorage.
+async function instrument(context: BrowserContext): Promise<void> {
   await context.addInitScript(() => {
-    const KEY = '__sw_e2e_reload_count';
-    const n = Number(sessionStorage.getItem(KEY) || '0') + 1;
-    sessionStorage.setItem(KEY, String(n));
-    (window as unknown as { __reloadCount: number }).__reloadCount = n;
-  });
+    const loadKey = '__sw_e2e_load_count';
+    const loads = Number(sessionStorage.getItem(loadKey) || '0') + 1;
+    sessionStorage.setItem(loadKey, String(loads));
+    (window as any).__loadCount = loads;
 
-  // Capture postMessages sent TO service workers (e.g. { type: 'SKIP_WAITING' }).
-  // NOTE: we must forward EVERY argument via `apply` — the browser passes a
-  // second argument (transfer list / postMessage options) and dropping it breaks
-  // the SW install handshake, hanging activation.
-  await context.addInitScript(() => {
-    const KEY = '__sw_e2e_messages';
-    const arr: string[] = JSON.parse(sessionStorage.getItem(KEY) || '[]');
-    (window as unknown as { __swMessages: string[] }).__swMessages = arr;
-    const proto = (window as unknown as { ServiceWorker?: { prototype: any } }).ServiceWorker
-      ?.prototype;
-    if (proto && !proto.__patched) {
-      const orig = proto.postMessage;
+    const ccKey = '__sw_e2e_controller_changes';
+    (window as any).__controllerChanges = Number(sessionStorage.getItem(ccKey) || '0');
+    navigator.serviceWorker?.addEventListener('controllerchange', () => {
+      const count = Number(sessionStorage.getItem(ccKey) || '0') + 1;
+      sessionStorage.setItem(ccKey, String(count));
+      (window as any).__controllerChanges = count;
+    });
+
+    const messageKey = '__sw_e2e_inbound_messages';
+    (window as any).__inboundMessages = JSON.parse(sessionStorage.getItem(messageKey) || '[]');
+    navigator.serviceWorker?.addEventListener('message', event => {
+      const value = event.data?.type ? `${event.data.type}:${event.data.migrationId || ''}` : String(event.data);
+      const messages = JSON.parse(sessionStorage.getItem(messageKey) || '[]');
+      messages.push(value);
+      sessionStorage.setItem(messageKey, JSON.stringify(messages));
+      (window as any).__inboundMessages = messages;
+    });
+
+    const outboundKey = '__sw_e2e_outbound_messages';
+    const outbound: string[] = JSON.parse(sessionStorage.getItem(outboundKey) || '[]');
+    (window as any).__outboundMessages = outbound;
+    const proto = (window as any).ServiceWorker?.prototype;
+    if (proto && !proto.__migrationPatched) {
+      const original = proto.postMessage;
       proto.postMessage = function (...args: unknown[]) {
-        const msg = args[0];
-        const type = msg && typeof msg === 'object' && 'type' in msg
-          ? String((msg as { type: unknown }).type)
-          : String(msg);
-        arr.push(type);
-        sessionStorage.setItem(KEY, JSON.stringify(arr));
-        (window as unknown as { __swMessages: string[] }).__swMessages = arr;
-        return orig.apply(this, args);
+        const message: any = args[0];
+        outbound.push(message?.type || String(message));
+        sessionStorage.setItem(outboundKey, JSON.stringify(outbound));
+        return original.apply(this, args);
       };
-      proto.__patched = true;
-    }
-  });
-
-  // Count controllerchange events (proves the waiting worker took over).
-  await context.addInitScript(() => {
-    const KEY = '__sw_e2e_cc';
-    (window as unknown as { __controllerChanges: number }).__controllerChanges = Number(
-      sessionStorage.getItem(KEY) || '0',
-    );
-    const sw = (window as unknown as { navigator: { serviceWorker?: any } }).navigator
-      ?.serviceWorker;
-    if (sw && !sw.__ccPatched) {
-      sw.addEventListener('controllerchange', () => {
-        const n = Number(sessionStorage.getItem(KEY) || '0') + 1;
-        sessionStorage.setItem(KEY, String(n));
-        (window as unknown as { __controllerChanges: number }).__controllerChanges = n;
-      });
-      sw.__ccPatched = true;
+      proto.__migrationPatched = true;
     }
   });
 }
 
-async function establishOldControl(page: Page): Promise<{ sha: string; baseline: number }> {
+async function waitForSha(page: Page, expected: string): Promise<void> {
+  await page.waitForFunction(
+    sha => (window as any).__FAMILYQUEST_BUILD__?.sha === sha,
+    expected,
+    { timeout: 45_000 },
+  );
+}
+
+async function waitForActiveWorker(page: Page): Promise<void> {
+  await page.waitForFunction(async () => {
+    const registration = await navigator.serviceWorker.getRegistration();
+    return registration?.active?.state === 'activated';
+  }, null, { timeout: 45_000 });
+}
+
+async function establishGenuineLegacyControl(page: Page): Promise<number> {
   server.setBuild('old');
   await page.goto('/', { waitUntil: 'domcontentloaded' });
-
-  // The app bundle must have published its build identifier.
+  await waitForSha(page, shaInfo.old);
+  await waitForActiveWorker(page);
+  // Registration can briefly disappear while WebKit/Chromium persist the
+  // newly activated worker. Require it to remain observable before navigating.
+  await page.waitForTimeout(1_000);
+  await waitForActiveWorker(page);
+  // A distinct navigation after activation creates the genuinely controlled
+  // legacy document. This avoids browser-specific reload reuse semantics.
+  await page.goto('/login', { waitUntil: 'domcontentloaded' });
   await page.waitForFunction(
-    () => !!(window as unknown as { __FAMILYQUEST_BUILD__?: { sha?: string } }).__FAMILYQUEST_BUILD__?.sha,
+    () => navigator.serviceWorker.controller?.state === 'activated',
     null,
-    { timeout: 30000 },
+    { timeout: 45_000 },
   );
+  await waitForSha(page, shaInfo.old);
 
-  // Wait until the OLD SW has FULLY activated (not merely 'activating'),
-  // otherwise the reload below would race the install and the tab would stay
-  // uncontrolled. Manual polling (waitForFunction's async predicate is flaky
-  // here for an unknown reason in this Chromium build).
-  {
-    const start = Date.now();
-    let activated = false;
-    while (Date.now() - start < 30000) {
-      activated = await page.evaluate(async () => {
-        const reg = await (window as unknown as {
-          navigator: {
-            serviceWorker: {
-              getRegistration: () => Promise<{ active?: { state: string } } | null>;
-            };
-          };
-        }).navigator.serviceWorker.getRegistration();
-        return !!(reg && reg.active && reg.active.state === 'activated');
-      });
-      if (activated) break;
-      await page.waitForTimeout(250);
-    }
-    if (!activated) throw new Error('OLD SW did not reach activated state');
-  }
-
-  // registerType:'prompt' + clientsClaim:false => the first load is NOT
-  // controlled. Reload so the already-active OLD SW takes control of the tab.
-  await page.reload({ waitUntil: 'domcontentloaded' });
-  {
-    const start = Date.now();
-    let controlled = false;
-    while (Date.now() - start < 30000) {
-      controlled = await page.evaluate(() => {
-        const c = (window as unknown as { navigator: { serviceWorker?: { controller?: { state: string } } } })
-          .navigator.serviceWorker?.controller;
-        return !!c && c.state === 'activated';
-      });
-      if (controlled) break;
-      await page.waitForTimeout(250);
-    }
-    if (!controlled) throw new Error('OLD SW did not take control after reload');
-  }
-
-  const sha = await page.evaluate(
-    () => (window as unknown as { __FAMILYQUEST_BUILD__: { sha: string } }).__FAMILYQUEST_BUILD__.sha,
-  );
-  const baseline = await page.evaluate(
-    () => (window as unknown as { __reloadCount: number }).__reloadCount,
-  );
-  return { sha, baseline };
+  const scriptUrl = await page.locator('script[type="module"][src]').getAttribute('src');
+  expect(scriptUrl).toBeTruthy();
+  const legacyBundle = await (await page.request.get(new URL(scriptUrl!, page.url()).toString())).text();
+  expect(legacyBundle).not.toContain('reversal-status');
+  return page.evaluate(() => (window as any).__loadCount);
 }
 
-async function waitForWaitingWorker(page: Page, timeout = 30000): Promise<void> {
-  const start = Date.now();
-  while (Date.now() - start < timeout) {
-    const found = await page.evaluate(async () => {
-      const reg = await (window as unknown as {
-        navigator: { serviceWorker: { getRegistration: () => Promise<{ waiting?: unknown } | null> } };
-      }).navigator.serviceWorker.getRegistration();
-      return !!(reg && reg.waiting);
-    });
-    if (found) return;
-    await page.waitForTimeout(250);
-  }
-  throw new Error('No waiting service worker appeared after update');
-}
-
-async function triggerUpdate(page: Page): Promise<void> {
-  server.setBuild('new');
+async function requestWorkerUpdate(page: Page, build: 'new' | 'normal'): Promise<void> {
+  server.setBuild(build);
   await page.evaluate(async () => {
-    const reg = await (window as unknown as {
-      navigator: { serviceWorker: { getRegistration: () => Promise<{ update?: () => Promise<void> } | null> } };
-    }).navigator.serviceWorker.getRegistration();
-    if (reg && reg.update) await reg.update();
+    const registration = await navigator.serviceWorker.getRegistration();
+    await registration?.update();
   });
 }
 
-// Drives the startup phase through the EXACT production path the StartupScreen
-// effect uses (reportStartupPhase). No separate code path is created.
-async function transitionToReady(page: Page): Promise<void> {
-  await page.evaluate(() => {
-    const fn = (window as unknown as { __reportStartupPhase?: (p: string) => void }).__reportStartupPhase;
-    if (fn) fn('ready');
-  });
-}
+test.describe('one-time legacy service-worker migration', () => {
+  test.beforeEach(async ({ context }) => instrument(context));
 
-test.describe('Safe service-worker update lifecycle', () => {
-  let browser: import('@playwright/test').Browser;
-  let context: BrowserContext;
-  let page: Page;
+  test('82422c8 is claimed, navigated once, and a later normal release rolls forward safely', async ({ page, context }) => {
+    const baseline = await establishGenuineLegacyControl(page);
 
-  // A fresh browser per test guarantees an isolated service-worker database, so a
-  // prior test's OLD/NEW SW registration can never leak into the next run.
-  test.beforeEach(async () => {
-    browser = await chromium.launch();
-    context = await browser.newContext({ ...devices['Desktop Chrome'] });
-    await installInstrumentation(context);
-    page = await context.newPage();
-  });
+    await requestWorkerUpdate(page, 'new');
+    await waitForSha(page, shaInfo.new);
 
-  test.afterEach(async () => {
-    await context?.close();
-    await browser?.close();
-  });
+    const migrated = await page.evaluate(() => ({
+      sha: (window as any).__FAMILYQUEST_BUILD__.sha,
+      loads: (window as any).__loadCount,
+      controllerChanges: (window as any).__controllerChanges,
+      inbound: (window as any).__inboundMessages,
+      controller: navigator.serviceWorker.controller && {
+        state: navigator.serviceWorker.controller.state,
+        scriptURL: navigator.serviceWorker.controller.scriptURL,
+      },
+    }));
+    expect(migrated.sha).toBe(shaInfo.new);
+    expect(migrated.loads).toBe(baseline + 1);
+    expect(migrated.controllerChanges).toBeGreaterThanOrEqual(1);
+    expect(migrated.inbound).toContain('LEGACY_SW_MIGRATION_NAVIGATING:legacy-82422c8-2026-08');
+    expect(migrated.controller?.state).toBe('activated');
 
-  test('deferred: stale controlled client upgrades only after bootstrap is ready', async () => {
-    const { sha: oldSha, baseline } = await establishOldControl(page);
-    expect(oldSha).toBe(shaInfo.old);
+    await expect(page.getByText('Welcome back', { exact: true })).toBeVisible({ timeout: 20_000 });
+    await page.waitForFunction(() => Boolean((window as any).__QUEKI_STARTUP_METRICS__));
+    const migrationBundleUrl = await page.locator('script[type="module"][src]').getAttribute('src');
+    const migrationBundle = await (await page.request.get(new URL(migrationBundleUrl!, page.url()).toString())).text();
+    expect(migrationBundle).toContain('reversal-status');
 
-    // 3 + 4. Swap to NEW build and trigger an update check -> new SW reaches waiting.
-    await triggerUpdate(page);
-    await waitForWaitingWorker(page);
+    // Waiting does not retrigger migration.
+    await page.waitForTimeout(2_000);
+    expect(await page.evaluate(() => (window as any).__loadCount)).toBe(baseline + 1);
 
-    // 5. While bootstrap is NOT ready:
-    const waitingState = await page.evaluate(async () => {
-      const reg = await (window as unknown as {
-        navigator: { serviceWorker: { getRegistration: () => Promise<{ waiting?: { state: string } } | null> } };
-      }).navigator.serviceWorker.getRegistration();
-      return reg?.waiting?.state ?? null;
-    });
-    expect(waitingState).toBe('installed'); // waiting, NOT activated
+    // An intentional revisit is one ordinary navigation, never an extra migration reload.
+    await page.goto('/rewards', { waitUntil: 'domcontentloaded' });
+    await waitForSha(page, shaInfo.new);
+    expect(await page.evaluate(() => (window as any).__loadCount)).toBe(baseline + 2);
+    await page.waitForTimeout(1_000);
+    expect(await page.evaluate(() => (window as any).__loadCount)).toBe(baseline + 2);
 
-    const controllerStateDuringBootstrap = await page.evaluate(
-      () => (window as unknown as { navigator: { serviceWorker: { controller?: { state: string } } } })
-        .navigator.serviceWorker.controller?.state,
-    );
-    expect(controllerStateDuringBootstrap).toBe('activated'); // still the OLD SW
+    // A fresh tab opened after activation loads normally exactly once.
+    const fresh = await context.newPage();
+    await fresh.goto('/', { waitUntil: 'domcontentloaded' });
+    await waitForSha(fresh, shaInfo.new);
+    expect(await fresh.evaluate(() => (window as any).__loadCount)).toBe(1);
+    await fresh.waitForTimeout(1_000);
+    expect(await fresh.evaluate(() => (window as any).__loadCount)).toBe(1);
+    await fresh.close();
 
-    const countDuringBootstrap = await page.evaluate(
-      () => (window as unknown as { __reloadCount: number }).__reloadCount,
-    );
-    expect(countDuringBootstrap).toBe(baseline); // no reload yet
-
-    const shaDuringBootstrap = await page.evaluate(
-      () => (window as unknown as { __FAMILYQUEST_BUILD__: { sha: string } }).__FAMILYQUEST_BUILD__.sha,
-    );
-    expect(shaDuringBootstrap).toBe(oldSha); // old client still running
-
-    // 6. Transition startup to ready (real production path via test hook).
-    const loadPromise = page.waitForEvent('load');
-    await transitionToReady(page);
-    await loadPromise; // the safe reload
-
-    // 7. After ready: waiting worker got SKIP_WAITING, activated, reloaded once.
-    const finalSha = await page.evaluate(
-      () => (window as unknown as { __FAMILYQUEST_BUILD__: { sha: string } }).__FAMILYQUEST_BUILD__.sha,
-    );
-    expect(finalSha).toBe(shaInfo.new);
-    expect(finalSha).not.toBe(oldSha);
-
-    const finalCount = await page.evaluate(
-      () => (window as unknown as { __reloadCount: number }).__reloadCount,
-    );
-    expect(finalCount).toBe(baseline + 1); // exactly one reload
-
-    const messages = await page.evaluate(
-      () => (window as unknown as { __swMessages: string[] }).__swMessages,
-    );
-    expect(messages).toContain('SKIP_WAITING');
-
-    const controller = await page.evaluate(() => {
-      const c = (window as unknown as { navigator: { serviceWorker: { controller?: { state: string; scriptURL: string } } } })
-        .navigator.serviceWorker.controller;
-      return c ? { state: c.state, scriptURL: c.scriptURL } : null;
-    });
-    expect(controller).not.toBeNull();
-    expect(controller!.state).toBe('activated'); // new SW controls the page
-
-    const cc = await page.evaluate(
-      () => (window as unknown as { __controllerChanges: number }).__controllerChanges,
-    );
-    expect(cc).toBeGreaterThanOrEqual(1); // controller changed (waiting -> active)
+    // Rollback proof: a subsequent normal prompt/waiting release takes over via
+    // the existing safe handler and causes one reload, with no migration behavior.
+    await page.evaluate(() => (window as any).__reportStartupPhase?.('ready'));
+    const beforeNormal = await page.evaluate(() => (window as any).__loadCount);
+    await requestWorkerUpdate(page, 'normal');
+    await waitForSha(page, shaInfo.normal);
+    await expect(page.getByText('Welcome back', { exact: true })).toBeVisible({ timeout: 20_000 });
+    expect(await page.evaluate(() => (window as any).__loadCount)).toBe(beforeNormal + 1);
+    expect(await page.evaluate(() => navigator.serviceWorker.controller?.state)).toBe('activated');
+    expect(await page.evaluate(() => (window as any).__outboundMessages)).toContain('SKIP_WAITING');
+    await page.waitForTimeout(2_000);
+    expect(await page.evaluate(() => (window as any).__loadCount)).toBe(beforeNormal + 1);
 
     console.log(
-      `[E2E][deferred] OLD_SHA=${oldSha} -> NEW_SHA=${finalSha} | reloads=${finalCount - baseline} | SKIP_WAITING=${messages.includes('SKIP_WAITING')} | controller=${controller!.state}`,
-    );
-  });
-
-  test('already-ready: waiting worker activates and reloads safely', async () => {
-    const { sha: oldSha, baseline } = await establishOldControl(page);
-    expect(oldSha).toBe(shaInfo.old);
-
-    // App already ready before the update is found. The waiting worker is
-    // therefore applied immediately (no deferral), so it never lingers in the
-    // `waiting` state — we wait for the resulting safe reload instead.
-    await transitionToReady(page);
-
-    const loadPromise = page.waitForEvent('load');
-    await triggerUpdate(page);
-    await loadPromise; // the safe reload (waiting worker applied immediately)
-
-    const finalSha = await page.evaluate(
-      () => (window as unknown as { __FAMILYQUEST_BUILD__: { sha: string } }).__FAMILYQUEST_BUILD__.sha,
-    );
-    expect(finalSha).toBe(shaInfo.new);
-    expect(finalSha).not.toBe(oldSha);
-
-    const finalCount = await page.evaluate(
-      () => (window as unknown as { __reloadCount: number }).__reloadCount,
-    );
-    expect(finalCount).toBe(baseline + 1); // exactly one reload
-
-    const messages = await page.evaluate(
-      () => (window as unknown as { __swMessages: string[] }).__swMessages,
-    );
-    expect(messages).toContain('SKIP_WAITING');
-
-    const controllerState = await page.evaluate(
-      () => (window as unknown as { navigator: { serviceWorker: { controller?: { state: string } } } })
-        .navigator.serviceWorker.controller?.state,
-    );
-    expect(controllerState).toBe('activated');
-
-    console.log(
-      `[E2E][already-ready] OLD_SHA=${oldSha} -> NEW_SHA=${finalSha} | reloads=${finalCount - baseline} | SKIP_WAITING=${messages.includes('SKIP_WAITING')} | controller=${controllerState}`,
+      `[MIGRATION] OLD_SHA=${shaInfo.old} -> NEW_SHA=${shaInfo.new} -> NORMAL_SHA=${shaInfo.normal}` +
+      ` | migrationReloads=1 | normalReloads=1 | controller=${migrated.controller?.state}`,
     );
   });
 });

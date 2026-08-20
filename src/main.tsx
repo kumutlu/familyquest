@@ -4,7 +4,11 @@ import { I18nextProvider } from 'react-i18next'
 import { FAMILYQUEST_BUILD } from './buildInfo'
 import './index.css'
 import App from './App.tsx'
-import { installServiceWorkerControllerListener, installServiceWorkerUpdateHandler } from './serviceWorkerUpdate'
+import {
+  installServiceWorkerControllerListener,
+  installServiceWorkerUpdateHandler,
+  LEGACY_SW_MIGRATION_ID,
+} from './serviceWorkerUpdate'
 import { installChunkLoadErrorMonitor } from './chunkLoadErrorMonitor'
 import i18n, { bootstrapI18n } from './i18n'
 import { markStartupStage, resetStartupMetrics } from './startupDiagnostics'
@@ -13,16 +17,16 @@ import { useAppearanceStore } from './store/appearanceStore'
 resetStartupMetrics()
 markStartupStage('APP_SCRIPT_READY')
 
-// Observe (but never auto-reload on) service-worker controller changes. This
-// records a diagnostic if a takeover happens mid-bootstrap instead of masking
-// the failure with a reload.
-installServiceWorkerControllerListener()
+// ONE RELEASE ONLY: observe migration takeover and keep a guarded fallback
+// reload. The migration worker normally navigates legacy clients itself; the
+// listener's session marker prevents a second reload during that race.
+installServiceWorkerControllerListener(undefined, { migrationId: LEGACY_SW_MIGRATION_ID })
 
 // Register the PWA service worker and wire a SAFE update path. The worker is
-// built with `registerType: 'prompt'` + `skipWaiting: false` + `clientsClaim:
-// false`, so a newly deployed worker parks in the `waiting` state and never
-// takes over an open tab on its own. `installServiceWorkerUpdateHandler`
-// detects that waiting worker and, once bootstrap has finished, tells it to
+// Normally built with `registerType: 'prompt'` + waiting semantics. This rescue
+// release temporarily enables immediate activation/claim for legacy clients;
+// in subsequent normal releases, `installServiceWorkerUpdateHandler` detects
+// the waiting worker and, once bootstrap has finished, tells it to
 // `skipWaiting()` and reloads — guaranteeing the user eventually runs the
 // current build SHA instead of a stale, SW-cached bundle (the Safari bug).
 //

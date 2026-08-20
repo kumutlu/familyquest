@@ -37,9 +37,9 @@ const MIME = {
   '.map': 'application/json; charset=utf-8',
 };
 
-export async function startSwServer(port, oldRoot, newRoot) {
+export async function startSwServer(port, oldRoot, newRoot, normalRoot = newRoot) {
   let current = 'old';
-  const roots = { old: oldRoot, new: newRoot };
+  const roots = { old: oldRoot, new: newRoot, normal: normalRoot };
 
   const server = http.createServer(async (req, res) => {
     try {
@@ -49,7 +49,7 @@ export async function startSwServer(port, oldRoot, newRoot) {
       // --- control endpoints (not part of the app) ---
       if (pathname === '/__e2e/switch') {
         const build = url.searchParams.get('build');
-        if (build === 'old' || build === 'new') {
+        if (build === 'old' || build === 'new' || build === 'normal') {
           current = build;
           res.writeHead(204).end();
         } else {
@@ -115,7 +115,7 @@ export async function startSwServer(port, oldRoot, newRoot) {
     port,
     getBuild: () => current,
     setBuild: (b) => {
-      if (b !== 'old' && b !== 'new') throw new Error(`invalid build ${b}`);
+      if (b !== 'old' && b !== 'new' && b !== 'normal') throw new Error(`invalid build ${b}`);
       current = b;
     },
     close: () =>

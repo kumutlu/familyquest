@@ -1,6 +1,8 @@
 import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest';
 import {
+  installServiceWorkerControllerListener,
   installServiceWorkerUpdateHandler,
+  LEGACY_SW_MIGRATION_ID,
   type ServiceWorkerLike,
   type ServiceWorkerRegistrationLike,
 } from './serviceWorkerUpdate';
@@ -27,6 +29,101 @@ import { FAMILYQUEST_BUILD } from './buildInfo';
 function asMock(fn: unknown): ReturnType<typeof vi.fn> {
   return fn as ReturnType<typeof vi.fn>;
 }
+
+describe('one-time legacy controller migration', () => {
+  it('reloads at most once for the migration controller change', () => {
+    vi.useFakeTimers();
+    const listeners: Record<string, (event?: any) => void> = {};
+    const serviceWorker = {
+      controller: {},
+      addEventListener: vi.fn((name: string, listener: (event?: any) => void) => {
+        listeners[name] = listener;
+      }),
+    };
+    const storage = new Map<string, string>();
+    const reload = vi.fn();
+
+    installServiceWorkerControllerListener(serviceWorker as any, {
+      migrationId: LEGACY_SW_MIGRATION_ID,
+      reload,
+      storage: {
+        getItem: key => storage.get(key) ?? null,
+        setItem: (key, value) => storage.set(key, value),
+      },
+      reloadDelayMs: 25,
+    });
+
+    listeners.controllerchange();
+    listeners.controllerchange();
+    vi.advanceTimersByTime(25);
+
+    expect(reload).toHaveBeenCalledTimes(1);
+    expect(storage.get(`queki:sw-migration:${LEGACY_SW_MIGRATION_ID}`)).toBe('reloading');
+    vi.useRealTimers();
+  });
+
+  it('suppresses the client reload when the migration worker is navigating the page', () => {
+    vi.useFakeTimers();
+    const listeners: Record<string, (event?: any) => void> = {};
+    const serviceWorker = {
+      controller: {},
+      addEventListener: vi.fn((name: string, listener: (event?: any) => void) => {
+        listeners[name] = listener;
+      }),
+    };
+    const storage = new Map<string, string>();
+    const reload = vi.fn();
+
+    installServiceWorkerControllerListener(serviceWorker as any, {
+      migrationId: LEGACY_SW_MIGRATION_ID,
+      reload,
+      storage: {
+        getItem: key => storage.get(key) ?? null,
+        setItem: (key, value) => storage.set(key, value),
+      },
+      reloadDelayMs: 25,
+    });
+
+    listeners.controllerchange();
+    listeners.message({ data: { type: 'LEGACY_SW_MIGRATION_NAVIGATING', migrationId: LEGACY_SW_MIGRATION_ID } });
+    vi.advanceTimersByTime(25);
+
+    expect(reload).not.toHaveBeenCalled();
+    expect(storage.get(`queki:sw-migration:${LEGACY_SW_MIGRATION_ID}`)).toBe('navigating');
+    vi.useRealTimers();
+  });
+
+  it('does nothing when the migration id is absent', () => {
+    const serviceWorker = { controller: {}, addEventListener: vi.fn() };
+    const reload = vi.fn();
+    installServiceWorkerControllerListener(serviceWorker as any, { reload });
+    expect(serviceWorker.addEventListener).not.toHaveBeenCalled();
+    expect(reload).not.toHaveBeenCalled();
+  });
+
+  it('does not reload again after navigation when the migration marker survives', () => {
+    vi.useFakeTimers();
+    const listeners: Record<string, () => void> = {};
+    const storage = new Map([[`queki:sw-migration:${LEGACY_SW_MIGRATION_ID}`, 'navigating']]);
+    const reload = vi.fn();
+    installServiceWorkerControllerListener({
+      controller: {},
+      addEventListener: (name: string, listener: () => void) => { listeners[name] = listener; },
+    } as any, {
+      migrationId: LEGACY_SW_MIGRATION_ID,
+      reload,
+      storage: {
+        getItem: key => storage.get(key) ?? null,
+        setItem: (key, value) => storage.set(key, value),
+      },
+      reloadDelayMs: 25,
+    });
+    listeners.controllerchange();
+    vi.advanceTimersByTime(25);
+    expect(reload).not.toHaveBeenCalled();
+    vi.useRealTimers();
+  });
+});
 
 // A waiting worker double. The production `scheduleSafeReload` posts
 // SKIP_WAITING and then waits for the worker to reach the `activated` state

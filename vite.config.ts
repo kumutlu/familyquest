@@ -11,6 +11,9 @@ import { firebaseReservedNavigationDenylist } from './pwaNavigation.js'
 // compile-time constants. Git may be unavailable (e.g. CI tarball builds), so
 // resolution must never throw and fail the build.
 function resolveBuildSha(): string {
+  if (process.env.VITE_SW_E2E_HOOK === '1' && process.env.VITE_SW_E2E_BUILD_SHA) {
+    return process.env.VITE_SW_E2E_BUILD_SHA.slice(0, 7)
+  }
   try {
     const sha = execFileSync('git', ['rev-parse', '--short=7', 'HEAD'], {
       encoding: 'utf8',
@@ -25,6 +28,11 @@ function resolveBuildSha(): string {
 const buildSha = resolveBuildSha()
 const builtAt = new Date().toISOString()
 const appVersion: string = JSON.parse(readFileSync('package.json', 'utf8')).version ?? 'unknown'
+// ONE RELEASE ONLY: rescue clients still controlled by pre-lifecycle workers
+// such as production build 82422c8. Set QUEKI_LEGACY_SW_MIGRATION=0 when
+// building the following normal safe-lifecycle release, then remove this block.
+const legacySwMigrationId = 'legacy-82422c8-2026-08'
+const legacySwMigrationEnabled = process.env.QUEKI_LEGACY_SW_MIGRATION !== '0'
 
 // Deterministic production config: when building, force the production mode so
 // Vite explicitly loads the committed `.env.production` and embeds the Firebase
@@ -134,14 +142,15 @@ export default defineConfig(({ mode }) => {
         ]
       },
       workbox: {
-        // Disabled so a new SW does NOT skip the waiting phase and does NOT
-        // claim already-open clients. Combined with `registerType: 'prompt'`
-        // above, an open tab stays on one consistent version; the new worker
-        // activates only on a safe reload/new navigation. PWA/offline
-        // functionality is preserved (the SW is still installed and controls
-        // new navigations).
-        skipWaiting: false,
-        clientsClaim: false,
+        // Normally disabled for the safe waiting lifecycle. This one migration
+        // release enables both settings so pre-lifecycle workers cannot strand
+        // clients on 82422c8. Build the following release with
+        // QUEKI_LEGACY_SW_MIGRATION=0 and remove the migration script/config.
+        skipWaiting: legacySwMigrationEnabled,
+        clientsClaim: legacySwMigrationEnabled,
+        importScripts: legacySwMigrationEnabled
+          ? [`legacy-sw-migration.js?migration=${legacySwMigrationId}`]
+          : [],
         cleanupOutdatedCaches: true,
         // Firebase Hosting reserves `/__/` for Auth helpers and other platform
         // endpoints. Let those navigations reach Hosting rather than serving

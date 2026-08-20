@@ -1,62 +1,60 @@
-// Builds two PRODUCTION preview artifacts with DIFFERENT build SHAs so the
-// Playwright SW-lifecycle gate can prove a stale controlled client is upgraded
-// to a new build.
-//
-//   e2e-artifacts/old   -> built from current source, SHA = current HEAD short SHA
-//   e2e-artifacts/new   -> built from current source, SHA = HEAD after an empty
-//                          commit (so the bundle hash differs -> sw.js precache
-//                          manifest differs -> the browser detects a NEW SW)
-//   e2e-artifacts/sha.json -> { old, new }
-//
-// The empty commit is reverted with `git reset --soft HEAD~1` so the working
-// tree (including the uncommitted lifecycle fix) is left untouched.
-//
-// Usage: node scripts/build-sw-e2e-artifacts.mjs
-
-import { execSync } from 'node:child_process';
-import { cpSync, mkdirSync, rmSync, writeFileSync } from 'node:fs';
+// Build three production artifacts for the one-time legacy SW migration gate:
+// old = genuine 82422c8 source; new = migration; normal = rollback lifecycle.
+// No commits are created.
+import { execFileSync, execSync } from 'node:child_process';
+import { cpSync, mkdirSync, mkdtempSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
 const ROOT = process.cwd();
 const ART = join(ROOT, 'e2e-artifacts');
+const OLD_REF = '82422c8';
+const NORMAL_SHA = 'f0110ff';
 
-// Expose the deterministic E2E startup-phase hook ONLY in the artifacts built
-// for the service-worker lifecycle gate. The hook (`window.__reportStartupPhase`)
-// is gated in `src/startupDiagnostics.ts` behind `import.meta.env.VITE_SW_E2E_HOOK`,
-// which Vite only defines when this env var is set. Real production/preview
-// builds never set it, so the production bundle never exposes the hook.
-process.env.VITE_SW_E2E_HOOK = '1';
-
-const sha = () =>
-  execSync('git rev-parse --short=7 HEAD', { cwd: ROOT, stdio: ['ignore', 'pipe', 'ignore'] })
-    .toString()
-    .trim();
-
-const build = () => {
-  console.log('[build] npm run build ...');
-  execSync('npm run build', { cwd: ROOT, stdio: 'inherit' });
-};
-
-const copyDist = (dest) => {
+const sha = cwd => execFileSync('git', ['rev-parse', '--short=7', 'HEAD'], {
+  cwd, encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'],
+}).trim();
+const build = (cwd, env = {}) => execSync('npm run build', {
+  cwd, env: { ...process.env, ...env }, stdio: 'inherit',
+});
+const copyDist = (cwd, name) => {
+  const dest = join(ART, name);
   rmSync(dest, { recursive: true, force: true });
   mkdirSync(dest, { recursive: true });
-  cpSync(join(ROOT, 'dist'), dest, { recursive: true });
+  cpSync(join(cwd, 'dist'), dest, { recursive: true });
 };
 
-const oldSha = sha();
-build();
-copyDist(join(ART, 'old'));
+mkdirSync(ART, { recursive: true });
+const tempRoot = mkdtempSync(join(tmpdir(), 'queki-sw-old-'));
+const oldWorktree = join(tempRoot, 'worktree');
+let oldWorktreeAdded = false;
+try {
+  execFileSync('git', ['worktree', 'add', '--detach', oldWorktree, OLD_REF], { cwd: ROOT, stdio: 'inherit' });
+  oldWorktreeAdded = true;
+  symlinkSync(join(ROOT, 'node_modules'), join(oldWorktree, 'node_modules'), 'dir');
+  build(oldWorktree, { VITE_SW_E2E_HOOK: '1', QUEKI_LEGACY_SW_MIGRATION: '0' });
+  copyDist(oldWorktree, 'old');
+} finally {
+  if (oldWorktreeAdded) {
+    execFileSync('git', ['worktree', 'remove', '--force', oldWorktree], { cwd: ROOT, stdio: 'ignore' });
+  }
+  rmSync(tempRoot, { recursive: true, force: true });
+}
 
-// Create a new HEAD with an identical tree so the embedded SHA changes while the
-// source (and the uncommitted lifecycle fix) is preserved.
-execSync('git commit --allow-empty -m "e2e: marker for NEW build SHA"', { cwd: ROOT, stdio: 'inherit' });
-const newSha = sha();
-build();
-copyDist(join(ART, 'new'));
+const migrationSha = sha(ROOT);
+build(ROOT, {
+  VITE_SW_E2E_HOOK: '1', VITE_SW_E2E_BUILD_SHA: migrationSha,
+  QUEKI_LEGACY_SW_MIGRATION: '1',
+});
+copyDist(ROOT, 'new');
 
-// Restore HEAD; working tree (incl. the fix) is untouched by --soft.
-execSync('git reset --soft HEAD~1', { cwd: ROOT, stdio: 'inherit' });
+build(ROOT, {
+  VITE_SW_E2E_HOOK: '1', VITE_SW_E2E_BUILD_SHA: NORMAL_SHA,
+  QUEKI_LEGACY_SW_MIGRATION: '0',
+});
+copyDist(ROOT, 'normal');
 
-writeFileSync(join(ART, 'sha.json'), JSON.stringify({ old: oldSha, new: newSha }, null, 2));
-console.log(`[build] OLD_SHA=${oldSha}  NEW_SHA=${newSha}`);
-console.log(`[build] artifacts: ${join(ART, 'old')}  ${join(ART, 'new')}`);
+writeFileSync(join(ART, 'sha.json'), JSON.stringify({
+  old: OLD_REF, new: migrationSha, normal: NORMAL_SHA,
+}, null, 2));
+console.log(`[build] OLD_SHA=${OLD_REF} NEW_SHA=${migrationSha} NORMAL_SHA=${NORMAL_SHA}`);
