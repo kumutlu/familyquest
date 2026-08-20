@@ -70,6 +70,11 @@ export default defineConfig(({ mode }) => {
     tailwindcss(),
     react(),
     VitePWA({
+      // `injectRegister: null` — registration is owned by src/main.tsx (which
+      // calls `navigator.serviceWorker.register` and wires the safe update
+      // handler). This prevents the plugin from injecting its own registration
+      // script, which would double-register the SW and bypass our update logic.
+      injectRegister: null,
       // `selfDestroying` is only for the dev server: in development we don't want
       // a stale precache SW interfering with HMR. In a production build it MUST
       // be false — otherwise vite-plugin-pwa (see its `generateServiceWorker`)
@@ -82,8 +87,8 @@ export default defineConfig(({ mode }) => {
       // service worker installs in the background and stays in the `waiting`
       // state. It does NOT call `skipWaiting()` and does NOT take control of an
       // already-open tab. The open tab keeps running one consistent app/SW
-      // version; the new worker only becomes active on the user's next
-      // navigation/reload. This removes the deployment-time race where an old
+      // version; the new worker only becomes active on a safe reload/new
+      // navigation. This removes the deployment-time race where an old
       // app shell was served new chunks (or vice-versa) and bootstrap stalled
       // into a generic "Connection problem".
       //

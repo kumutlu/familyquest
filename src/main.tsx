@@ -4,7 +4,7 @@ import { I18nextProvider } from 'react-i18next'
 import { FAMILYQUEST_BUILD } from './buildInfo'
 import './index.css'
 import App from './App.tsx'
-import { installServiceWorkerControllerListener } from './serviceWorkerUpdate'
+import { installServiceWorkerControllerListener, installServiceWorkerUpdateHandler } from './serviceWorkerUpdate'
 import { installChunkLoadErrorMonitor } from './chunkLoadErrorMonitor'
 import i18n, { bootstrapI18n } from './i18n'
 import { markStartupStage, resetStartupMetrics } from './startupDiagnostics'
@@ -17,6 +17,35 @@ markStartupStage('APP_SCRIPT_READY')
 // records a diagnostic if a takeover happens mid-bootstrap instead of masking
 // the failure with a reload.
 installServiceWorkerControllerListener()
+
+// Register the PWA service worker and wire a SAFE update path. The worker is
+// built with `registerType: 'prompt'` + `skipWaiting: false` + `clientsClaim:
+// false`, so a newly deployed worker parks in the `waiting` state and never
+// takes over an open tab on its own. `installServiceWorkerUpdateHandler`
+// detects that waiting worker and, once bootstrap has finished, tells it to
+// `skipWaiting()` and reloads — guaranteeing the user eventually runs the
+// current build SHA instead of a stale, SW-cached bundle (the Safari bug).
+//
+// `injectRegister` is set to `null` in vite.config.ts so registration is owned
+// here rather than by the plugin's injected script; this avoids a double
+// registration and lets us attach the update handler to the real registration.
+function registerServiceWorkerAndInstallUpdate(): void {
+  if (typeof navigator === 'undefined' || !('serviceWorker' in navigator)) return
+  // No service worker in development: the dev server + HMR must not be
+  // interfered with by a precaching SW (and the dev build is self-destroying).
+  if (import.meta.env.MODE === 'development') return
+  navigator.serviceWorker
+    .register('/sw.js', { scope: '/' })
+    .then((registration) => {
+      installServiceWorkerUpdateHandler(registration)
+    })
+    .catch(() => {
+      // Registration failure is non-fatal: the app still works online, only
+      // offline/PWA is degraded. Never let it break bootstrap.
+    })
+}
+
+registerServiceWorkerAndInstallUpdate()
 
 // Classify chunk-load failures (e.g. a stale hashed asset after a deploy) as a
 // distinct, non-sensitive diagnostic rather than a generic timeout.

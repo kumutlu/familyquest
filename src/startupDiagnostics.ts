@@ -12,7 +12,8 @@ export type StartupDiagnosticCode =
   | 'PROFILE_LOAD_TIMEOUT'
   | 'FAMILY_LOAD_TIMEOUT'
   | 'CHUNK_LOAD_ERROR'
-  | 'SERVICE_WORKER_CONTROLLER_CHANGE_DURING_BOOTSTRAP';
+  | 'SERVICE_WORKER_CONTROLLER_CHANGE_DURING_BOOTSTRAP'
+  | 'SERVICE_WORKER_UPDATE_DEFERRED_DURING_BOOTSTRAP';
 
 export type StartupStage =
   | 'APP_SCRIPT_READY'
@@ -109,12 +110,33 @@ export function getStartupMetrics(): StartupMetrics {
 // so it can tell whether a controller change happened mid-bootstrap.
 let currentPhase: StartupPhase | 'unknown' = 'unknown';
 
-export function reportStartupPhase(phase: StartupPhase): void {
+// Listeners notified whenever the startup phase changes. Used to flush a
+// deferred service-worker update once bootstrap completes (see
+// `serviceWorkerUpdate.ts`), without coupling that module to React.
+const phaseListeners = new Set<(phase: StartupPhase | 'unknown') => void>();
+
+export function reportStartupPhase(phase: StartupPhase | 'unknown'): void {
   currentPhase = phase;
+  for (const listener of phaseListeners) listener(phase);
 }
 
 export function getStartupPhase(): StartupPhase | 'unknown' {
   return currentPhase;
+}
+
+/**
+ * Subscribes to startup-phase changes. Returns an unsubscribe function.
+ *
+ * The service-worker update handler uses this to apply a deferred waiting
+ * worker only after the app has finished bootstrapping.
+ */
+export function subscribeStartupPhase(
+  listener: (phase: StartupPhase | 'unknown') => void,
+): () => void {
+  phaseListeners.add(listener);
+  return () => {
+    phaseListeners.delete(listener);
+  };
 }
 
 // Keys that must never be attached to a diagnostic, as a defensive guard
@@ -139,4 +161,28 @@ export function logStartupDiagnostic(
   }
   // eslint-disable-next-line no-console
   console.error('[StartupDiagnostic]', code, safeDetail);
+}
+
+// ---------------------------------------------------------------------------
+// Deterministic E2E test hook.
+//
+// Exposes `reportStartupPhase` on `window` so a Playwright harness can drive the
+// startup phase through the EXACT same production path the `StartupScreen`
+// effect uses. This lets the safe service-worker update lifecycle be exercised
+// deterministically (defer-while-bootstrapping vs. apply-when-ready) without
+// depending on a live Firebase auth/profile/family resolution. It is a pure
+// pass-through to the real module function — no separate code path is created.
+//
+// GATING: this hook is ONLY compiled into the dedicated service-worker
+// lifecycle E2E artifacts, which are built with `VITE_SW_E2E_HOOK=1` (see
+// `scripts/build-sw-e2e-artifacts.mjs`). Every real production/preview build
+// leaves this block compiled out, so no production-global test hook is exposed.
+// Even where it is present, it is a pure pass-through to `reportStartupPhase`
+// (the exact function the StartupScreen effect calls) and cannot alter
+// application state in an unsafe way.
+// ---------------------------------------------------------------------------
+if (typeof window !== 'undefined' && import.meta.env.VITE_SW_E2E_HOOK) {
+  (window as typeof window & {
+    __reportStartupPhase?: (phase: StartupPhase | 'unknown') => void;
+  }).__reportStartupPhase = reportStartupPhase;
 }
