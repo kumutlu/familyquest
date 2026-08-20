@@ -457,6 +457,43 @@ describe('bootstrap/auth/listener state machine', () => {
     ]);
   });
 
+  it('normalizes redemption snapshots newest-first by redeemedAt with createdAt fallback', () => {
+    authenticatedState();
+    useStore.getState().loadFamilyData('user1', 'fam1');
+    listener('families/fam1').next(familySnapshot());
+
+    listener('families/fam1/redemptions').next(collectionSnapshot([
+      { id: 'redemption-a', redeemedAt: { toMillis: () => 2_000 }, label: '2 weeks ago' },
+      { id: 'redemption-b', redeemedAt: new Date(3_000), label: 'yesterday' },
+      { id: 'redemption-c', redeemedAt: { toDate: () => new Date(1_000) }, label: '3 weeks ago' },
+      { id: 'redemption-d', createdAt: { seconds: 4, nanoseconds: 0 }, label: 'today' },
+    ]));
+
+    expect(useStore.getState().redemptions.map(redemption => redemption.label)).toEqual([
+      'today',
+      'yesterday',
+      '2 weeks ago',
+      '3 weeks ago',
+    ]);
+  });
+
+  it('orders equal-time redemptions deterministically by id', () => {
+    authenticatedState();
+    useStore.getState().loadFamilyData('user1', 'fam1');
+    listener('families/fam1').next(familySnapshot());
+    const sameTime = { toMillis: () => 1_000 };
+
+    listener('families/fam1/redemptions').next(collectionSnapshot([
+      { id: 'redemption-z', redeemedAt: sameTime },
+      { id: 'redemption-a', redeemedAt: sameTime },
+    ]));
+
+    expect(useStore.getState().redemptions.map(redemption => redemption.id)).toEqual([
+      'redemption-a',
+      'redemption-z',
+    ]);
+  });
+
   it('9. contains an optional bootstrap listener failure without tearing down critical data', () => {
     authenticatedState();
     useStore.getState().loadFamilyData('user1', 'fam1');

@@ -63,6 +63,12 @@ const normalizeHistory = (items: any[]) => items
     return timeDifference || String(left.id).localeCompare(String(right.id));
   });
 
+const normalizeRedemptions = (items: any[]) => [...items].sort((left, right) => {
+  const timeDifference = timestampMillis(right.redeemedAt || right.createdAt)
+    - timestampMillis(left.redeemedAt || left.createdAt);
+  return timeDifference || String(left.id).localeCompare(String(right.id));
+});
+
 const emptyFamilyState = () => ({
   familyData: null,
   familyMembers: [] as any[],
@@ -825,7 +831,7 @@ export const useStore = create<AppState>((set, get) => ({
           subscribePlanned('joinRequests', 'Join requests', snapshot => set({ joinRequests: docs(snapshot) }));
           subscribePlanned('childJoinRequests', 'Child join requests', snapshot => set({ childJoinRequests: docs(snapshot) }));
           subscribePlanned('taskCompletions', 'Task completions', snapshot => set({ taskCompletions: docs(snapshot) }));
-          subscribePlanned('redemptions', 'Redemptions', snapshot => set({ redemptions: docs(snapshot) }));
+          subscribePlanned('redemptions', 'Redemptions', snapshot => set({ redemptions: normalizeRedemptions(docs(snapshot)) }));
           subscribePlanned('walletTransactions', 'Wallet transactions', snapshot => set({ walletTransactions: normalizeHistory(docs(snapshot)) }));
           subscribePlanned('savingsGoals', 'Savings goals', snapshot => {
             const goals = docs(snapshot);
@@ -841,7 +847,7 @@ export const useStore = create<AppState>((set, get) => ({
           subscribePlanned('avatarUnlocks', 'Avatar unlocks', snapshot => set({ avatarUnlocks: docs(snapshot) }));
         } else {
           subscribePlanned('taskCompletions', 'Task completions', snapshot => set({ taskCompletions: docs(snapshot) }));
-          subscribePlanned('redemptions', 'Redemptions', snapshot => set({ redemptions: docs(snapshot) }));
+          subscribePlanned('redemptions', 'Redemptions', snapshot => set({ redemptions: normalizeRedemptions(docs(snapshot)) }));
           subscribePlanned('walletTransactions', 'Wallet transactions', snapshot => set({ walletTransactions: normalizeHistory(docs(snapshot)) }));
           subscribePlanned('savingsGoals', 'Savings goals', snapshot => {
             const goals = docs(snapshot);
