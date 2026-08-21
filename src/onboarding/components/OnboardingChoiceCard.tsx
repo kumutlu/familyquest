@@ -27,17 +27,17 @@ export function OnboardingChoiceCard({
       aria-checked={selected}
       onClick={onSelect}
       className={[
-        'group relative flex min-h-16 w-full items-center gap-3 rounded-2xl border px-4 py-3 text-left',
+        'group relative flex min-h-14 w-full items-center gap-3 rounded-2xl border px-3.5 py-2.5 text-left',
         'transition-[border-color,background-color,box-shadow,transform] duration-200 motion-reduce:transition-none',
         'focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-500 focus-visible:ring-offset-2 dark:focus-visible:ring-offset-slate-900',
         selected
-          ? 'border-primary-500 bg-primary-50 shadow-sm dark:border-indigo-400 dark:bg-indigo-500/15'
-          : 'border-gray-200 bg-white/80 hover:-translate-y-0.5 hover:border-primary-300 hover:shadow-sm dark:border-slate-700 dark:bg-slate-900/70 dark:hover:border-indigo-500',
+          ? 'border-primary-400 bg-primary-50/80 shadow-sm ring-1 ring-primary-400 dark:border-indigo-400 dark:bg-indigo-500/15'
+          : 'border-gray-100 bg-gray-50/65 hover:-translate-y-0.5 hover:border-primary-200 hover:bg-white hover:shadow-sm dark:border-slate-700/70 dark:bg-slate-800/55 dark:hover:border-indigo-500',
         className,
       ].join(' ')}
     >
       {icon ? (
-        <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-primary-100 text-primary-700 dark:bg-indigo-500/20 dark:text-indigo-200">
+        <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-primary-100 text-primary-700 dark:bg-indigo-500/20 dark:text-indigo-200">
           {icon}
         </span>
       ) : null}

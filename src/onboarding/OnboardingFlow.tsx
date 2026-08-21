@@ -28,6 +28,8 @@ import { FirstTask } from './postauth/FirstTask';
 import { Success } from './postauth/Success';
 import { OnboardingVisual } from './components/OnboardingVisual';
 import {
+  ChildJoinScene,
+  FamilyIdentityScene,
   FamilyHomeScene,
   FamilyMembersScene,
   InvitationScene,
@@ -251,11 +253,11 @@ export function OnboardingFlow() {
         case 's1': return <FamilyHomeScene label={t('visuals.welcome')} />;
         case 's2':
         case 's3': return <ProfileScene label={t('visuals.parent')} />;
-        case 's4':
+        case 's4': return <ChildJoinScene label={t('visuals.family')} />;
         case 'p1': return <FamilyMembersScene label={t('visuals.family')} />;
         case 's5':
         case 'p2': return <JourneyScene label={t('visuals.journey')} />;
-        case 's6': return <FamilyHomeScene label={t('visuals.home')} />;
+        case 's6': return <FamilyIdentityScene label={t('visuals.home')} />;
         case 's7': return <InvitationScene label={t('visuals.account')} />;
         case 'p3': return <SuccessScene label={t('visuals.success')} />;
       }
@@ -264,7 +266,12 @@ export function OnboardingFlow() {
   })();
 
   return (
-    <OnboardingShell eyebrow={t('meta.title')} progress={progress} visual={visual}>
+    <OnboardingShell
+      eyebrow={t('meta.title')}
+      progress={progress}
+      visual={visual}
+      compact={draft.step === 's4' || draft.step === 'p1' || draft.step === 'p2'}
+    >
       {renderStep()}
     </OnboardingShell>
   );

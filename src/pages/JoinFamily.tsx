@@ -15,7 +15,7 @@ import {
 } from '../lib/childJoinApi';
 import { PublicAuthShell } from '../onboarding/components/PublicAuthShell';
 import { OnboardingVisual } from '../onboarding/components/OnboardingVisual';
-import { InvitationScene } from '../onboarding/visuals/OnboardingScenes';
+import { ManualJoinScene } from '../onboarding/visuals/OnboardingScenes';
 
 /**
  * Child join entry flow.
@@ -150,7 +150,8 @@ export function JoinFamily() {
 
   return (
     <PublicAuthShell
-      visual={<OnboardingVisual title={t('auth:joinYourFamily')}><InvitationScene label={t('auth:joinYourFamily')} /></OnboardingVisual>}
+      visual={<OnboardingVisual title={t('auth:joinYourFamily')}><ManualJoinScene label={t('auth:joinYourFamily')} /></OnboardingVisual>}
+      mobileVisual={<OnboardingVisual title={t('auth:joinYourFamily')} className="max-h-44"><ManualJoinScene label={t('auth:joinYourFamily')} /></OnboardingVisual>}
       visualTitle={t('auth:joinYourFamily')}
     >
         <div className="rounded-[1.75rem] border border-white/80 bg-white/90 px-5 py-7 shadow-xl backdrop-blur dark:border-slate-700 dark:bg-slate-900/90 sm:px-8">
@@ -225,8 +226,8 @@ export function JoinFamily() {
                 </div>
               )}
 
-              <form className="mt-6 space-y-6" onSubmit={handleSubmit} noValidate>
-                <div>
+              <form className="mt-6 space-y-5" onSubmit={handleSubmit} noValidate>
+                <div className="rounded-2xl border border-indigo-100 bg-indigo-50/70 p-3 dark:border-indigo-500/20 dark:bg-indigo-500/10">
                   <label htmlFor="join-family-code" className="block text-sm font-bold text-primary-700 dark:text-indigo-300">{t('auth:familyCode')}</label>
                   <div className="mt-1">
                     <input
@@ -235,13 +236,13 @@ export function JoinFamily() {
                       autoComplete="off"
                       value={familyCode}
                       onChange={e => setFamilyCode(e.target.value)}
-                      className={inputClass}
+                      className={`${inputClass} text-center text-lg font-black uppercase tracking-[0.2em]`}
                     />
                   </div>
                 </div>
 
                 <div>
-                  <label htmlFor="join-username" className="block text-sm font-medium text-gray-700">{t('auth:username')}</label>
+                  <label htmlFor="join-username" className="block text-sm font-medium text-gray-700 dark:text-slate-300">{t('auth:username')}</label>
                   <div className="mt-1">
                     <input
                       id="join-username"
@@ -255,7 +256,7 @@ export function JoinFamily() {
                 </div>
 
                 <div>
-                  <label htmlFor="join-password" className="block text-sm font-medium text-gray-700">{t('auth:createPassword')}</label>
+                  <label htmlFor="join-password" className="block text-sm font-medium text-gray-700 dark:text-slate-300">{t('auth:createPassword')}</label>
                   <div className="mt-1">
                     <input
                       id="join-password"
@@ -269,7 +270,7 @@ export function JoinFamily() {
                 </div>
 
                 <div>
-                  <label htmlFor="join-confirm-password" className="block text-sm font-medium text-gray-700">{t('auth:confirmPassword')}</label>
+                  <label htmlFor="join-confirm-password" className="block text-sm font-medium text-gray-700 dark:text-slate-300">{t('auth:confirmPassword')}</label>
                   <div className="mt-1">
                     <input
                       id="join-confirm-password"

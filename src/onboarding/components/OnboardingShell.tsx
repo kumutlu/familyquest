@@ -19,7 +19,7 @@ export function OnboardingShell({ children, progress, eyebrow, visual, compact =
   return (
     <div
       data-testid="onboarding-shell"
-      className="relative min-h-dvh overflow-hidden bg-gradient-to-br from-amber-50 via-white to-indigo-50 font-sans text-slate-900 dark:bg-slate-950 dark:from-slate-950 dark:via-slate-950 dark:to-indigo-950 dark:text-slate-100"
+      className="relative min-h-dvh overflow-x-hidden bg-gradient-to-br from-amber-50 via-white to-indigo-50 font-sans text-slate-900 dark:bg-slate-950 dark:from-slate-950 dark:via-slate-950 dark:to-indigo-950 dark:text-slate-100"
     >
       <div aria-hidden="true" className="pointer-events-none absolute -left-32 top-12 h-72 w-72 rounded-full bg-amber-200/35 blur-3xl dark:bg-amber-500/10" />
       <div aria-hidden="true" className="pointer-events-none absolute -right-28 bottom-0 h-80 w-80 rounded-full bg-indigo-300/35 blur-3xl dark:bg-indigo-500/15" />
@@ -40,7 +40,7 @@ export function OnboardingShell({ children, progress, eyebrow, visual, compact =
         </section>
         <main
           data-testid="onboarding-content-region"
-          className="flex w-full flex-1 flex-col justify-end lg:w-[55%] lg:justify-center lg:pl-6"
+          className={`flex w-full flex-1 flex-col ${compact ? 'justify-start' : 'justify-end'} lg:w-[55%] lg:justify-center lg:pl-6`}
         >
           <div className="mx-auto w-full max-w-[500px]">
             {progress}

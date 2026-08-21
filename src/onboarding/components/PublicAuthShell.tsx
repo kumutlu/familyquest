@@ -5,9 +5,10 @@ interface PublicAuthShellProps {
   visual: ReactNode;
   visualTitle: ReactNode;
   visualCopy?: ReactNode;
+  mobileVisual?: ReactNode;
 }
 
-export function PublicAuthShell({ children, visual, visualTitle, visualCopy }: PublicAuthShellProps) {
+export function PublicAuthShell({ children, visual, visualTitle, visualCopy, mobileVisual }: PublicAuthShellProps) {
   return (
     <div
       data-testid="public-auth-shell"
@@ -24,7 +25,10 @@ export function PublicAuthShell({ children, visual, visualTitle, visualCopy }: P
         </div>
       </aside>
       <main className="flex min-h-dvh items-center px-4 py-6 sm:px-6 lg:px-10 lg:py-10">
-        <div className="mx-auto w-full max-w-[500px]">{children}</div>
+        <div className="mx-auto w-full max-w-[500px]">
+          {mobileVisual ? <div data-testid="public-auth-mobile-visual" className="mb-4 max-h-44 overflow-hidden lg:hidden">{mobileVisual}</div> : null}
+          {children}
+        </div>
       </main>
     </div>
   );

@@ -27,5 +27,6 @@ describe('onboarding theme contract', () => {
     );
     expect(scenes).toContain('motion-reduce:animate-none');
     expect(scenes).toContain('motion-safe:animate-');
+    expect(css).toContain('@keyframes onboarding-child-join');
   });
 });

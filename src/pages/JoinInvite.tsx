@@ -19,7 +19,7 @@ import {
 } from '../lib/inviteLink';
 import { PublicAuthShell } from '../onboarding/components/PublicAuthShell';
 import { OnboardingVisual } from '../onboarding/components/OnboardingVisual';
-import { InvitationScene } from '../onboarding/visuals/OnboardingScenes';
+import { CodeInvitationScene } from '../onboarding/visuals/OnboardingScenes';
 
 type Phase = 'validating' | 'invalid' | 'ready' | 'joining' | 'pending';
 
@@ -94,7 +94,7 @@ export function JoinInvite() {
 
   return (
     <PublicAuthShell
-      visual={<OnboardingVisual title={t('family:join.title')}><InvitationScene label={t('family:join.title')} /></OnboardingVisual>}
+      visual={<OnboardingVisual title={t('family:join.title')}><CodeInvitationScene label={t('family:join.title')} /></OnboardingVisual>}
       visualTitle={t('family:join.title')}
       visualCopy={preview?.familyName}
     >

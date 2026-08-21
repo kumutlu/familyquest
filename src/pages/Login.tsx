@@ -172,7 +172,7 @@ export function Login() {
       {/* ------------------------------------------------------------------ */}
       <aside
         aria-label={t('auth:intro.aboutLabel')}
-        className="relative hidden overflow-hidden bg-gradient-to-br from-purple-600 via-primary-600 to-indigo-700 px-6 py-10 text-white lg:flex lg:flex-col lg:justify-center lg:px-16 lg:py-12"
+        className="relative hidden overflow-hidden bg-gradient-to-br from-purple-600 via-primary-600 to-indigo-700 px-6 py-10 text-white dark:from-purple-700 dark:via-indigo-700 dark:to-violet-950 lg:flex lg:flex-col lg:justify-center lg:px-16 lg:py-12"
       >
         {/* Soft glows for depth — restrained, not childish. */}
         <div aria-hidden="true" className="pointer-events-none absolute -left-24 -top-24 h-72 w-72 rounded-full bg-white/20 blur-3xl" />
