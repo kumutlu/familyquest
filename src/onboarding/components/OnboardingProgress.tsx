@@ -20,8 +20,8 @@ export function OnboardingProgress({ current, total, labelKey = 'meta.stepLabel'
   const clampedCurrent = Math.min(Math.max(current, 1), total);
 
   return (
-    <nav aria-label={t(labelKey, { current: clampedCurrent, total })} className="mb-6">
-      <ol className="flex items-center gap-1.5" aria-hidden={false}>
+    <nav aria-label={t(labelKey, { current: clampedCurrent, total })} className="mb-4">
+      <ol className="flex items-center justify-center gap-2 lg:justify-start" aria-hidden={false}>
         {Array.from({ length: total }, (_, index) => {
           const stepNumber = index + 1;
           const isActive = stepNumber === clampedCurrent;
@@ -31,8 +31,12 @@ export function OnboardingProgress({ current, total, labelKey = 'meta.stepLabel'
               key={stepNumber}
               aria-current={isActive ? 'step' : undefined}
               className={[
-                'h-1.5 flex-1 rounded-full transition-colors',
-                isActive ? 'bg-primary-500' : isComplete ? 'bg-primary-200' : 'bg-gray-200',
+                'h-2 rounded-full transition-[width,background-color] duration-200 motion-reduce:transition-none',
+                isActive
+                  ? 'w-8 bg-primary-500 dark:bg-indigo-400'
+                  : isComplete
+                    ? 'w-3 bg-primary-200 dark:bg-indigo-700'
+                    : 'w-3 bg-gray-200 dark:bg-slate-700',
               ].join(' ')}
             />
           );

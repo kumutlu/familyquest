@@ -21,27 +21,27 @@ export function MiniJourney({ childName }: MiniJourneyProps) {
   ];
 
   return (
-    <div className="space-y-3">
+    <div className="space-y-3 sm:grid sm:grid-cols-3 sm:gap-3 sm:space-y-0">
       {steps.map((step, index) => (
         <div
           key={index}
-          className="flex items-center gap-3 rounded-xl bg-gray-50 px-3 py-3 motion-reduce:transition-none motion-safe:transition-all motion-safe:duration-500"
+          className="flex items-center gap-3 rounded-2xl border border-gray-100 bg-gray-50 px-3 py-3 motion-reduce:transition-none motion-safe:transition-all motion-safe:duration-200 dark:border-slate-700 dark:bg-slate-800/70 sm:flex-col sm:items-start"
         >
           <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-primary-100 text-sm font-bold text-primary-700">
             {index + 1}
           </span>
           <div className="min-w-0">
-            <p className="text-sm font-semibold text-gray-800">{step.text}</p>
-            <p className="text-xs text-gray-500">{step.card}</p>
+            <p className="text-sm font-semibold text-gray-800 dark:text-slate-100">{step.text}</p>
+            <p className="text-xs text-gray-500 dark:text-slate-400">{step.card}</p>
           </div>
         </div>
       ))}
 
-      <p className="text-sm font-medium text-gray-700">{t('s5.model', { child })}</p>
+      <p className="text-sm font-medium text-gray-700 dark:text-slate-300 sm:col-span-3">{t('s5.model', { child })}</p>
 
-      <div className="rounded-xl border border-gray-100 bg-white px-3 py-3">
-        <p className="text-sm font-semibold text-gray-800">{t('s5.teaser')}</p>
-        <ul className="mt-1 list-disc list-inside text-sm text-gray-500">
+      <div className="rounded-2xl border border-gray-100 bg-white px-3 py-3 dark:border-slate-700 dark:bg-slate-900 sm:col-span-3">
+        <p className="text-sm font-semibold text-gray-800 dark:text-slate-100">{t('s5.teaser')}</p>
+        <ul className="mt-1 list-inside list-disc text-sm text-gray-500 dark:text-slate-400">
           <li>{t('s5.teaserBullets.allowance')}</li>
           <li>{t('s5.teaserBullets.saving')}</li>
           <li>{t('s5.teaserBullets.rewards')}</li>

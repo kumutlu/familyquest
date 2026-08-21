@@ -388,7 +388,7 @@ describe('Login — product introduction (brand area)', () => {
   it('renders the English brand headline and supporting copy', () => {
     renderLogin();
     expect(
-      screen.getByRole('heading', { name: /small wins\. big habits\./i }),
+      screen.getByRole('heading', { name: /family life, beautifully in sync\./i }),
     ).toBeInTheDocument();
     expect(
       screen.getByText(/queki helps families build better routines/i),
@@ -419,7 +419,7 @@ describe('Login — product introduction (brand area)', () => {
     await act(async () => { await i18n.changeLanguage('tr'); });
     renderLogin();
     expect(
-      screen.getByRole('heading', { name: /küçük başarılar\. büyük alışkanlıklar\./i }),
+      screen.getByRole('heading', { name: /aile hayatı, uyum içinde\./i }),
     ).toBeInTheDocument();
   });
 

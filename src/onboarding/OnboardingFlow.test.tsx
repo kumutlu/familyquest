@@ -230,6 +230,15 @@ describe('OnboardingFlow — Step 1 (Refined Queki front door)', () => {
 
     await waitFor(() => expect(navigate).toHaveBeenCalledWith('/login'));
   });
+
+  it('offers the existing manual join-family route as a secondary welcome action', async () => {
+    const user = userEvent.setup();
+    renderFlow();
+
+    await user.click(screen.getByRole('button', { name: /join a family/i }));
+
+    await waitFor(() => expect(navigate).toHaveBeenCalledWith('/join-family'));
+  });
 });
 
 describe('OnboardingFlow — Sign out (S2 control)', () => {

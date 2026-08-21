@@ -24,7 +24,7 @@ export function Step2ParentName({ draft, patch, onNext, onSignOut }: Step2Props)
 
   return (
     <OnboardingCard>
-      <h1 className="text-2xl font-extrabold text-gray-900">{t('s2.title')}</h1>
+      <h1 className="text-2xl font-extrabold text-gray-900 dark:text-slate-50 sm:text-3xl">{t('s2.title')}</h1>
       <form
         className="mt-5 space-y-4"
         onSubmit={(event) => {
@@ -33,7 +33,7 @@ export function Step2ParentName({ draft, patch, onNext, onSignOut }: Step2Props)
         }}
       >
         <div>
-          <label htmlFor="parent-first-name" className="block text-sm font-medium text-gray-700">
+          <label htmlFor="parent-first-name" className="block text-sm font-semibold text-gray-700 dark:text-slate-300">
             {t('s2.label')}
           </label>
           <input
@@ -45,7 +45,7 @@ export function Step2ParentName({ draft, patch, onNext, onSignOut }: Step2Props)
             value={value}
             onChange={(event) => patch({ parentFirstName: event.target.value })}
             placeholder={t('s2.placeholder')}
-            className="mt-1 block w-full px-3 py-2.5 border border-gray-300 rounded-xl focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-500 focus-visible:ring-offset-2"
+            className="mt-2 block min-h-12 w-full rounded-2xl border border-gray-300 bg-white px-4 py-3 text-gray-900 placeholder:text-gray-400 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-500 focus-visible:ring-offset-2 dark:border-slate-700 dark:bg-slate-950/70 dark:text-slate-100 dark:placeholder:text-slate-500 dark:focus-visible:ring-offset-slate-900"
           />
         </div>
         <div className="flex flex-col gap-3 min-[400px]:flex-row min-[400px]:items-center">
@@ -57,7 +57,7 @@ export function Step2ParentName({ draft, patch, onNext, onSignOut }: Step2Props)
       <button
         type="button"
         onClick={onSignOut}
-        className="mt-4 w-full text-center text-sm text-gray-400 hover:text-gray-600"
+        className="mt-4 min-h-11 w-full text-center text-sm text-gray-400 hover:text-gray-600 dark:text-slate-500 dark:hover:text-slate-300"
       >
         {t('s2.signOut')}
       </button>

@@ -5,6 +5,9 @@ import { Button } from '../components/ui/Button';
 import { signUp, signInWithGoogle } from '../lib/api';
 import { useStore } from '../store/useStore';
 import { postAuthDestination } from '../lib/inviteLink';
+import { PublicAuthShell } from '../onboarding/components/PublicAuthShell';
+import { OnboardingVisual } from '../onboarding/components/OnboardingVisual';
+import { FamilyHomeScene } from '../onboarding/visuals/OnboardingScenes';
 
 export function Signup() {
   const { t } = useTranslation(['auth', 'common']);
@@ -63,14 +66,17 @@ export function Signup() {
   };
 
   return (
-    <div className="min-h-screen bg-gray-50 flex flex-col justify-center py-12 sm:px-6 lg:px-8">
-      <div className="sm:mx-auto sm:w-full sm:max-w-md text-center">
-        <h2 className="mt-6 text-3xl font-extrabold text-gray-900">{t('auth:createParentAccount')}</h2>
-        <p className="mt-2 text-sm text-gray-600">{t('auth:createParentSubtitle')}</p>
+    <PublicAuthShell
+      visual={<OnboardingVisual title={t('auth:createParentAccount')}><FamilyHomeScene label={t('auth:createParentAccount')} /></OnboardingVisual>}
+      visualTitle={t('auth:createParentAccount')}
+    >
+      <div className="text-center lg:text-left">
+        <h1 className="text-3xl font-extrabold text-gray-900 dark:text-slate-50">{t('auth:createParentAccount')}</h1>
+        <p className="mt-2 text-sm text-gray-600 dark:text-slate-300">{t('auth:createParentSubtitle')}</p>
       </div>
 
-      <div className="mt-8 sm:mx-auto sm:w-full sm:max-w-md">
-        <div className="bg-white py-8 px-4 shadow sm:rounded-lg sm:px-10">
+      <div className="mt-6">
+        <div className="rounded-[1.75rem] border border-white/80 bg-white/90 px-5 py-7 shadow-xl backdrop-blur dark:border-slate-700 dark:bg-slate-900/90 sm:px-8">
           <form className="space-y-6" onSubmit={handleSignup}>
             <div>
               <label className="block text-sm font-medium text-gray-700">{t('auth:displayName')}</label>
@@ -133,6 +139,6 @@ export function Signup() {
           </div>
         </div>
       </div>
-    </div>
+    </PublicAuthShell>
   );
 }

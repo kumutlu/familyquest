@@ -30,7 +30,7 @@ export function Step6FamilyName({ draft, patch, onNext, onBack }: Step6Props) {
 
   return (
     <OnboardingCard>
-      <h1 className="text-2xl font-extrabold text-gray-900">{t('s6.title')}</h1>
+      <h1 className="text-2xl font-extrabold text-gray-900 dark:text-slate-50 sm:text-3xl">{t('s6.title')}</h1>
       <form
         className="mt-5 space-y-4"
         onSubmit={(event) => {
@@ -39,7 +39,7 @@ export function Step6FamilyName({ draft, patch, onNext, onBack }: Step6Props) {
         }}
       >
         <div>
-          <label htmlFor="family-name" className="block text-sm font-medium text-gray-700">
+          <label htmlFor="family-name" className="block text-sm font-semibold text-gray-700 dark:text-slate-300">
             {t('s6.label')}
           </label>
           <input
@@ -50,14 +50,14 @@ export function Step6FamilyName({ draft, patch, onNext, onBack }: Step6Props) {
             value={value}
             onChange={(event) => patch({ familyName: event.target.value })}
             placeholder={t('s6.placeholder')}
-            className="mt-1 block w-full px-3 py-2.5 border border-gray-300 rounded-xl focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-500 focus-visible:ring-offset-2"
+            className="mt-2 block min-h-12 w-full rounded-2xl border border-gray-300 bg-white px-4 py-3 text-gray-900 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-500 focus-visible:ring-offset-2 dark:border-slate-700 dark:bg-slate-950/70 dark:text-slate-100 dark:focus-visible:ring-offset-slate-900"
           />
         </div>
         {suggestion ? (
           <button
             type="button"
             onClick={() => patch({ familyName: `${draft.parentFirstName.trim()}'s Family` })}
-            className="inline-flex items-center rounded-full border border-primary-200 bg-primary-50 px-3 py-1.5 text-sm font-semibold text-primary-700 hover:bg-primary-100"
+            className="inline-flex min-h-11 items-center rounded-full border border-primary-200 bg-primary-50 px-4 py-2 text-sm font-semibold text-primary-700 hover:bg-primary-100 dark:border-indigo-500/30 dark:bg-indigo-500/15 dark:text-indigo-200"
           >
             {suggestion}
           </button>

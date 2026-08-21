@@ -13,6 +13,9 @@ import {
   type ChildJoinRequestHandle,
   type ChildJoinRequestStatus,
 } from '../lib/childJoinApi';
+import { PublicAuthShell } from '../onboarding/components/PublicAuthShell';
+import { OnboardingVisual } from '../onboarding/components/OnboardingVisual';
+import { InvitationScene } from '../onboarding/visuals/OnboardingScenes';
 
 /**
  * Child join entry flow.
@@ -143,18 +146,20 @@ export function JoinFamily() {
   };
 
   const inputClass =
-    'appearance-none block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm placeholder-gray-400 focus:outline-none focus:ring-primary-500 focus:border-primary-500 sm:text-sm';
+    'appearance-none block min-h-12 w-full rounded-2xl border border-gray-300 bg-white px-4 py-3 text-gray-900 shadow-sm placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-primary-500 dark:border-slate-700 dark:bg-slate-950/70 dark:text-slate-100 dark:placeholder-slate-500 sm:text-sm';
 
   return (
-    <div className="min-h-screen bg-gray-50 flex flex-col justify-center py-12 sm:px-6 lg:px-8">
-      <div className="mt-8 sm:mx-auto sm:w-full sm:max-w-md">
-        <div className="bg-white py-8 px-4 shadow sm:rounded-lg sm:px-10">
+    <PublicAuthShell
+      visual={<OnboardingVisual title={t('auth:joinYourFamily')}><InvitationScene label={t('auth:joinYourFamily')} /></OnboardingVisual>}
+      visualTitle={t('auth:joinYourFamily')}
+    >
+        <div className="rounded-[1.75rem] border border-white/80 bg-white/90 px-5 py-7 shadow-xl backdrop-blur dark:border-slate-700 dark:bg-slate-900/90 sm:px-8">
           {handle && status ? (
             <div>
-              <h2 className="text-2xl font-extrabold text-gray-900">
+              <h1 className="text-2xl font-extrabold text-gray-900 dark:text-slate-50">
                 {t('auth:childJoin.requestSent')}
-              </h2>
-              <p className="mt-3 text-sm text-gray-600">{statusBody[status]}</p>
+              </h1>
+              <p className="mt-3 text-sm text-gray-600 dark:text-slate-300">{statusBody[status]}</p>
 
               {error && (
                 <div role="alert" className="mt-4 text-red-500 text-sm">
@@ -162,14 +167,14 @@ export function JoinFamily() {
                 </div>
               )}
 
-              <dl className="mt-6 space-y-3 text-sm">
-                <div className="flex justify-between">
-                  <dt className="text-gray-500">{t('auth:childJoin.yourUsername')}</dt>
-                  <dd className="font-medium text-gray-900">{handle.username}</dd>
+              <dl className="mt-6 space-y-3 rounded-2xl bg-gray-50 p-4 text-sm dark:bg-slate-800/70">
+                <div className="flex justify-between gap-4">
+                  <dt className="text-gray-500 dark:text-slate-400">{t('auth:childJoin.yourUsername')}</dt>
+                  <dd className="font-medium text-gray-900 dark:text-slate-100">{handle.username}</dd>
                 </div>
                 <div className="flex justify-between">
-                  <dt className="text-gray-500">{t('auth:childJoin.statusLabel')}</dt>
-                  <dd className="font-medium text-gray-900">
+                  <dt className="text-gray-500 dark:text-slate-400">{t('auth:childJoin.statusLabel')}</dt>
+                  <dd className="rounded-full bg-white px-2 py-1 font-medium text-gray-900 dark:bg-slate-900 dark:text-slate-100">
                     {t(`auth:childJoin.status.${status}`)}
                   </dd>
                 </div>
@@ -211,8 +216,8 @@ export function JoinFamily() {
             </div>
           ) : (
             <div>
-              <h2 className="text-2xl font-extrabold text-gray-900">{t('auth:joinYourFamily')}</h2>
-              <p className="mt-2 text-sm text-gray-600">{t('auth:joinFamilyDescription')}</p>
+              <h1 className="text-2xl font-extrabold text-gray-900 dark:text-slate-50 sm:text-3xl">{t('auth:joinYourFamily')}</h1>
+              <p className="mt-2 text-sm text-gray-600 dark:text-slate-300">{t('auth:joinFamilyDescription')}</p>
 
               {error && (
                 <div role="alert" className="mt-4 text-red-500 text-sm">
@@ -222,7 +227,7 @@ export function JoinFamily() {
 
               <form className="mt-6 space-y-6" onSubmit={handleSubmit} noValidate>
                 <div>
-                  <label htmlFor="join-family-code" className="block text-sm font-medium text-gray-700">{t('auth:familyCode')}</label>
+                  <label htmlFor="join-family-code" className="block text-sm font-bold text-primary-700 dark:text-indigo-300">{t('auth:familyCode')}</label>
                   <div className="mt-1">
                     <input
                       id="join-family-code"
@@ -290,7 +295,6 @@ export function JoinFamily() {
             </div>
           )}
         </div>
-      </div>
-    </div>
+    </PublicAuthShell>
   );
 }

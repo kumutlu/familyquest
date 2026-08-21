@@ -17,6 +17,9 @@ import {
   rememberPendingInvite,
   type InvitationErrorKey,
 } from '../lib/inviteLink';
+import { PublicAuthShell } from '../onboarding/components/PublicAuthShell';
+import { OnboardingVisual } from '../onboarding/components/OnboardingVisual';
+import { InvitationScene } from '../onboarding/visuals/OnboardingScenes';
 
 type Phase = 'validating' | 'invalid' | 'ready' | 'joining' | 'pending';
 
@@ -90,9 +93,13 @@ export function JoinInvite() {
   const returnTo = code ? buildJoinUrl(code, '') : '/join';
 
   return (
-    <div className="mx-auto flex min-h-screen max-w-md flex-col justify-center px-4 py-10">
-      <div className="rounded-2xl border border-gray-200 bg-white p-6 shadow-sm">
-        <h1 className="text-xl font-bold text-gray-900">{t('family:join.title')}</h1>
+    <PublicAuthShell
+      visual={<OnboardingVisual title={t('family:join.title')}><InvitationScene label={t('family:join.title')} /></OnboardingVisual>}
+      visualTitle={t('family:join.title')}
+      visualCopy={preview?.familyName}
+    >
+      <div className="rounded-[1.75rem] border border-white/80 bg-white/90 p-6 shadow-xl backdrop-blur dark:border-slate-700 dark:bg-slate-900/90 sm:p-8">
+        <h1 className="text-2xl font-extrabold text-gray-900 dark:text-slate-50">{t('family:join.title')}</h1>
 
         {phase === 'validating' && (
           <p className="mt-4 text-sm text-gray-600" role="status">{t('family:join.validating')}</p>
@@ -114,12 +121,12 @@ export function JoinInvite() {
 
         {(phase === 'ready' || phase === 'joining') && preview && (
           <>
-            <p className="mt-4 text-base text-gray-800">
+            <p className="mt-5 rounded-2xl border border-indigo-100 bg-indigo-50 p-4 text-base font-semibold text-gray-800 dark:border-indigo-500/20 dark:bg-indigo-500/10 dark:text-slate-100">
               {preview.intendedRole === 'parent'
                 ? t('family:join.confirmParent', { family: preview.familyName })
                 : t('family:join.confirmChild', { family: preview.familyName })}
             </p>
-            <p className="mt-1 text-sm text-gray-500">
+            <p className="mt-2 text-sm text-gray-500 dark:text-slate-400">
               {preview.intendedRole === 'parent'
                 ? t('family:join.roleParent')
                 : t('family:join.roleChild')}
@@ -167,7 +174,7 @@ export function JoinInvite() {
           </>
         )}
       </div>
-    </div>
+    </PublicAuthShell>
   );
 }
 

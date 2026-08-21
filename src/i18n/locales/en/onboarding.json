@@ -10,6 +10,7 @@
     "subtitle": "Queki turns everyday responsibilities into progress your child can see.",
     "weeklySummary": "This week — {{count}} tasks done · {{points}} pts earned · {{saved}} saved",
     "cta": "Set up your family",
+    "join": "Join a family",
     "secondary": "I already have an account"
   },
   "s2": {
@@ -130,6 +131,16 @@
     "retry": "Retry",
     "back": "Back",
     "startOver": "Start over"
+  },
+  "visuals": {
+    "region": "Queki onboarding illustration",
+    "welcome": "A warm family home",
+    "parent": "Your Queki profile",
+    "family": "Your family coming together",
+    "journey": "Task to approval, points and reward",
+    "home": "A home for your family",
+    "account": "Your family invitation and account",
+    "success": "Your family setup is complete"
   },
   "loading": {
     "resuming": "Resuming your setup…"

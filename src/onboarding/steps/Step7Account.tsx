@@ -35,17 +35,17 @@ export function Step7Account({ draft, onGoogle, onEmail, authError, onStartOver,
 
   return (
     <OnboardingCard>
-      <h1 className="text-2xl font-extrabold text-gray-900">{t('s7.title')}</h1>
+      <h1 className="text-2xl font-extrabold text-gray-900 dark:text-slate-50 sm:text-3xl">{t('s7.title')}</h1>
 
-      <div className="mt-4 rounded-xl bg-gray-50 p-4 space-y-1 text-sm">
-        <p className="font-semibold text-gray-800">
+      <div className="mt-4 space-y-2 rounded-2xl border border-indigo-100 bg-gradient-to-br from-indigo-50 to-amber-50 p-4 text-sm dark:border-indigo-500/20 dark:from-indigo-500/10 dark:to-amber-500/5">
+        <p className="font-semibold text-gray-800 dark:text-slate-100">
           {t('s7.summaryParent', { parent, relationship: relationshipLabel })}
         </p>
-        <p className="text-gray-600">{t('s7.summaryChild', { child })}</p>
-        <p className="text-gray-600">{t('s7.summaryFamily', { family })}</p>
+        <p className="text-gray-600 dark:text-slate-300">{t('s7.summaryChild', { child })}</p>
+        <p className="text-gray-600 dark:text-slate-300">{t('s7.summaryFamily', { family })}</p>
       </div>
 
-      <p className="mt-4 text-sm text-gray-600">{t('s7.body')}</p>
+      <p className="mt-4 text-sm text-gray-600 dark:text-slate-300">{t('s7.body')}</p>
 
       <div className="mt-5 space-y-3">
         {/* Only the providers the app actually implements: Google + Email.

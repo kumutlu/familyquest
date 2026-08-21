@@ -164,7 +164,7 @@ export function Login() {
   ];
 
   return (
-    <div className="min-h-screen bg-gradient-to-b from-purple-50/70 via-white to-white lg:grid lg:grid-cols-2 lg:bg-gray-50">
+    <div data-testid="public-auth-shell" className="min-h-dvh bg-gradient-to-br from-amber-50 via-white to-indigo-50 dark:from-slate-950 dark:via-slate-950 dark:to-indigo-950 lg:grid lg:grid-cols-[45%_55%]">
       {/* ------------------------------------------------------------------ */}
       {/* Left: brand area (desktop only). A deliberate, premium composition   */}
       {/* that makes the page feel intentionally designed rather than a form   */}
@@ -235,7 +235,7 @@ export function Login() {
       {/* ------------------------------------------------------------------ */}
       {/* Right: authentication card (logic unchanged).                      */}
       {/* ------------------------------------------------------------------ */}
-      <main className="flex flex-col justify-center px-4 py-10 sm:px-6 lg:px-8">
+      <main className="flex flex-col justify-center px-4 py-8 sm:px-6 lg:px-10">
         {/* Compact brand header on mobile (the left panel is hidden). Text
             wordmark only — the single logo <img> instance lives in the desktop
             brand area to preserve the fallback-contract (exactly one logo). */}
@@ -251,7 +251,7 @@ export function Login() {
             <p className="mt-2 text-sm text-gray-500">{t('auth:welcomeBackSubtitle')}</p>
           </div>
 
-          <div className="rounded-2xl border border-gray-100 bg-white p-6 shadow-xl sm:p-8">
+          <div className="rounded-[1.75rem] border border-white/80 bg-white/90 p-6 shadow-xl backdrop-blur dark:border-slate-700 dark:bg-slate-900/90 sm:p-8">
             {/* Tab switcher */}
             <div role="tablist" aria-label={t('auth:chooseSignInMethod')} className="mb-6 flex border-b border-gray-200">
               <button

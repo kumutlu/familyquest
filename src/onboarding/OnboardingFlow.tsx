@@ -26,16 +26,25 @@ import { Step7Account } from './steps/Step7Account';
 import { FamilyComposition } from './postauth/FamilyComposition';
 import { FirstTask } from './postauth/FirstTask';
 import { Success } from './postauth/Success';
+import { OnboardingVisual } from './components/OnboardingVisual';
+import {
+  FamilyHomeScene,
+  FamilyMembersScene,
+  InvitationScene,
+  JourneyScene,
+  ProfileScene,
+  SuccessScene,
+} from './visuals/OnboardingScenes';
 
 const GOOGLE_CANCELLED_MESSAGE = 'Google sign-in could not be completed. Please try again.';
 
 function BoundedLoading() {
   const { t } = useTranslation('onboarding');
   return (
-    <div className="light min-h-dvh flex items-center justify-center bg-gradient-to-b from-amber-50 to-white">
+    <div className="flex min-h-dvh items-center justify-center bg-gradient-to-b from-amber-50 to-white text-slate-900 dark:from-slate-950 dark:to-indigo-950 dark:text-slate-100">
       <div className="text-center" role="status" aria-live="polite">
         <div className="mx-auto h-8 w-8 animate-spin rounded-full border-2 border-primary-200 border-t-primary-500" />
-        <p className="mt-3 text-sm text-gray-500">{t('loading.resuming')}</p>
+        <p className="mt-3 text-sm text-gray-500 dark:text-slate-400">{t('loading.resuming')}</p>
       </div>
     </div>
   );
@@ -201,7 +210,7 @@ export function OnboardingFlow() {
   const renderStep = () => {
     switch (draft.step) {
       case 's1':
-        return <Step1ValueProposition onNext={goNext} onLogin={() => navigate('/login')} />;
+        return <Step1ValueProposition onNext={goNext} onLogin={() => navigate('/login')} onJoin={() => navigate('/join-family')} />;
       case 's2':
         return (
           <Step2ParentName draft={draft} patch={patch} onNext={goNext} onSignOut={handleSignOut} />
@@ -236,8 +245,26 @@ export function OnboardingFlow() {
     }
   };
 
+  const visual = (() => {
+    const scene = (() => {
+      switch (draft.step) {
+        case 's1': return <FamilyHomeScene label={t('visuals.welcome')} />;
+        case 's2':
+        case 's3': return <ProfileScene label={t('visuals.parent')} />;
+        case 's4':
+        case 'p1': return <FamilyMembersScene label={t('visuals.family')} />;
+        case 's5':
+        case 'p2': return <JourneyScene label={t('visuals.journey')} />;
+        case 's6': return <FamilyHomeScene label={t('visuals.home')} />;
+        case 's7': return <InvitationScene label={t('visuals.account')} />;
+        case 'p3': return <SuccessScene label={t('visuals.success')} />;
+      }
+    })();
+    return <OnboardingVisual title={t('visuals.region')}>{scene}</OnboardingVisual>;
+  })();
+
   return (
-    <OnboardingShell eyebrow={t('meta.title')} progress={progress}>
+    <OnboardingShell eyebrow={t('meta.title')} progress={progress} visual={visual}>
       {renderStep()}
     </OnboardingShell>
   );

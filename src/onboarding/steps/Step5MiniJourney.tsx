@@ -14,7 +14,7 @@ export function Step5MiniJourney({ draft, onNext, onBack }: Step5Props) {
   const { t } = useTranslation('onboarding');
   return (
     <OnboardingCard>
-      <h1 className="text-2xl font-extrabold text-gray-900">{t('s5.title')}</h1>
+      <h1 className="text-2xl font-extrabold text-gray-900 dark:text-slate-50 sm:text-3xl">{t('s5.title')}</h1>
       <div className="mt-4">
         <MiniJourney childName={draft.childFirstName} />
       </div>

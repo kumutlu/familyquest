@@ -6,6 +6,8 @@ import { OnboardingError } from '../components/OnboardingError';
 import { ensureFirstTask, type SetupDeps } from '../lib/onboardingSetup';
 import { classifyOnboardingError, withBoundedTimeout, SETUP_WAIT_MS } from '../lib/onboardingErrors';
 import type { OnboardingDraft } from '../lib/onboardingDraft';
+import { BookOpen, BrushCleaning, HandHeart, PencilLine } from 'lucide-react';
+import { OnboardingChoiceCard } from '../components/OnboardingChoiceCard';
 
 interface FirstTaskProps {
   draft: OnboardingDraft;
@@ -26,6 +28,13 @@ const TEMPLATES: TaskTemplate[] = [
   { key: 'read', title: 'Read for 20 minutes', points: 15 },
   { key: 'help', title: 'Help tidy up', points: 10 },
 ];
+
+const TEMPLATE_ICONS = {
+  tidy: BrushCleaning,
+  read: BookOpen,
+  help: HandHeart,
+  custom: PencilLine,
+};
 
 export function FirstTask({ draft, patch, goNext, goBack, deps }: FirstTaskProps) {
   const { t } = useTranslation('onboarding');
@@ -92,50 +101,35 @@ export function FirstTask({ draft, patch, goNext, goBack, deps }: FirstTaskProps
 
   return (
     <OnboardingCard>
-      <h1 className="text-2xl font-extrabold text-gray-900">{t('p2.title', { child: childName })}</h1>
-      <p className="mt-2 text-base text-gray-600">{t('p2.subtitle')}</p>
+      <h1 className="text-2xl font-extrabold text-gray-900 dark:text-slate-50 sm:text-3xl">{t('p2.title', { child: childName })}</h1>
+      <p className="mt-2 text-base text-gray-600 dark:text-slate-300">{t('p2.subtitle')}</p>
 
       <div role="radiogroup" aria-label={t('p2.title', { child: childName })} className="mt-5 space-y-2">
         {TEMPLATES.map(tmpl => (
-          <button
+          <OnboardingChoiceCard
             key={tmpl.key}
-            type="button"
-            role="radio"
-            aria-checked={selected === tmpl.key}
-            onClick={() => {
+            label={t(`p2.templates.${tmpl.key}`)}
+            icon={(() => { const Icon = TEMPLATE_ICONS[tmpl.key]; return <Icon className="h-5 w-5" />; })()}
+            meta={`+${tmpl.points}`}
+            selected={selected === tmpl.key}
+            onSelect={() => {
               setSelected(tmpl.key);
               setCustomTitle('');
             }}
-            className={[
-              'w-full min-h-[44px] rounded-xl border px-4 py-3 text-left text-base font-semibold transition-colors',
-              selected === tmpl.key
-                ? 'border-primary-500 bg-primary-50 text-primary-700'
-                : 'border-gray-200 bg-white text-gray-700 hover:border-primary-300',
-            ].join(' ')}
-          >
-            {t(`p2.templates.${tmpl.key}`)}
-          </button>
+          />
         ))}
-        <button
-          type="button"
-          role="radio"
-          aria-checked={selected === 'custom'}
-          onClick={() => setSelected('custom')}
-          className={[
-            'w-full min-h-[44px] rounded-xl border px-4 py-3 text-left text-base font-semibold transition-colors',
-            selected === 'custom'
-              ? 'border-primary-500 bg-primary-50 text-primary-700'
-              : 'border-gray-200 bg-white text-gray-700 hover:border-primary-300',
-          ].join(' ')}
-        >
-          {t('p2.templates.custom')}
-        </button>
+        <OnboardingChoiceCard
+          label={t('p2.templates.custom')}
+          icon={<PencilLine className="h-5 w-5" />}
+          selected={selected === 'custom'}
+          onSelect={() => setSelected('custom')}
+        />
       </div>
 
       {selected === 'custom' ? (
         <div className="mt-3 space-y-3">
           <div>
-            <label htmlFor="custom-task-title" className="block text-sm font-medium text-gray-700">
+            <label htmlFor="custom-task-title" className="block text-sm font-medium text-gray-700 dark:text-slate-300">
               {t('p2.customLabel')}
             </label>
             <input
@@ -143,11 +137,11 @@ export function FirstTask({ draft, patch, goNext, goBack, deps }: FirstTaskProps
               type="text"
               value={customTitle}
               onChange={(event) => setCustomTitle(event.target.value)}
-              className="mt-1 block w-full px-3 py-2.5 border border-gray-300 rounded-xl focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-500"
+              className="mt-1 block min-h-12 w-full rounded-xl border border-gray-300 bg-white px-3 py-2.5 text-gray-900 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-500 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-100"
             />
           </div>
           <div>
-            <label htmlFor="custom-task-points" className="block text-sm font-medium text-gray-700">
+            <label htmlFor="custom-task-points" className="block text-sm font-medium text-gray-700 dark:text-slate-300">
               {t('p2.customPointsLabel')}
             </label>
             <input
@@ -155,7 +149,7 @@ export function FirstTask({ draft, patch, goNext, goBack, deps }: FirstTaskProps
               type="number"
               defaultValue={10}
               min={1}
-              className="mt-1 block w-full px-3 py-2.5 border border-gray-300 rounded-xl focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-500"
+              className="mt-1 block min-h-12 w-full rounded-xl border border-gray-300 bg-white px-3 py-2.5 text-gray-900 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-500 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-100"
             />
           </div>
         </div>

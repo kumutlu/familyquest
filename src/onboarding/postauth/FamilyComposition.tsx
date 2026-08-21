@@ -196,9 +196,11 @@ export function FamilyComposition({ draft, patch, goNext, deps }: FamilyComposit
   if (showLoading) {
     return (
       <OnboardingCard>
-        <div className="text-center py-6" role="status" aria-live="polite">
-          <div className="mx-auto h-8 w-8 animate-spin rounded-full border-2 border-primary-200 border-t-primary-500" />
-          <p className="mt-3 text-sm text-gray-500">{t('p1.settingUp')}</p>
+        <div className="py-8 text-center" role="status" aria-live="polite">
+          <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-[1.5rem] bg-primary-50 dark:bg-indigo-500/15">
+            <div className="h-8 w-8 animate-spin rounded-full border-2 border-primary-200 border-t-primary-500 motion-reduce:animate-none" />
+          </div>
+          <p className="mt-4 text-sm font-semibold text-gray-500 dark:text-slate-400">{t('p1.settingUp')}</p>
         </div>
       </OnboardingCard>
     );
@@ -206,20 +208,20 @@ export function FamilyComposition({ draft, patch, goNext, deps }: FamilyComposit
 
   return (
     <OnboardingCard>
-      <h1 className="text-2xl font-extrabold text-gray-900">{t('p1.title')}</h1>
+      <h1 className="text-2xl font-extrabold text-gray-900 dark:text-slate-50 sm:text-3xl">{t('p1.title')}</h1>
 
-      <h2 className="mt-4 text-sm font-semibold text-gray-500">{t('p1.membersHeading')}</h2>
+      <h2 className="mt-5 text-sm font-semibold uppercase tracking-wide text-gray-500 dark:text-slate-400">{t('p1.membersHeading')}</h2>
       <ul className="mt-2 space-y-2" aria-label={t('p1.membersHeading')}>
         {members.map(member => (
           <li
             key={member.id}
-            className="flex items-center gap-3 rounded-xl bg-gray-50 px-3 py-2.5"
+            className="flex items-center gap-3 rounded-2xl border border-gray-100 bg-gray-50/80 px-3 py-3 dark:border-slate-700 dark:bg-slate-800/70"
           >
             <span className="flex h-8 w-8 items-center justify-center rounded-full bg-primary-100 text-sm font-bold text-primary-700">
               {member.name.charAt(0).toUpperCase()}
             </span>
-            <span className="text-sm font-semibold text-gray-800">{member.name}</span>
-            <span className="ml-auto text-xs text-gray-400">
+            <span className="text-sm font-semibold text-gray-800 dark:text-slate-100">{member.name}</span>
+            <span className="ml-auto rounded-full bg-white px-2.5 py-1 text-xs font-medium text-gray-500 dark:bg-slate-900 dark:text-slate-400">
               {member.role === 'child' ? t('p1.roleChild') : t('p1.roleParent')}
             </span>
           </li>
@@ -235,7 +237,7 @@ export function FamilyComposition({ draft, patch, goNext, deps }: FamilyComposit
               onChange={(event) => setNewChildName(event.target.value)}
               placeholder={t('s4.placeholder')}
               aria-label={t('s4.label')}
-              className="flex-1 px-3 py-2 border border-gray-300 rounded-xl focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-500"
+              className="min-h-11 flex-1 rounded-xl border border-gray-300 bg-white px-3 py-2 text-gray-900 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-500 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-100"
             />
             <Button type="submit" disabled={!newChildName.trim()}>
               {t('p1.addChild')}

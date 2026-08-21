@@ -10,7 +10,8 @@ export function OnboardingCard({ children, className }: OnboardingCardProps) {
   return (
     <div
       className={[
-        'bg-white rounded-2xl shadow-sm border border-gray-100 p-6 sm:p-8',
+        'rounded-[1.75rem] border border-white/80 bg-white/90 p-6 shadow-[0_24px_70px_-38px_rgba(15,23,42,0.45)] backdrop-blur-sm sm:p-8',
+        'dark:border-slate-700/80 dark:bg-slate-900/90 dark:shadow-[0_24px_70px_-38px_rgba(0,0,0,0.8)]',
         className ?? '',
       ].join(' ')}
     >

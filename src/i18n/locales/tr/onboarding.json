@@ -10,6 +10,7 @@
     "subtitle": "Queki, günlük sorumlulukları çocuğunuzun görebileceği ilerlemeye dönüştürür.",
     "weeklySummary": "Bu hafta — {{count}} görev tamamlandı · {{points}} puan kazanıldı · {{saved}} tasarruf",
     "cta": "Ailenizi kurun",
+    "join": "Bir aileye katıl",
     "secondary": "Zaten hesabım var"
   },
   "s2": {
@@ -130,6 +131,16 @@
     "retry": "Tekrar dene",
     "back": "Geri",
     "startOver": "Baştan başla"
+  },
+  "visuals": {
+    "region": "Queki başlangıç illüstrasyonu",
+    "welcome": "Sıcak bir aile yuvası",
+    "parent": "Queki profiliniz",
+    "family": "Aileniz bir araya geliyor",
+    "journey": "Görevden onaya, puana ve ödüle",
+    "home": "Aileniz için bir yuva",
+    "account": "Aile davetiniz ve hesabınız",
+    "success": "Aile kurulumunuz tamamlandı"
   },
   "loading": {
     "resuming": "Kurulumunuz sürdürülüyor…"

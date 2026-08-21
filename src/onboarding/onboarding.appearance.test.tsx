@@ -103,34 +103,30 @@ afterEach(() => {
   });
 });
 
-describe('Onboarding appearance — always renders Light', () => {
-  it('renders the onboarding root with the light override when <html> is dark (OS dark)', () => {
+describe('Onboarding appearance — follows the resolved app theme', () => {
+  it('renders dark-compatible surfaces when <html> is dark (OS dark)', () => {
     // Simulate an OS/browser that prefers dark (fresh private/incognito context).
     document.documentElement.classList.add('dark');
     document.documentElement.style.colorScheme = 'dark';
 
     const { container } = renderFlow();
-    const root = container.querySelector('.light');
-    expect(root, 'onboarding root must carry the light override class even when <html> is dark').toBeTruthy();
-    expect(root!.classList.contains('dark')).toBe(false);
+    const root = container.querySelector('[data-testid="onboarding-shell"]');
+    expect(root).toHaveClass('dark:bg-slate-950');
+    expect(container.querySelector('.light')).toBeNull();
   });
 
-  it('renders the onboarding root with the light override for a stale persisted dark appearance', () => {
+  it('does not force a light subtree for a persisted dark appearance', () => {
     // Simulate a stale persisted dark preference from a previous authenticated session.
     localStorage.setItem('queki:appearance', 'dark');
     document.documentElement.classList.add('dark');
     document.documentElement.style.colorScheme = 'dark';
 
     const { container } = renderFlow();
-    const root = container.querySelector('.light');
-    expect(
-      root,
-      'onboarding root must carry the light override class even with a stale persisted dark preference',
-    ).toBeTruthy();
-    expect(root!.classList.contains('dark')).toBe(false);
+    expect(container.querySelector('[data-testid="onboarding-shell"]')).toBeTruthy();
+    expect(container.querySelector('.light')).toBeNull();
   });
 
-  it('authenticated dark preference is honoured and not mutated; onboarding still renders light', () => {
+  it('authenticated dark preference is honoured and not mutated', () => {
     // An authenticated user who chose Dark.
     localStorage.setItem('queki:appearance', 'dark');
     useAppearanceStore.getState().initAppearance();
@@ -138,8 +134,7 @@ describe('Onboarding appearance — always renders Light', () => {
     expect(useAppearanceStore.getState().appearance).toBe('dark');
 
     const { container, unmount } = renderFlow();
-    const root = container.querySelector('.light');
-    expect(root, 'onboarding root should still carry the light override').toBeTruthy();
+    expect(container.querySelector('[data-testid="onboarding-shell"]')).toHaveClass('dark:bg-slate-950');
 
     unmount();
     // The preference is untouched → the authenticated app remains dark.
@@ -149,13 +144,9 @@ describe('Onboarding appearance — always renders Light', () => {
   });
 });
 
-describe('Onboarding appearance — CSS light override contract', () => {
-  // The concrete CSS rules are asserted in tests/theme/onboardingLight.test.ts
-  // (which has Node types available and is excluded from the app `tsc -b`
-  // build). Here we assert the behavioural guarantee: the onboarding root
-  // carries the `light` class that scopes those rules.
-  it('applies the `light` override class to the onboarding root', () => {
+describe('Onboarding appearance — theme-safe root contract', () => {
+  it('does not apply a forced-light override class', () => {
     const { container } = renderFlow();
-    expect(container.querySelector('.light')).toBeTruthy();
+    expect(container.querySelector('.light')).toBeNull();
   });
 });
