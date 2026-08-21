@@ -2,6 +2,7 @@ import { Page, expect } from '@playwright/test';
 import { execSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
+import { expectOnboardingP1TerminalState } from './readiness';
 
 /**
  * Shared helpers for the Refined Queki onboarding E2E contract.
@@ -103,7 +104,7 @@ export async function signUpFromS7(page: Page, data: OnboardingPersona) {
   await page.getByRole('button', { name: /sign up/i }).click();
 
   // Returns to /onboarding and advances S7 -> P1 once auth resolves.
-  await expect(page.getByRole('heading', { name: P1_HEADING })).toBeVisible({ timeout: 20000 });
+  await expectOnboardingP1TerminalState(page);
 }
 
 /** Drive P1 -> P2 -> P3 -> dashboard. */
@@ -132,10 +133,13 @@ export async function completeEmailOnboarding(page: Page, data: OnboardingPerson
 }
 
 /** Read the authoritative Firestore outcome for a just-onboarded user. */
-export async function getOnboardingOutcome(email: string): Promise<OnboardingOutcome> {
+export async function getOnboardingOutcome(
+  email: string,
+  expected: Partial<OnboardingOutcome> = { familyCount: 1, childCount: 1, taskCount: 1 },
+): Promise<OnboardingOutcome> {
   const raw = execSync(`npx tsx "${READ_OUTCOME_SCRIPT}"`, {
     encoding: 'utf8',
-    env: { ...process.env, ONBOARDING_EMAIL: email },
+    env: { ...process.env, ONBOARDING_EMAIL: email, ONBOARDING_EXPECTED_OUTCOME: JSON.stringify(expected) },
     timeout: 60_000,
   });
   const trimmed = raw.trim();

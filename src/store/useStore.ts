@@ -19,6 +19,7 @@ import {
   type BootstrapRole,
 } from '../lib/bootstrapQueries';
 import i18n, { applyDocumentDirection, applyLanguage, resolveProfileLanguage } from '../i18n';
+import { recordE2ETimeline } from '../lib/e2eDiagnostics';
 import {
   finishStartupResource,
   markStartupStage,
@@ -259,6 +260,7 @@ export const useStore = create<AppState>((set, get) => ({
       stopProfileListener();
       stopFamilyListeners();
       logAuthTrace('auth-listener-fired', { signedIn: Boolean(user), generation });
+      recordE2ETimeline('auth-listener-fired', { signedIn: Boolean(user), generation });
       markStartupStage('AUTH_RESOLVED');
 
       if (!user) {
@@ -324,6 +326,7 @@ export const useStore = create<AppState>((set, get) => ({
         let profileSnapshotRevision = 0;
 
         const handleProfileSnapshot = (profileSnapshot: any) => {
+          recordE2ETimeline('profile-listener-result', { exists: profileSnapshot.exists(), fromCache: Boolean(profileSnapshot.metadata?.fromCache) });
           const snapshotRevision = ++profileSnapshotRevision;
           if (generation !== authGeneration || get().authUser?.uid !== user.uid) return;
 
@@ -446,6 +449,7 @@ export const useStore = create<AppState>((set, get) => ({
             if (profileSnapshot.metadata?.fromCache) markStartupStage('PROFILE_CACHE_RESULT');
             else {
               profileServerConfirmed = true;
+              recordE2ETimeline('profile-server-confirmed');
               markStartupStage('PROFILE_SERVER_CONFIRMED');
             }
             handleProfileSnapshot(profileSnapshot);
@@ -467,6 +471,7 @@ export const useStore = create<AppState>((set, get) => ({
         void getDocFromServer(profileReference)
           .then(snapshot => {
             profileServerConfirmed = true;
+            recordE2ETimeline('profile-server-confirmed', { source: 'getDocFromServer', exists: snapshot.exists() });
             markStartupStage('PROFILE_SERVER_CONFIRMED');
             handleProfileSnapshot(snapshot);
           })

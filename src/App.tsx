@@ -32,6 +32,7 @@ import { RequestDetailProvider } from './components/requests/RequestDetailContex
 import { Suspense, useEffect } from 'react';
 import { consumeGoogleRedirectResult } from './lib/googleRedirectAuth';
 import { markStartupStage } from './startupDiagnostics';
+import { E2EBootstrapDiagnostics } from './components/E2EBootstrapDiagnostics';
 
 function App() {
   const initAuth = useStore(state => state.initAuth);
@@ -64,6 +65,7 @@ function App() {
     <Suspense fallback={<div data-testid="route-translations-loading" aria-busy="true" className="min-h-screen bg-gray-50" />}>
       <Router>
         <RequestDetailProvider>
+          <E2EBootstrapDiagnostics />
           <Routes>
           <Route path="/login" element={<Login />} />
           <Route path="/signup" element={<Signup />} />

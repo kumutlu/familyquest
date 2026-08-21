@@ -13,6 +13,7 @@ import {
   SETUP_WAIT_MS,
 } from '../lib/onboardingErrors';
 import type { OnboardingDraft } from '../lib/onboardingDraft';
+import { recordE2ETimeline } from '../../lib/e2eDiagnostics';
 
 interface FamilyCompositionProps {
   draft: OnboardingDraft;
@@ -35,6 +36,7 @@ interface FamilyCompositionProps {
  * is never executed twice.
  */
 export function FamilyComposition({ draft, patch, goNext, deps }: FamilyCompositionProps) {
+  recordE2ETimeline('p1-render');
   const { t } = useTranslation('onboarding');
   const currentUser = useStore(state => state.currentUser);
   const familyData = useStore(state => state.familyData);
@@ -100,10 +102,14 @@ export function FamilyComposition({ draft, patch, goNext, deps }: FamilyComposit
       try {
         let next = draft;
         if (!next.familyId) {
+          recordE2ETimeline('ensure-family-start');
           next = await withBoundedTimeout(ensureFamily(next, deps), SETUP_WAIT_MS, t('errors.offline'));
+          recordE2ETimeline('ensure-family-end', { familyId: next.familyId });
         }
         if (!next.childId) {
+          recordE2ETimeline('ensure-first-child-start');
           next = await withBoundedTimeout(ensureFirstChild(next, deps), SETUP_WAIT_MS, t('errors.offline'));
+          recordE2ETimeline('ensure-first-child-end', { childId: next.childId });
         }
         completedRef.current = true;
         // Persist even if StrictMode already "unmounted" this run — the draft is

@@ -61,4 +61,31 @@ describe('Firestore deployment-transition cache', () => {
       { localCache: { kind: 'persistent-cache' } },
     );
   });
+
+  it('forces long polling only for the emulator test path', async () => {
+    vi.stubEnv('VITE_USE_FIREBASE_EMULATOR', 'true');
+    vi.stubEnv('VITE_FIRESTORE_EMULATOR_HOST', '127.0.0.1');
+    vi.stubEnv('VITE_FIRESTORE_EMULATOR_PORT', '18080');
+
+    await import('./firebase');
+
+    expect(initializeFirestore).toHaveBeenCalledWith(
+      expect.objectContaining({ kind: 'app' }),
+      {
+        localCache: { kind: 'persistent-cache' },
+        experimentalForceLongPolling: true,
+      },
+    );
+  });
+
+  it('does not enable emulator transport overrides in production', async () => {
+    vi.stubEnv('VITE_USE_FIREBASE_EMULATOR', 'false');
+
+    await import('./firebase');
+
+    expect(initializeFirestore).toHaveBeenCalledWith(
+      expect.objectContaining({ kind: 'app' }),
+      { localCache: { kind: 'persistent-cache' } },
+    );
+  });
 });

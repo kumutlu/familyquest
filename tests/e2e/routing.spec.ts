@@ -2,6 +2,7 @@ import { test, expect } from '@playwright/test';
 import { execSync } from 'child_process';
 import { loginAs, logout } from './utils/auth';
 import { seedTestFamily } from './utils/seed';
+import { collectE2ETimeline } from './utils/timeline';
 
 /**
  * Option A routing regression: Refined Queki onboarding is the public front
@@ -13,9 +14,12 @@ import { seedTestFamily } from './utils/seed';
  * `npm run test:e2e`.
  */
 test.describe('Public routing — Refined Queki front door', () => {
-  test.beforeEach(async () => {
+  let finishTimeline: ((testInfo: import('@playwright/test').TestInfo) => Promise<void>) | undefined;
+  test.beforeEach(async ({ page }) => {
+    finishTimeline = collectE2ETimeline(page);
     execSync('npx tsx tests/e2e/utils/seed.ts', { stdio: 'ignore' });
   });
+  test.afterEach(async ({}, testInfo) => finishTimeline?.(testInfo));
 
   test('1. clean visitor at / lands on Refined Step 1 (onboarding)', async ({ page }) => {
     await page.goto('/');
@@ -39,7 +43,6 @@ test.describe('Public routing — Refined Queki front door', () => {
   test('3. existing owner never sees onboarding', async ({ page }) => {
     await loginAs(page, 'owner@test.com');
     await page.goto('/onboarding');
-    await page.waitForTimeout(1500);
 
     // Owner is redirected out of onboarding into the application.
     await expect(page).not.toHaveURL(/\/onboarding/);
@@ -51,7 +54,6 @@ test.describe('Public routing — Refined Queki front door', () => {
   test('4. managed child never sees parent onboarding', async ({ page }) => {
     await loginAs(page, 'child@test.com');
     await page.goto('/onboarding');
-    await page.waitForTimeout(1500);
 
     await expect(page).not.toHaveURL(/\/onboarding/);
     await expect(

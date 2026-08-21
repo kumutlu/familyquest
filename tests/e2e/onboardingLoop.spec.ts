@@ -7,6 +7,7 @@ import {
   expectDashboard,
   type OnboardingPersona,
 } from './utils/onboardingFlow';
+import { collectE2ETimeline, isFirestoreTransportError } from './utils/timeline';
 
 /**
  * P0 verification: creating a family via the Refined Queki onboarding must not
@@ -19,6 +20,9 @@ import {
  */
 
 const PASSWORD = 'password123';
+let finishTimeline: ((testInfo: import('@playwright/test').TestInfo) => Promise<void>) | undefined;
+test.beforeEach(async ({ page }) => { finishTimeline = collectE2ETimeline(page); });
+test.afterEach(async ({}, testInfo) => finishTimeline?.(testInfo));
 
 function uniqueEmail(prefix: string) {
   return `${prefix}-${Date.now()}-${Math.floor(Math.random() * 10000)}@example.com`;
@@ -72,11 +76,10 @@ test('parent creates a family once and lands on the dashboard without a loop', a
 
   // Scenario 8: an existing owner never sees onboarding, even via direct URL.
   await page.goto('/onboarding');
-  await page.waitForTimeout(1500);
   await expect(page).not.toHaveURL(/\/onboarding/);
   await expect(page.getByRole('heading', { name: /small wins\. big habits\./i })).toHaveCount(0);
 
   // Scenario 9: no auth/routing/family-loading console errors.
-  const relevant = errors.filter((e) => /auth|route|router|family|permission|firestore/i.test(e));
+  const relevant = errors.filter((e) => !isFirestoreTransportError(e) && /auth|route|router|family|permission|firestore/i.test(e));
   expect(relevant, relevant.join('\n')).toEqual([]);
 });

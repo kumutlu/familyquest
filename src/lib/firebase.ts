@@ -58,9 +58,12 @@ export const auth = getAuth(app);
 // replacement (including Safari's first launch after a Hosting deployment).
 // The startup store accepts only the authenticated user's exact profile and
 // family generation, while live listeners/server reads remain authoritative.
-export const db = initializeFirestore(app, {
+const emulatorMode = import.meta.env.VITE_USE_FIREBASE_EMULATOR === 'true';
+const firestoreSettings = {
   localCache: persistentLocalCache({ tabManager: persistentMultipleTabManager() }),
-});
+  ...(emulatorMode ? { experimentalForceLongPolling: true } : {}),
+};
+export const db = initializeFirestore(app, firestoreSettings);
 export const googleProvider = new GoogleAuthProvider();
 // All callable functions are deployed with setGlobalOptions({ region:
 // 'europe-west1' }). The Functions client otherwise defaults to us-central1,
@@ -68,10 +71,14 @@ export const googleProvider = new GoogleAuthProvider();
 export const FIREBASE_FUNCTIONS_REGION = 'europe-west1';
 export const functions = getFunctions(app, FIREBASE_FUNCTIONS_REGION);
 
-if (import.meta.env.VITE_USE_FIREBASE_EMULATOR === 'true') {
-  connectAuthEmulator(auth, 'http://127.0.0.1:9099', { disableWarnings: true });
-  connectFirestoreEmulator(db, '127.0.0.1', 8080);
-  connectFunctionsEmulator(functions, '127.0.0.1', 5001);
+if (emulatorMode) {
+  const emulatorHost = import.meta.env.VITE_FIREBASE_EMULATOR_HOST || '127.0.0.1';
+  const authPort = Number(import.meta.env.VITE_FIREBASE_AUTH_EMULATOR_PORT || 9099);
+  const firestorePort = Number(import.meta.env.VITE_FIRESTORE_EMULATOR_PORT || 8080);
+  const functionsPort = Number(import.meta.env.VITE_FIREBASE_FUNCTIONS_EMULATOR_PORT || 5001);
+  connectAuthEmulator(auth, `http://${emulatorHost}:${authPort}`, { disableWarnings: true });
+  connectFirestoreEmulator(db, emulatorHost, firestorePort);
+  connectFunctionsEmulator(functions, emulatorHost, functionsPort);
 }
 
 // Dev-only startup trace: marks the moment the Firebase app/auth/db handles are

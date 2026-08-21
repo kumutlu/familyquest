@@ -14,6 +14,7 @@ import { claimFamilyChallenge } from './challengeClaimApi';
 import { FAMILYQUEST_BUILD } from '../buildInfo';
 import { calculateBehaviourEffect, DEFAULT_DEBT_LIMIT_PENCE } from './behaviour';
 import type { BehaviourEventInput } from './behaviour';
+import { recordE2ETimeline } from './e2eDiagnostics';
 import { reviewerFields, transferApprovalRequestUpdate } from './approvalContracts';
 import { effectSnapshot, manualWalletEffectSnapshot } from './reversalContracts';
 import {
@@ -115,8 +116,11 @@ async function getEffectiveActorId(): Promise<string> {
 }
 
 export const signUp = async (email: string, pass: string, name: string) => {
+  recordE2ETimeline('signup-request-started');
   const cred = await createUserWithEmailAndPassword(auth, email, pass);
+  recordE2ETimeline('firebase-auth-user-created', { uid: cred.user.uid });
   // Create user doc without familyId first
+  recordE2ETimeline('profile-write-started', { uid: cred.user.uid });
   await setDoc(doc(db, 'users', cred.user.uid), {
     uid: cred.user.uid,
     role: 'parent', // default role
@@ -128,6 +132,7 @@ export const signUp = async (email: string, pass: string, name: string) => {
     longestStreak: 0,
     lastActiveDate: serverTimestamp()
   });
+  recordE2ETimeline('profile-write-completed', { uid: cred.user.uid });
   return cred.user;
 };
 

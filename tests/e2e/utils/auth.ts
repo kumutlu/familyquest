@@ -1,6 +1,7 @@
-import { Page, expect } from '@playwright/test';
+import { Page, type TestInfo } from '@playwright/test';
+import { expectManagedChildReady, expectOwnerReady, expectSignedOutReady } from './readiness';
 
-export async function loginAs(page: Page, email: string) {
+export async function loginAs(page: Page, email: string, testInfo?: TestInfo) {
   await page.goto('/login');
 
   // Wait for the login form to be visible
@@ -13,17 +14,14 @@ export async function loginAs(page: Page, email: string) {
   // Submit the form
   await page.click('button[type="submit"]');
 
-  // Wait for the post-login redirect to leave the login route. Waiting on the
-  // URL (rather than only on the "Queki" text) is more robust against transient
-  // auth-emulator latency and avoids flaky "still on the login page" failures.
   await page.waitForURL(url => url.pathname !== '/login', { timeout: 15000 });
-  await expect(page.locator('text="Queki"').first()).toBeVisible({ timeout: 10000 });
+  if (email.startsWith('child')) await expectManagedChildReady(page, testInfo);
+  else await expectOwnerReady(page, testInfo);
 }
 
-export async function logout(page: Page) {
+export async function logout(page: Page, testInfo?: TestInfo) {
   // Dismiss any open modal/overlay first so the Profile menu is clickable.
   await page.keyboard.press('Escape').catch(() => {});
-  await page.waitForTimeout(300);
 
   // The app persists Firebase Auth in IndexedDB, so clearing only
   // localStorage/sessionStorage is not enough — the previous session would
@@ -35,10 +33,10 @@ export async function logout(page: Page) {
     const signOutButton = page.locator('[role="menuitem"]', { hasText: 'Sign Out' });
     if (await signOutButton.isVisible().catch(() => false)) {
       await signOutButton.click();
-      await page.waitForSelector('input[type="email"]', { timeout: 10000 }).catch(() => {});
+      await expectSignedOutReady(page, testInfo).catch(() => {});
     }
   }
   // Fallback: ensure we are on the login page.
   await page.goto('/login');
-  await page.waitForSelector('input[type="email"]', { timeout: 10000 }).catch(() => {});
+  await expectSignedOutReady(page, testInfo);
 }

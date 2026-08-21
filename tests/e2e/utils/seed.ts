@@ -2,8 +2,8 @@ import { initializeApp, getApps, cert } from 'firebase-admin/app';
 import { getFirestore, Timestamp } from 'firebase-admin/firestore';
 import { getAuth } from 'firebase-admin/auth';
 
-process.env.FIRESTORE_EMULATOR_HOST = '127.0.0.1:8080';
-process.env.FIREBASE_AUTH_EMULATOR_HOST = '127.0.0.1:9099';
+process.env.FIRESTORE_EMULATOR_HOST ||= '127.0.0.1:8080';
+process.env.FIREBASE_AUTH_EMULATOR_HOST ||= '127.0.0.1:9099';
 
 // Initialize Admin SDK once
 if (getApps().length === 0) {
@@ -14,7 +14,7 @@ export const db = getFirestore();
 export const adminAuth = getAuth();
 
 export async function clearEmulator() {
-  const response = await fetch('http://127.0.0.1:8080/emulator/v1/projects/familyquest-beta-402cb/databases/(default)/documents', { method: 'DELETE' });
+  const response = await fetch(`http://${process.env.FIRESTORE_EMULATOR_HOST}/emulator/v1/projects/familyquest-beta-402cb/databases/(default)/documents`, { method: 'DELETE' });
   if (!response.ok) {
     throw new Error('Failed to clear firestore emulator');
   }

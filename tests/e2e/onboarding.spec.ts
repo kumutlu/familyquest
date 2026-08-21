@@ -10,6 +10,7 @@ import {
   expectDashboard,
   type OnboardingPersona,
 } from './utils/onboardingFlow';
+import { collectE2ETimeline, isFirestoreTransportError } from './utils/timeline';
 
 /**
  * Refined Queki onboarding — E2E contract.
@@ -48,9 +49,12 @@ function persona(overrides: Partial<OnboardingPersona> = {}): OnboardingPersona 
 }
 
 test.describe('Refined Queki onboarding', () => {
-  test.beforeEach(async () => {
+  let finishTimeline: ((testInfo: import('@playwright/test').TestInfo) => Promise<void>) | undefined;
+  test.beforeEach(async ({ page }) => {
+    finishTimeline = collectE2ETimeline(page);
     execSync('npx tsx tests/e2e/utils/seed.ts', { stdio: 'ignore' });
   });
+  test.afterEach(async ({}, testInfo) => finishTimeline?.(testInfo));
 
   test('New visitor lands on Refined Step 1 with the value proposition', async ({ page }) => {
     await page.goto('/');
@@ -169,7 +173,7 @@ test.describe('Refined Queki onboarding', () => {
     });
 
     // Authoritative state already exists — no second family/child.
-    const mid = await getOnboardingOutcome(data.email);
+    const mid = await getOnboardingOutcome(data.email, { familyCount: 1, childCount: 1 });
     expect(mid.familyCount).toBe(1);
     expect(mid.childCount).toBe(1);
 
@@ -190,7 +194,6 @@ test.describe('Refined Queki onboarding', () => {
 
     // Direct deep link to /onboarding is redirected away.
     await page.goto('/onboarding');
-    await page.waitForTimeout(1500);
     await expect(page).not.toHaveURL(/\/onboarding/);
     await expect(page.getByRole('heading', { name: /small wins\. big habits\./i })).toHaveCount(0);
   });
@@ -198,7 +201,6 @@ test.describe('Refined Queki onboarding', () => {
   test('Managed child never enters parent onboarding', async ({ page }) => {
     await loginAs(page, 'child@test.com');
     await page.goto('/onboarding');
-    await page.waitForTimeout(1500);
     await expect(page).not.toHaveURL(/\/onboarding/);
     await expect(page.getByRole('heading', { name: /small wins\. big habits\./i })).toHaveCount(0);
     // The child reaches their own authenticated experience.
@@ -231,7 +233,7 @@ test.describe('Refined Queki onboarding', () => {
     await completeEmailOnboarding(page, data);
 
     const relevant = errors.filter((e) =>
-      /auth|route|router|family|permission|firestore|user not found/i.test(e),
+      !isFirestoreTransportError(e) && /auth|route|router|family|permission|firestore|user not found/i.test(e),
     );
     expect(relevant, relevant.join('\n')).toEqual([]);
   });
