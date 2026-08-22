@@ -68,6 +68,9 @@ export function OnboardingFlow() {
   const currentUser = useStore(state => state.currentUser);
   const bootstrapError = useStore(state => state.bootstrapError);
   const refreshCurrentUser = useStore(state => state.refreshCurrentUser);
+  // Authoritative signal: the profile document is confirmed present on the
+  // server (not merely a cached snapshot).
+  const profileServerConfirmed = useStore(state => state.profileServerConfirmed);
 
   const currentFamilyId = currentUser?.familyId ?? null;
   const { draft, goNext, goBack, setStep, patch, reset } = useOnboardingMachine(currentFamilyId);
@@ -77,11 +80,20 @@ export function OnboardingFlow() {
   const inPostAuth = POST_AUTH_STEPS.includes(draft.step);
   const postAuth = authStatus === 'authenticated' && (inPostAuth || !currentUser?.familyId);
 
+  // Tracks whether THIS onboarding session attempted to create a family. When
+  // it has, a later-arriving currentUser.familyId is this session's own
+  // creation (published via refreshCurrentUser) — not pre-existing membership —
+  // so the established-family guard below must not exit mid-setup.
+  const familyCreationAttemptedRef = useRef(false);
+
   // Build the idempotent setup dependencies from the authoritative store + api.
   const deps = useMemo<SetupDeps>(
     () => ({
       uid: authUser?.uid ?? currentUser?.id ?? '',
-      createFamilyAndParent,
+      createFamilyAndParent: (...args: Parameters<typeof createFamilyAndParent>) => {
+        familyCreationAttemptedRef.current = true;
+        return createFamilyAndParent(...args);
+      },
       createManagedMember,
       createTask,
       refreshCurrentUser,
@@ -99,13 +111,16 @@ export function OnboardingFlow() {
     }
   }, [postAuth]);
 
-  // Funnel: auth completed + advance s7 → p1 when auth resolves.
+  // Funnel: auth completed + advance s7 → p1 when auth resolves. Never persist
+  // a preemptive p1 step for an account whose authoritative profile already
+  // carries a familyId — such a draft would trap an established-family owner
+  // in post-auth setup.
   useEffect(() => {
-    if (postAuth && PRE_AUTH_STEPS.includes(draft.step)) {
+    if (postAuth && PRE_AUTH_STEPS.includes(draft.step) && !currentUser?.familyId) {
       recordOnboardingEvent('onboarding_auth_completed', { authProvider: draft.authProvider });
       setStep('p1');
     }
-  }, [postAuth, draft.step, draft.authProvider, setStep]);
+  }, [postAuth, draft.step, draft.authProvider, setStep, currentUser?.familyId]);
 
   // Funnel: family created / first task created (idempotent, fires once).
   const prevFamilyId = useRef(draft.familyId);
@@ -120,6 +135,30 @@ export function OnboardingFlow() {
   }, [draft.firstTaskId]);
 
   // --- Internal guards (mirror AppLayout, but for the public route) ---
+  // Authoritative established-family membership always wins over a stale
+  // persisted draft. Once the server-confirmed profile carries a familyId that
+  // this onboarding session did not itself create, the user must exit
+  // onboarding immediately — regardless of draft.step. A stale draft at
+  // p1/p2/p3 must NEVER override authoritative membership: it would trap an
+  // established-family owner in P1 and can drive a duplicate family creation.
+  // (When THIS session creates the family, familyCreationAttemptedRef is set,
+  // so the guard stays out of the way of legitimate P1→P3 continuation.)
+  const establishedFamilyMismatch =
+    profileServerConfirmed &&
+    Boolean(currentUser?.familyId) &&
+    draft.familyId !== currentUser.familyId &&
+    !familyCreationAttemptedRef.current;
+
+  useEffect(() => {
+    if (establishedFamilyMismatch) {
+      // Clear the stale draft so it can never drive a duplicate creation later.
+      reset();
+    }
+  }, [establishedFamilyMismatch, reset]);
+
+  if (establishedFamilyMismatch) {
+    return <Navigate to="/" replace />;
+  }
   // Established family owner (or anyone who already has a family) is never
   // re-routed through onboarding — UNLESS we are actively in the post-auth
   // setup phase (draft.step in p1/p2/p3), in which case we must finish P2/P3.
