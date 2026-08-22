@@ -206,6 +206,16 @@ const stopFamilyListener = (name: string) => {
 const errorText = (context: string, error: any) =>
   `[${context}] ${error?.code || 'unknown'}: ${error?.message || 'Listener failed'}`;
 
+const RETRYABLE_FAMILY_VALIDATION_CODES = new Set([
+  'aborted',
+  'cancelled',
+  'deadline-exceeded',
+  'unavailable',
+]);
+
+const isRetryableFamilyValidationError = (error: any) =>
+  RETRYABLE_FAMILY_VALIDATION_CODES.has(String(error?.code || '').replace(/^firestore\//, ''));
+
 // Surface the underlying Firebase error in development only. This is how we
 // diagnose issues like a missing composite index (`failed-precondition`) or a
 // rules/query mismatch (`permission-denied`) without ever exposing raw Firebase
@@ -624,6 +634,16 @@ export const useStore = create<AppState>((set, get) => ({
 
     const handleCriticalListenerError = (resource: BootstrapResource, context: string, error: any) => {
       if (!isCurrent()) return;
+      if (resource === 'family' && isRetryableFamilyValidationError(error)) {
+        set(current => ({
+          bootstrapStatus: { ...current.bootstrapStatus, [resource]: 'loading' },
+          bootstrapError: errorText('FamilyVerificationDelayed', error),
+          familyLoading: true,
+          appReady: false,
+          loading: true,
+        }));
+        return;
+      }
       stopFamilyListeners();
       set(current => ({
         bootstrapStatus: { ...current.bootstrapStatus, [resource]: 'error' },
@@ -657,9 +677,15 @@ export const useStore = create<AppState>((set, get) => ({
       let serverConfirmed = false;
       const acceptSnapshot = (snapshot: any) => {
         if (!isCurrent()) return;
-        if (!snapshot.metadata?.fromCache) serverConfirmed = true;
+        const authoritative = !snapshot.metadata?.fromCache;
+        if (authoritative) {
+          serverConfirmed = true;
+          if (get().bootstrapError?.startsWith('[FamilyVerificationDelayed]')) {
+            set({ bootstrapError: null });
+          }
+        }
         applySnapshot(snapshot);
-        if (readyOnSnapshot) markReady(resource);
+        if (readyOnSnapshot && authoritative) markReady(resource);
       };
       const unsubscribe = onSnapshot(
         target,
@@ -951,6 +977,7 @@ export const useStore = create<AppState>((set, get) => ({
       subscribePlanned('family', 'Family', snapshot => {
         if (snapshot.metadata?.fromCache) markStartupStage('FAMILY_CACHE_RESULT');
         else markStartupStage('FAMILY_SERVER_CONFIRMED');
+        if (!snapshot.exists() && snapshot.metadata?.fromCache) return;
         if (!snapshot.exists()) {
           handleCriticalListenerError('family', 'Family', { code: 'not-found', message: 'Family document does not exist' });
           return;

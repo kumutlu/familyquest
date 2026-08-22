@@ -11,6 +11,8 @@
   "criticalTitle": "We couldn't open your dashboard",
   "identityErrorBody": "We couldn't verify your sign-in or profile. Try again or sign out.",
   "familyErrorBody": "We couldn't verify your family access. Try again or sign out.",
+  "familyDelayedTitle": "Still verifying your family",
+  "familyDelayedBody": "Your dashboard will open automatically when the connection recovers.",
   "criticalErrorBody": "A required startup step failed. Try again or sign out.",
   "retry": "Retry",
   "signOut": "Sign out"

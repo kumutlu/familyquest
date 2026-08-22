@@ -153,17 +153,75 @@ describe('two-stage family bootstrap sequencing', () => {
     expect(useStore.getState().loading).toBe(false);
   });
 
-  it('uses a matching cached family for fast render while server validation remains pending', async () => {
+  it('keeps cached family state provisional until authoritative validation succeeds', async () => {
     useStore.getState().loadFamilyData('u1', 'f1');
     harness.snapshotNext.get(FAMILY_PATH)?.({
       ...documentSnapshot('f1'),
-      metadata: { fromCache: true },
+      metadata: { fromCache: true, hasPendingWrites: false },
     });
     await Promise.resolve();
 
-    expect(useStore.getState().appReady).toBe(true);
-    expect(useStore.getState().familyData).toMatchObject({ id: 'f1', name: 'Family' });
-    expect((harness.serverReads.get(FAMILY_PATH) ?? []).length).toBeGreaterThan(0);
+    expect(useStore.getState()).toMatchObject({
+      familyData: { id: 'f1', name: 'Family' },
+      familyLoading: true,
+      appReady: false,
+      bootstrapError: null,
+    });
+
+    await resolveRead(FAMILY_PATH, documentSnapshot('f1'));
+
+    expect(useStore.getState()).toMatchObject({
+      familyLoading: false,
+      appReady: true,
+      bootstrapError: null,
+    });
+  });
+
+  it('accepts a non-cache family listener snapshot as authoritative validation', async () => {
+    useStore.getState().loadFamilyData('u1', 'f1');
+    harness.snapshotNext.get(FAMILY_PATH)?.({
+      ...documentSnapshot('f1'),
+      metadata: { fromCache: true, hasPendingWrites: false },
+    });
+    await Promise.resolve();
+    expect(useStore.getState().appReady).toBe(false);
+
+    harness.snapshotNext.get(FAMILY_PATH)?.(documentSnapshot('f1'));
+    await Promise.resolve();
+
+    expect(useStore.getState()).toMatchObject({
+      familyLoading: false,
+      appReady: true,
+      bootstrapError: null,
+      bootstrapStatus: { family: 'ready' },
+    });
+  });
+
+  it('keeps retryable family validation failures recoverable until a listener confirms the family', async () => {
+    useStore.getState().loadFamilyData('u1', 'f1');
+    harness.snapshotNext.get(FAMILY_PATH)?.({
+      ...documentSnapshot('f1'),
+      metadata: { fromCache: true, hasPendingWrites: false },
+    });
+    await rejectRead(FAMILY_PATH, { code: 'unavailable', message: 'transport unavailable' });
+
+    expect(useStore.getState()).toMatchObject({
+      familyData: { id: 'f1', name: 'Family' },
+      familyLoading: true,
+      appReady: false,
+      bootstrapStatus: { family: 'loading' },
+    });
+    expect(useStore.getState().bootstrapError).toContain('[FamilyVerificationDelayed] unavailable');
+
+    harness.snapshotNext.get(FAMILY_PATH)?.(documentSnapshot('f1'));
+    await Promise.resolve();
+
+    expect(useStore.getState()).toMatchObject({
+      familyLoading: false,
+      appReady: true,
+      bootstrapError: null,
+      bootstrapStatus: { family: 'ready' },
+    });
   });
 
   it('revokes cached family readiness when server permission validation fails', async () => {
@@ -173,7 +231,7 @@ describe('two-stage family bootstrap sequencing', () => {
       metadata: { fromCache: true },
     });
     await Promise.resolve();
-    expect(useStore.getState().appReady).toBe(true);
+    expect(useStore.getState().appReady).toBe(false);
 
     await rejectRead(FAMILY_PATH, { code: 'permission-denied', message: 'denied' });
     expect(useStore.getState().appReady).toBe(false);

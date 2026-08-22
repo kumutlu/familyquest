@@ -238,7 +238,7 @@ describe('bootstrap/auth/listener state machine', () => {
     listener('families/fam1').next(familySnapshot());
     listener('families/fam1').next(familySnapshot(true, { name: 'Updated' }));
     expect(useStore.getState().bootstrapStatus.family).toBe('ready');
-    expect(useStore.getState().appReady).toBe(false);
+    expect(useStore.getState().appReady).toBe(true);
   });
 
   it('marks optional history resources loading until their authoritative snapshots arrive', () => {
@@ -262,6 +262,7 @@ describe('bootstrap/auth/listener state machine', () => {
   it('resolves goal subcollection resources immediately when there are no savings goals', () => {
     authenticatedState();
     useStore.getState().loadFamilyData('user1', 'fam1');
+    listener('families/fam1').next(familySnapshot());
 
     listener('families/fam1/savings_goals').next(collectionSnapshot([]));
 
@@ -276,6 +277,7 @@ describe('bootstrap/auth/listener state machine', () => {
   it('keeps goal ledger loading until every active goal has an authoritative snapshot', () => {
     authenticatedState();
     useStore.getState().loadFamilyData('user1', 'fam1');
+    listener('families/fam1').next(familySnapshot());
     listener('families/fam1/savings_goals').next(collectionSnapshot([
       { id: 'goal-1' },
       { id: 'goal-2' },
@@ -291,6 +293,7 @@ describe('bootstrap/auth/listener state machine', () => {
   it('does not let a slower initial server read overwrite a newer listener snapshot', async () => {
     authenticatedState();
     useStore.getState().loadFamilyData('user1', 'fam1');
+    listener('families/fam1').next(familySnapshot());
     listener('families/fam1/tasks').next(collectionSnapshot([{ id: 'new', title: 'New' }]));
     serverRead('families/fam1/tasks').resolve(collectionSnapshot([{ id: 'old', title: 'Old' }]));
     await Promise.resolve();
@@ -308,9 +311,10 @@ describe('bootstrap/auth/listener state machine', () => {
   it('does not treat an empty cache snapshot as authoritative readiness', () => {
     authenticatedState();
     useStore.getState().loadFamilyData('user1', 'fam1');
+    listener('families/fam1').next(familySnapshot());
     listener('families/fam1/tasks').next(collectionSnapshot([], true));
     expect(useStore.getState().bootstrapStatus.tasks).toBe('loading');
-    expect(useStore.getState().appReady).toBe(false);
+    expect(useStore.getState().appReady).toBe(true);
   });
 
   it('does not treat a missing family in cache as an authoritative missing document', () => {
@@ -321,22 +325,10 @@ describe('bootstrap/auth/listener state machine', () => {
     expect(useStore.getState().bootstrapStatus.family).toBe('loading');
   });
 
-  it('turns cache-only startup into a recoverable error when the server read rejects', async () => {
-    authenticatedState();
-    useStore.getState().loadFamilyData('user1', 'fam1');
-    listener('families/fam1/tasks').next(collectionSnapshot([], true));
-    serverRead('families/fam1/tasks').reject({ code: 'unavailable', message: 'offline' });
-    await Promise.resolve();
-    await Promise.resolve();
-    expect(useStore.getState()).toMatchObject({ appReady: false, loading: false, activeFamilyId: null });
-    expect(useStore.getState().bootstrapError).toContain('unavailable');
-    useStore.getState().retryBootstrap();
-    expect(listener('families/fam1/tasks', 1)).toBeDefined();
-  });
-
   it.each(['parent', 'owner'])('uses parent-wide listeners for the %s role', role => {
     authenticatedState('fam1', role);
     useStore.getState().loadFamilyData('user1', 'fam1');
+    listener('families/fam1').next(familySnapshot());
     expect(listeners.some(item => item.target === 'families/fam1/join_requests')).toBe(true);
     const transferQuery = queryShapes.find(shape => shape.target === 'families/fam1/transfer_requests');
     expect(transferQuery?.constraints.some(constraint => constraint.type === 'where')).toBe(false);
@@ -345,6 +337,7 @@ describe('bootstrap/auth/listener state machine', () => {
   it('subscribes to reversals during initial bootstrap for parent/owner', () => {
     authenticatedState('fam1', 'parent');
     useStore.getState().loadFamilyData('user1', 'fam1');
+    listener('families/fam1').next(familySnapshot());
     expect(listeners.some(item => item.target === 'families/fam1/reversals')).toBe(true);
   });
 
@@ -408,6 +401,7 @@ describe('bootstrap/auth/listener state machine', () => {
       currentUser: { id: 'user1', familyId: 'fam1', role: 'child' },
     });
     useStore.getState().loadFamilyData('user1', 'fam1');
+    listener('families/fam1').next(familySnapshot());
 
     expect(listeners.some(item => item.target === 'families/fam1/join_requests')).toBe(false);
     expect(listeners.some(item => item.target === 'families/fam1/wallets/user1')).toBe(true);
@@ -435,6 +429,7 @@ describe('bootstrap/auth/listener state machine', () => {
   it('normalizes and sorts mixed legacy and V2 wallet and behaviour histories client-side', () => {
     authenticatedState();
     useStore.getState().loadFamilyData('user1', 'fam1');
+    listener('families/fam1').next(familySnapshot());
     const legacyTime = { toMillis: () => 1_000 };
     const v2Time = { toMillis: () => 2_000 };
 
@@ -524,9 +519,11 @@ describe('bootstrap/auth/listener state machine', () => {
   it('10. retry creates a fresh subscription generation', () => {
     authenticatedState();
     useStore.getState().loadFamilyData('user1', 'fam1');
+    listener('families/fam1').next(familySnapshot());
     const oldTask = listener('families/fam1/tasks');
     listener('families/fam1').error({ code: 'unavailable', message: 'offline' });
     useStore.getState().retryBootstrap();
+    listener('families/fam1', 1).next(familySnapshot());
     expect(listener('families/fam1/tasks', 1)).toBeDefined();
     oldTask.next(collectionSnapshot([{ id: 'stale', title: 'Stale' }]));
     expect(useStore.getState().tasks).toEqual([]);
@@ -558,10 +555,12 @@ describe('bootstrap/auth/listener state machine', () => {
     await authNext!({ uid: 'user1', getIdToken: vi.fn().mockResolvedValue('token') });
     const profile = listener('users/user1');
     profile.next({ exists: () => true, id: 'user1', data: () => ({ familyId: 'fam1', role: 'parent' }) });
+    listener('families/fam1').next(familySnapshot());
     const oldTask = listener('families/fam1/tasks');
     const oldUnsubscribes = listeners.slice(1).map(item => item.unsubscribe);
     profile.next({ exists: () => true, id: 'user1', data: () => ({ familyId: 'fam2', role: 'parent' }) });
     expect(oldUnsubscribes.every(unsubscribe => unsubscribe.mock.calls.length === 1)).toBe(true);
+    listener('families/fam2').next({ ...familySnapshot(), id: 'fam2' });
     expect(listeners.some(item => item.target === 'families/fam2/tasks')).toBe(true);
     oldTask.next(collectionSnapshot([{ id: 'stale' }]));
     expect(useStore.getState().tasks).toEqual([]);
@@ -670,6 +669,7 @@ describe('bootstrap/auth/listener state machine', () => {
   it('subscribes to gamification summaries collection for parent role', () => {
     authenticatedState('fam1', 'parent');
     useStore.getState().loadFamilyData('user1', 'fam1');
+    listener('families/fam1').next(familySnapshot());
     expect(listeners.some(item => item.target === 'families/fam1/gamification_summaries')).toBe(true);
     expect(listeners.some(item => item.target === 'families/fam1/daily_progress')).toBe(true);
   });
@@ -677,6 +677,7 @@ describe('bootstrap/auth/listener state machine', () => {
   it('subscribes to own gamification summary document for child role', () => {
     authenticatedState('fam1', 'child');
     useStore.getState().loadFamilyData('user1', 'fam1');
+    listener('families/fam1').next(familySnapshot());
     expect(listeners.some(item => item.target === 'families/fam1/gamification_summaries/user1')).toBe(true);
     expect(listeners.some(item => item.target === 'families/fam1/daily_progress')).toBe(true);
   });

@@ -184,6 +184,22 @@ describe('StartupScreen', () => {
     expect(screen.getByRole('alert')).not.toHaveTextContent('taking longer than expected');
   });
 
+  it('labels retryable family validation as delayed rather than denied in English and Turkish', async () => {
+    const { rerender } = render(
+      <StartupScreen phase="error" error="[FamilyVerificationDelayed] unavailable: transport" onRetry={vi.fn()} />,
+    );
+    expect(screen.getByRole('alert')).toHaveTextContent('Still verifying your family');
+    expect(screen.getByRole('alert')).toHaveTextContent('Your dashboard will open automatically when the connection recovers.');
+    expect(screen.getByRole('alert')).not.toHaveTextContent('family access');
+
+    await act(async () => {
+      await i18n.changeLanguage('tr');
+    });
+    rerender(<StartupScreen phase="error" error="[FamilyVerificationDelayed] unavailable: transport" onRetry={vi.fn()} />);
+    expect(screen.getByRole('alert')).toHaveTextContent('Aileniz hâlâ doğrulanıyor');
+    expect(screen.getByRole('alert')).not.toHaveTextContent('aile erişiminizi doğrulayamadık');
+  });
+
   it('labels a confirmed offline timeout as a connection problem', async () => {
     Object.defineProperty(navigator, 'onLine', { configurable: true, value: false });
     render(<StartupScreen phase="family" onRetry={vi.fn()} />);

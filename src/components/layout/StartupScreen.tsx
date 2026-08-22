@@ -114,15 +114,21 @@ export function StartupScreen({ phase, error, onRetry, onSignOut, attempt = 0 }:
     const offline = typeof navigator !== 'undefined' && navigator.onLine === false;
     const errorKind = error?.startsWith('[Family]')
       ? 'family'
+      : error?.startsWith('[FamilyVerificationDelayed]')
+        ? 'family-delayed'
       : error?.startsWith('[Profile]') || error?.startsWith('[Auth')
         ? 'identity'
         : 'critical';
-    const title = offline
+    const title = errorKind === 'family-delayed'
+      ? t('familyDelayedTitle')
+      : offline
       ? t('offlineTitle')
       : timedOut
         ? t('slowTitle')
         : t('criticalTitle');
-    const body = offline
+    const body = errorKind === 'family-delayed'
+      ? t('familyDelayedBody')
+      : offline
       ? t('offlineBody')
       : timedOut
         ? t('timeoutBody')

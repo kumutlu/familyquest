@@ -11,6 +11,8 @@
   "criticalTitle": "Panelinizi açamadık",
   "identityErrorBody": "Oturumunuzu veya profilinizi doğrulayamadık. Tekrar deneyin ya da çıkış yapın.",
   "familyErrorBody": "Aile erişiminizi doğrulayamadık. Tekrar deneyin ya da çıkış yapın.",
+  "familyDelayedTitle": "Aileniz hâlâ doğrulanıyor",
+  "familyDelayedBody": "Bağlantı yeniden kurulduğunda paneliniz otomatik olarak açılacak.",
   "criticalErrorBody": "Gerekli bir başlatma adımı başarısız oldu. Tekrar deneyin ya da çıkış yapın.",
   "retry": "Tekrar dene",
   "signOut": "Çıkış yap"
