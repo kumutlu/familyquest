@@ -75,7 +75,18 @@ describe('approval API transaction contracts', () => {
     })
     await rejectTaskCompletion('family-1', 'completion-1', 'Please retry')
     expect(tx.update).toHaveBeenCalledTimes(1)
-    expect(tx.update).toHaveBeenCalledWith(expect.anything(), expect.objectContaining({ status: 'rejected', reviewedBy: 'owner-1' }))
+    expect(tx.update).toHaveBeenCalledWith(expect.anything(), expect.objectContaining({ status: 'rejected', reviewedBy: 'owner-1', parentComment: 'Please retry' }))
+  })
+
+  it('rejects a task with empty/absent rejection comment', async () => {
+    const tx = transactionWith({
+      'families/family-1/task_completions/completion-1': { taskId: 'task-1', assigneeId: 'child-1', status: 'pending_approval' },
+      'families/family-1/tasks/task-1': { title: 'Tidy room', pointsReward: 10 },
+      'users/owner-1': { familyId: 'family-1', role: 'parent', displayName: 'Parent' },
+    })
+    await rejectTaskCompletion('family-1', 'completion-1')
+    expect(tx.update).toHaveBeenCalledTimes(1)
+    expect(tx.update).toHaveBeenCalledWith(expect.anything(), expect.objectContaining({ status: 'rejected', reviewedBy: 'owner-1', parentComment: '' }))
   })
 
   it('derives join target identity and display name from the pending request', async () => {

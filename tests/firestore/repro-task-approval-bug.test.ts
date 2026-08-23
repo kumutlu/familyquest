@@ -1,13 +1,15 @@
 import { assertFails, assertSucceeds, initializeTestEnvironment, RulesTestEnvironment } from '@firebase/rules-unit-testing';
-import { doc, setDoc, serverTimestamp, runTransaction, getDoc } from 'firebase/firestore';
+import { doc, setDoc, serverTimestamp, runTransaction } from 'firebase/firestore';
 import { readFileSync } from 'fs';
-import { describe, beforeAll, afterAll, beforeEach, it, expect } from 'vitest';
+import { describe, beforeAll, afterAll, beforeEach, it } from 'vitest';
 
 let testEnv: RulesTestEnvironment;
 const projectId = 'familyquest-task-approval-bug';
 const familyId = 'family123';
 const parentId = 'parent456';
+const ownerId = 'owner456';
 const childId = 'child789';
+const otherFamilyParentId = 'otherParent999';
 
 beforeAll(async () => {
   testEnv = await initializeTestEnvironment({
@@ -29,8 +31,11 @@ beforeEach(async () => {
   await testEnv.withSecurityRulesDisabled(async (context) => {
     const db = context.firestore();
     await setDoc(doc(db, 'families', familyId), { name: 'Family 1' });
+    await setDoc(doc(db, 'families', 'familyOther'), { name: 'Family Other' });
     await setDoc(doc(db, 'users', parentId), { familyId, role: 'parent', displayName: 'Parent' });
+    await setDoc(doc(db, 'users', ownerId), { familyId, role: 'owner', displayName: 'Owner' });
     await setDoc(doc(db, 'users', childId), { familyId, role: 'child', displayName: 'Child' });
+    await setDoc(doc(db, 'users', otherFamilyParentId), { familyId: 'familyOther', role: 'parent', displayName: 'Other Parent' });
     await setDoc(doc(db, `families/${familyId}/tasks`, 'task1'), { title: 'Clean Room', pointsReward: 50 });
     await setDoc(doc(db, `families/${familyId}/task_completions`, 'comp1'), {
       taskId: 'task1',
@@ -160,5 +165,152 @@ describe('Task Approval Bug Reproduction - Transaction with pre-read', () => {
         }
       })
     );
+  });
+
+  describe('Wave 4.1 Rejection Note Firestore Rules Verification', () => {
+    it('1. authorised parent/owner may reject with no parentComment (absent)', async () => {
+      const db = testEnv.authenticatedContext(parentId).firestore();
+      await assertSucceeds(
+        runTransaction(db, async (transaction) => {
+          transaction.update(doc(db, `families/${familyId}/task_completions`, 'comp1'), {
+            status: 'rejected',
+            rejectedAt: serverTimestamp(),
+            reviewedBy: parentId,
+            reviewedByName: 'Parent',
+            reviewedAt: serverTimestamp(),
+          });
+        })
+      );
+    });
+
+    it('1b. authorised owner may reject with no parentComment (absent)', async () => {
+      const db = testEnv.authenticatedContext(ownerId).firestore();
+      await assertSucceeds(
+        runTransaction(db, async (transaction) => {
+          transaction.update(doc(db, `families/${familyId}/task_completions`, 'comp1'), {
+            status: 'rejected',
+            rejectedAt: serverTimestamp(),
+            reviewedBy: ownerId,
+            reviewedByName: 'Owner',
+            reviewedAt: serverTimestamp(),
+          });
+        })
+      );
+    });
+
+    it('2. authorised parent/owner may reject with parentComment: \'\' (empty string)', async () => {
+      const db = testEnv.authenticatedContext(parentId).firestore();
+      await assertSucceeds(
+        runTransaction(db, async (transaction) => {
+          transaction.update(doc(db, `families/${familyId}/task_completions`, 'comp1'), {
+            status: 'rejected',
+            parentComment: '',
+            rejectedAt: serverTimestamp(),
+            reviewedBy: parentId,
+            reviewedByName: 'Parent',
+            reviewedAt: serverTimestamp(),
+          });
+        })
+      );
+    });
+
+    it('3. authorised parent/owner may reject with a non-empty comment', async () => {
+      const db = testEnv.authenticatedContext(parentId).firestore();
+      await assertSucceeds(
+        runTransaction(db, async (transaction) => {
+          transaction.update(doc(db, `families/${familyId}/task_completions`, 'comp1'), {
+            status: 'rejected',
+            parentComment: 'Please vacuum under the rug too',
+            rejectedAt: serverTimestamp(),
+            reviewedBy: parentId,
+            reviewedByName: 'Parent',
+            reviewedAt: serverTimestamp(),
+          });
+        })
+      );
+    });
+
+    it('4. unauthorised child cannot reject', async () => {
+      const db = testEnv.authenticatedContext(childId).firestore();
+      await assertFails(
+        runTransaction(db, async (transaction) => {
+          transaction.update(doc(db, `families/${familyId}/task_completions`, 'comp1'), {
+            status: 'rejected',
+            parentComment: 'Redo it',
+            rejectedAt: serverTimestamp(),
+            reviewedBy: childId,
+            reviewedByName: 'Child',
+            reviewedAt: serverTimestamp(),
+          });
+        })
+      );
+    });
+
+    it('5. cross-family reviewer cannot reject', async () => {
+      const db = testEnv.authenticatedContext(otherFamilyParentId).firestore();
+      await assertFails(
+        runTransaction(db, async (transaction) => {
+          transaction.update(doc(db, `families/${familyId}/task_completions`, 'comp1'), {
+            status: 'rejected',
+            parentComment: '',
+            rejectedAt: serverTimestamp(),
+            reviewedBy: otherFamilyParentId,
+            reviewedByName: 'Other Parent',
+            reviewedAt: serverTimestamp(),
+          });
+        })
+      );
+    });
+
+    it('6. approval permissions are unchanged (parent approves, child cannot approve)', async () => {
+      const parentDb = testEnv.authenticatedContext(parentId).firestore();
+      await assertSucceeds(
+        runTransaction(parentDb, async (transaction) => {
+          transaction.update(doc(parentDb, `families/${familyId}/task_completions`, 'comp1'), {
+            status: 'approved',
+            parentComment: null,
+            approvedAt: serverTimestamp(),
+            reviewedBy: parentId,
+            reviewedByName: 'Parent',
+            reviewedAt: serverTimestamp(),
+          });
+        })
+      );
+
+      // Re-setup comp1
+      await testEnv.withSecurityRulesDisabled(async (context) => {
+        const db = context.firestore();
+        await setDoc(doc(db, `families/${familyId}/task_completions`, 'comp2'), {
+          taskId: 'task1',
+          assigneeId: childId,
+          status: 'pending_approval',
+        });
+      });
+
+      const childDb = testEnv.authenticatedContext(childId).firestore();
+      await assertFails(
+        runTransaction(childDb, async (transaction) => {
+          transaction.update(doc(childDb, `families/${familyId}/task_completions`, 'comp2'), {
+            status: 'approved',
+            approvedAt: serverTimestamp(),
+            reviewedBy: childId,
+            reviewedByName: 'Child',
+            reviewedAt: serverTimestamp(),
+          });
+        })
+      );
+    });
+
+    it('7. unrelated task-completion rules remain unchanged (unauthenticated write denied)', async () => {
+      const unauthDb = testEnv.unauthenticatedContext().firestore();
+      await assertFails(
+        runTransaction(unauthDb, async (transaction) => {
+          transaction.update(doc(unauthDb, `families/${familyId}/task_completions`, 'comp1'), {
+            status: 'rejected',
+            rejectedAt: serverTimestamp(),
+          });
+        })
+      );
+    });
   });
 });

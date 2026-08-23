@@ -796,8 +796,8 @@ export const approveTaskCompletion = async (familyId: string, completionId: stri
   });
 };
 
-export const rejectTaskCompletion = async (familyId: string, completionId: string, comment: string) => {
-  if (!comment.trim()) throw new Error('Rejection reason is required');
+export const rejectTaskCompletion = async (familyId: string, completionId: string, comment?: string) => {
+  const cleanComment = typeof comment === 'string' ? comment.trim() : '';
   const completionRef = doc(db, `families/${familyId}/task_completions`, completionId);
   const currentUserUid = auth.currentUser?.uid;
   if (!currentUserUid) throw new Error('Not authenticated');
@@ -819,7 +819,7 @@ export const rejectTaskCompletion = async (familyId: string, completionId: strin
       actorId: currentUserUid,
       recipientIds: [completion.assigneeId],
       title: 'Task needs attention',
-      body: `“${taskDoc.data().title}” needs attention: “${comment}”`,
+      body: cleanComment ? `“${taskDoc.data().title}” needs attention: “${cleanComment}”` : `“${taskDoc.data().title}” needs attention`,
       entityType: 'task_completion',
       entityId: completionId,
       actionUrl: '/tasks',
@@ -828,7 +828,7 @@ export const rejectTaskCompletion = async (familyId: string, completionId: strin
 
     transaction.update(completionRef, {
       status: 'rejected',
-      parentComment: comment,
+      parentComment: cleanComment,
       rejectedAt: serverTimestamp(),
       ...reviewerFields(currentUserUid, reviewerDoc.data().displayName || 'Parent', serverTimestamp()),
     });
@@ -838,7 +838,7 @@ export const rejectTaskCompletion = async (familyId: string, completionId: strin
       actorId: currentUserUid,
       actorName: reviewerDoc.data().displayName || 'Parent',
       type: 'custom',
-      text: `Task rejected: ${taskDoc.data().title} - "${comment}"`,
+      text: cleanComment ? `Task rejected: ${taskDoc.data().title} - "${cleanComment}"` : `Task rejected: ${taskDoc.data().title}`,
       createdAt: serverTimestamp(),
       timestamp: serverTimestamp()
     });
@@ -1815,6 +1815,7 @@ export const contributeToGoal = async (
         goalId,
         childId,
         amountPence,
+        familyId,
         status: 'pending',
         createdBy: actorId,
         createdAt: serverTimestamp(),
@@ -1824,91 +1825,138 @@ export const contributeToGoal = async (
       return;
     }
 
-    // Matching (design §6). Compute the match amount up-front so the goal's
-    // currentAmountPence is updated exactly ONCE (a single Firestore rules
-    // evaluation), keeping the atomic transaction under the 1000-expression
-    // limit even for auto-match goals.
-    const policy = goal.matching ?? { mode: 'none', perX: 0, matchY: 0 };
-    const matchPence = policy.mode === 'auto' ? computeMatchPence(amountPence, policy) : 0;
-    const finalGoalAmount = goal.currentAmountPence + amountPence + matchPence;
+    // Authoritative wallet-debit + goal-contribution. Shared with the
+    // parent-approved contribution path (approveGoalContribution) so the two
+    // entry points can never drift. A child's money leaves their wallet ONLY
+    // here — either immediately (no approval) or via a parent-approved request.
+    // Nothing is written to the wallet/goal before approval.
+    applyGoalContribution(transaction, {
+      familyId, goalId, childId, amountPence, actorId, goal, walletBalance,
+      walletRef, goalDocRef, txRef, contribRef, ledgerRef, proposalRef, key, requestHash, parentNotif,
+    });
+  });
+};
 
-    transaction.update(walletRef, { balance: walletBalance - amountPence, lastGoalTxId: txRef.id });
-    transaction.update(goalDocRef, {
-      currentAmountPence: finalGoalAmount,
-      ...(finalGoalAmount >= goal.targetAmountPence ? { status: 'reached' } : {}),
-    });
-    transaction.set(txRef, {
-      type: 'goal_contribution',
-      childId,
+/**
+ * Authoritative wallet-debit + goal-contribution application.
+ *
+ * Used by BOTH the immediate (no-approval) child contribution path and the
+ * parent-approved contribution request path. Centralised so the two entry points
+ * apply the exact same atomic writes: wallet debit, goal balance bump, immutable
+ * child_contribution leg + goal_ledger entry, and the optional auto/manual match.
+ *
+ * Security boundary: this is the ONLY place a child's wallet balance is debited
+ * for a goal. It is only ever reached (a) directly by the child when no approval
+ * is required, or (b) by a parent inside approveGoalContribution after they have
+ * authorised the pending request. The child can never trigger a wallet mutation
+ * while a request is still pending.
+ */
+function applyGoalContribution(
+  transaction: any,
+  ctx: {
+    familyId: string;
+    goalId: string;
+    childId: string;
+    amountPence: number;
+    actorId: string;
+    goal: Goal;
+    walletBalance: number;
+    walletRef: any;
+    goalDocRef: any;
+    txRef: any;
+    contribRef: any;
+    ledgerRef: any;
+    proposalRef: any;
+    key: string;
+    requestHash: string;
+    parentNotif?: { ref: any; data: any } | null;
+  },
+) {
+  const { familyId, goalId, childId, amountPence, actorId, goal, walletBalance, walletRef, goalDocRef, txRef, contribRef, ledgerRef, proposalRef, key, requestHash, parentNotif } = ctx;
+  // Matching (design §6). Compute the match amount up-front so the goal's
+  // currentAmountPence is updated exactly ONCE (a single Firestore rules
+  // evaluation), keeping the atomic transaction under the 1000-expression
+  // limit even for auto-match goals.
+  const policy = goal.matching ?? { mode: 'none', perX: 0, matchY: 0 };
+  const matchPence = policy.mode === 'auto' ? computeMatchPence(amountPence, policy) : 0;
+  const finalGoalAmount = goal.currentAmountPence + amountPence + matchPence;
+
+  transaction.update(walletRef, { balance: walletBalance - amountPence, lastGoalTxId: txRef.id });
+  transaction.update(goalDocRef, {
+    currentAmountPence: finalGoalAmount,
+    ...(finalGoalAmount >= goal.targetAmountPence ? { status: 'reached' } : {}),
+  });
+  transaction.set(txRef, {
+    type: 'goal_contribution',
+    childId,
+    goalId,
+    amount: -amountPence,
+    familyId,
+    sourceId: txRef.id,
+    status: 'completed',
+    timestamp: serverTimestamp(),
+    createdAt: serverTimestamp(),
+  });
+  transaction.set(contribRef, {
+    contribId: contribRef.id,
+    goalId,
+    type: 'child_contribution',
+    ownerType: 'child',
+    ownerId: childId,
+    amountPence,
+    matchPence: 0,
+    status: 'applied',
+    walletTxId: txRef.id,
+    createdBy: actorId,
+    createdAt: serverTimestamp(),
+  });
+  transaction.set(ledgerRef, {
+    entryId: ledgerRef.id,
+    goalId,
+    type: 'child_contribution',
+    amountPence,
+    ownerId: childId,
+    createdAt: serverTimestamp(),
+  });
+
+  if (matchPence > 0) {
+    const matchRef = doc(collection(db, `families/${familyId}/${GOAL_COLLECTION}/${goalId}/contributions`));
+    transaction.set(matchRef, {
+      contribId: matchRef.id,
       goalId,
-      amount: -amountPence,
-      familyId,
-      sourceId: txRef.id,
-      status: 'completed',
-      timestamp: serverTimestamp(),
-      createdAt: serverTimestamp(),
-    });
-    transaction.set(contribRef, {
-      contribId: contribRef.id,
-      goalId,
-      type: 'child_contribution',
-      ownerType: 'child',
-      ownerId: childId,
-      amountPence,
-      matchPence: 0,
+      type: 'auto_match',
+      ownerType: 'parent',
+      ownerId: actorId,
+      amountPence: matchPence,
+      matchPence,
+      sourceContributionId: contribRef.id,
       status: 'applied',
-      walletTxId: txRef.id,
       createdBy: actorId,
       createdAt: serverTimestamp(),
     });
-    transaction.set(ledgerRef, {
-      entryId: ledgerRef.id,
+    transaction.set(doc(collection(db, `families/${familyId}/${GOAL_COLLECTION}/${goalId}/goal_ledger`)), {
+      entryId: ledgerRef.id + '_m',
       goalId,
-      type: 'child_contribution',
-      amountPence,
-      ownerId: childId,
+      type: 'auto_match',
+      amountPence: matchPence,
+      ownerId: actorId,
       createdAt: serverTimestamp(),
     });
+  } else if (policy.mode === 'manual') {
+    const proposedMatchAmountPence = computeMatchPence(amountPence, { ...policy, mode: 'auto' });
+    transaction.set(proposalRef, {
+      proposalId: proposalRef.id,
+      goalId,
+      sourceContributionId: contribRef.id,
+      proposedMatchAmountPence,
+      status: 'proposed',
+      createdAt: serverTimestamp(),
+    });
+  }
 
-    if (matchPence > 0) {
-      const matchRef = doc(collection(db, `families/${familyId}/${GOAL_COLLECTION}/${goalId}/contributions`));
-      transaction.set(matchRef, {
-        contribId: matchRef.id,
-        goalId,
-        type: 'auto_match',
-        ownerType: 'parent',
-        ownerId: actorId,
-        amountPence: matchPence,
-        matchPence,
-        sourceContributionId: contribRef.id,
-        status: 'applied',
-        createdBy: actorId,
-        createdAt: serverTimestamp(),
-      });
-      transaction.set(doc(collection(db, `families/${familyId}/${GOAL_COLLECTION}/${goalId}/goal_ledger`)), {
-        entryId: ledgerRef.id + '_m',
-        goalId,
-        type: 'auto_match',
-        amountPence: matchPence,
-        ownerId: actorId,
-        createdAt: serverTimestamp(),
-      });
-    } else if (policy.mode === 'manual') {
-      const proposedMatchAmountPence = computeMatchPence(amountPence, { ...policy, mode: 'auto' });
-      transaction.set(proposalRef, {
-        proposalId: proposalRef.id,
-        goalId,
-        sourceContributionId: contribRef.id,
-        proposedMatchAmountPence,
-        status: 'proposed',
-        createdAt: serverTimestamp(),
-      });
-    }
-
-    applyNotificationWrites(transaction, parentNotif);
-    writeIdempotency(transaction, familyId, key, 'goal_contribution', actorId, requestHash, contribRef.id);
-  });
-};
+  if (parentNotif) applyNotificationWrites(transaction, parentNotif);
+  writeIdempotency(transaction, familyId, key, 'goal_contribution', actorId, requestHash, contribRef.id);
+}
 
 // ---------------------------------------------------------------------------
 // addParentGoalContribution (external money; no wallet debit)
@@ -2054,6 +2102,7 @@ export const requestGoalWithdrawal = async (
       goalId,
       childId,
       amountPence,
+      familyId,
       status: 'pending',
       createdBy: actorId,
       createdAt: serverTimestamp(),
@@ -2177,6 +2226,105 @@ export const rejectGoalWithdrawal = async (familyId: string, requestId: string, 
     if (!reqSnap.exists()) throw new Error('Request not found');
     const req = reqSnap.data();
     if (req.status !== 'pending') throw new Error('Request is not pending');
+    transaction.update(requestRef, {
+      status: 'rejected',
+      reviewedBy: actorId,
+      reviewedByName: actorSnap.exists() ? (actorSnap.data().displayName as string) : undefined,
+      reviewedAt: serverTimestamp(),
+      rejectionReason: reason ?? null,
+    });
+  });
+};
+
+// ---------------------------------------------------------------------------
+// approveGoalContribution / rejectGoalContribution
+//
+// A child-created (or parent-created) goal contribution request that was filed
+// with approvalRequired=true is actioned here by a parent. approveGoalContribution
+// performs the authoritative wallet debit + goal contribution via the SAME secure
+// flow used by the immediate (no-approval) path (applyGoalContribution). The child
+// never mutates their wallet while the request is pending; the debit happens only
+// once a parent approves. rejectGoalContribution leaves all balances untouched.
+// ---------------------------------------------------------------------------
+
+export const approveGoalContribution = async (familyId: string, requestId: string, clientReqId: string) => {
+  const actorId = requireActorId();
+  const actorRef = doc(db, 'users', actorId);
+  const actorSnap = await getDoc(actorRef);
+  const actorRole = actorSnap.exists() ? (actorSnap.data().role as string) : undefined;
+  assertParent(actorRole, familyId);
+
+  const key = goalContributionKey(`req:${requestId}`, clientReqId);
+  const requestHash = requestHashOf({ requestId, approve: true });
+  const idemRef = idempotencyRef(familyId, key);
+  const requestRef = doc(db, `families/${familyId}/goal_requests`, requestId);
+
+  await runTransaction(db, async (transaction) => {
+    const [idemSnap, reqSnap] = await Promise.all([
+      transaction.get(idemRef),
+      transaction.get(requestRef),
+    ]);
+    const prior = checkIdempotency(idemSnap, key, requestHash);
+    if (prior !== null) return; // idempotent replay, no new writes
+
+    if (!reqSnap.exists()) throw new Error('Request not found');
+    const req = reqSnap.data();
+    if (req.status !== 'pending') throw new Error('Request is not pending');
+    if (req.requestType !== 'contribution') throw new Error('Request is not a contribution request');
+    const goalId: string = req.goalId;
+    const childId: string = req.childId;
+    const amountPence: number = req.amountPence;
+
+    const goalDocRef = goalRef(familyId, goalId);
+    const walletRef = doc(db, `families/${familyId}/wallets`, childId);
+    const [goalSnap, walletSnap] = await Promise.all([
+      transaction.get(goalDocRef),
+      transaction.get(walletRef),
+    ]);
+    if (!goalSnap.exists()) throw new Error('Goal not found');
+    const goal = normalizeGoalDoc(goalSnap.data());
+    assertActiveOrReached(goal.status);
+    if (!walletSnap.exists()) throw new Error('Wallet not found');
+    const walletBalance = walletSnap.data().balance || 0;
+    if (walletBalance < amountPence) throw new Error('Insufficient funds');
+
+    const txRef = doc(collection(db, `families/${familyId}/wallet_transactions`));
+    const contribRef = doc(collection(db, `families/${familyId}/${GOAL_COLLECTION}/${goalId}/contributions`));
+    const ledgerRef = doc(collection(db, `families/${familyId}/${GOAL_COLLECTION}/${goalId}/goal_ledger`));
+    const proposalRef = doc(collection(db, `families/${familyId}/${GOAL_COLLECTION}/${goalId}/match_proposals`));
+
+    // Authoritative wallet debit + goal contribution (same secure flow as the
+    // immediate child path). Works for child-owned AND parent-owned goals.
+    applyGoalContribution(transaction, {
+      familyId, goalId, childId, amountPence, actorId, goal, walletBalance,
+      walletRef, goalDocRef, txRef, contribRef, ledgerRef, proposalRef, key, requestHash,
+    });
+
+    transaction.update(requestRef, {
+      status: 'approved',
+      reviewedBy: actorId,
+      reviewedByName: actorSnap.exists() ? (actorSnap.data().displayName as string) : undefined,
+      reviewedAt: serverTimestamp(),
+      contribId: contribRef.id,
+      walletTxId: txRef.id,
+    });
+  });
+};
+
+export const rejectGoalContribution = async (familyId: string, requestId: string, reason?: string) => {
+  const actorId = requireActorId();
+  const actorRef = doc(db, 'users', actorId);
+  const actorSnap = await getDoc(actorRef);
+  const actorRole = actorSnap.exists() ? (actorSnap.data().role as string) : undefined;
+  assertParent(actorRole, familyId);
+  const requestRef = doc(db, `families/${familyId}/goal_requests`, requestId);
+  await runTransaction(db, async (transaction) => {
+    const reqSnap = await transaction.get(requestRef);
+    if (!reqSnap.exists()) throw new Error('Request not found');
+    const req = reqSnap.data();
+    if (req.status !== 'pending') throw new Error('Request is not pending');
+    if (req.requestType !== 'contribution') throw new Error('Request is not a contribution request');
+    // Rejection must NOT mutate any wallet or goal balance.
     transaction.update(requestRef, {
       status: 'rejected',
       reviewedBy: actorId,

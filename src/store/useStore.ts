@@ -885,10 +885,17 @@ export const useStore = create<AppState>((set, get) => ({
             set({ savingsGoals: goals });
             subscribeGoalSubcollections(goals.map((goal: any) => goal.id));
           });
-          subscribePlanned('goalRequests', 'Goal requests', snapshot => set({ goalRequests: docs(snapshot) }));
+          subscribePlanned('goalRequests', 'Goal requests', snapshot => set({
+            goalRequests: docs(snapshot).sort((a: any, b: any) => {
+              const timeA = a.createdAt?.toMillis ? a.createdAt.toMillis() : new Date(a.createdAt || 0).getTime();
+              const timeB = b.createdAt?.toMillis ? b.createdAt.toMillis() : new Date(b.createdAt || 0).getTime();
+              return timeB - timeA;
+            }),
+          }));
           subscribePlanned('transferRequests', 'Transfer requests', snapshot => set({ transferRequests: docs(snapshot) }));
           subscribePlanned('petboxRequests', 'Pet Box requests', snapshot => set({ petboxRequests: docs(snapshot) }));
           subscribePlanned('profileUpdateRequests', 'Profile update requests', snapshot => set({ profileUpdateRequests: docs(snapshot) }));
+          subscribePlanned('avatarUnlocks', 'Avatar unlocks', snapshot => set({ avatarUnlocks: docs(snapshot) }));
 
           const moneyRequestResults: any[][] = [[], []];
           const moneyRequestReady = [false, false];

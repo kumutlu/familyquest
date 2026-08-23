@@ -236,7 +236,11 @@ export function createBootstrapQueryPlan(
       { resource: 'redemptions', key: 'redemptions', kind: 'query', target: query(collection(db, `${familyPath}/redemptions`), where('userId', '==', userId)) },
       { resource: 'walletTransactions', key: 'walletTransactions', kind: 'query', target: query(collection(db, `${familyPath}/wallet_transactions`), where('childId', '==', userId)) },
       { resource: 'savingsGoals', key: 'savingsGoals', kind: 'query', target: query(collection(db, `${familyPath}/savings_goals`), where('childId', '==', userId)) },
-      { resource: 'goalRequests', key: 'goalRequests', kind: 'query', target: query(collection(db, `${familyPath}/goal_requests`), where('childId', '==', userId), orderBy('createdAt', 'desc')) },
+      // NOTE: intentionally NO orderBy here for goalRequests or transferRequests.
+      // A `where('childId','==',uid)` plus `orderBy('createdAt','desc')` requires a composite
+      // index. Filtering by the childId alone uses the automatic single-field index,
+      // and we sort client-side in the store.
+      { resource: 'goalRequests', key: 'goalRequests', kind: 'query', target: query(collection(db, `${familyPath}/goal_requests`), where('childId', '==', userId)) },
       // NOTE: intentionally NO orderBy here. A `where('fromChildId','==',uid)
       // plus `orderBy('createdAt','desc')` requires the composite index
       // `fromChildId ASC, createdAt DESC`. If that index is missing or still

@@ -120,19 +120,50 @@ describe('SwipeReview', () => {
     await waitFor(() => expect(api.approveTaskCompletion).toHaveBeenCalledTimes(1));
   });
 
-  it('rejection requires a reason and sends it through the domain contract', async () => {
+  it('rejection note is optional: sends immediately with empty reason when confirmed', async () => {
     useStoreMock.mockReturnValue(makeStore());
     renderReview();
     fireEvent.click(screen.getByTestId('review-reject'));
     const sheet = await screen.findByRole('dialog', { name: 'What should be different?' });
     const confirm = screen.getByRole('button', { name: 'Send back' });
-    expect(confirm).toBeDisabled();
-    fireEvent.change(screen.getByRole('textbox'), { target: { value: 'Please redo it' } });
+    expect(confirm).not.toBeDisabled();
+    fireEvent.click(confirm);
+    await waitFor(() => expect(api.rejectTaskCompletion).toHaveBeenCalledWith('fam', 'c1', ''));
+    // The reason sheet closes once the mutation is dispatched.
+    await waitFor(() => expect(sheet).not.toBeInTheDocument());
+  });
+
+  it('rejection with an entered note persists the note through the domain call', async () => {
+    useStoreMock.mockReturnValue(makeStore());
+    renderReview();
+    fireEvent.click(screen.getByTestId('review-reject'));
+    const sheet = await screen.findByRole('dialog', { name: 'What should be different?' });
+    const confirm = screen.getByRole('button', { name: 'Send back' });
+    const textarea = screen.getByRole('textbox');
+    fireEvent.change(textarea, { target: { value: 'Please redo it' } });
     expect(confirm).not.toBeDisabled();
     fireEvent.click(confirm);
     await waitFor(() => expect(api.rejectTaskCompletion).toHaveBeenCalledWith('fam', 'c1', 'Please redo it'));
-    // The reason sheet closes once the mutation is dispatched.
     await waitFor(() => expect(sheet).not.toBeInTheDocument());
+  });
+
+  it('reject textarea does not remount or lose focus across multiple typed characters', async () => {
+    useStoreMock.mockReturnValue(makeStore());
+    renderReview();
+    fireEvent.click(screen.getByTestId('review-reject'));
+    await screen.findByRole('dialog', { name: 'What should be different?' });
+    const textarea = screen.getByRole('textbox') as HTMLTextAreaElement;
+    textarea.focus();
+    expect(document.activeElement).toBe(textarea);
+
+    const initialNode = textarea;
+    // Simulate typing multiple characters sequentially
+    const textToType = 'Room was not fully vacuumed';
+    for (let i = 0; i < textToType.length; i++) {
+      fireEvent.change(textarea, { target: { value: textToType.slice(0, i + 1) } });
+      expect(screen.getByRole('textbox')).toBe(initialNode);
+    }
+    expect(textarea.value).toBe(textToType);
   });
 
   it('a failed mutation restores the card with actionable feedback', async () => {
@@ -269,13 +300,13 @@ describe('SwipeReview — Wave 3 typed kinds', () => {
     expect(api.approveMoneyRequest).toHaveBeenCalledWith('fam', 'mr1');
   });
 
-  it('rejecting a transfer keeps the reason-required contract and calls the right mutation', async () => {
+  it('rejecting a transfer calls the right mutation with optional reason', async () => {
     useStoreMock.mockReturnValue(makeStore({ taskCompletions: [], transferRequests: [transfer({ id: 'tr1' })] }));
     renderReview();
     fireEvent.click(screen.getByTestId('review-reject'));
     const confirm = screen.getByRole('button', { name: 'Send back' });
-    expect(confirm).toBeDisabled(); // reason required
-    fireEvent.change(screen.getByPlaceholderText(/Add a short note/), { target: { value: 'Save your money' } });
+    expect(confirm).not.toBeDisabled();
+    fireEvent.change(screen.getByPlaceholderText(/Add a note/), { target: { value: 'Save your money' } });
     fireEvent.click(confirm);
     await waitFor(() => expect(api.rejectTransferRequest).toHaveBeenCalledTimes(1));
     expect(api.rejectTransferRequest).toHaveBeenCalledWith('fam', 'tr1', 'Save your money');

@@ -82,6 +82,20 @@ describe('Dashboard role routing (Queki v2)', () => {
     expect(screen.getByTestId('child-living-home')).toBeInTheDocument();
     expect(screen.queryByTestId('parent-living-home')).not.toBeInTheDocument();
   });
+
+  it('renders Child Living Home even when an optional background resource failed', () => {
+    store.state = baseState({
+      currentUser: { id: 'c-1', familyId: 'f1', role: 'child', displayName: 'Ada' },
+      bootstrapStatus: {
+        ...readyBootstrap,
+        goalRequests: 'error',
+        petboxRequests: 'error',
+      },
+    });
+    render(<MemoryRouter><Dashboard /></MemoryRouter>);
+    expect(screen.getByTestId('child-living-home')).toBeInTheDocument();
+    expect(screen.queryByTestId('living-home-error')).not.toBeInTheDocument();
+  });
 });
 
 describe('Parent Living Home priorities', () => {
@@ -200,5 +214,37 @@ describe('Child Living Home semantics (XP ≠ points ≠ money)', () => {
   it('keeps streak meaning independent from both currencies', () => {
     render(<MemoryRouter><Dashboard /></MemoryRouter>);
     expect(screen.getByLabelText('4 day streak')).toBeInTheDocument();
+  });
+
+  it('renders loading skeleton while core tasks/members are loading', () => {
+    store.state = {
+      ...store.state,
+      bootstrapStatus: { ...readyBootstrap, tasks: 'loading' },
+    };
+    render(<MemoryRouter><Dashboard /></MemoryRouter>);
+    expect(screen.getByTestId('child-living-home')).toBeInTheDocument();
+    expect(screen.queryByTestId('child-all-done')).not.toBeInTheDocument();
+  });
+
+  it('renders recoverable error when core task resource fails', () => {
+    store.state = {
+      ...store.state,
+      bootstrapStatus: { ...readyBootstrap, tasks: 'error' },
+    };
+    render(<MemoryRouter><Dashboard /></MemoryRouter>);
+    expect(screen.getByTestId('living-home-error')).toBeInTheDocument();
+    expect(screen.queryByTestId('child-living-home')).not.toBeInTheDocument();
+  });
+
+  it('renders without error when optional wallet or gamification data is null', () => {
+    store.state = {
+      ...store.state,
+      myWallet: null,
+      myGamificationSummary: null,
+      myDailyProgress: null,
+    };
+    render(<MemoryRouter><Dashboard /></MemoryRouter>);
+    expect(screen.getByTestId('child-living-home')).toBeInTheDocument();
+    expect(screen.queryByTestId('child-balance-chip')).not.toBeInTheDocument();
   });
 });

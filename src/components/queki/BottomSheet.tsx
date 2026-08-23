@@ -23,22 +23,27 @@ export interface BottomSheetProps {
  */
 export function BottomSheet({ open, onClose, 'aria-label': ariaLabel, title, children, className }: BottomSheetProps) {
   const panelRef = useRef<HTMLDivElement>(null);
+  const onCloseRef = useRef(onClose);
+  onCloseRef.current = onClose;
   const reducedMotion = useReducedMotion();
 
   useEffect(() => {
     if (!open) return;
     const previouslyFocused = document.activeElement as HTMLElement | null;
     const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') onClose();
+      if (event.key === 'Escape') onCloseRef.current();
     };
     document.addEventListener('keydown', onKeyDown);
-    // Move focus into the sheet for keyboard users.
-    panelRef.current?.focus();
+    // Move focus into the sheet for keyboard users if a child element hasn't already focused.
+    const activeEl = document.activeElement;
+    if (!panelRef.current?.contains(activeEl)) {
+      panelRef.current?.focus();
+    }
     return () => {
       document.removeEventListener('keydown', onKeyDown);
       previouslyFocused?.focus?.();
     };
-  }, [open, onClose]);
+  }, [open]);
 
   if (!open || typeof document === 'undefined') return null;
 

@@ -172,7 +172,11 @@ export function ChildLivingHome() {
     }
   };
 
-  if (bootstrapStatus && Object.values(bootstrapStatus).includes('error')) {
+  const coreResourcesFailed =
+    bootstrapStatus &&
+    (['tasks', 'members'] as const).some(resource => bootstrapStatus[resource] === 'error');
+
+  if (coreResourcesFailed) {
     return (
       <div className="mx-auto max-w-md py-12 text-center" role="alert" data-testid="living-home-error">
         <span className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-2xl bg-coral-50 text-coral-500">

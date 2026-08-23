@@ -1556,7 +1556,7 @@ service cloud.firestore {
       let data = request.resource.data;
       let requiredKeys = ['requestType', 'goalId', 'childId', 'amountPence', 'status', 'createdAt'];
       return data.keys().hasAll(requiredKeys)
-        && data.keys().hasOnly(['requestType', 'goalId', 'childId', 'amountPence', 'status', 'createdBy', 'createdAt', 'dedupeKey'])
+        && data.keys().hasOnly(['requestType', 'goalId', 'childId', 'amountPence', 'status', 'createdBy', 'createdAt', 'dedupeKey', 'familyId'])
         && data.familyId == familyId
         && data.status == 'pending'
         && data.amountPence is int && data.amountPence > 0
@@ -1847,7 +1847,7 @@ service cloud.firestore {
               && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'parentComment', 'approvedAt', 'reviewedBy', 'reviewedByName', 'reviewedAt']))
             || (request.resource.data.status == 'rejected'
               && request.resource.data.rejectedAt == request.time
-              && request.resource.data.parentComment is string && request.resource.data.parentComment.trim().size() > 0
+              && (!('parentComment' in request.resource.data) || request.resource.data.parentComment == null || request.resource.data.parentComment is string)
               && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'parentComment', 'rejectedAt', 'reviewedBy', 'reviewedByName', 'reviewedAt']))))
           || (isAuthenticated() && resource.data.status == 'pending_approval' && (resource.data.assigneeId == authProfileId() || isParent(familyId))
               && request.resource.data.status == 'cancelled' && request.resource.data.cancelledBy == authProfileId()

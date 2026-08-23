@@ -58,7 +58,7 @@
     "rejecting": "Geri gönderiliyor…",
     "swipeHint": "Onaylamak için sağa, geri göndermek için sola kaydır",
     "rejectReasonTitle": "Nasıl olmalıydı?",
-    "rejectReasonPlaceholder": "{{name}} için kısa bir not ekle…",
+    "rejectReasonPlaceholder": "Not ekle (isteğe bağlı)…",
     "rejectConfirm": "Geri gönder",
     "cancel": "Vazgeç",
     "allCaughtUpTitle": "Her şey tamam!",

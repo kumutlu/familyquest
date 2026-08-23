@@ -58,7 +58,7 @@
     "rejecting": "Rejecting…",
     "swipeHint": "Swipe right to approve, left to reject",
     "rejectReasonTitle": "What should be different?",
-    "rejectReasonPlaceholder": "Add a short note for {{name}}…",
+    "rejectReasonPlaceholder": "Add a note (optional)…",
     "rejectConfirm": "Send back",
     "cancel": "Cancel",
     "allCaughtUpTitle": "All caught up!",

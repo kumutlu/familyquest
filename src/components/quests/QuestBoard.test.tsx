@@ -72,6 +72,42 @@ describe('QuestBoard', () => {
     expect(screen.getByTestId('today-progress')).toHaveTextContent('0 of 1');
   });
 
+  it('renders truthful generic pending copy "Waiting for approval" when family has multiple authorized reviewers', () => {
+    useStoreMock.mockReturnValue(
+      makeStore({
+        tasks: [todayTask],
+        taskCompletions: [
+          { id: 'c1', taskId: 't1', assigneeId: 'childA', status: 'pending_approval', periodKey: TODAY_KEY },
+        ],
+        familyMembers: [
+          { id: 'p1', displayName: 'Bilge MUM', role: 'parent' },
+          { id: 'p2', displayName: 'Kemal DAD', role: 'owner' },
+        ],
+      }),
+    );
+    render(<QuestBoard />);
+    expect(screen.getByTestId('pending-quest')).toHaveTextContent('Waiting for approval');
+    // Does NOT arbitrarily pick parents[0] ('Bilge MUM')
+    expect(screen.getByTestId('pending-quest')).not.toHaveTextContent('Waiting for Bilge MUM');
+  });
+
+  it('renders truthful generic pending copy even in a single-parent family', () => {
+    useStoreMock.mockReturnValue(
+      makeStore({
+        tasks: [todayTask],
+        taskCompletions: [
+          { id: 'c1', taskId: 't1', assigneeId: 'childA', status: 'pending_approval', periodKey: TODAY_KEY },
+        ],
+        familyMembers: [
+          { id: 'p1', displayName: 'Single Parent', role: 'owner' },
+        ],
+      }),
+    );
+    render(<QuestBoard />);
+    expect(screen.getByTestId('pending-quest')).toHaveTextContent('Waiting for approval');
+    expect(screen.getByTestId('pending-quest')).not.toHaveTextContent('Waiting for Single Parent');
+  });
+
   it('pending state derives from authoritative data and survives re-render/reload', () => {
     const store = makeStore({
       tasks: [todayTask],

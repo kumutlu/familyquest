@@ -208,10 +208,14 @@ export function SwipeReview() {
     [executeDecision],
   );
 
+  const handleCloseRejectSheet = useCallback(() => {
+    setRejectTarget(null);
+    setRejectComment('');
+  }, []);
+
   const handleRejectConfirm = useCallback(() => {
     if (!rejectTarget) return;
     const comment = rejectComment.trim();
-    if (!comment) return; // domain contract: rejection reason required for every kind
     const target = rejectTarget;
     setRejectTarget(null);
     setRejectComment('');
@@ -504,13 +508,10 @@ export function SwipeReview() {
         </>
       )}
 
-      {/* ---- Rejection reason sheet (domain contract: reason required) ------ */}
+      {/* ---- Rejection reason sheet (optional note) ------ */}
       <BottomSheet
         open={Boolean(rejectTarget)}
-        onClose={() => {
-          setRejectTarget(null);
-          setRejectComment('');
-        }}
+        onClose={handleCloseRejectSheet}
         aria-label={t('review.rejectReasonTitle')}
         title={t('review.rejectReasonTitle')}
       >
@@ -524,9 +525,8 @@ export function SwipeReview() {
           <textarea
             value={rejectComment}
             onChange={event => setRejectComment(event.target.value)}
-            placeholder={t('review.rejectReasonPlaceholder', { name: rejectTarget?.childName ?? '' })}
+            placeholder={t('review.rejectReasonPlaceholder', { name: rejectTarget?.childName ?? '', defaultValue: 'Add a note (optional)…' })}
             rows={3}
-            required
             autoFocus
             className="w-full rounded-xl border qk-border-subtle qk-bg-card p-3 text-body qk-text-primary focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-500"
           />
@@ -535,14 +535,17 @@ export function SwipeReview() {
               variant="secondary"
               type="button"
               fullWidth
-              onClick={() => {
-                setRejectTarget(null);
-                setRejectComment('');
-              }}
+              onClick={handleCloseRejectSheet}
             >
               {t('review.cancel')}
             </TactileButton>
-            <TactileButton variant="coral" type="submit" fullWidth disabled={!rejectComment.trim()}>
+            <TactileButton
+              variant="coral"
+              type="submit"
+              fullWidth
+              disabled={Boolean(processingKey)}
+              data-testid="reject-confirm-btn"
+            >
               {t('review.rejectConfirm')}
             </TactileButton>
           </div>

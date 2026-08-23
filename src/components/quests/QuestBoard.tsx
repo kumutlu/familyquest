@@ -57,7 +57,7 @@ interface MomentState {
 
 export function QuestBoard() {
   const { t } = useTranslation('quests');
-  const { currentUser, tasks, taskCompletions, familyMembers, bootstrapStatus } = useStore();
+  const { currentUser, tasks, taskCompletions, bootstrapStatus } = useStore();
   const now = useRecurrenceClock();
 
   const [expanded, setExpanded] = useState(false);
@@ -86,11 +86,6 @@ export function QuestBoard() {
   const progress = useMemo(
     () => computeTodayProgress(tasks, taskCompletions, now, isChild ? currentUser?.id : undefined),
     [tasks, taskCompletions, now, isChild, currentUser?.id],
-  );
-
-  const reviewerName = useMemo(
-    () => familyMembers.find(m => m?.role === 'parent' || m?.role === 'owner')?.displayName,
-    [familyMembers],
   );
 
   const streakDays = Number(currentUser?.currentStreak ?? 0);
@@ -165,7 +160,6 @@ export function QuestBoard() {
           kind: 'submitted',
           questTitle: String(quest.task.title ?? ''),
           points: Number(quest.task.pointsReward ?? 0),
-          reviewerName,
           autoApproved: !requiresApproval,
         });
       } catch (err) {
@@ -177,7 +171,7 @@ export function QuestBoard() {
         setError(err instanceof Error ? err.message : t('review.errorRetry'));
       }
     },
-    [currentUser, interaction, now, reviewerName, t],
+    [currentUser, interaction, now, t],
   );
 
   // Authoritative reconciliation: if a listener delivers the pending record
@@ -342,7 +336,7 @@ export function QuestBoard() {
       {board.pending.length > 0 && (
         <section className="space-y-3" aria-label={t('pendingCard.description')}>
           {board.pending.map(view => (
-            <PendingQuestCard key={view.completionId ?? view.task.id} quest={view} reviewerName={reviewerName} />
+            <PendingQuestCard key={view.completionId ?? view.task.id} quest={view} />
           ))}
         </section>
       )}
