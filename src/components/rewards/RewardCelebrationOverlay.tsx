@@ -291,7 +291,10 @@ export function RewardCelebrationOverlay({
           </p>
         </div>
 
-        <h2 className="rc-title" id="reward-celebration-title">Reward Requested!</h2>
+        {/* Redemption is instant in this domain (points deducted inside the
+            redeemReward transaction), so the honest headline is "unlocked",
+            not "requested". */}
+        <h2 className="rc-title" id="reward-celebration-title">Reward Unlocked!</h2>
         <p className="rc-kicker">Nice choice!</p>
 
         <div

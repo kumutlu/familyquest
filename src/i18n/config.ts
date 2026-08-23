@@ -24,6 +24,7 @@ export const NAMESPACES = [
   'auth',
   'family',
   'tasks',
+  'quests',
   'wallet',
   'goals',
   'rewards',
@@ -41,6 +42,7 @@ export const NAMESPACES = [
   'legal',
   'help',
   'onboarding',
+  'familyWorld',
 ] as const;
 export type Namespace = (typeof NAMESPACES)[number];
 

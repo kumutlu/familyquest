@@ -19,8 +19,9 @@ import { MoneyInsights } from '../components/wallet/MoneyInsights';
 import { PendingTransfers } from '../components/wallet/PendingTransfers';
 import { TransactionList } from '../components/wallet/TransactionList';
 import { TransactionDetailsModal } from '../components/wallet/TransactionDetailsModal';
-import { SendMoneyModal } from '../components/wallet/SendMoneyModal';
+import { SendFlowSheet } from '../components/wallet/SendFlowSheet';
 import { RequestMoneyModal } from '../components/wallet/RequestMoneyModal';
+import { TransferArrivalMoment } from '../components/wallet/TransferArrivalMoment';
 import { ErrorState, TransactionSkeletonRows } from '../components/wallet/WalletStates';
 import { currencySymbolFromCode, resolveFamilyCurrencyCode } from '../i18n/format';
 
@@ -199,10 +200,22 @@ export function Wallet() {
         nameResolver={nameResolver}
       />
       {isChild && activeModal === 'send' && (
-        <SendMoneyModal onClose={() => setActiveModal(null)} currencyCode={currencyCode} />
+        <SendFlowSheet onClose={() => setActiveModal(null)} currencyCode={currencyCode} />
       )}
       {isChild && activeModal === 'request' && (
         <RequestMoneyModal onClose={() => setActiveModal(null)} currencyCode={currencyCode} />
+      )}
+
+      {/* Recipient-side living moment — derived purely from the authoritative
+          wallet_transactions stream; never replays on reload. */}
+      {isChild && (
+        <TransferArrivalMoment
+          transactions={walletTransactions}
+          currentUserId={currentUser.id}
+          familyMembers={familyMembers}
+          familyData={familyData}
+          currencyCode={currencyCode}
+        />
       )}
     </div>
   );

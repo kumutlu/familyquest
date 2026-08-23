@@ -17,6 +17,7 @@ const store = vi.hoisted(() => ({
   challenges: [] as any[],
   behaviourEvents: [] as any[],
   loading: false,
+  bootstrapStatus: { tasks: 'ready', members: 'ready' } as any,
 }));
 
 vi.mock('../store/useStore', () => ({ useStore: () => store }));
@@ -97,13 +98,13 @@ describe('Parent Core i18n — English rendering', () => {
   it('renders the Rewards empty state in English', () => {
     render(withRouter(<Rewards />));
     expect(screen.getByText('Rewards')).toBeInTheDocument();
-    expect(screen.getByText('No rewards available yet.')).toBeInTheDocument();
+    expect(screen.getByText('No rewards yet')).toBeInTheDocument();
   });
 
   it('renders the Tasks empty state in English', () => {
     render(withRouter(<Tasks />));
-    expect(screen.getByText('Tasks')).toBeInTheDocument();
-    expect(screen.getByText('No active tasks found in this category.')).toBeInTheDocument();
+    expect(screen.getByText('Quests')).toBeInTheDocument();
+    expect(screen.getByText('No quests yet')).toBeInTheDocument();
   });
 
   it('renders the Family page in English', () => {
@@ -140,13 +141,13 @@ describe('Parent Core i18n — Turkish rendering', () => {
   it('renders the Rewards empty state in Turkish', () => {
     render(withRouter(<Rewards />));
     expect(screen.getByText('Ödüller')).toBeInTheDocument();
-    expect(screen.getByText('Henüz uygun ödül yok.')).toBeInTheDocument();
+    expect(screen.getByText('Henüz ödül yok')).toBeInTheDocument();
   });
 
   it('renders the Tasks empty state in Turkish', () => {
     render(withRouter(<Tasks />));
     expect(screen.getByText('Görevler')).toBeInTheDocument();
-    expect(screen.getByText('Bu kategoride aktif görev bulunamadı.')).toBeInTheDocument();
+    expect(screen.getByText('Henüz görev yok')).toBeInTheDocument();
   });
 
   it('renders the Family page in Turkish', () => {
@@ -178,11 +179,11 @@ describe('Parent Core i18n — language switching', () => {
 
   it('switches the Rewards empty state from English to Turkish', async () => {
     render(withRouter(<Rewards />));
-    expect(screen.getByText('No rewards available yet.')).toBeInTheDocument();
+    expect(screen.getByText('No rewards yet')).toBeInTheDocument();
 
     await act(async () => { await i18n.changeLanguage('tr'); });
 
-    expect(screen.getByText('Henüz uygun ödül yok.')).toBeInTheDocument();
-    expect(screen.queryByText('No rewards available yet.')).not.toBeInTheDocument();
+    expect(screen.getByText('Henüz ödül yok')).toBeInTheDocument();
+    expect(screen.queryByText('No rewards yet')).not.toBeInTheDocument();
   });
 });

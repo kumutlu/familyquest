@@ -158,7 +158,17 @@
     "childrenOnly": "Transferler yalnızca çocuklar arasında yapılabilir.",
     "walletNotFound": "Cüzdanınız bulunamadı. Lütfen yenileyip tekrar deneyin.",
     "signedOut": "Oturumunuz kapatıldı. Lütfen tekrar giriş yapın.",
-    "generic": "Bir şeyler ters gitti. Lütfen tekrar deneyin."
+    "generic": "Bir şeyler ters gitti. Lütfen tekrar deneyin.",
+    "stageWho": "KİME?",
+    "stageAmount": "NE KADAR?",
+    "stageReview": "KONTROL ET",
+    "stageReviewCta": "Kontrol et",
+    "stageChange": "Değiştir",
+    "stageBack": "Geri",
+    "availableBalance": "Mevcut: {{amount}}",
+    "quickAmounts": "Hızlı tutarlar",
+    "reviewTitle": "{{name}} kişisine {{amount}} gönderilsin mi?",
+    "sentDone": "Tamam"
   },
   "request": {
     "title": "Para İste",
@@ -217,5 +227,11 @@
     "fundDonation": "Fon bağışı -{{amount}}",
     "withdrawal": "Para çekme -{{amount}}",
     "deducted": "Düşüldü -{{amount}}"
+  },
+  "arrival": {
+    "title": "Para geldi",
+    "received": "{{name}} sana {{amount}} gönderdi",
+    "someone": "Biri",
+    "dismiss": "Yaşasın!"
   }
 }

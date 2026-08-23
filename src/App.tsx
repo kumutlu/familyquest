@@ -4,6 +4,7 @@ import { Dashboard } from './pages/Dashboard';
 import { Family } from './pages/Family';
 import { MemberProfile } from './pages/MemberProfile';
 import { Tasks } from './pages/Tasks';
+import { ReviewPage } from './pages/ReviewPage';
 import { Rewards } from './pages/Rewards';
 import { Wallet } from './pages/Wallet';
 import { Wallets } from './pages/Wallets';
@@ -90,6 +91,8 @@ function App() {
             <Route path="family" element={<Family />} />
             <Route path="family/:id" element={<MemberProfile />} />
             <Route path="tasks" element={<Tasks />} />
+            {/* Queki v2 Wave 2: parent fast review (swipe) flow. */}
+            <Route path="review" element={<ReviewPage />} />
             <Route path="rewards" element={<Rewards />} />
             <Route path="pet-box" element={<FundsDashboard />} />
             <Route path="wallet" element={<Wallet />} />

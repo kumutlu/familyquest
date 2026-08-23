@@ -1,0 +1,77 @@
+{
+  "parent": {
+    "greeting": "Hello, {{name}}",
+    "heroSubtitle": "Here's what matters right now.",
+    "familyBalanceLabel": "Family wallet",
+    "mascotCalm": "Everything is running smoothly. Nice work!",
+    "mascotBusy": "Some things need your eye today.",
+    "approvals": {
+      "title_one": "{{count}} waiting for you",
+      "title_other": "{{count}} waiting for you",
+      "description": "Quests, transfers and requests need a decision.",
+      "action": "Review"
+    },
+    "goalMilestone": {
+      "title": "\u201c{{title}}\u201d is {{progress}}% funded",
+      "description": "Almost there — worth celebrating soon."
+    },
+    "challengeUpdate": {
+      "title": "Family Quest finished",
+      "description": "\u201c{{title}}\u201d is ready to wrap up."
+    },
+    "walletEvent": {
+      "title": "{{name}} received {{amount}}",
+      "description": "A wallet top-up landed in the last day."
+    },
+    "allCalm": {
+      "title": "All quiet",
+      "description": "Nothing needs you right now."
+    },
+    "childrenHeading": "Your crew",
+    "childSubtitle": "Level {{level}} · {{points}} pts",
+    "reviewSheetTitle": "Approvals",
+    "historyLink": "Full approval history"
+  },
+  "child": {
+    "greeting": "Hi, {{name}}!",
+    "heroSubtitle": "Let's make today count.",
+    "mascotEncourage": "You've got this — small steps every day!",
+    "mascotCelebrate": "Look at you go! Amazing work!",
+    "approvalWaiting": {
+      "title_one": "{{count}} quest waiting for approval",
+      "title_other": "{{count}} quests waiting for approval",
+      "description": "A grown-up will take a look soon."
+    },
+    "moneyReceived": {
+      "title": "You received {{amount}}",
+      "description": "Straight to your wallet."
+    },
+    "nextQuest": {
+      "title": "Next up: {{title}}",
+      "description_one": "Worth {{points}} points",
+      "description_other": "Worth {{points}} points"
+    },
+    "streakKeep": {
+      "title": "Keep your {{days}}-day streak!",
+      "description": "Do one more quest today to keep the flame alive."
+    },
+    "rewardAvailable": {
+      "title": "\u201c{{title}}\u201d is within reach",
+      "description": "You have enough points to claim it."
+    },
+    "familyQuest": {
+      "title": "Family Quest: {{title}}",
+      "description": "Your family is playing this together."
+    },
+    "allDone": {
+      "title": "You're all caught up!",
+      "description": "Check back later for new quests."
+    },
+    "walletHeading": "Your wallet"
+  },
+  "loading": "Warming things up…",
+  "emptyAction": "Take a look around",
+  "errorTitle": "This view couldn't load",
+  "errorDescription": "Your family data is safe. Try again in a moment.",
+  "errorRetry": "Try again"
+}

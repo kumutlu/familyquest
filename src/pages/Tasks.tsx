@@ -1,24 +1,18 @@
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { HelpButton } from '../help/components/HelpButton';
-import { Card, CardContent } from '../components/ui/Card';
 import { PageLoader } from '../components/ui/PageLoader';
-import { EmptyState } from '../components/ui/EmptyState';
-import { Badge } from '../components/ui/Badge';
 import { Button } from '../components/ui/Button';
-import { Plus, CheckCircle2 } from 'lucide-react';
 import { useStore } from '../store/useStore';
 import { completeTask, createTask, updateTask } from '../lib/api';
-import { deriveTaskAvailability } from '../lib/taskRecurrence';
 import { useRecurrenceClock } from '../lib/useRecurrenceClock';
-import { cn } from '../lib/utils';
-import { isChildRole, isParentRole } from '../lib/roles';
+import { isChildRole } from '../lib/roles';
 import { TaskDetailsModal } from '../components/tasks/TaskDetailsModal';
+import { QuestBoard } from '../components/quests/QuestBoard';
+import { ParentQuestBoard } from '../components/parent/ParentQuestBoard';
 
 export function Tasks() {
   const { t } = useTranslation(['tasks', 'errors']);
-  const { currentUser, tasks, taskCompletions, loading, familyMembers } = useStore();
-  const [filter, setFilter] = useState<'all' | 'daily' | 'weekdays' | 'weekends' | 'weekly' | 'one-time'>('all');
+  const { currentUser, loading, familyMembers } = useStore();
   const [selectedTask, setSelectedTask] = useState<any>(null);
 
   const [isFormOpen, setIsFormOpen] = useState(false);
@@ -34,29 +28,15 @@ export function Tasks() {
 
   if (loading) return <PageLoader label={t('tasks:loading')} />;
 
-  // Filter out archived tasks first
-  const activeTasks = tasks.filter(t => t.isActive !== false);
+  // Queki v2 Wave 2: children get the touch-first Quest Board; parents keep
+  // full management via the v2 Parent Quest Board (create/edit/archive all
+  // preserved behind the same modals as before).
+  if (isChildRole(currentUser?.role)) {
+    return <QuestBoard />;
+  }
 
-  // Role-scoped visibility: children only see their own tasks and shared tasks
-  const visibleTasks = isChildRole(currentUser?.role)
-    ? activeTasks.filter(task => !task.assigneeId || task.assigneeId === currentUser?.id)
-    : activeTasks;
-
-  // Derive each task's current availability from immutable completion history +
-  // the current recurrence period. This is the single source of truth shared
-  // with the parent view, so recurring tasks reset correctly instead of staying
-  // permanently completed.
-  const mappedTasks = visibleTasks.map(task => {
-    const av = deriveTaskAvailability(task, taskCompletions, now, currentUser?.id);
-    return {
-      ...task,
-      status: av.status,
-      completionId: av.completionId,
-      available: av.available,
-    };
-  });
-
-  const filteredTasks = filter === 'all' ? mappedTasks : mappedTasks.filter(t => t.type === filter);
+  // Availability/status derivation for the management list now lives in the
+  // pure selectors consumed by ParentQuestBoard (same taskRecurrence engine).
 
   const handleTaskClick = (task: any) => {
     setSelectedTask(task);
@@ -139,86 +119,13 @@ export function Tasks() {
 
   return (
     <div className="space-y-6 animate-in fade-in duration-300">
-      <header className="flex justify-between items-center">
-        <div>
-          <div className="flex items-center gap-1">
-            <h1 className="text-2xl font-bold text-gray-900 tracking-tight">{t('tasks:title')}</h1>
-            <HelpButton />
-          </div>
-          <p className="text-gray-500 mt-1">{t('tasks:subtitle')}</p>
-        </div>
-        {isParentRole(currentUser?.role) && (
-          <Button onClick={openCreateForm} aria-label={t('tasks:addAria')} size="sm" className="bg-primary-500 rounded-full h-10 w-10 p-0 shadow-lg flex items-center justify-center">
-            <Plus size={20} />
-          </Button>
-        )}
-      </header>
-
       {successMsg && (
         <div className="bg-success-50 text-success-700 p-3 rounded-xl mb-4 text-sm font-medium animate-in fade-in slide-in-from-top-2">
           {successMsg}
         </div>
       )}
 
-      <div className="flex gap-2 overflow-x-auto pb-2 scrollbar-hide -mx-4 px-4 sm:mx-0 sm:px-0">
-        <Button variant={filter === 'all' ? 'primary' : 'secondary'} size="sm" onClick={() => setFilter('all')} className="rounded-full">{t('tasks:filter.all')}</Button>
-        <Button variant={filter === 'daily' ? 'primary' : 'secondary'} size="sm" onClick={() => setFilter('daily')} className="rounded-full">{t('tasks:filter.daily')}</Button>
-        <Button variant={filter === 'weekdays' ? 'primary' : 'secondary'} size="sm" onClick={() => setFilter('weekdays')} className="rounded-full">{t('tasks:filter.weekdays')}</Button>
-        <Button variant={filter === 'weekends' ? 'primary' : 'secondary'} size="sm" onClick={() => setFilter('weekends')} className="rounded-full">{t('tasks:filter.weekends')}</Button>
-        <Button variant={filter === 'weekly' ? 'primary' : 'secondary'} size="sm" onClick={() => setFilter('weekly')} className="rounded-full">{t('tasks:filter.weekly')}</Button>
-        <Button variant={filter === 'one-time' ? 'primary' : 'secondary'} size="sm" onClick={() => setFilter('one-time')} className="rounded-full whitespace-nowrap">{t('tasks:filter.oneTime')}</Button>
-      </div>
-
-      <div className="space-y-3">
-        {filteredTasks.length === 0 ? (
-          <EmptyState
-            title={t('tasks:empty')}
-            icon={<CheckCircle2 size={22} aria-hidden="true" />}
-          />
-        ) : (
-          filteredTasks.map((task) => (
-            <Card key={task.id} role="button" tabIndex={0}
-              aria-label={t('tasks:viewDetailsAria', { title: task.title })}
-              className={cn(
-              "cursor-pointer transition-all active:scale-[0.98] focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-400",
-              task.status === 'approved' ? 'opacity-50' : 'hover:border-primary-300'
-            )}
-              onClick={() => handleTaskClick(task)}
-              onKeyDown={(e) => {
-                if (e.key === 'Enter' || e.key === ' ') {
-                  e.preventDefault();
-                  handleTaskClick(task);
-                }
-              }}
-            >
-              <CardContent className="p-4 flex items-center gap-4">
-                <div className={cn(
-                  "w-6 h-6 rounded-full border-2 flex items-center justify-center shrink-0 transition-colors",
-                  task.status === 'approved' ? "bg-success-500 border-success-500 text-white" :
-                  task.status === 'pending_approval' ? "bg-warning-500 border-warning-500 text-white" :
-                  "border-gray-300 text-transparent"
-                )}>
-                  <CheckCircle2 size={16} className={task.status !== 'pending' ? 'opacity-100' : 'opacity-0'} />
-                </div>
-
-                <div className="flex-1 min-w-0">
-                  <h3 className={cn("font-bold truncate", task.status === 'approved' ? 'text-gray-500 line-through' : 'text-gray-900')}>
-                    {task.title}
-                  </h3>
-                  <div className="flex items-center gap-2 mt-1">
-                    <Badge variant={task.status === 'approved' ? 'default' : 'primary'}>
-                      +{task.pointsReward} pts
-                    </Badge>
-                    {task.status === 'pending_approval' && (
-                      <Badge variant="warning" className="bg-warning-100 text-warning-700">{t('tasks:waitingApproval')}</Badge>
-                    )}
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-          ))
-        )}
-      </div>
+      <ParentQuestBoard onOpenTask={handleTaskClick} onCreate={openCreateForm} />
 
       {/* Task Details Modal */}
       {selectedTask && (

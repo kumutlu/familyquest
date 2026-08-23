@@ -49,5 +49,22 @@
     "saving": "Saving…",
     "templateLabel": "Or choose a template:",
     "templatePlaceholder": "Select a template..."
+  },
+  "shop": {
+    "title": "Rewards",
+    "subtitle": "Spend your hard-earned points.",
+    "pointsAria": "You have {{value}} points",
+    "needMore": "Need {{value}} more",
+    "outOfStock": "All gone",
+    "emptyTitle": "No rewards yet",
+    "emptyHint": "Ask a parent to add something fun!",
+    "openDetailAria": "Open {{title}} details"
+  },
+  "confirm": {
+    "getIt": "GET IT",
+    "getting": "Getting it…",
+    "yourPoints": "Your points: {{value}}",
+    "afterThis": "{{value}} points after this",
+    "parentNote": "We’ll tell your parents you got this."
   }
 }

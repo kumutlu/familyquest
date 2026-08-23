@@ -1,5 +1,6 @@
 import { Send, HandCoins } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
+import { TactileButton } from '../queki/TactileButton';
 
 interface QuickActionsProps {
   onSend: () => void;
@@ -8,30 +9,40 @@ interface QuickActionsProps {
   requestHint?: string;
 }
 
-// Primary child actions shown directly below the balance card.
+/**
+ * Queki v2 Wave 3 primary child actions, directly under the balance hero.
+ *
+ * ROLE-AWARE by construction: children can SEND (parent-approved transfer) and
+ * REQUEST money; they cannot ADD money, so no fake Add action is rendered.
+ * Two natural actions beat three fake ones.
+ */
 export function QuickActions({ onSend, onRequest, requestDisabled, requestHint }: QuickActionsProps) {
   const { t } = useTranslation('wallet');
   return (
-    <div className="grid grid-cols-2 gap-3">
-      <button
-        type="button"
+    <div className="grid grid-cols-2 gap-3" data-testid="wallet-quick-actions">
+      <TactileButton
+        variant="mint"
+        size="lg"
         onClick={onSend}
-        className="flex flex-col items-center justify-center gap-2 rounded-2xl bg-primary-600 px-4 py-4 text-white shadow-sm transition-all hover:bg-primary-700 active:scale-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-400 focus-visible:ring-offset-2"
         aria-label={t('quickActions.send')}
+        data-testid="wallet-action-send"
+        className="flex-col gap-2 py-5"
       >
         <Send size={22} aria-hidden="true" />
-        <span className="text-sm font-semibold">{t('quickActions.send')}</span>
-      </button>
-      <button
-        type="button"
+        <span className="text-sm font-bold">{t('quickActions.send')}</span>
+      </TactileButton>
+      <TactileButton
+        variant="secondary"
+        size="lg"
         onClick={onRequest}
         disabled={requestDisabled}
-        className="flex flex-col items-center justify-center gap-2 rounded-2xl bg-white px-4 py-4 text-gray-900 shadow-sm border border-gray-200 transition-all hover:border-primary-300 hover:text-primary-700 active:scale-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-400 focus-visible:ring-offset-2 disabled:opacity-50 disabled:pointer-events-none"
         aria-label={t('quickActions.request')}
+        data-testid="wallet-action-request"
+        className="flex-col gap-2 py-5"
       >
         <HandCoins size={22} aria-hidden="true" />
-        <span className="text-sm font-semibold">{t('quickActions.request')}</span>
-      </button>
+        <span className="text-sm font-bold">{t('quickActions.request')}</span>
+      </TactileButton>
       {requestHint && (
         <p className="col-span-2 text-xs text-gray-400">{requestHint}</p>
       )}

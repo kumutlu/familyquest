@@ -32,8 +32,21 @@
   "nav": {
     "home": "Ana Sayfa",
     "tasks": "Görevler",
+    "quests": "Görevler",
     "rewards": "Ödüller",
-    "family": "Aile"
+    "family": "Aile",
+    "action": {
+      "parent": "Yeni bir şey oluştur",
+      "child": "Görevlerimi yap"
+    }
+  },
+  "composer": {
+    "title": "Ne yapmak istersin?",
+    "newTask": "Yeni görev",
+    "newReward": "Yeni ödül",
+    "logBehaviour": "Davranış kaydet",
+    "doQuests": "Görevlerimi yap",
+    "viewRewards": "Ödülleri gör"
   },
   "roles": {
     "owner": "Sahip",

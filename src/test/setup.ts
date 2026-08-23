@@ -24,6 +24,10 @@ import enFunds from '../i18n/locales/en/funds.json';
 import trFunds from '../i18n/locales/tr/funds.json';
 import enProfile from '../i18n/locales/en/profile.json';
 import trProfile from '../i18n/locales/tr/profile.json';
+import enQuests from '../i18n/locales/en/quests.json';
+import trQuests from '../i18n/locales/tr/quests.json';
+import enHome from '../i18n/locales/en/home.json';
+import trHome from '../i18n/locales/tr/home.json';
 
 // Preload the UI namespaces used by the Parent Core experience so that
 // components render with real translations synchronously in tests (the
@@ -42,6 +46,8 @@ const UI_BUNDLES: Record<string, { en: unknown; tr: unknown }> = {
   settings: { en: enSettings, tr: trSettings },
   funds: { en: enFunds, tr: trFunds },
   profile: { en: enProfile, tr: trProfile },
+  quests: { en: enQuests, tr: trQuests },
+  home: { en: enHome, tr: trHome },
 };
 
 for (const [ns, { en, tr }] of Object.entries(UI_BUNDLES)) {

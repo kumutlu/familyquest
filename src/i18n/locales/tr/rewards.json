@@ -49,5 +49,22 @@
     "saving": "Kaydediliyor…",
     "templateLabel": "Veya bir şablon seçin:",
     "templatePlaceholder": "Şablon seçin..."
+  },
+  "shop": {
+    "title": "Ödüller",
+    "subtitle": "Puanlarını harcamanın vakti.",
+    "pointsAria": "{{value}} puanın var",
+    "needMore": "{{value}} puan daha gerekli",
+    "outOfStock": "Tükendi",
+    "emptyTitle": "Henüz ödül yok",
+    "emptyHint": "Bir ebeveynden eğlenceli bir şey eklemesini iste!",
+    "openDetailAria": "{{title}} ayrıntılarını aç"
+  },
+  "confirm": {
+    "getIt": "ALDIM",
+    "getting": "Alınıyor…",
+    "yourPoints": "Puanın: {{value}}",
+    "afterThis": "Bundan sonra {{value}} puan",
+    "parentNote": "Ebeveynlerine haber vereceğiz."
   }
 }

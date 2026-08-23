@@ -1,28 +1,41 @@
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { HelpButton } from '../help/components/HelpButton';
 import { Card, CardContent } from '../components/ui/Card';
 import { PageLoader } from '../components/ui/PageLoader';
-import { EmptyState } from '../components/ui/EmptyState';
 import { Badge } from '../components/ui/Badge';
 import { Button } from '../components/ui/Button';
-import { Gift, Gamepad2, Pizza, Ticket, Plus, Edit, Trash2 } from 'lucide-react';
+import { Plus } from 'lucide-react';
 import { useStore } from '../store/useStore';
 import { redeemReward, createReward, updateReward } from '../lib/api';
 import { mapTransactionError } from '../lib/transactionErrors';
 import { RewardCelebrationOverlay } from '../components/rewards/RewardCelebrationOverlay';
+import { RewardCard, RewardIcon } from '../components/rewards/RewardCard';
+import { RewardDetailSheet } from '../components/rewards/RewardDetailSheet';
+import { buildRewardShop, childVisibleShop, type ShopReward } from '../lib/rewards/shop';
 import { cn } from '../lib/utils';
 import { isParentRole } from '../lib/roles';
 import { formatNumber, formatRelativeTime } from '../i18n/format';
 import { Avatar } from '../components/ui/Avatar';
 import { HistoryActionControl } from '../components/reversals/HistoryActionControl';
 import { findReversal } from '../lib/reversalHistory';
+import { QuekiMascot } from '../components/queki/QuekiMascot';
+import { triggerHaptic } from '../lib/interaction/haptics';
+import { playCue } from '../lib/interaction/sound';
 
+/**
+ * Rewards — Queki v2 Wave 3 REWARD SHOP.
+ *
+ * Browsable and tactile: a coral semantic grid of reward cards under a single
+ * points hero. The domain engine stays authoritative — `redeemReward` deducts
+ * points and completes the redemption inside one Firestore transaction; this
+ * surface never mutates balances locally and only celebrates confirmed results.
+ */
 export function Rewards() {
   const { t } = useTranslation(['rewards', 'errors']);
   const { currentUser, rewards, redemptions, loading, familyMembers, reversals } = useStore();
-  const [selectedReward, setSelectedReward] = useState<any>(null);
-  const isParent = currentUser?.role === 'parent' || currentUser?.role === 'owner';
+  const [selectedReward, setSelectedReward] = useState<ShopReward | null>(null);
+  const isParent = isParentRole(currentUser?.role);
 
   const formatRedemptionDateTime = (timestamp: any) => {
     const date = timestamp?.toDate ? timestamp.toDate() : timestamp instanceof Date ? timestamp : new Date(timestamp || 0);
@@ -46,20 +59,26 @@ export function Rewards() {
   const [error, setError] = useState<string | null>(null);
   const [successMsg, setSuccessMsg] = useState<string | null>(null);
 
+  // Deterministic shop view-model (ordering + affordability + stock states),
+  // derived purely from authoritative store data.
+  const shop = useMemo(
+    () => buildRewardShop(rewards, currentUser?.rewardPoints ?? 0),
+    [rewards, currentUser?.rewardPoints],
+  );
+  const visibleShop = useMemo(() => childVisibleShop(shop), [shop]);
+
   if (loading || !currentUser) return <PageLoader label={t('rewards:loading')} />;
 
-  const activeRewards = rewards.filter(r => r.isActive !== false);
-
-  const handleRedeem = async () => {
-    // Guard: a pending request must never be issued twice (no double deduction).
+  const handleRedeem = async (reward: ShopReward) => {
+    // Guard: a redemption must never be issued twice (no double deduction).
     if (isSubmitting) return;
 
-    if (currentUser.rewardPoints < selectedReward.cost) {
+    if ((currentUser.rewardPoints ?? 0) < reward.cost) {
       setError(t('rewards:details.notEnoughPoints'));
       return;
     }
 
-    if (selectedReward.inventory !== undefined && selectedReward.inventory !== null && selectedReward.inventory <= 0) {
+    if (reward.availability !== 'available') {
       setError(t('rewards:details.outOfStock'));
       return;
     }
@@ -70,19 +89,20 @@ export function Rewards() {
     // Balance as it stood before the request; the confirmed resulting balance
     // comes back from the redemption itself.
     const beforePoints = currentUser.rewardPoints || 0;
-    const rewardTitle = selectedReward.title;
-    const rewardIcon = getIcon(selectedReward.icon);
 
     try {
       // Inventory is decremented atomically inside redeemReward's Firestore
       // transaction; the client must never write reward stock itself.
-      const result = await redeemReward(currentUser.familyId, currentUser.id, selectedReward.id);
+      const result = await redeemReward(currentUser.familyId, currentUser.id, reward.id);
+
+      triggerHaptic('rewardUnlock');
+      playCue('rewardUnlock');
 
       // Only a confirmed, successful redemption opens the celebration.
       setSelectedReward(null);
       setCelebration({
-        rewardTitle: result.rewardTitle || rewardTitle,
-        rewardIcon,
+        rewardTitle: result.rewardTitle || reward.title,
+        rewardIcon: <RewardIcon icon={reward.icon} size={40} />,
         beforePoints,
         afterPoints: result.pointsAfter,
       });
@@ -99,8 +119,9 @@ export function Rewards() {
     setIsFormOpen(true);
   };
 
-  const openEditForm = (reward: any) => {
-    setFormData({ ...reward });
+  const openEditForm = (reward: ShopReward) => {
+    const original = rewards.find(r => r.id === reward.id);
+    setFormData({ ...original });
     setSelectedReward(null);
     setIsFormOpen(true);
   };
@@ -143,78 +164,73 @@ export function Rewards() {
     setIsSubmitting(false);
   };
 
-  const getIcon = (iconName: string) => {
-    switch (iconName) {
-      case 'Gamepad2': return <Gamepad2 className="text-reward-500" size={24} />;
-      case 'Pizza': return <Pizza className="text-reward-500" size={24} />;
-      case 'Ticket': return <Ticket className="text-reward-500" size={24} />;
-      default: return <Gift className="text-reward-500" size={24} />;
-    }
-  };
-
   return (
-    <div className="space-y-6 animate-in fade-in duration-300">
-      <header className="flex justify-between items-center">
+    <div className="mx-auto max-w-2xl space-y-6 px-4 pb-[calc(2.5rem+env(safe-area-inset-bottom))] animate-in fade-in duration-300">
+      {/* ---- Points hero --------------------------------------------------- */}
+      <header className="flex items-start justify-between gap-3">
         <div>
           <div className="flex items-center gap-1">
-            <h1 className="text-2xl font-bold text-gray-900 tracking-tight">{t('rewards:title')}</h1>
+            <h1 className="text-title qk-text-primary">{t('rewards:shop.title')}</h1>
             <HelpButton />
           </div>
-          <p className="text-gray-500 mt-1">{t('rewards:subtitle')}</p>
+          <p className="mt-1 text-meta qk-text-secondary">{t('rewards:shop.subtitle')}</p>
         </div>
-        <div className="flex items-center gap-3">
-          <Badge variant="reward" className="text-sm px-3 py-1 bg-reward-100 text-reward-700">
-            {t('rewards:pointsBadge', { value: formatNumber(currentUser.rewardPoints) })}
-          </Badge>
-          {isParentRole(currentUser.role) && (
-            <Button onClick={openCreateForm} aria-label={t('rewards:addAria')} size="sm" className="bg-reward-500 hover:bg-reward-600 rounded-full h-10 w-10 p-0 shadow-lg flex items-center justify-center">
-              <Plus size={20} />
-            </Button>
-          )}
-        </div>
+        {isParent && (
+          <Button onClick={openCreateForm} aria-label={t('rewards:addAria')} size="sm" className="bg-coral-500 hover:bg-coral-600 rounded-full h-10 w-10 p-0 shadow-lg flex items-center justify-center">
+            <Plus size={20} />
+          </Button>
+        )}
       </header>
 
+      <div
+        className="flex items-center justify-center gap-2 rounded-card qk-bg-card qk-border-subtle qk-shadow-card border py-4"
+        data-testid="points-hero"
+        role="status"
+        aria-label={t('rewards:shop.pointsAria', { value: formatNumber(currentUser.rewardPoints) })}
+      >
+        <span aria-hidden="true" className="text-xl text-coral-500">★</span>
+        <span className="text-title font-extrabold tabular-nums qk-text-primary" data-testid="points-hero-value">
+          {formatNumber(currentUser.rewardPoints)}
+        </span>
+        <span className="text-meta font-semibold qk-text-secondary">
+          {t('rewards:shop.pointsAria', { value: formatNumber(currentUser.rewardPoints) })}
+        </span>
+      </div>
+
       {successMsg && (
-        <div className="bg-success-50 text-success-700 p-3 rounded-xl mb-4 text-sm font-medium animate-in fade-in slide-in-from-top-2">
+        <div className="rounded-xl bg-success-50 p-3 text-sm font-medium text-success-700 animate-in fade-in slide-in-from-top-2">
           {successMsg}
         </div>
       )}
 
-      <div className="grid grid-cols-2 gap-4 pb-24">
-        {activeRewards.length === 0 ? (
-          <EmptyState
-            className="col-span-2"
-            title={t('rewards:empty')}
-            icon={<Gift size={22} aria-hidden="true" />}
-          />
+      {/* ---- Shop grid ------------------------------------------------------ */}
+      <div className="grid grid-cols-2 gap-4 sm:grid-cols-3" data-testid="reward-shop-grid">
+        {visibleShop.length === 0 ? (
+          <div
+            className="col-span-2 flex flex-col items-center justify-center gap-3 rounded-card qk-bg-card qk-border-subtle qk-shadow-card border p-8 text-center sm:col-span-3"
+            data-testid="reward-shop-empty"
+          >
+            <QuekiMascot state="happy" size={110} />
+            <p className="text-body font-bold qk-text-primary">{t('rewards:shop.emptyTitle')}</p>
+            <p className="text-meta qk-text-secondary">{t('rewards:shop.emptyHint')}</p>
+            {isParent && (
+              <Button onClick={openCreateForm} size="sm" className="bg-coral-500 hover:bg-coral-600 mt-1">
+                <Plus size={16} className="mr-1" />
+                {t('rewards:addAria')}
+              </Button>
+            )}
+          </div>
         ) : (
-          activeRewards.map((reward) => {
-            const outOfStock = reward.inventory !== undefined && reward.inventory !== null && reward.inventory <= 0;
-            return (
-              <Card
-                key={reward.id}
-                className={cn("cursor-pointer transition-transform hover:scale-[1.02] active:scale-[0.98]", outOfStock && "opacity-50 grayscale")}
-                onClick={() => setSelectedReward(reward)}
-              >
-                <CardContent className="p-4 flex flex-col items-center text-center">
-                  <div className="w-12 h-12 bg-reward-50 rounded-2xl flex items-center justify-center mb-3">
-                    {getIcon(reward.icon)}
-                  </div>
-                  <h3 className="font-bold text-gray-900 text-sm mb-1 leading-tight">{reward.title}</h3>
-                  <p className="text-reward-600 font-bold text-xs">{t('rewards:pointsBadge', { value: formatNumber(reward.cost) })}</p>
-                  {reward.inventory !== undefined && reward.inventory !== null && (
-                    <p className="text-xs text-gray-400 mt-1">{t('rewards:details.left', { value: formatNumber(reward.inventory) })}</p>
-                  )}
-                </CardContent>
-              </Card>
-            );
-          })
+          visibleShop.map(reward => (
+            <RewardCard key={reward.id} reward={reward} onOpen={setSelectedReward} />
+          ))
         )}
       </div>
 
+      {/* ---- Parent redemption history (progressive disclosure) ------------- */}
       {isParent && redemptions.length > 0 && (
         <section>
-          <h2 className="mb-3 text-lg font-bold text-gray-900">{t('rewards:redemptionHistory')}</h2>
+          <h2 className="mb-3 text-lg font-bold text-gray-900 dark:text-gray-100">{t('rewards:redemptionHistory')}</h2>
           <div className="space-y-2">
             {redemptions.map(redemption => {
               const reward = rewards.find(item => item.id === redemption.rewardId);
@@ -230,17 +246,17 @@ export function Rewards() {
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center gap-2 mb-1">
                           <Avatar src={childAvatar} fallback={childName[0] || '?'} size="sm" />
-                          <p className="font-semibold text-gray-900 text-sm truncate">{childName}</p>
+                          <p className="font-semibold text-gray-900 dark:text-gray-100 text-sm truncate">{childName}</p>
                           {reversal && (
                             <Badge variant="danger" data-testid="reversal-status">
                               {t('rewards:reversed')}
                             </Badge>
                           )}
                         </div>
-                        <p className="text-sm text-gray-600">
+                        <p className="text-sm text-gray-600 dark:text-gray-300">
                           {t('rewards:redemptionHistoryRedeemed', { name: childName, reward: reward?.title || 'Reward' })}
                         </p>
-                        <p className={`text-xs text-gray-500 mt-0.5 ${reversal ? 'line-through decoration-gray-300' : ''}`}>
+                        <p className={cn('text-xs text-gray-500 mt-0.5', reversal && 'line-through decoration-gray-300')}>
                           {t('rewards:redeemedPoints', { value: formatNumber(redemption.costPaid) })}
                         </p>
                         <p className="text-xs text-gray-400 mt-0.5">{dateTimeStr}</p>
@@ -257,72 +273,43 @@ export function Rewards() {
         </section>
       )}
 
-      {/* Detail & Redemption Modal */}
-      {selectedReward && (
-        <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-gray-900/40 backdrop-blur-sm animate-in fade-in duration-200">
-          <div className="bg-white w-full sm:max-w-md sm:rounded-3xl rounded-t-3xl shadow-xl animate-in slide-in-from-bottom-full sm:slide-in-from-bottom-10 duration-300 overflow-hidden flex flex-col">
-            <div className="px-6 py-4 flex justify-between items-center border-b border-gray-100">
-              <h3 className="text-xl font-bold text-gray-900">{t('rewards:details.title')}</h3>
-              <button onClick={() => { setSelectedReward(null); setError(null); }} aria-label={t('rewards:details.closeAria')} className="p-2 -mr-2 bg-gray-100 hover:bg-gray-200 rounded-full text-gray-500 transition-colors">✕</button>
-            </div>
+      {/* ---- Focused detail surface ----------------------------------------- */}
+      <RewardDetailSheet
+        reward={selectedReward}
+        childPoints={currentUser.rewardPoints ?? 0}
+        isParent={isParent}
+        isRedeeming={isSubmitting}
+        error={error}
+        onClose={() => {
+          setSelectedReward(null);
+          setError(null);
+        }}
+        onRedeem={handleRedeem}
+        onEdit={openEditForm}
+        onArchive={handleArchive}
+      />
 
-            <div className="p-6">
-              <div className="flex flex-col items-center text-center space-y-4">
-                <div className="w-24 h-24 bg-reward-50 rounded-3xl flex items-center justify-center">
-                  {getIcon(selectedReward.icon)}
-                </div>
-
-                <div>
-                  <h4 className="text-2xl font-bold text-gray-900">{selectedReward.title}</h4>
-                  <p className="text-reward-600 font-bold text-lg mt-1">{t('rewards:details.points', { value: formatNumber(selectedReward.cost) })}</p>
-                  {selectedReward.inventory !== undefined && selectedReward.inventory !== null && (
-                    <p className="text-sm text-gray-500 mt-1">{t('rewards:details.inStock', { value: formatNumber(selectedReward.inventory) })}</p>
-                  )}
-                </div>
-
-                {error && <div className="p-3 bg-danger-50 text-danger-600 rounded-xl text-sm w-full font-medium">{error}</div>}
-
-                {/* Parent Actions */}
-                {isParentRole(currentUser?.role) && (
-                   <div className="flex gap-4 w-full mt-6 pt-6 border-t border-gray-100">
-                      <Button variant="secondary" fullWidth onClick={() => openEditForm(selectedReward)}><Edit size={16} className="mr-2"/> {t('rewards:details.edit')}</Button>
-                      <Button variant="danger" fullWidth onClick={() => handleArchive(selectedReward.id)}><Trash2 size={16} className="mr-2"/> {t('rewards:details.archive')}</Button>
-                   </div>
-                )}
-
-                {/* Child Actions */}
-                {currentUser?.role === 'child' && (
-                  <Button fullWidth onClick={handleRedeem} size="lg" className="bg-reward-500 hover:bg-reward-600 shadow-reward-500/25 mt-6" disabled={isSubmitting || (selectedReward.inventory !== undefined && selectedReward.inventory !== null && selectedReward.inventory <= 0)}>
-                    {isSubmitting ? t('rewards:details.redeeming') : t('rewards:details.redeem')}
-                  </Button>
-                )}
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Create/Edit Form Modal */}
+      {/* ---- Create/Edit Form Modal ------------------------------------------ */}
       {isFormOpen && (
         <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-gray-900/40 backdrop-blur-sm animate-in fade-in duration-200">
-          <div className="bg-white w-full sm:max-w-md sm:rounded-3xl rounded-t-3xl shadow-xl overflow-hidden flex flex-col max-h-[90vh] animate-in slide-in-from-bottom-full sm:slide-in-from-bottom-10 duration-300">
-            <div className="px-6 py-4 flex justify-between items-center border-b border-gray-100">
-              <h3 className="text-xl font-bold text-gray-900">{formData.id ? t('rewards:form.editTitle') : t('rewards:form.newTitle')}</h3>
-              <button onClick={() => setIsFormOpen(false)} className="p-2 -mr-2 bg-gray-100 hover:bg-gray-200 rounded-full text-gray-500">✕</button>
+          <div className="bg-white dark:bg-gray-900 w-full sm:max-w-md sm:rounded-3xl rounded-t-3xl shadow-xl overflow-hidden flex flex-col max-h-[90vh] animate-in slide-in-from-bottom-full sm:slide-in-from-bottom-10 duration-300">
+            <div className="px-6 py-4 flex justify-between items-center border-b border-gray-100 dark:border-gray-800">
+              <h3 className="text-xl font-bold text-gray-900 dark:text-gray-100">{formData.id ? t('rewards:form.editTitle') : t('rewards:form.newTitle')}</h3>
+              <button onClick={() => setIsFormOpen(false)} className="p-2 -mr-2 bg-gray-100 hover:bg-gray-200 dark:bg-gray-800 dark:hover:bg-gray-700 rounded-full text-gray-500">✕</button>
             </div>
             <div className="p-6 overflow-y-auto">
               <form onSubmit={handleFormSubmit} className="space-y-4">
                 <div>
-                  <label className="block text-sm font-medium text-gray-700">{t('rewards:form.rewardTitle')}</label>
-                  <input type="text" required value={formData.title} onChange={e => setFormData({...formData, title: e.target.value})} className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md" />
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">{t('rewards:form.rewardTitle')}</label>
+                  <input type="text" required value={formData.title} onChange={e => setFormData({...formData, title: e.target.value})} className="mt-1 block w-full px-3 py-2 border border-gray-300 dark:border-gray-700 rounded-md bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100" />
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-gray-700">{t('rewards:form.cost')}</label>
-                  <input type="number" required min="1" value={formData.cost} onChange={e => setFormData({...formData, cost: e.target.value})} className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md" />
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">{t('rewards:form.cost')}</label>
+                  <input type="number" required min="1" value={formData.cost} onChange={e => setFormData({...formData, cost: e.target.value})} className="mt-1 block w-full px-3 py-2 border border-gray-300 dark:border-gray-700 rounded-md bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100" />
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-gray-700">{t('rewards:form.icon')}</label>
-                  <select value={formData.icon} onChange={e => setFormData({...formData, icon: e.target.value})} className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md bg-white">
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">{t('rewards:form.icon')}</label>
+                  <select value={formData.icon} onChange={e => setFormData({...formData, icon: e.target.value})} className="mt-1 block w-full px-3 py-2 border border-gray-300 dark:border-gray-700 rounded-md bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100">
                     <option value="Gift">{t('rewards:form.iconGift')}</option>
                     <option value="Gamepad2">{t('rewards:form.iconGamepad')}</option>
                     <option value="Pizza">{t('rewards:form.iconPizza')}</option>
@@ -330,14 +317,14 @@ export function Rewards() {
                   </select>
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-gray-700">{t('rewards:form.inventory')}</label>
-                  <input type="number" placeholder={t('rewards:form.inventoryPlaceholder')} min="0" value={formData.inventory} onChange={e => setFormData({...formData, inventory: e.target.value})} className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md" />
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">{t('rewards:form.inventory')}</label>
+                  <input type="number" placeholder={t('rewards:form.inventoryPlaceholder')} min="0" value={formData.inventory} onChange={e => setFormData({...formData, inventory: e.target.value})} className="mt-1 block w-full px-3 py-2 border border-gray-300 dark:border-gray-700 rounded-md bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100" />
                   <p className="text-xs text-gray-500 mt-1">{t('rewards:form.inventoryHelp')}</p>
                 </div>
 
                 {error && <p className="text-red-500 text-sm">{error}</p>}
                 <div className="pt-4">
-                  <Button type="submit" fullWidth disabled={isSubmitting} className="bg-reward-500 hover:bg-reward-600">
+                  <Button type="submit" fullWidth disabled={isSubmitting} className="bg-coral-500 hover:bg-coral-600">
                     {isSubmitting ? t('rewards:form.saving') : t('rewards:form.save')}
                   </Button>
                 </div>
@@ -347,7 +334,7 @@ export function Rewards() {
         </div>
       )}
 
-      {/* Success-only celebration: opened after a confirmed redemption. */}
+      {/* ---- Confirmed unlock moment (only after transaction resolves) ------- */}
       <RewardCelebrationOverlay
         open={celebration !== null}
         rewardTitle={celebration?.rewardTitle ?? ''}

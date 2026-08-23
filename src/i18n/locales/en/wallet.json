@@ -158,7 +158,17 @@
     "childrenOnly": "Transfers can only be sent between children.",
     "walletNotFound": "We could not find your wallet. Please refresh and try again.",
     "signedOut": "You have been signed out. Please sign in again.",
-    "generic": "Something went wrong. Please try again."
+    "generic": "Something went wrong. Please try again.",
+    "stageWho": "WHO?",
+    "stageAmount": "HOW MUCH?",
+    "stageReview": "CHECK IT",
+    "stageReviewCta": "Check it",
+    "stageChange": "Change",
+    "stageBack": "Back",
+    "availableBalance": "Available: {{amount}}",
+    "quickAmounts": "Quick amounts",
+    "reviewTitle": "Send {{amount}} to {{name}}?",
+    "sentDone": "Done"
   },
   "request": {
     "title": "Request Money",
@@ -217,5 +227,11 @@
     "fundDonation": "Fund donation -{{amount}}",
     "withdrawal": "Withdrawal -{{amount}}",
     "deducted": "Deducted -{{amount}}"
+  },
+  "arrival": {
+    "title": "Money received",
+    "received": "{{name}} sent you {{amount}}",
+    "someone": "Someone",
+    "dismiss": "Yay!"
   }
 }

@@ -1,0 +1,89 @@
+{
+  "title": "Ailemiz",
+  "subtitle": "Aileniz için paylaşılan bir alan.",
+  "loading": "Aile alanınız hazırlanıyor…",
+  "manage": "Aileyi yönet",
+  "scene": {
+    "ourFamily": "Ailemiz",
+    "singleChildIntro": "Sadece ikiniz — birlikte büyüyorsunuz.",
+    "multiChildIntro": "Aileniz, birlikte."
+  },
+  "member": {
+    "you": "Sen",
+    "level": "Seviye {{level}}",
+    "viewProfile": "Profili gör"
+  },
+  "quest": {
+    "title": "Aile Görevi",
+    "badge": "Aile Görevi",
+    "inProgress": "Devam ediyor",
+    "readyToClaim": "Talep etmeye hazır",
+    "completed": "Tamamlandı",
+    "progress": "{{earned}} / {{target}}",
+    "percent": "%{{percent}}",
+    "remaining": "{{remaining}} kaldı",
+    "daysLeft_one": "{{count}} gün kaldı",
+    "daysLeft_other": "{{count}} gün kaldı",
+    "keepGoing": "Devam edin — neredeyse oradasınız!",
+    "targetReached": "Hedefe ulaşıldı! Ailece başardınız.",
+    "reward": "Her çocuk +{{points}} puan alır",
+    "claim": "Ödülü al",
+    "claiming": "Alınıyor…",
+    "claimHint": "Her çocuğa +{{points}} puan verir ve görevi kapatır.",
+    "waitingForParent": "Hedefe ulaşıldı! Bir ebeveynin talep etmesi bekleniyor.",
+    "start": "Aile Görevi başlat",
+    "startTitle": "Yeni Aile Görevi",
+    "create": "Görev oluştur",
+    "creating": "Oluşturuluyor…",
+    "questTitle": "Görev başlığı",
+    "xpTarget": "Aile XP hedefi",
+    "rewardPerChild": "Çocuk başına ödül (puan)",
+    "noActive": "Şu an aktif Aile Görevi yok.",
+    "noActiveHint": "Birlikte büyümek için bir tane başlat."
+  },
+  "progress": {
+    "title": "Aile İlerlemesi",
+    "questBased": "Aile Göreviniz tarafından yönlendiriliyor.",
+    "calm": "Aileniz harika gidiyor."
+  },
+  "achievements": {
+    "title": "Aile Başarımları",
+    "empty": "Aileniz büyüdükçe başarımlar görünecek.",
+    "familyQuestComplete": "Aile Görevi tamamlandı!",
+    "firstQuest": "İlk Aile Görevi",
+    "streakTogether": "Galibiyet Haftası",
+    "levelTogether": "Yükselen Yıldızlar",
+    "unlocked": "Açıldı"
+  },
+  "moments": {
+    "title": "Aile Anları",
+    "empty": "Özel anlar burada görünecek.",
+    "questComplete": "Aile Görevi tamamlandı",
+    "moneySent": "{{name}} {{amount}} gönderdi",
+    "moneyReceived": "{{name}} {{amount}} aldı",
+    "questApproved": "{{name}} bir görev bitirdi",
+    "levelUp": "{{name}} Seviye {{level}}'e ulaştı",
+    "streak": "{{name}} {{days}} günlük seri yakaladı"
+  },
+  "detail": {
+    "title": "{{name}}",
+    "sendMoney": "Para gönder",
+    "viewQuests": "Görevleri gör",
+    "viewProgress": "İlerlemeyi gör",
+    "manageChild": "Çocuğu yönet",
+    "editProfile": "Profili düzenle",
+    "close": "Kapat",
+    "walletHidden": "Diğer üyelerden gizli"
+  },
+  "celebration": {
+    "questComplete": "Aile Görevi tamamlandı!",
+    "teamwork": "Takım çalışması!",
+    "achievementUnlocked": "Başarım açıldı",
+    "dismiss": "Devam etmek için dokun"
+  },
+  "states": {
+    "errorTitle": "Bu ekran yüklenemedi",
+    "errorDescription": "Aile verileriniz güvende. Birazdan tekrar deneyin.",
+    "retry": "Tekrar dene"
+  }
+}

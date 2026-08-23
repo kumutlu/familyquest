@@ -32,6 +32,12 @@ vi.mock('../../config/navigation', () => ({
     { labelKey: 'nav.tasks', path: '/tasks', icon: () => null },
     { labelKey: 'nav.rewards', path: '/rewards', icon: () => null },
   ],
+  getQuekiNavItems: () => [
+    { labelKey: 'nav.home', path: '/', icon: () => null, testId: 'queki-nav-home' },
+    { labelKey: 'nav.tasks', path: '/tasks', icon: () => null, testId: 'queki-nav-quests' },
+    { labelKey: 'nav.rewards', path: '/rewards', icon: () => null, testId: 'queki-nav-rewards' },
+    { labelKey: 'nav.family', path: '/family', icon: () => null, testId: 'queki-nav-family' },
+  ],
 }));
 
 vi.mock('./ProfileDropdown', () => ({ ProfileDropdown: () => <div>ProfileDropdown</div> }));

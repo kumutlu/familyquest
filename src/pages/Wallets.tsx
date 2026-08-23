@@ -1,9 +1,7 @@
 import { useStore } from '../store/useStore';
 import { useTranslation } from 'react-i18next';
 import { HelpButton } from '../help/components/HelpButton';
-import { Card, CardContent } from '../components/ui/Card';
 import { PageLoader } from '../components/ui/PageLoader';
-import { Avatar } from '../components/ui/Avatar';
 import { Badge } from '../components/ui/Badge';
 import { isChildRole, isParentRole } from '../lib/roles';
 import { Navigate } from 'react-router-dom';
@@ -11,6 +9,8 @@ import { useState } from 'react';
 import { AddMoneyModal } from '../components/wallet/AddMoneyModal';
 import { transactionPresentation } from '../lib/walletPresentation';
 import { formatPence, formatDate as i18nFormatDate, resolveFamilyCurrencyCode } from '../i18n/format';
+import { CharacterFrame } from '../components/queki/CharacterFrame';
+import { TactileButton } from '../components/queki/TactileButton';
 
 export function Wallets() {
   const { currentUser, familyData, familyMembers, loading, walletTransactions, childWallets } = useStore();
@@ -68,7 +68,7 @@ export function Wallets() {
           {t('allowance.noChildren')}
         </div>
       ) : (
-        <div className="space-y-4">
+        <div className="grid gap-4 sm:grid-cols-2" data-testid="parent-wallet-list">
           {children.map(child => {
             const recentTxs = getRecentTransactions(child.id);
             // Canonical balance source: families/{familyId}/wallets/{childId}.balance
@@ -79,57 +79,61 @@ export function Wallets() {
             const balance = walletDoc?.balance ?? 0;
 
             return (
-              <Card key={child.id} className="overflow-hidden">
-                <CardContent className="p-0">
-                  <div className="p-5 border-b border-gray-100 flex items-start justify-between bg-white">
-                    <div className="flex items-center gap-4">
-                      <Avatar src={child.avatarUrl} fallback={child.displayName[0]} size="md" />
-                      <div>
-                        <h4 className="font-semibold text-gray-900 flex items-center gap-2 text-lg">
-                          {child.displayName}
-                          {child.isManaged && (
-                            <Badge variant="outline" className="text-[10px] border-gray-300 text-gray-500 bg-gray-50">{t('allowance.managed')}</Badge>
-                          )}
-                        </h4>
-                        <div className="mt-1">
-                          <span className="text-xs text-gray-500 uppercase font-bold tracking-wider mr-2">{t('allowance.balance')}</span>
-                          <span className="text-xl font-extrabold text-success-600">{formatAmount(balance)}</span>
-                        </div>
-                      </div>
+              <section
+                key={child.id}
+                data-testid="parent-wallet-card"
+                className="overflow-hidden rounded-card qk-bg-card qk-border-subtle qk-shadow-card border"
+              >
+                <div className="flex items-start justify-between gap-3 bg-gradient-to-br from-mint-500 to-mint-700 p-5 text-white">
+                  <div className="flex items-center gap-4 min-w-0">
+                    <CharacterFrame src={child.avatarUrl} fallback={child.displayName?.[0] || '?'} size={52} />
+                    <div className="min-w-0">
+                      <h4 className="font-bold flex items-center gap-2 text-lg truncate">
+                        {child.displayName}
+                        {child.isManaged && (
+                          <Badge variant="outline" className="text-[10px] border-white/40 text-white/90 bg-white/10">{t('allowance.managed')}</Badge>
+                        )}
+                      </h4>
+                      <p className="mt-1 text-2xl font-extrabold tabular-nums" data-testid={`wallet-balance-${child.id}`}>
+                        {formatAmount(balance)}
+                      </p>
+                      <p className="text-xs text-white/70 uppercase font-bold tracking-wider">{t('allowance.balance')}</p>
                     </div>
-
-                    <button
-                      onClick={() => setSelectedChildId(child.id)}
-                      className="bg-primary-50 hover:bg-primary-100 text-primary-700 font-bold py-2 px-4 rounded-xl transition-colors text-sm"
-                    >
-                      {t('allowance.manageWallet')}
-                    </button>
                   </div>
 
-                  <div className="bg-gray-50 p-4">
-                    <h5 className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-3">{t('allowance.recentActivity')}</h5>
-                    {recentTxs.length === 0 ? (
-                      <p className="text-sm text-gray-500">{t('allowance.noRecent')}</p>
-                    ) : (
-                      <div className="space-y-2">
-                        {recentTxs.map(tx => (
-                          <div key={tx.id} className="flex justify-between items-center text-sm bg-white p-2.5 rounded-lg border border-gray-100 shadow-sm">
-                            <div>
-                              <p className="font-medium text-gray-800">
-                                {formatTransactionLabel(tx)}
-                              </p>
-                              {tx.note && <p className="text-xs text-gray-500 mt-0.5">{tx.note}</p>}
-                            </div>
-                            <span className="text-[10px] text-gray-400 font-medium">
-                              {formatDate(tx.createdAt)}
-                            </span>
+                  <TactileButton
+                    variant="secondary"
+                    size="sm"
+                    onClick={() => setSelectedChildId(child.id)}
+                    data-testid={`manage-wallet-${child.id}`}
+                  >
+                    {t('allowance.manageWallet')}
+                  </TactileButton>
+                </div>
+
+                <div className="qk-bg-inset p-4">
+                  <h5 className="text-xs font-bold qk-text-secondary uppercase tracking-wider mb-3">{t('allowance.recentActivity')}</h5>
+                  {recentTxs.length === 0 ? (
+                    <p className="text-sm qk-text-secondary">{t('allowance.noRecent')}</p>
+                  ) : (
+                    <div className="space-y-2">
+                      {recentTxs.map(tx => (
+                        <div key={tx.id} className="flex justify-between items-center text-sm rounded-xl qk-bg-card border qk-border-subtle p-2.5">
+                          <div className="min-w-0">
+                            <p className="font-medium qk-text-primary truncate">
+                              {formatTransactionLabel(tx)}
+                            </p>
+                            {tx.note && <p className="text-xs qk-text-secondary mt-0.5 truncate">{tx.note}</p>}
                           </div>
-                        ))}
-                      </div>
-                    )}
-                  </div>
-                </CardContent>
-              </Card>
+                          <span className="text-[10px] qk-text-secondary font-medium shrink-0 ml-2">
+                            {formatDate(tx.createdAt)}
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              </section>
             );
           })}
         </div>

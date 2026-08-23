@@ -1,0 +1,77 @@
+{
+  "parent": {
+    "greeting": "Merhaba, {{name}}",
+    "heroSubtitle": "Şu an önemli olan şeyler.",
+    "familyBalanceLabel": "Aile cüzdanı",
+    "mascotCalm": "Her şey yolunda. Harika gidiyorsun!",
+    "mascotBusy": "Bugün ilgileneceğin birkaç şey var.",
+    "approvals": {
+      "title_one": "{{count}} onay seni bekliyor",
+      "title_other": "{{count}} onay seni bekliyor",
+      "description": "Görevler, transferler ve istekler karar bekliyor.",
+      "action": "İncele"
+    },
+    "goalMilestone": {
+      "title": "\u201c{{title}}\u201d %{{progress}} tamamlandı",
+      "description": "Neredeyse bitti — yakında kutlayabiliriz."
+    },
+    "challengeUpdate": {
+      "title": "Aile Görevi bitti",
+      "description": "\u201c{{title}}\u201d tamamlanmaya hazır."
+    },
+    "walletEvent": {
+      "title": "{{name}} para aldı",
+      "description": "Son bir günde cüzdana para geldi."
+    },
+    "allCalm": {
+      "title": "Her şey sakin",
+      "description": "Şu anda seni bekleyen bir şey yok."
+    },
+    "childrenHeading": "Ekibin",
+    "childSubtitle": "Seviye {{level}} · {{points}} puan",
+    "reviewSheetTitle": "Onaylar",
+    "historyLink": "Tüm onay geçmişi"
+  },
+  "child": {
+    "greeting": "Selam, {{name}}!",
+    "heroSubtitle": "Bugünü harika yapalım.",
+    "mascotEncourage": "Başarabilirsin — her gün küçük adımlar!",
+    "mascotCelebrate": "Harika gidiyorsun! Muhteşem iş!",
+    "approvalWaiting": {
+      "title_one": "{{count}} görev onay bekliyor",
+      "title_other": "{{count}} görev onay bekliyor",
+      "description": "Bir büyükan/büyükanne yakında bakacak."
+    },
+    "moneyReceived": {
+      "title": "{{amount}} aldın",
+      "description": "Doğrudan cüzdanına eklendi."
+    },
+    "nextQuest": {
+      "title": "Sıradaki: {{title}}",
+      "description_one": "{{points}} puan değerinde",
+      "description_other": "{{points}} puan değerinde"
+    },
+    "streakKeep": {
+      "title": "{{days}} günlük serini koru!",
+      "description": "Alevin sönmesin için bugün bir görev daha yap."
+    },
+    "rewardAvailable": {
+      "title": "\u201c{{title}}\u201d artık yeterli",
+      "description": "Bunu alacak kadar puanın var."
+    },
+    "familyQuest": {
+      "title": "Aile Görevi: {{title}}",
+      "description": "Ailen bunu birlikte yapıyor."
+    },
+    "allDone": {
+      "title": "Her şeyi bitirdin!",
+      "description": "Yeni görevler için sonra tekrar bak."
+    },
+    "walletHeading": "Cüzdanın"
+  },
+  "loading": "Hazırlanıyor…",
+  "emptyAction": "Etrafa bir göz at",
+  "errorTitle": "Bu ekran yüklenemedi",
+  "errorDescription": "Aile verilerin güvende. Birazdan tekrar dene.",
+  "errorRetry": "Tekrar dene"
+}

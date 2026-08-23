@@ -32,8 +32,21 @@
   "nav": {
     "home": "Home",
     "tasks": "Tasks",
+    "quests": "Quests",
     "rewards": "Rewards",
-    "family": "Family"
+    "family": "Family",
+    "action": {
+      "parent": "Create something new",
+      "child": "Do my quests"
+    }
+  },
+  "composer": {
+    "title": "What do you want to do?",
+    "newTask": "New quest",
+    "newReward": "New reward",
+    "logBehaviour": "Log behaviour",
+    "doQuests": "Do my quests",
+    "viewRewards": "See rewards"
   },
   "roles": {
     "owner": "Owner",

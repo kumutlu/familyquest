@@ -29,6 +29,12 @@ vi.mock('../../config/navigation', () => ({
     { labelKey: 'nav.tasks', path: '/tasks', icon: () => null },
     { labelKey: 'nav.rewards', path: '/rewards', icon: () => null },
   ],
+  getQuekiNavItems: () => [
+    { labelKey: 'nav.home', path: '/', icon: () => null, testId: 'queki-nav-home' },
+    { labelKey: 'nav.tasks', path: '/tasks', icon: () => null, testId: 'queki-nav-quests' },
+    { labelKey: 'nav.rewards', path: '/rewards', icon: () => null, testId: 'queki-nav-rewards' },
+    { labelKey: 'nav.family', path: '/family', icon: () => null, testId: 'queki-nav-family' },
+  ],
 }));
 
 vi.mock('./ProfileDropdown', () => ({
@@ -56,17 +62,19 @@ describe('AppLayout — mobile bottom navigation layout', () => {
 
   it('renders exactly one mobile bottom navigation, anchored to the viewport', () => {
     const { container } = renderAppLayout();
-    const navs = screen.getAllByTestId('mobile-bottom-nav');
+    const navs = screen.getAllByTestId('queki-bottom-nav');
     expect(navs).toHaveLength(1);
     const nav = navs[0];
     // Anchored to the viewport bottom, not to page content.
     expect(nav.className).toMatch(/\bfixed\b/);
     expect(nav.className).toMatch(/bottom-0/);
     expect(nav.className).toMatch(/inset-x-0/);
+    // Safe area handled via the env() padding utility class.
     expect(nav.className).toMatch(/pb-\[env\(safe-area-inset-bottom\)\]/);
     expect(nav.style.position).toBe('fixed');
     // Must be the last child of the layout root — never nested inside the
-    // scrolling/transformable main content area.
+    // scrolling/transformable main content area. (The composer sheet portals
+    // to body only when opened, so it never breaks this invariant.)
     const root = container.querySelector('div.min-h-dvh')!;
     expect(root.lastElementChild).toBe(nav);
     expect(container.querySelector('main')!.contains(nav)).toBe(false);
@@ -80,20 +88,19 @@ describe('AppLayout — mobile bottom navigation layout', () => {
     expect(container.querySelector('div.min-h-screen')).not.toBeInTheDocument();
   });
 
-  it('main reserves space for bottom nav via safe-area padding', () => {
+  it('main reserves space for the taller Queki v2 nav via safe-area padding', () => {
     const { container } = renderAppLayout();
     const main = container.querySelector('main');
     expect(main).toBeInTheDocument();
-    // The main should have pb-[calc(4rem+env(safe-area-inset-bottom))] on mobile
-    expect(main?.className).toMatch(/pb-\[calc\(4rem\+env\(safe-area-inset-bottom\)\)\]/);
+    // Clears the overhanging centre Action button plus the safe area.
+    expect(main?.className).toMatch(/pb-\[calc\(6rem\+env\(safe-area-inset-bottom\)\)\]/);
   });
 
-  it('bottom nav has valid safe-area padding class (not pb-safe)', () => {
-    const { container } = renderAppLayout();
-    const nav = container.querySelector('nav.md\\:hidden');
-    expect(nav).toBeInTheDocument();
-    // Should use pb-[env(safe-area-inset-bottom)], NOT pb-safe
-    expect(nav?.className).toMatch(/pb-\[env\(safe-area-inset-bottom\)\]/);
+  it('bottom nav has valid safe-area padding (not pb-safe)', () => {
+    renderAppLayout();
+    const nav = screen.getByTestId('queki-bottom-nav');
+    expect(nav.className).toMatch(/pb-\[env\(safe-area-inset-bottom\)\]/);
+    expect(nav.className).not.toMatch(/pb-safe/);
   });
 
   it('bottom nav is fixed to viewport bottom on mobile', () => {

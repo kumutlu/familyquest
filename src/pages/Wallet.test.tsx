@@ -24,8 +24,8 @@ vi.mock('../components/wallet/TransactionDetailsModal', () => ({
   TransactionDetailsModal: ({ isOpen, transaction }: any) =>
     isOpen && transaction ? <span>{`details:${transaction.id}`}</span> : null,
 }));
-vi.mock('../components/wallet/SendMoneyModal', () => ({
-  SendMoneyModal: () => <span>send-money-open</span>,
+vi.mock('../components/wallet/SendFlowSheet', () => ({
+  SendFlowSheet: () => <span>send-money-open</span>,
 }));
 vi.mock('../components/wallet/RequestMoneyModal', () => ({
   RequestMoneyModal: () => <span>request-money-open</span>,

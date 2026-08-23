@@ -17,9 +17,11 @@ import type enFunds from './locales/en/funds.json';
 import type enRequests from './locales/en/requests.json';
 import type enReversals from './locales/en/reversals.json';
 import type enBulletin from './locales/en/bulletin.json';
+import type enFamilyWorld from './locales/en/familyWorld.json';
 import type enLegal from './locales/en/legal.json';
 import type enStartup from './locales/en/startup.json';
 import type enOnboarding from './locales/en/onboarding.json';
+import type enHome from './locales/en/home.json';
 
 /**
  * Strongly-typed resource shape, keyed by NAMESPACE (not language). `en` is the
@@ -50,6 +52,9 @@ interface Resources {
   legal: typeof enLegal;
   startup: typeof enStartup;
   onboarding: typeof enOnboarding;
+  home: typeof enHome;
+  familyWorld: typeof enFamilyWorld;
+  quests: Record<string, unknown>;
   // The Help Center resolves article/category keys dynamically at runtime, so
   // its namespace is registered with an open key map rather than a literal
   // key union.

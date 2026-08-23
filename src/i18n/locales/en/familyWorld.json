@@ -1,0 +1,89 @@
+{
+  "title": "Our Family",
+  "subtitle": "A shared space for your family.",
+  "loading": "Warming up your family space…",
+  "manage": "Manage family",
+  "scene": {
+    "ourFamily": "Our family",
+    "singleChildIntro": "Just the two of you — growing together.",
+    "multiChildIntro": "Your family, together."
+  },
+  "member": {
+    "you": "You",
+    "level": "Level {{level}}",
+    "viewProfile": "View profile"
+  },
+  "quest": {
+    "title": "Family Quest",
+    "badge": "Family Quest",
+    "inProgress": "In progress",
+    "readyToClaim": "Ready to claim",
+    "completed": "Completed",
+    "progress": "{{earned}} / {{target}}",
+    "percent": "{{percent}}%",
+    "remaining": "{{remaining}} to go",
+    "daysLeft_one": "{{count}} day left",
+    "daysLeft_other": "{{count}} days left",
+    "keepGoing": "Keep it going — you're almost there!",
+    "targetReached": "Target reached! The whole family made it.",
+    "reward": "Every child gets +{{points}} points",
+    "claim": "Claim reward",
+    "claiming": "Claiming…",
+    "claimHint": "Gives every child +{{points}} points and closes the quest.",
+    "waitingForParent": "Goal reached! Waiting for a parent to claim.",
+    "start": "Start a Family Quest",
+    "startTitle": "New Family Quest",
+    "create": "Create quest",
+    "creating": "Creating…",
+    "questTitle": "Quest title",
+    "xpTarget": "Family XP target",
+    "rewardPerChild": "Reward per child (points)",
+    "noActive": "No active Family Quest right now.",
+    "noActiveHint": "Start one to grow together."
+  },
+  "progress": {
+    "title": "Family Progress",
+    "questBased": "Driven by your Family Quest.",
+    "calm": "Your family is doing great."
+  },
+  "achievements": {
+    "title": "Family Achievements",
+    "empty": "Achievements will appear as your family grows.",
+    "familyQuestComplete": "Family Quest complete!",
+    "firstQuest": "First Family Quest",
+    "streakTogether": "Week of Wins",
+    "levelTogether": "Rising Stars",
+    "unlocked": "Unlocked"
+  },
+  "moments": {
+    "title": "Family Moments",
+    "empty": "Special moments will show up here.",
+    "questComplete": "Family Quest complete",
+    "moneySent": "{{name}} sent {{amount}}",
+    "moneyReceived": "{{name}} received {{amount}}",
+    "questApproved": "{{name}} finished a quest",
+    "levelUp": "{{name}} reached Level {{level}}",
+    "streak": "{{name}} hit a {{days}}-day streak"
+  },
+  "detail": {
+    "title": "{{name}}",
+    "sendMoney": "Send money",
+    "viewQuests": "View quests",
+    "viewProgress": "View progress",
+    "manageChild": "Manage child",
+    "editProfile": "Edit profile",
+    "close": "Close",
+    "walletHidden": "Hidden from other members"
+  },
+  "celebration": {
+    "questComplete": "Family Quest complete!",
+    "teamwork": "Teamwork!",
+    "achievementUnlocked": "Achievement unlocked",
+    "dismiss": "Tap to continue"
+  },
+  "states": {
+    "errorTitle": "This view couldn't load",
+    "errorDescription": "Your family data is safe. Try again in a moment.",
+    "retry": "Try again"
+  }
+}

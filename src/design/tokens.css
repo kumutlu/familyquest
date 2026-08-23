@@ -1,0 +1,204 @@
+/* ============================================================================
+   Queki v2 Design Tokens
+   ----------------------------------------------------------------------------
+   The single source of truth for the Queki v2 visual language. Components must
+   consume these tokens (Tailwind utilities generated from the @theme scales,
+   or the semantic CSS variables) — never hardcode ad-hoc colours.
+
+   Semantic colour identities (stable across light AND dark):
+     brand    → Queki indigo/violet identity      (--color-primary-*)
+     xp       → gold                              (--color-xp-*)
+     wallet   → mint / real money                 (--color-mint-*)
+     rewards  → coral                             (--color-coral-*)
+     streak   → orange                            (--color-streak-*)
+     family   → blue                              (--color-family-*)
+
+   Surfaces are exposed as runtime CSS variables (--qk-surface-*) so both
+   themes share one component API. Dark values are rich indigo-tinted neutrals,
+   not plain black.
+   ========================================================================== */
+
+@theme {
+  /* ---- XP: gold ---------------------------------------------------------- */
+  --color-xp-50: #fffbeb;
+  --color-xp-100: #fef3c7;
+  --color-xp-200: #fde68a;
+  --color-xp-300: #fcd34d;
+  --color-xp-400: #fbbf24;
+  --color-xp-500: #f59e0b;
+  --color-xp-600: #d97706;
+  --color-xp-700: #b45309;
+
+  /* ---- Wallet: mint (real money) ----------------------------------------- */
+  --color-mint-50: #ecfdf5;
+  --color-mint-100: #d1fae5;
+  --color-mint-200: #a7f3d0;
+  --color-mint-300: #6ee7b7;
+  --color-mint-400: #34d399;
+  --color-mint-500: #10b981;
+  --color-mint-600: #059669;
+  --color-mint-700: #047857;
+
+  /* ---- Rewards: coral ----------------------------------------------------- */
+  --color-coral-50: #fff1f0;
+  --color-coral-100: #ffe1dd;
+  --color-coral-200: #ffc4bd;
+  --color-coral-300: #ff9d92;
+  --color-coral-400: #ff7a6b;
+  --color-coral-500: #f95d4e;
+  --color-coral-600: #e04335;
+  --color-coral-700: #b93226;
+
+  /* ---- Streak: orange ------------------------------------------------------ */
+  --color-streak-50: #fff7ed;
+  --color-streak-100: #ffedd5;
+  --color-streak-200: #fed7aa;
+  --color-streak-300: #fdba74;
+  --color-streak-400: #fb923c;
+  --color-streak-500: #f97316;
+  --color-streak-600: #ea580c;
+  --color-streak-700: #c2410c;
+
+  /* ---- Family: blue -------------------------------------------------------- */
+  --color-family-50: #eff6ff;
+  --color-family-100: #dbeafe;
+  --color-family-200: #bfdbfe;
+  --color-family-300: #93c5fd;
+  --color-family-400: #60a5fa;
+  --color-family-500: #3b82f6;
+  --color-family-600: #2563eb;
+  --color-family-700: #1d4ed8;
+
+  /* ---- Typography scale (mobile-first hierarchy) --------------------------- */
+  --text-display: 2.125rem;        /* hero numbers / celebration moments */
+  --text-display--line-height: 2.375rem;
+  --text-display--letter-spacing: -0.02em;
+  --text-display--font-weight: 800;
+
+  --text-title: 1.5rem;            /* page title */
+  --text-title--line-height: 1.875rem;
+  --text-title--letter-spacing: -0.01em;
+  --text-title--font-weight: 800;
+
+  --text-card-title: 1.0625rem;    /* card title */
+  --text-card-title--line-height: 1.5rem;
+  --text-card-title--font-weight: 700;
+
+  --text-body: 0.9375rem;          /* body copy */
+  --text-body--line-height: 1.375rem;
+
+  --text-meta: 0.8125rem;          /* metadata / captions */
+  --text-meta--line-height: 1.125rem;
+
+  --text-balance: 1.75rem;         /* number/balance readouts */
+  --text-balance--line-height: 2rem;
+  --text-balance--letter-spacing: -0.02em;
+  --text-balance--font-weight: 800;
+
+  --text-button: 0.9375rem;        /* button labels */
+  --text-button--line-height: 1.25rem;
+  --text-button--font-weight: 700;
+
+  /* ---- Shape ---------------------------------------------------------------- */
+  --radius-card: 1.25rem;          /* TactileCard */
+  --radius-sheet: 1.75rem;         /* BottomSheet top corners */
+  --radius-hero: 2rem;             /* Living Home hero region */
+
+  /* ---- Motion easing -------------------------------------------------------- */
+  --ease-tap: cubic-bezier(0.2, 0, 0, 1);
+  --ease-enter: cubic-bezier(0.16, 1, 0.3, 1);
+  --ease-exit: cubic-bezier(0.4, 0, 1, 1);
+  --ease-sheet: cubic-bezier(0.32, 0.72, 0, 1);
+  --ease-celebrate: cubic-bezier(0.34, 1.56, 0.64, 1);
+
+  /* ---- Motion durations (also mirrored in src/design/motion.ts) ------------- */
+  --animate-duration-tap: 120ms;
+  --animate-duration-enter: 240ms;
+  --animate-duration-exit: 180ms;
+  --animate-duration-sheet: 320ms;
+  --animate-duration-card: 260ms;
+  --animate-duration-success: 450ms;
+  --animate-duration-celebration: 700ms;
+
+  /* ---- Wave 2: quest loop ---------------------------------------------------- */
+  --animate-duration-hold: 900ms;          /* hold-to-complete fill */
+  --animate-duration-swipe-exit: 240ms;    /* review card fly-off */
+  --animate-duration-next-card: 260ms;     /* next review card entry */
+  --ease-swipe-exit: cubic-bezier(0.22, 0.61, 0.36, 1);
+}
+
+/* ---- Semantic surfaces (runtime-switchable) --------------------------------
+   Light: warm paper, never generic white SaaS. Dark: rich indigo-night. */
+:root {
+  --qk-surface-page: #f6f5fb;
+  --qk-surface-card: #ffffff;
+  --qk-surface-raised: #ffffff;
+  --qk-surface-inset: #efedf8;
+  --qk-surface-hero-from: #4f46e5;
+  --qk-surface-hero-to: #7c3aed;
+  --qk-text-primary: #17151f;
+  --qk-text-secondary: #5b5870;
+  --qk-text-onbrand: #ffffff;
+  --qk-border-subtle: rgba(79, 70, 229, 0.10);
+  --qk-shadow-card: 0 1px 2px rgba(23, 21, 31, 0.05), 0 8px 24px -12px rgba(79, 70, 229, 0.18);
+}
+
+.dark {
+  --qk-surface-page: #101019;
+  --qk-surface-card: #1a1926;
+  --qk-surface-raised: #232134;
+  --qk-surface-inset: #14131f;
+  --qk-surface-hero-from: #4338ca;
+  --qk-surface-hero-to: #6d28d9;
+  --qk-text-primary: #f1f0f7;
+  --qk-text-secondary: #a5a3b8;
+  --qk-text-onbrand: #ffffff;
+  --qk-border-subtle: rgba(165, 180, 252, 0.14);
+  --qk-shadow-card: 0 1px 2px rgba(0, 0, 0, 0.4), 0 12px 32px -16px rgba(0, 0, 0, 0.55);
+
+  /* Semantic tints become dark, hue-preserving versions of themselves so chips
+     and badges keep their meaning without blinding light surfaces. */
+  --color-xp-50: #2b230c;
+  --color-xp-100: #3a2f10;
+  --color-xp-200: #52420f;
+  --color-mint-50: #0a2419;
+  --color-mint-100: #0f3524;
+  --color-mint-200: #145033;
+  --color-coral-50: #2b1210;
+  --color-coral-100: #3c1714;
+  --color-coral-200: #571f1a;
+  --color-streak-50: #2a1a0c;
+  --color-streak-100: #3a2710;
+  --color-streak-200: #4a3414;
+  --color-family-50: #0e1b2e;
+  --color-family-100: #14243d;
+  --color-family-200: #1b3355;
+}
+
+/* Utility hooks for the surface variables (kept as real classes so components
+   can use them alongside Tailwind utilities without arbitrary-value noise). */
+@utility qk-bg-page { background-color: var(--qk-surface-page); }
+@utility qk-bg-card { background-color: var(--qk-surface-card); }
+@utility qk-bg-raised { background-color: var(--qk-surface-raised); }
+@utility qk-bg-inset { background-color: var(--qk-surface-inset); }
+@utility qk-text-primary { color: var(--qk-text-primary); }
+@utility qk-text-secondary { color: var(--qk-text-secondary); }
+@utility qk-border-subtle { border-color: var(--qk-border-subtle); }
+@utility qk-shadow-card { box-shadow: var(--qk-shadow-card); }
+
+/* Reduced motion: collapse every Queki v2 duration to zero. Component-level
+   transitions driven by these variables become instant for users who opt out. */
+@media (prefers-reduced-motion: reduce) {
+  :root {
+    --animate-duration-tap: 0ms;
+    --animate-duration-enter: 0ms;
+    --animate-duration-exit: 0ms;
+    --animate-duration-sheet: 0ms;
+    --animate-duration-card: 0ms;
+    --animate-duration-success: 0ms;
+    --animate-duration-celebration: 0ms;
+    --animate-duration-hold: 0ms;
+    --animate-duration-swipe-exit: 0ms;
+    --animate-duration-next-card: 0ms;
+  }
+}

@@ -1,0 +1,93 @@
+{
+  "board": {
+    "title": "Görev Panosu",
+    "todayLabel": "Bugün",
+    "progressAria": "Bugünün görev ilerlemesi: {{total}} görevden {{confirmed}} onaylandı",
+    "progressConfirmed": "{{total}} görevden {{confirmed}}",
+    "submittedChip_one": "{{count}} görev onay bekliyor",
+    "submittedChip_other": "{{count}} görev onay bekliyor",
+    "streakAria": "{{days}} günlük seri",
+    "moreQuests": "{{count}} görev daha",
+    "showLess": "Daha az göster",
+    "doneSectionTitle": "Bugün bitenler",
+    "emptyTitle": "Şu anda bekleyen bir şey yok",
+    "emptyDescription": "Bir büyükanne veya büyükbaba görev atadığında burada görünecek.",
+    "allDoneTitle": "Her şeyi bitirdin!",
+    "allDoneDescription": "Tüm görevler tamam. Yarın yine bekleriz!",
+    "loading": "Görevlerin yükleniyor…"
+  },
+  "quest": {
+    "holdToComplete": "Tamamlamak için basılı tut",
+    "completing": "Tamamlanıyor…",
+    "keepHolding": "Basılı tutmaya devam et…",
+    "completeNow": "Tamamla",
+    "pointsAria": "{{points}} puan potansiyel ödül",
+    "retryTitle": "Bu sefer onaylanmadı",
+    "retryAction": "Tekrar dene",
+    "parentCommentAria": "Ebeveyn notu"
+  },
+  "pendingCard": {
+    "title": "Gönderildi!",
+    "description": "Onay bekleniyor",
+    "waitingFor": "{{name}} bakıyor"
+  },
+  "doneCard": {
+    "title": "Onaylandı",
+    "aria": "{{title}} onaylandı"
+  },
+  "moment": {
+    "completeTitle": "Görev tamamlandı!",
+    "potentialPoints": "+{{points}} potansiyel",
+    "waitingLine": "{{name}} bekleniyor",
+    "waitingGeneric": "Onay bekleniyor",
+    "autoApproved": "+{{points}} puan hemen hesabına!"
+  },
+  "approvedMoment": {
+    "title": "Onaylandı!",
+    "xpAward": "+{{xp}} XP",
+    "pointsAward": "+{{points}} puan",
+    "dismiss": "Harika"
+  },
+  "review": {
+    "title": "Kaydırarak Onayla",
+    "queueCount_one": "{{count}} görev incelenecek",
+    "queueCount_other": "{{count}} görev incelenecek",
+    "approve": "Onayla",
+    "reject": "Geri gönder",
+    "approving": "Onaylanıyor…",
+    "rejecting": "Geri gönderiliyor…",
+    "swipeHint": "Onaylamak için sağa, geri göndermek için sola kaydır",
+    "rejectReasonTitle": "Nasıl olmalıydı?",
+    "rejectReasonPlaceholder": "{{name}} için kısa bir not ekle…",
+    "rejectConfirm": "Geri gönder",
+    "cancel": "Vazgeç",
+    "allCaughtUpTitle": "Her şey tamam!",
+    "allCaughtUpDescription": "Onayınızı bekleyen bir şey yok.",
+    "backHome": "Ana Sayfaya Dön",
+    "historyLink": "Tüm onay geçmişi",
+    "errorRetry": "Queki'ye ulaşılamadı. Tekrar dene.",
+    "staleItem": "Bu görev zaten incelenmiş.",
+    "completedWhen": "{{time}} gönderildi",
+    "potentialReward": "Onaylanırsa +{{points}} puan",
+    "kindQuest": "Görev onayı",
+    "kindTransfer": "Para gönderimi",
+    "kindMoneyRequest": "Para isteği",
+    "transferAmount": "{{amount}}",
+    "moneyRequestFrom": "{{name}} kişisinden istek",
+    "awaitingAcceptance": "{{name}} kabul etmesini bekliyor"
+  },
+  "parentBoard": {
+    "title": "Görevler",
+    "subtitle_one": "{{count}} aktif görev",
+    "subtitle_other": "{{count}} aktif görev",
+    "filterAll": "Herkes",
+    "manageHint": "Yönetmek için bir göreve dokun",
+    "emptyTitle": "Henüz görev yok",
+    "emptyDescription": "Ekibin yapacak bir şeyi olsun diye ilk görevi oluştur.",
+    "createFirst": "Görev oluştur",
+    "assignedTo": "{{name}} için",
+    "sharedBadge": "Paylaşılan",
+    "pendingBadge": "Seni bekliyor",
+    "approvedBadge": "Onaylandı"
+  }
+}

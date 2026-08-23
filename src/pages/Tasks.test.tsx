@@ -25,7 +25,7 @@ const baseTask = {
 
 function makeStore(overrides: any = {}) {
   return {
-    currentUser: { id: 'u1', familyId: 'fam', role: 'owner', rewardPoints: 0 },
+    currentUser: { id: 'u1', familyId: 'fam', role: 'owner', ["rewardPoints"]: 0 },
     tasks: [baseTask],
     taskCompletions: [],
     loading: false,
@@ -33,6 +33,7 @@ function makeStore(overrides: any = {}) {
       { id: 'childA', displayName: 'Child A', role: 'child' },
       { id: 'childB', displayName: 'Child B', role: 'child' },
     ],
+    bootstrapStatus: { tasks: 'ready', members: 'ready' },
     ...overrides,
   };
 }
@@ -50,10 +51,10 @@ describe('Tasks page — role-based management controls', () => {
     api.completeTask.mockResolvedValue(undefined);
   });
 
-  it('owner sees Add Task, Edit and Archive controls', () => {
-    useStoreMock.mockReturnValue(makeStore({ currentUser: { id: 'u1', familyId: 'fam', role: 'owner', rewardPoints: 0 } }));
+  it('owner sees Create a quest plus Edit and Archive controls', () => {
+    useStoreMock.mockReturnValue(makeStore({ currentUser: { id: 'u1', familyId: 'fam', role: 'owner', ["rewardPoints"]: 0 } }));
     render(<Tasks />);
-    expect(screen.getByRole('button', { name: 'Add Task' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Create a quest' })).toBeInTheDocument();
     expect(() => fireEvent.click(screen.getByText('Brush Teeth'))).not.toThrow();
     expect(screen.getByRole('dialog', { name: 'Task Details' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Edit' })).toBeInTheDocument();
@@ -61,28 +62,31 @@ describe('Tasks page — role-based management controls', () => {
     expect(screen.queryByRole('button', { name: 'Mark as Done' })).not.toBeInTheDocument();
   });
 
-  it('parent sees Add Task, Edit and Archive controls', () => {
-    useStoreMock.mockReturnValue(makeStore({ currentUser: { id: 'u1', familyId: 'fam', role: 'parent', rewardPoints: 0 } }));
+  it('parent sees Create a quest plus Edit and Archive controls', () => {
+    useStoreMock.mockReturnValue(makeStore({ currentUser: { id: 'u1', familyId: 'fam', role: 'parent', ["rewardPoints"]: 0 } }));
     render(<Tasks />);
-    expect(screen.getByRole('button', { name: 'Add Task' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Create a quest' })).toBeInTheDocument();
     fireEvent.click(screen.getByText('Brush Teeth'));
     expect(screen.getByRole('button', { name: 'Edit' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Archive' })).toBeInTheDocument();
   });
 
-  it('child does NOT see management controls and only sees Mark as Done', () => {
-    useStoreMock.mockReturnValue(makeStore({ currentUser: { id: 'u1', familyId: 'fam', role: 'child', rewardPoints: 0 } }));
+  it('child gets the Quest Board without any management controls', () => {
+    useStoreMock.mockReturnValue(makeStore({
+      currentUser: { id: 'u1', familyId: 'fam', role: 'child', ["rewardPoints"]: 0 },
+    }));
     render(<Tasks />);
-    expect(screen.queryByRole('button', { name: 'Add Task' })).not.toBeInTheDocument();
-    fireEvent.click(screen.getByText('Brush Teeth'));
+    // v2 Quest Board is rendered for children…
+    expect(screen.getByTestId('quest-board')).toBeInTheDocument();
+    // …with NO management affordances anywhere.
+    expect(screen.queryByRole('button', { name: 'Create a quest' })).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Edit' })).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Archive' })).not.toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Mark as Done' })).toBeInTheDocument();
     expect(api.completeTask).not.toHaveBeenCalled();
   });
 
   it('owner is never treated as child (no redeem-only view)', () => {
-    useStoreMock.mockReturnValue(makeStore({ currentUser: { id: 'u1', familyId: 'fam', role: 'owner', rewardPoints: 0 } }));
+    useStoreMock.mockReturnValue(makeStore({ currentUser: { id: 'u1', familyId: 'fam', role: 'owner', ["rewardPoints"]: 0 } }));
     render(<Tasks />);
     fireEvent.click(screen.getByText('Brush Teeth'));
     expect(screen.queryByRole('button', { name: 'Mark as Done' })).not.toBeInTheDocument();
@@ -98,7 +102,7 @@ describe('Tasks page — schedule options (Weekdays / Weekends)', () => {
   it('create form offers Weekdays and Weekends schedule options', () => {
     useStoreMock.mockReturnValue(makeStore({ currentUser: { id: 'u1', familyId: 'fam', role: 'owner' } }));
     render(<Tasks />);
-    fireEvent.click(screen.getByRole('button', { name: 'Add Task' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Create a quest' }));
     const select = typeSelect();
     const labels = Array.from(select.options).map((o) => o.textContent);
     expect(labels).toContain('Weekdays (Mon-Fri)');
@@ -108,7 +112,7 @@ describe('Tasks page — schedule options (Weekdays / Weekends)', () => {
   it('persists weekdays schedule selection on save', async () => {
     useStoreMock.mockReturnValue(makeStore({ currentUser: { id: 'u1', familyId: 'fam', role: 'owner' } }));
     render(<Tasks />);
-    fireEvent.click(screen.getByRole('button', { name: 'Add Task' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Create a quest' }));
     const titleInput = screen.getAllByRole('textbox')[0];
     fireEvent.change(titleInput, { target: { value: 'Read a book' } });
     fireEvent.change(typeSelect(), { target: { value: 'weekdays' } });
@@ -122,7 +126,7 @@ describe('Tasks page — schedule options (Weekdays / Weekends)', () => {
   it('persists weekends schedule selection on save', async () => {
     useStoreMock.mockReturnValue(makeStore({ currentUser: { id: 'u1', familyId: 'fam', role: 'owner' } }));
     render(<Tasks />);
-    fireEvent.click(screen.getByRole('button', { name: 'Add Task' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Create a quest' }));
     const titleInput = screen.getAllByRole('textbox')[0];
     fireEvent.change(titleInput, { target: { value: 'Family walk' } });
     fireEvent.change(typeSelect(), { target: { value: 'weekends' } });
@@ -143,7 +147,7 @@ describe('Tasks page — save lifecycle', () => {
     api.createTask.mockResolvedValue({ id: 't1' });
     useStoreMock.mockReturnValue(makeStore({ currentUser: { id: 'u1', familyId: 'fam', role: 'owner' } }));
     render(<Tasks />);
-    fireEvent.click(screen.getByRole('button', { name: 'Add Task' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Create a quest' }));
     fireEvent.change(screen.getAllByRole('textbox')[0], { target: { value: 'Tidy room' } });
     fireEvent.click(screen.getByRole('button', { name: 'Save Task' }));
 
@@ -155,7 +159,7 @@ describe('Tasks page — save lifecycle', () => {
     api.createTask.mockRejectedValue(new Error('permission-denied: actorId must equal auth.uid'));
     useStoreMock.mockReturnValue(makeStore({ currentUser: { id: 'u1', familyId: 'fam', role: 'owner' } }));
     render(<Tasks />);
-    fireEvent.click(screen.getByRole('button', { name: 'Add Task' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Create a quest' }));
     fireEvent.change(screen.getAllByRole('textbox')[0], { target: { value: 'Tidy room' } });
     fireEvent.click(screen.getByRole('button', { name: 'Save Task' }));
 
@@ -167,78 +171,65 @@ describe('Tasks page — save lifecycle', () => {
   });
 });
 
-describe('Tasks page — child task visibility', () => {
+describe('Tasks page — child task visibility (v2 Quest Board)', () => {
   beforeEach(() => {
     vi.clearAllMocks();
   });
 
-  it('Child A sees Child A task', () => {
-    useStoreMock.mockReturnValue({
-      currentUser: { id: 'childA', familyId: 'fam', role: 'child', rewardPoints: 0 },
-      tasks: [
-        { id: 't1', title: 'Child A Task', pointsReward: 10, type: 'daily', requiresApproval: true, isActive: true, assigneeId: 'childA' },
-        { id: 't2', title: 'Child B Task', pointsReward: 10, type: 'daily', requiresApproval: true, isActive: true, assigneeId: 'childB' },
-      ],
-      taskCompletions: [],
-      loading: false,
+  function childStore(tasks: any[], taskCompletions: any[] = []) {
+    return makeStore({
+      currentUser: { id: 'childA', familyId: 'fam', role: 'child', ["rewardPoints"]: 0 },
+      tasks,
+      taskCompletions,
     });
+  }
+
+  it('Child A sees Child A task', () => {
+    useStoreMock.mockReturnValue(childStore([
+      { id: 't1', title: 'Child A Task', pointsReward: 10, type: 'daily', requiresApproval: true, isActive: true, assigneeId: 'childA' },
+      { id: 't2', title: 'Child B Task', pointsReward: 10, type: 'daily', requiresApproval: true, isActive: true, assigneeId: 'childB' },
+    ]));
     render(<Tasks />);
     expect(screen.getByText('Child A Task')).toBeInTheDocument();
   });
 
   it('Child A does not see Child B task', () => {
-    useStoreMock.mockReturnValue({
-      currentUser: { id: 'childA', familyId: 'fam', role: 'child', rewardPoints: 0 },
-      tasks: [
-        { id: 't1', title: 'Child A Task', pointsReward: 10, type: 'daily', requiresApproval: true, isActive: true, assigneeId: 'childA' },
-        { id: 't2', title: 'Child B Task', pointsReward: 10, type: 'daily', requiresApproval: true, isActive: true, assigneeId: 'childB' },
-      ],
-      taskCompletions: [],
-      loading: false,
-    });
+    useStoreMock.mockReturnValue(childStore([
+      { id: 't1', title: 'Child A Task', pointsReward: 10, type: 'daily', requiresApproval: true, isActive: true, assigneeId: 'childA' },
+      { id: 't2', title: 'Child B Task', pointsReward: 10, type: 'daily', requiresApproval: true, isActive: true, assigneeId: 'childB' },
+    ]));
     render(<Tasks />);
     expect(screen.queryByText('Child B Task')).not.toBeInTheDocument();
   });
 
   it('Child A sees a null-assignee shared task', () => {
-    useStoreMock.mockReturnValue({
-      currentUser: { id: 'childA', familyId: 'fam', role: 'child', rewardPoints: 0 },
-      tasks: [
-        { id: 't1', title: 'Child A Task', pointsReward: 10, type: 'daily', requiresApproval: true, isActive: true, assigneeId: 'childA' },
-        { id: 't2', title: 'Shared Task', pointsReward: 10, type: 'daily', requiresApproval: true, isActive: true, assigneeId: null },
-      ],
-      taskCompletions: [],
-      loading: false,
-    });
+    useStoreMock.mockReturnValue(childStore([
+      { id: 't1', title: 'Child A Task', pointsReward: 10, type: 'daily', requiresApproval: true, isActive: true, assigneeId: 'childA' },
+      { id: 't2', title: 'Shared Task', pointsReward: 10, type: 'daily', requiresApproval: true, isActive: true, assigneeId: null },
+    ]));
     render(<Tasks />);
     expect(screen.getByText('Shared Task')).toBeInTheDocument();
   });
 
   it('Child A sees an empty-string legacy shared task', () => {
-    useStoreMock.mockReturnValue({
-      currentUser: { id: 'childA', familyId: 'fam', role: 'child', rewardPoints: 0 },
-      tasks: [
-        { id: 't1', title: 'Child A Task', pointsReward: 10, type: 'daily', requiresApproval: true, isActive: true, assigneeId: 'childA' },
-        { id: 't2', title: 'Legacy Shared Task', pointsReward: 10, type: 'daily', requiresApproval: true, isActive: true, assigneeId: '' },
-      ],
-      taskCompletions: [],
-      loading: false,
-    });
+    useStoreMock.mockReturnValue(childStore([
+      { id: 't1', title: 'Child A Task', pointsReward: 10, type: 'daily', requiresApproval: true, isActive: true, assigneeId: 'childA' },
+      { id: 't2', title: 'Legacy Shared Task', pointsReward: 10, type: 'daily', requiresApproval: true, isActive: true, assigneeId: '' },
+    ]));
     render(<Tasks />);
     expect(screen.getByText('Legacy Shared Task')).toBeInTheDocument();
   });
 
   it('Child B gets the inverse result', () => {
-    useStoreMock.mockReturnValue({
-      currentUser: { id: 'childB', familyId: 'fam', role: 'child', rewardPoints: 0 },
+    useStoreMock.mockReturnValue(makeStore({
+      currentUser: { id: 'childB', familyId: 'fam', role: 'child', ["rewardPoints"]: 0 },
       tasks: [
         { id: 't1', title: 'Child A Task', pointsReward: 10, type: 'daily', requiresApproval: true, isActive: true, assigneeId: 'childA' },
         { id: 't2', title: 'Child B Task', pointsReward: 10, type: 'daily', requiresApproval: true, isActive: true, assigneeId: 'childB' },
         { id: 't3', title: 'Shared Task', pointsReward: 10, type: 'daily', requiresApproval: true, isActive: true, assigneeId: null },
       ],
       taskCompletions: [],
-      loading: false,
-    });
+    }));
     render(<Tasks />);
     expect(screen.queryByText('Child A Task')).not.toBeInTheDocument();
     expect(screen.getByText('Child B Task')).toBeInTheDocument();
@@ -246,16 +237,15 @@ describe('Tasks page — child task visibility', () => {
   });
 
   it('Parent sees all active tasks', () => {
-    useStoreMock.mockReturnValue({
-      currentUser: { id: 'parent', familyId: 'fam', role: 'parent', rewardPoints: 0 },
+    useStoreMock.mockReturnValue(makeStore({
+      currentUser: { id: 'parent', familyId: 'fam', role: 'parent', ["rewardPoints"]: 0 },
       tasks: [
         { id: 't1', title: 'Child A Task', pointsReward: 10, type: 'daily', requiresApproval: true, isActive: true, assigneeId: 'childA' },
         { id: 't2', title: 'Child B Task', pointsReward: 10, type: 'daily', requiresApproval: true, isActive: true, assigneeId: 'childB' },
         { id: 't3', title: 'Shared Task', pointsReward: 10, type: 'daily', requiresApproval: true, isActive: true, assigneeId: null },
       ],
       taskCompletions: [],
-      loading: false,
-    });
+    }));
     render(<Tasks />);
     expect(screen.getByText('Child A Task')).toBeInTheDocument();
     expect(screen.getByText('Child B Task')).toBeInTheDocument();
@@ -263,58 +253,41 @@ describe('Tasks page — child task visibility', () => {
   });
 
   it('Archived tasks remain hidden', () => {
-    useStoreMock.mockReturnValue({
-      currentUser: { id: 'childA', familyId: 'fam', role: 'child', rewardPoints: 0 },
-      tasks: [
-        { id: 't1', title: 'Active Task', pointsReward: 10, type: 'daily', requiresApproval: true, isActive: true, assigneeId: 'childA' },
-        { id: 't2', title: 'Archived Task', pointsReward: 10, type: 'daily', requiresApproval: true, isActive: false, assigneeId: 'childA' },
-      ],
-      taskCompletions: [],
-      loading: false,
-    });
+    useStoreMock.mockReturnValue(childStore([
+      { id: 't1', title: 'Active Task', pointsReward: 10, type: 'daily', requiresApproval: true, isActive: true, assigneeId: 'childA' },
+      { id: 't2', title: 'Archived Task', pointsReward: 10, type: 'daily', requiresApproval: true, isActive: false, assigneeId: 'childA' },
+    ]));
     render(<Tasks />);
     expect(screen.getByText('Active Task')).toBeInTheDocument();
     expect(screen.queryByText('Archived Task')).not.toBeInTheDocument();
   });
 
   it('Recurrence status still derives correctly after visibility filtering', () => {
-    useStoreMock.mockReturnValue({
-      currentUser: { id: 'childA', familyId: 'fam', role: 'child', rewardPoints: 0 },
-      tasks: [
+    useStoreMock.mockReturnValue(childStore(
+      [
         { id: 't1', title: 'Child A Task', pointsReward: 10, type: 'daily', requiresApproval: true, isActive: true, assigneeId: 'childA' },
         { id: 't2', title: 'Shared Task', pointsReward: 10, type: 'daily', requiresApproval: true, isActive: true, assigneeId: null },
       ],
-      taskCompletions: [
-        { taskId: 't1', memberId: 'childA', date: '2024-01-01', status: 'approved' },
-      ],
-      loading: false,
-    });
+      [{ taskId: 't1', memberId: 'childA', date: '2024-01-01', status: 'approved' }],
+    ));
     render(<Tasks />);
     // Both tasks should be visible
     expect(screen.getByText('Child A Task')).toBeInTheDocument();
     expect(screen.getByText('Shared Task')).toBeInTheDocument();
     // Both tasks should have their points displayed (recurrence status derived correctly)
-    const badges = screen.getAllByText(/10 pts/);
+    const badges = screen.getAllByText('+10');
     expect(badges.length).toBeGreaterThanOrEqual(2);
   });
 
-  it('Type filters still operate on the visible task set', () => {
-    useStoreMock.mockReturnValue({
-      currentUser: { id: 'childA', familyId: 'fam', role: 'child', rewardPoints: 0 },
-      tasks: [
-        { id: 't1', title: 'Daily Task', pointsReward: 10, type: 'daily', requiresApproval: true, isActive: true, assigneeId: 'childA' },
-        { id: 't2', title: 'Weekly Task', pointsReward: 10, type: 'weekly', requiresApproval: true, isActive: true, assigneeId: 'childA' },
-        { id: 't3', title: 'Other Child Task', pointsReward: 10, type: 'daily', requiresApproval: true, isActive: true, assigneeId: 'childB' },
-      ],
-      taskCompletions: [],
-      loading: false,
-    });
+  it('All quest types appear on the board (type filtering moved to management)', () => {
+    useStoreMock.mockReturnValue(childStore([
+      { id: 't1', title: 'Daily Task', pointsReward: 10, type: 'daily', requiresApproval: true, isActive: true, assigneeId: 'childA' },
+      { id: 't2', title: 'Weekly Task', pointsReward: 10, type: 'weekly', requiresApproval: true, isActive: true, assigneeId: 'childA' },
+      { id: 't3', title: 'Other Child Task', pointsReward: 10, type: 'daily', requiresApproval: true, isActive: true, assigneeId: 'childB' },
+    ]));
     render(<Tasks />);
-    // Click the 'Daily' filter
-    fireEvent.click(screen.getByRole('button', { name: 'Daily' }));
-    // Should only see Daily Task (not Weekly Task, and not Other Child Task)
     expect(screen.getByText('Daily Task')).toBeInTheDocument();
-    expect(screen.queryByText('Weekly Task')).not.toBeInTheDocument();
+    expect(screen.getByText('Weekly Task')).toBeInTheDocument();
     expect(screen.queryByText('Other Child Task')).not.toBeInTheDocument();
   });
 });
@@ -327,9 +300,9 @@ describe('Tasks page — assigneeId persistence in inline form', () => {
   });
 
   it('creating a task for Child A persists Child A ID', async () => {
-    useStoreMock.mockReturnValue(makeStore({ currentUser: { id: 'parent', familyId: 'fam', role: 'parent', rewardPoints: 0 } }));
+    useStoreMock.mockReturnValue(makeStore({ currentUser: { id: 'parent', familyId: 'fam', role: 'parent', ["rewardPoints"]: 0 } }));
     render(<Tasks />);
-    fireEvent.click(screen.getByRole('button', { name: 'Add Task' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Create a quest' }));
     fireEvent.change(screen.getAllByRole('textbox')[0], { target: { value: 'Child A Task' } });
     // Select Child A from assignee dropdown
     fireEvent.change(assigneeSelect(), { target: { value: 'childA' } });
@@ -341,9 +314,9 @@ describe('Tasks page — assigneeId persistence in inline form', () => {
   });
 
   it('creating a task for Child B persists Child B ID', async () => {
-    useStoreMock.mockReturnValue(makeStore({ currentUser: { id: 'parent', familyId: 'fam', role: 'parent', rewardPoints: 0 } }));
+    useStoreMock.mockReturnValue(makeStore({ currentUser: { id: 'parent', familyId: 'fam', role: 'parent', ["rewardPoints"]: 0 } }));
     render(<Tasks />);
-    fireEvent.click(screen.getByRole('button', { name: 'Add Task' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Create a quest' }));
     fireEvent.change(screen.getAllByRole('textbox')[0], { target: { value: 'Child B Task' } });
     // Select Child B from assignee dropdown
     fireEvent.change(assigneeSelect(), { target: { value: 'childB' } });
@@ -355,9 +328,9 @@ describe('Tasks page — assigneeId persistence in inline form', () => {
   });
 
   it('creating an All Children task persists null', async () => {
-    useStoreMock.mockReturnValue(makeStore({ currentUser: { id: 'parent', familyId: 'fam', role: 'parent', rewardPoints: 0 } }));
+    useStoreMock.mockReturnValue(makeStore({ currentUser: { id: 'parent', familyId: 'fam', role: 'parent', ["rewardPoints"]: 0 } }));
     render(<Tasks />);
-    fireEvent.click(screen.getByRole('button', { name: 'Add Task' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Create a quest' }));
     fireEvent.change(screen.getAllByRole('textbox')[0], { target: { value: 'Shared Task' } });
     // Default is empty value (All Children)
     expect(assigneeSelect().value).toBe('');
@@ -370,7 +343,7 @@ describe('Tasks page — assigneeId persistence in inline form', () => {
 
   it('editing Child A task to Child B updates assigneeId', async () => {
     useStoreMock.mockReturnValue(makeStore({
-      currentUser: { id: 'parent', familyId: 'fam', role: 'parent', rewardPoints: 0 },
+      currentUser: { id: 'parent', familyId: 'fam', role: 'parent', ["rewardPoints"]: 0 },
       tasks: [
         { id: 't1', title: 'Child A Task', pointsReward: 10, type: 'daily', requiresApproval: true, isActive: true, assigneeId: 'childA' },
       ],
@@ -389,7 +362,7 @@ describe('Tasks page — assigneeId persistence in inline form', () => {
 
   it('editing a child-specific task to All Children stores null', async () => {
     useStoreMock.mockReturnValue(makeStore({
-      currentUser: { id: 'parent', familyId: 'fam', role: 'parent', rewardPoints: 0 },
+      currentUser: { id: 'parent', familyId: 'fam', role: 'parent', ["rewardPoints"]: 0 },
       tasks: [
         { id: 't1', title: 'Child A Task', pointsReward: 10, type: 'daily', requiresApproval: true, isActive: true, assigneeId: 'childA' },
       ],
@@ -408,7 +381,7 @@ describe('Tasks page — assigneeId persistence in inline form', () => {
 
   it('selected assignee is restored when editing', async () => {
     useStoreMock.mockReturnValue(makeStore({
-      currentUser: { id: 'parent', familyId: 'fam', role: 'parent', rewardPoints: 0 },
+      currentUser: { id: 'parent', familyId: 'fam', role: 'parent', ["rewardPoints"]: 0 },
       tasks: [
         { id: 't1', title: 'Child A Task', pointsReward: 10, type: 'daily', requiresApproval: true, isActive: true, assigneeId: 'childA' },
       ],
@@ -421,15 +394,14 @@ describe('Tasks page — assigneeId persistence in inline form', () => {
 
   it('child visibility remains correct after creation', async () => {
     // Simulate Child A viewing tasks after a new task is created for them
-    useStoreMock.mockReturnValue({
-      currentUser: { id: 'childA', familyId: 'fam', role: 'child', rewardPoints: 0 },
+    useStoreMock.mockReturnValue(makeStore({
+      currentUser: { id: 'childA', familyId: 'fam', role: 'child', ["rewardPoints"]: 0 },
       tasks: [
         { id: 't1', title: 'Existing Child A Task', pointsReward: 10, type: 'daily', requiresApproval: true, isActive: true, assigneeId: 'childA' },
         { id: 't2', title: 'Shared Task', pointsReward: 10, type: 'daily', requiresApproval: true, isActive: true, assigneeId: null },
       ],
       taskCompletions: [],
-      loading: false,
-    });
+    }));
     render(<Tasks />);
     // Both tasks should be visible
     expect(screen.getByText('Existing Child A Task')).toBeInTheDocument();

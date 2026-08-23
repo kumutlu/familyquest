@@ -71,7 +71,7 @@ describe('Rewards page — role-based management controls', () => {
     fireEvent.click(screen.getByText('Extra Screen Time'));
     expect(screen.getByRole('button', { name: 'Edit' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Archive' })).toBeInTheDocument();
-    expect(screen.queryByRole('button', { name: 'Redeem Reward' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'GET IT' })).not.toBeInTheDocument();
   });
 
   it('parent sees Add Reward, Edit and Archive controls', () => {
@@ -90,7 +90,7 @@ describe('Rewards page — role-based management controls', () => {
     fireEvent.click(screen.getByText('Extra Screen Time'));
     expect(screen.queryByRole('button', { name: 'Edit' })).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Archive' })).not.toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Redeem Reward' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'GET IT' })).toBeInTheDocument();
   });
 });
 
@@ -223,7 +223,7 @@ describe('Rewards page — celebration overlay integration', () => {
   function openRedeem() {
     render(<Rewards />);
     fireEvent.click(screen.getByText('Extra Screen Time'));
-    return screen.getByRole('button', { name: 'Redeem Reward' });
+    return screen.getByRole('button', { name: 'GET IT' });
   }
 
   it('does not open the overlay before the redemption resolves', async () => {
@@ -263,7 +263,7 @@ describe('Rewards page — celebration overlay integration', () => {
 
     render(<Rewards />);
     fireEvent.click(screen.getByText('Cinema trip'));
-    fireEvent.click(screen.getByRole('button', { name: 'Redeem Reward' }));
+    fireEvent.click(screen.getByRole('button', { name: 'GET IT' }));
 
     await waitFor(() => expect(screen.getByTestId('reward-celebration-reward-title')).toHaveTextContent('Cinema trip'));
     expect(screen.getByTestId('reward-celebration-points-before')).toHaveTextContent('640');

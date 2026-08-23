@@ -1,0 +1,93 @@
+{
+  "board": {
+    "title": "Quest Board",
+    "todayLabel": "Today",
+    "progressAria": "Today's quest progress: {{confirmed}} of {{total}} confirmed",
+    "progressConfirmed": "{{confirmed}} of {{total}}",
+    "submittedChip_one": "{{count}} waiting for approval",
+    "submittedChip_other": "{{count}} waiting for approval",
+    "streakAria": "{{days}} day streak",
+    "moreQuests": "{{count}} more",
+    "showLess": "Show less",
+    "doneSectionTitle": "Done today",
+    "emptyTitle": "Nothing waiting right now",
+    "emptyDescription": "New quests will appear here when a grown-up assigns them.",
+    "allDoneTitle": "You're done!",
+    "allDoneDescription": "Every quest is finished. Come back tomorrow!",
+    "loading": "Loading your quests…"
+  },
+  "quest": {
+    "holdToComplete": "Hold to complete",
+    "completing": "Completing…",
+    "keepHolding": "Keep holding…",
+    "completeNow": "Complete",
+    "pointsAria": "{{points}} points potential reward",
+    "retryTitle": "Not approved this time",
+    "retryAction": "Try again",
+    "parentCommentAria": "Parent note"
+  },
+  "pendingCard": {
+    "title": "Sent!",
+    "description": "Waiting for approval",
+    "waitingFor": "Waiting for {{name}}"
+  },
+  "doneCard": {
+    "title": "Approved",
+    "aria": "{{title}} approved"
+  },
+  "moment": {
+    "completeTitle": "Quest complete!",
+    "potentialPoints": "+{{points}} potential",
+    "waitingLine": "Waiting for {{name}}",
+    "waitingGeneric": "Waiting for approval",
+    "autoApproved": "+{{points}} points, right away!"
+  },
+  "approvedMoment": {
+    "title": "Approved!",
+    "xpAward": "+{{xp}} XP",
+    "pointsAward": "+{{points}} pts",
+    "dismiss": "Awesome"
+  },
+  "review": {
+    "title": "Swipe Review",
+    "queueCount_one": "{{count}} to review",
+    "queueCount_other": "{{count}} to review",
+    "approve": "Approve",
+    "reject": "Reject",
+    "approving": "Approving…",
+    "rejecting": "Rejecting…",
+    "swipeHint": "Swipe right to approve, left to reject",
+    "rejectReasonTitle": "What should be different?",
+    "rejectReasonPlaceholder": "Add a short note for {{name}}…",
+    "rejectConfirm": "Send back",
+    "cancel": "Cancel",
+    "allCaughtUpTitle": "All caught up!",
+    "allCaughtUpDescription": "Nothing is waiting for your review.",
+    "backHome": "Back to Home",
+    "historyLink": "Full approval history",
+    "errorRetry": "Couldn't reach Queki. Try again.",
+    "staleItem": "This one was already handled.",
+    "completedWhen": "Submitted {{time}}",
+    "potentialReward": "+{{points}} pts if approved",
+    "kindQuest": "Quest approval",
+    "kindTransfer": "Money transfer",
+    "kindMoneyRequest": "Money request",
+    "transferAmount": "{{amount}}",
+    "moneyRequestFrom": "Requests from {{name}}",
+    "awaitingAcceptance": "Waiting for {{name}} to accept"
+  },
+  "parentBoard": {
+    "title": "Quests",
+    "subtitle_one": "{{count}} active quest",
+    "subtitle_other": "{{count}} active quests",
+    "filterAll": "Everyone",
+    "manageHint": "Tap a quest to manage it",
+    "emptyTitle": "No quests yet",
+    "emptyDescription": "Create the first quest so your crew has something to do.",
+    "createFirst": "Create a quest",
+    "assignedTo": "For {{name}}",
+    "sharedBadge": "Shared",
+    "pendingBadge": "Waiting for you",
+    "approvedBadge": "Approved"
+  }
+}

@@ -1,7 +1,7 @@
-import { Suspense, useEffect, useState } from 'react';
+import { Suspense, lazy, useEffect, useState } from 'react';
 import { Link, Outlet, useLocation, Navigate, useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
-import { AppWindow } from 'lucide-react';
+import { AppWindow, CheckSquare, Gift, ClipboardList } from 'lucide-react';
 import { cn } from '../../lib/utils';
 import { useStore } from '../../store/useStore';
 import { getNavItems } from '../../config/navigation';
@@ -13,6 +13,21 @@ import { StartupScreen } from './StartupScreen';
 import { deriveStartupPhase } from './startupState';
 import { signOut } from '../../lib/api';
 import { markStartupStage } from '../../startupDiagnostics';
+import { QuekiBottomNavigation } from '../queki/QuekiBottomNavigation';
+import { BottomSheet } from '../queki/BottomSheet';
+import { TactileButton } from '../queki/TactileButton';
+
+// Creation flows are heavy and belong to the composer only — keep them out of
+// the critical startup path behind route-local lazy chunks.
+const TaskFormModal = lazy(() =>
+  import('../forms/TaskFormModal').then(m => ({ default: m.TaskFormModal })),
+);
+const RewardFormModal = lazy(() =>
+  import('../forms/RewardFormModal').then(m => ({ default: m.RewardFormModal })),
+);
+const BehaviourFormModal = lazy(() =>
+  import('../forms/BehaviourFormModal').then(m => ({ default: m.BehaviourFormModal })),
+);
 
 export function AppLayout() {
   const { t } = useTranslation('common');
@@ -28,6 +43,15 @@ export function AppLayout() {
   const bootstrapError = useStore(state => state.bootstrapError);
   const bootstrapAttempt = useStore(state => state.bootstrapAttempt);
   const retryBootstrap = useStore(state => state.retryBootstrap);
+  const familyMembers = useStore(state => state.familyMembers);
+
+  // Wave 1 Action Composer state (sheet + lazily-mounted creation forms).
+  // Declared with the other hooks, BEFORE any early return, so the hook order
+  // is stable across the startup → ready transition.
+  const [composerOpen, setComposerOpen] = useState(false);
+  const [taskModalOpen, setTaskModalOpen] = useState(false);
+  const [rewardModalOpen, setRewardModalOpen] = useState(false);
+  const [eventModalOpen, setEventModalOpen] = useState(false);
 
   // Single deterministic source of truth for the global startup gate. Each
   // non-ready phase renders the bounded StartupScreen, which times out into a
@@ -93,13 +117,14 @@ export function AppLayout() {
   }
 
   // Single source of truth for navigation, shared by the desktop header and the
-  // mobile bottom navigation. See src/config/navigation.ts.
+  // Queki v2 bottom navigation. See src/config/navigation.ts.
   const navItems = getNavItems();
+  const isParent = currentUser?.role === 'owner' || currentUser?.role === 'parent' || currentUser?.role === 'admin';
 
   return (
-    <div className="min-h-dvh bg-gray-50 flex flex-col font-sans">
+    <div className="min-h-dvh qk-bg-page flex flex-col font-sans">
       {/* Top Navigation (Desktop & Mobile Header) */}
-      <header className="bg-white border-b border-gray-100 sticky top-0 z-40">
+      <header className="qk-bg-card border-b qk-border-subtle sticky top-0 z-40">
         <div className="max-w-5xl mx-auto px-4 h-16 flex items-center justify-between">
           <div className="flex items-center space-x-2">
             <Link to="/" className="flex items-center space-x-2 hover:opacity-80 transition-opacity">
@@ -155,50 +180,142 @@ export function AppLayout() {
           existing per-user read state. Renders nothing for parents. */}
       <ChildChallengeCelebration />
 
-      {/* Main Content Area */}
-      <main className="flex-1 max-w-5xl mx-auto w-full p-4 pb-[calc(4rem+env(safe-area-inset-bottom))] md:pb-8">
+      {/* Main Content Area. Bottom padding clears the taller Queki v2 nav
+          (including the overhanging centre Action button) plus the safe area. */}
+      <main className="flex-1 max-w-5xl mx-auto w-full p-4 pb-[calc(6rem+env(safe-area-inset-bottom))] md:pb-10">
         <Suspense fallback={<div data-testid="route-translations-loading" aria-busy="true" className="h-40 animate-pulse rounded-2xl bg-gray-100" />}>
           <Outlet />
         </Suspense>
       </main>
 
-      {/* Bottom Navigation (Mobile Only).
-          Single shared instance owned by the app shell. It is the last child of
-          the layout root and must never be nested inside transformed or
-          scrolling containers, otherwise `position: fixed` would resolve
-          against that ancestor instead of the viewport. */}
-      <nav
-        data-testid="mobile-bottom-nav"
-        aria-label={t('nav.primary', { defaultValue: 'Primary' })}
-        className="md:hidden fixed inset-x-0 bottom-0 bg-white border-t border-gray-100 pb-[env(safe-area-inset-bottom)] z-40"
-        style={{ position: 'fixed', left: 0, right: 0, bottom: 0 }}
-      >
-        <div className="flex justify-around items-center h-16">
-          {navItems.map((item) => {
-            const isActive = location.pathname === item.path;
-            const IconComp = item.icon as any;
+      {/* Queki v2 Bottom Navigation (Mobile Only).
+          Single shared instance owned by the app shell — last child of the
+          layout root so `position: fixed` always resolves against the viewport.
+          The centre Action button is role-aware and opens the composer sheet. */}
+      <QuekiBottomNavigation
+        role={currentUser?.role}
+        onActionPress={() => setComposerOpen(true)}
+      />
 
-            return (
-              <Link
-                key={item.path}
-                to={item.path}
-                className={cn(
-                  "flex flex-col items-center justify-center w-full h-full space-y-1 transition-colors",
-                  isActive ? "text-primary-600" : "text-gray-400 hover:text-gray-600"
-                )}
-              >
-                <div className={cn(
-                  "p-1 rounded-xl transition-all duration-200",
-                  isActive ? "bg-primary-50 scale-110" : ""
-                )}>
-                  {typeof item.icon === 'function' ? <IconComp /> : <IconComp size={22} strokeWidth={isActive ? 2.5 : 2} />}
-                </div>
-                <span className="text-[10px] font-semibold">{t(item.labelKey)}</span>
-              </Link>
-            );
-          })}
-        </div>
-      </nav>
+      {/* Wave 1 Action Composer: a temporary Queki v2 sheet with the correct
+          top-level actions. Full creation flows arrive in a later wave; these
+          buttons reuse the existing production forms unchanged. */}
+      <BottomSheet
+        open={composerOpen}
+        onClose={() => setComposerOpen(false)}
+        aria-label={t('composer.title', { defaultValue: 'What do you want to do?' })}
+        title={t('composer.title', { defaultValue: 'What do you want to do?' })}
+      >
+        {isParent ? (
+          <div className="grid gap-3 pb-2" data-testid="action-composer-parent">
+            <ComposerAction
+              testId="composer-new-task"
+              icon={<CheckSquare size={20} aria-hidden="true" />}
+              label={t('composer.newTask', { defaultValue: 'New quest' })}
+              onPress={() => {
+                setComposerOpen(false);
+                setTaskModalOpen(true);
+              }}
+            />
+            <ComposerAction
+              testId="composer-new-reward"
+              icon={<Gift size={20} aria-hidden="true" />}
+              label={t('composer.newReward', { defaultValue: 'New reward' })}
+              tone="coral"
+              onPress={() => {
+                setComposerOpen(false);
+                setRewardModalOpen(true);
+              }}
+            />
+            <ComposerAction
+              testId="composer-log-behaviour"
+              icon={<ClipboardList size={20} aria-hidden="true" />}
+              label={t('composer.logBehaviour', { defaultValue: 'Log behaviour' })}
+              tone="family"
+              onPress={() => {
+                setComposerOpen(false);
+                setEventModalOpen(true);
+              }}
+            />
+          </div>
+        ) : (
+          <div className="grid gap-3 pb-2" data-testid="action-composer-child">
+            <ComposerAction
+              testId="composer-do-quests"
+              icon={<CheckSquare size={20} aria-hidden="true" />}
+              label={t('composer.doQuests', { defaultValue: 'Do my quests' })}
+              onPress={() => {
+                setComposerOpen(false);
+                navigate('/tasks');
+              }}
+            />
+            <ComposerAction
+              testId="composer-view-rewards"
+              icon={<Gift size={20} aria-hidden="true" />}
+              label={t('composer.viewRewards', { defaultValue: 'See rewards' })}
+              tone="coral"
+              onPress={() => {
+                setComposerOpen(false);
+                navigate('/rewards');
+              }}
+            />
+          </div>
+        )}
+      </BottomSheet>
+
+      {/* Lazy creation forms — mounted only after the composer opened them. */}
+      {(taskModalOpen || rewardModalOpen || eventModalOpen) && (
+        <Suspense fallback={null}>
+          {eventModalOpen && (
+            <BehaviourFormModal
+              isOpen={eventModalOpen}
+              onClose={() => setEventModalOpen(false)}
+              childrenList={(currentUser && familyMembers.filter(m => m?.role === 'child')) || []}
+            />
+          )}
+          {taskModalOpen && (
+            <TaskFormModal isOpen={taskModalOpen} onClose={() => setTaskModalOpen(false)} />
+          )}
+          {rewardModalOpen && (
+            <RewardFormModal isOpen={rewardModalOpen} onClose={() => setRewardModalOpen(false)} />
+          )}
+        </Suspense>
+      )}
     </div>
+  );
+}
+
+function ComposerAction({
+  icon,
+  label,
+  onPress,
+  tone = 'brand',
+  testId,
+}: {
+  icon: React.ReactNode;
+  label: string;
+  onPress: () => void;
+  tone?: 'brand' | 'coral' | 'family';
+  testId?: string;
+}) {
+  const tones = {
+    brand: 'bg-primary-50 text-primary-600 dark:bg-primary-100',
+    coral: 'bg-coral-50 text-coral-500',
+    family: 'bg-family-50 text-family-600',
+  } as const;
+  return (
+    <TactileButton
+      variant="secondary"
+      size="lg"
+      fullWidth
+      onClick={onPress}
+      data-testid={testId}
+      className="justify-start gap-3 px-4"
+    >
+      <span aria-hidden="true" className={cn('flex h-9 w-9 items-center justify-center rounded-xl', tones[tone])}>
+        {icon}
+      </span>
+      <span className="font-button">{label}</span>
+    </TactileButton>
   );
 }

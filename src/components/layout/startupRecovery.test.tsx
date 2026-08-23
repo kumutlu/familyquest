@@ -27,6 +27,7 @@ vi.mock('../../store/useStore', () => ({
 
 vi.mock('../../config/navigation', () => ({
   getNavItems: () => [{ labelKey: 'nav.home', path: '/', icon: () => null }],
+  getQuekiNavItems: () => [{ labelKey: 'nav.home', path: '/', icon: () => null, testId: 'queki-nav-home' }],
 }));
 vi.mock('./ProfileDropdown', () => ({ ProfileDropdown: () => <div>ProfileDropdown</div> }));
 vi.mock('./NotificationCenter', () => ({ NotificationCenter: () => <div>NotificationCenter</div> }));
