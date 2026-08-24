@@ -15,6 +15,7 @@ export interface ShopRewardLike {
   id: string;
   title?: string;
   cost?: number;
+  icon?: string;
   isActive?: boolean;
   /** Finite number = limited stock; null/undefined = unlimited. */
   inventory?: number | null;

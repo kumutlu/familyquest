@@ -1713,6 +1713,44 @@ service cloud.firestore {
       allow read, write: if false;
     }
 
+    // BUG REPORTS (Wave 4.2: First-class in-app problem reporting)
+    match /bug_reports/{reportId} {
+      function validCategory(cat) {
+        return cat in ['broken', 'visual', 'points_rewards', 'tasks', 'wallet', 'family', 'other'];
+      }
+      function validTechnicalContext(ctx) {
+        return ctx is map
+          && ctx.keys().hasOnly(['releaseSha', 'releaseVersion', 'route', 'theme', 'locale', 'viewport', 'standalone', 'online', 'userAgent', 'swControlled'])
+          && (!('route' in ctx) || ctx.route is string)
+          && (!('theme' in ctx) || ctx.theme is string)
+          && (!('locale' in ctx) || ctx.locale is string)
+          && (!('releaseSha' in ctx) || ctx.releaseSha is string)
+          && (!('releaseVersion' in ctx) || ctx.releaseVersion is string)
+          && (!('standalone' in ctx) || ctx.standalone is bool)
+          && (!('online' in ctx) || ctx.online is bool)
+          && (!('userAgent' in ctx) || ctx.userAgent is string)
+          && (!('swControlled' in ctx) || ctx.swControlled is bool)
+          && (!('viewport' in ctx) || (ctx.viewport is map && ctx.viewport.keys().hasOnly(['width', 'height'])));
+      }
+
+      allow read, update, delete: if false;
+
+      allow create: if isAuthenticated()
+        && (!isManagedChildCaller() || isTrustedManagedChild())
+        && request.resource.data.reporterUserId == authProfileId()
+        && request.resource.data.familyId == (isManagedChildCaller() ? request.auth.token.get('familyId', '') : get(/databases/$(database)/documents/users/$(request.auth.uid)).data.get('familyId', ''))
+        && request.resource.data.status == 'open'
+        && request.resource.data.createdAt == request.time
+        && request.resource.data.category is string
+        && validCategory(request.resource.data.category)
+        && request.resource.data.description is string
+        && request.resource.data.description.trim().size() >= 3
+        && request.resource.data.description.size() <= 2000
+        && request.resource.data.keys().hasAll(['familyId', 'reporterUserId', 'reporterRole', 'category', 'description', 'status', 'createdAt'])
+        && request.resource.data.keys().hasOnly(['familyId', 'reporterUserId', 'reporterRole', 'category', 'description', 'technicalContext', 'status', 'createdAt'])
+        && (!('technicalContext' in request.resource.data) || validTechnicalContext(request.resource.data.technicalContext));
+    }
+
     // FAMILIES
     match /families/{familyId} {
       allow read: if isFamilyMember(familyId);

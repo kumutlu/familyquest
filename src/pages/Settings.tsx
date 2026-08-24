@@ -17,7 +17,10 @@ import {
   Loader2,
   AlertTriangle,
   Globe,
+  MessageSquarePlus,
+  HelpCircle,
 } from 'lucide-react';
+import { Link } from 'react-router-dom';
 import i18n, {
   applyLanguage,
   isSupportedLanguage,
@@ -52,6 +55,7 @@ import { FamilySettings } from '../components/family/FamilySettings';
 import { DeleteAccountDialog } from '../components/settings/DeleteAccountDialog';
 import { AppearanceSection } from '../components/settings/AppearanceSection';
 import { getLegalLinks } from '../config/legalLinks';
+import { BugReportSheet } from '../components/bug-report/BugReportSheet';
 
 interface SectionProps {
   id: string;
@@ -286,6 +290,7 @@ export function Settings() {
 
   const [editorOpen, setEditorOpen] = useState(false);
   const [deleteAccountOpen, setDeleteAccountOpen] = useState(false);
+  const [bugReportOpen, setBugReportOpen] = useState(false);
   const legalLinks = getLegalLinks();
 
   // Sign-out status is surfaced at page level; family actions own their feedback.
@@ -647,7 +652,45 @@ export function Settings() {
         </Card>
       </Section>
 
-      {/* 5. ABOUT */}
+      {/* 5. HELP & FEEDBACK */}
+      <Section
+        id="help-section"
+        icon={HelpCircle}
+        title={t('helpAndFeedback')}
+        description={t('helpAndFeedbackDesc')}
+      >
+        <Card>
+          <CardContent className="p-5 divide-y divide-gray-100 dark:divide-gray-800 space-y-2">
+            <Link
+              to="/help"
+              className="flex items-center justify-between py-2 text-sm font-semibold text-primary-600 hover:text-primary-700"
+            >
+              <span className="flex items-center gap-2">
+                <HelpCircle size={18} aria-hidden="true" />
+                {t('helpCenter')}
+              </span>
+              <span className="text-xs text-gray-400">→</span>
+            </Link>
+
+            <div className="pt-2">
+              <button
+                type="button"
+                onClick={() => setBugReportOpen(true)}
+                data-testid="open-bug-report"
+                className="flex w-full items-center justify-between py-2 text-sm font-semibold text-primary-600 hover:text-primary-700 text-left"
+              >
+                <span className="flex items-center gap-2">
+                  <MessageSquarePlus size={18} aria-hidden="true" />
+                  {t('reportProblem')}
+                </span>
+                <span className="text-xs text-gray-400">→</span>
+              </button>
+            </div>
+          </CardContent>
+        </Card>
+      </Section>
+
+      {/* 6. ABOUT */}
       <Section
         id="about-section"
         icon={Info}
@@ -708,6 +751,13 @@ export function Settings() {
 
       {deleteAccountOpen && (
         <DeleteAccountDialog onClose={() => setDeleteAccountOpen(false)} />
+      )}
+
+      {bugReportOpen && (
+        <BugReportSheet
+          open
+          onClose={() => setBugReportOpen(false)}
+        />
       )}
     </div>
   );

@@ -419,7 +419,7 @@ export function SwipeReview() {
                     <p className="text-card-title font-extrabold qk-text-primary">
                       {current.title}
                     </p>
-                    <p className="mt-2 inline-flex rounded-full bg-coral-50 px-3 py-1 text-meta font-bold text-coral-600">
+                    <p className="mt-2 inline-flex rounded-full bg-xp-50 px-3 py-1 text-meta font-bold text-xp-700 dark:bg-xp-100 dark:text-xp-300">
                       {t('review.potentialReward', { points: current.pointsReward })}
                     </p>
                   </>

@@ -40,6 +40,17 @@
       "child": "Görevlerimi yap"
     }
   },
+  "more": {
+    "title": "Daha fazla",
+    "goals": "Hedefler",
+    "wallets": "Cüzdanlar",
+    "wallet": "Cüzdanım",
+    "catBox": "Kedi Kutusu",
+    "history": "Geçmiş",
+    "notifications": "Bildirimler",
+    "settings": "Ayarlar",
+    "help": "Yardım ve Geri Bildirim"
+  },
   "composer": {
     "title": "Ne yapmak istersin?",
     "newTask": "Yeni görev",
@@ -53,5 +64,40 @@
     "parent": "Ebeveyn",
     "adult": "Yetişkin",
     "child": "Çocuk"
-  }
+  },
+  "bugReport": {
+    "action": "Sorun bildir",
+    "title": "Sorun bildir",
+    "prompt": "Bir şey çalışmıyor mu?",
+    "promptSubtitle": "Ne olduğunu bize anlatın, inceleyelim.",
+    "categoryLabel": "Bu ne hakkında?",
+    "categories": {
+      "broken": "Bir şey bozuk",
+      "visual": "Bir şey yanlış görünüyor",
+      "points_rewards": "Puanlar veya ödüller",
+      "tasks": "Görevler",
+      "wallet": "Cüzdan",
+      "family": "Aile",
+      "other": "Diğer"
+    },
+    "descriptionLabel": "Ne oldu?",
+    "descriptionPlaceholder": "Ne olduğunu bize anlatın…",
+    "descriptionMinHint": "Lütfen en az 3 karakter girin.",
+    "technicalDetails": "Teknik detaylar",
+    "technicalDetailsDesc": "Sorunu çözmemize yardımcı olan güvenli cihaz ve uygulama bilgileri:",
+    "techVersion": "Uygulama sürümü",
+    "techRoute": "Sayfa",
+    "techDevice": "Cihaz / Tarayıcı",
+    "techScreen": "Ekran boyutu",
+    "techLanguage": "Dil",
+    "submit": "Raporu gönder",
+    "submitting": "Gönderiliyor…",
+    "successTitle": "Teşekkürler — rapor gönderildi",
+    "successSubtitle": "Raporunuz bize ulaştı.",
+    "errorTitle": "Raporunuz gönderilemedi. Tekrar deneyin.",
+    "retry": "Tekrar dene",
+    "close": "Kapat"
+  },
+  "points": "Puanlar",
+  "pts": "puan"
 }

@@ -97,7 +97,8 @@ export interface MemberSummary {
   xp: number;
   points: number;
   streakDays: number;
-  walletBalanceFormatted?: string;
+  walletBalancePence?: number; // Canonical wallet balance in minor units (pence)
+  walletBalanceFormatted?: string; // Formatted for display (e.g., "£24.50")
   canViewWallet: boolean;
   isSelf: boolean;
   canSendMoney: boolean;

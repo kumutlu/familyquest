@@ -88,21 +88,29 @@ describe('FamilyWorld Selectors', () => {
     });
 
     it('allows parent to view child wallet balance but conceals sibling balance when viewed by child', () => {
+      const mockChildWallets = [
+        { id: 'child-1', balance: 4000 }, // £40.00
+        { id: 'child-2', balance: 1000 }, // £10.00
+      ];
+
       // Parent viewing
       const parentView = selectMemberSummaries(
         [mockParent, mockChild1, mockChild2],
         mockParent,
-        mockGamificationSummaries
+        mockGamificationSummaries,
+        mockChildWallets
       );
       const child1InParentView = parentView.find((m) => m.id === 'child-1');
       expect(child1InParentView?.canViewWallet).toBe(true);
-      expect(child1InParentView?.walletBalanceFormatted).toBe('40 pts');
+      expect(child1InParentView?.walletBalanceFormatted).toBe('£40.00');
+      expect(child1InParentView?.walletBalancePence).toBe(4000);
 
       // Child 1 viewing Child 2
       const childView = selectMemberSummaries(
         [mockParent, mockChild1, mockChild2],
         mockChild1,
-        mockGamificationSummaries
+        mockGamificationSummaries,
+        mockChildWallets
       );
       const child2InChildView = childView.find((m) => m.id === 'child-2');
       expect(child2InChildView?.canViewWallet).toBe(false);
@@ -111,14 +119,20 @@ describe('FamilyWorld Selectors', () => {
       // Child 1 viewing self
       const selfInChildView = childView.find((m) => m.id === 'child-1');
       expect(selfInChildView?.canViewWallet).toBe(true);
-      expect(selfInChildView?.walletBalanceFormatted).toBe('40 pts');
+      expect(selfInChildView?.walletBalanceFormatted).toBe('£40.00');
+      expect(selfInChildView?.walletBalancePence).toBe(4000);
     });
 
     it('sets role-aware permissions (canManage, canSendMoney)', () => {
+      const mockChildWallets = [
+        { id: 'child-1', balance: 4000 },
+      ];
+
       const parentView = selectMemberSummaries(
         [mockParent, mockChild1],
         mockParent,
-        mockGamificationSummaries
+        mockGamificationSummaries,
+        mockChildWallets
       );
       const child1 = parentView.find((m) => m.id === 'child-1');
       expect(child1?.canManage).toBe(true);
@@ -127,7 +141,8 @@ describe('FamilyWorld Selectors', () => {
       const childView = selectMemberSummaries(
         [mockParent, mockChild1],
         mockChild1,
-        mockGamificationSummaries
+        mockGamificationSummaries,
+        mockChildWallets
       );
       const parentInChildView = childView.find((m) => m.id === 'parent-1');
       expect(parentInChildView?.canManage).toBe(false);

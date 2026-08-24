@@ -170,5 +170,11 @@
     "missingCode": "Bu bağlantıda davet kodu yok.",
     "genericError": "Bu daveti kontrol edemedik. Lütfen tekrar dene.",
     "manualEntry": "Bunun yerine aile kodun mu var?"
+  },
+  "detail": {
+    "sendMoney": "Para Gönder",
+    "viewQuests": "Görevleri Gör",
+    "manageChild": "Üyeyi Yönet",
+    "manageWallet": "Cüzdanı Yönet"
   }
 }

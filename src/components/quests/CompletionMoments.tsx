@@ -75,7 +75,7 @@ export function CompletionMoment({
 
 /**
  * ApprovedRewardMoment — the CONFIRMED award moment, shown only once the
- * authoritative approval has landed. XP (gold) and points (coral) are always
+ * authoritative approval has landed. XP (gold) and points (warm gold) are always
  * displayed as separate identities; wallet money is never involved here.
  */
 export function ApprovedRewardMoment({
@@ -116,7 +116,7 @@ export function ApprovedRewardMoment({
             {t('approvedMoment.xpAward', { xp })}
           </span>
           <span
-            className="rounded-2xl bg-white/15 px-5 py-3 font-balance text-coral-200"
+            className="rounded-2xl bg-white/15 px-5 py-3 font-balance text-amber-200"
             data-testid="approved-points"
           >
             {t('approvedMoment.pointsAward', { points })}

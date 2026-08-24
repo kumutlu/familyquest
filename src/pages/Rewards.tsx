@@ -176,7 +176,7 @@ export function Rewards() {
           <p className="mt-1 text-meta qk-text-secondary">{t('rewards:shop.subtitle')}</p>
         </div>
         {isParent && (
-          <Button onClick={openCreateForm} aria-label={t('rewards:addAria')} size="sm" className="bg-coral-500 hover:bg-coral-600 rounded-full h-10 w-10 p-0 shadow-lg flex items-center justify-center">
+          <Button onClick={openCreateForm} aria-label={t('rewards:addAria')} size="sm" className="bg-primary-500 hover:bg-primary-600 rounded-full h-10 w-10 p-0 shadow-lg flex items-center justify-center">
             <Plus size={20} />
           </Button>
         )}
@@ -188,7 +188,7 @@ export function Rewards() {
         role="status"
         aria-label={t('rewards:shop.pointsAria', { value: formatNumber(currentUser.rewardPoints) })}
       >
-        <span aria-hidden="true" className="text-xl text-coral-500">★</span>
+        <span aria-hidden="true" className="text-xl text-xp-500 dark:text-xp-400">★</span>
         <span className="text-title font-extrabold tabular-nums qk-text-primary" data-testid="points-hero-value">
           {formatNumber(currentUser.rewardPoints)}
         </span>
@@ -214,7 +214,7 @@ export function Rewards() {
             <p className="text-body font-bold qk-text-primary">{t('rewards:shop.emptyTitle')}</p>
             <p className="text-meta qk-text-secondary">{t('rewards:shop.emptyHint')}</p>
             {isParent && (
-              <Button onClick={openCreateForm} size="sm" className="bg-coral-500 hover:bg-coral-600 mt-1">
+              <Button onClick={openCreateForm} size="sm" className="bg-primary-500 hover:bg-primary-600 mt-1">
                 <Plus size={16} className="mr-1" />
                 {t('rewards:addAria')}
               </Button>
@@ -324,7 +324,7 @@ export function Rewards() {
 
                 {error && <p className="text-red-500 text-sm">{error}</p>}
                 <div className="pt-4">
-                  <Button type="submit" fullWidth disabled={isSubmitting} className="bg-coral-500 hover:bg-coral-600">
+                  <Button type="submit" fullWidth disabled={isSubmitting} className="bg-primary-500 hover:bg-primary-600">
                     {isSubmitting ? t('rewards:form.saving') : t('rewards:form.save')}
                   </Button>
                 </div>

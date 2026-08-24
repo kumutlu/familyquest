@@ -40,6 +40,17 @@
       "child": "Do my quests"
     }
   },
+  "more": {
+    "title": "More",
+    "goals": "Goals",
+    "wallets": "Wallets",
+    "wallet": "My Wallet",
+    "catBox": "Cat Box",
+    "history": "History",
+    "notifications": "Notifications",
+    "settings": "Settings",
+    "help": "Help & Feedback"
+  },
   "composer": {
     "title": "What do you want to do?",
     "newTask": "New quest",
@@ -53,5 +64,40 @@
     "parent": "Parent",
     "adult": "Adult",
     "child": "Child"
-  }
+  },
+  "bugReport": {
+    "action": "Report a problem",
+    "title": "Report a problem",
+    "prompt": "Something not working?",
+    "promptSubtitle": "Tell us what happened and we'll look into it.",
+    "categoryLabel": "What is this about?",
+    "categories": {
+      "broken": "Something is broken",
+      "visual": "Something looks wrong",
+      "points_rewards": "Points or rewards",
+      "tasks": "Tasks",
+      "wallet": "Wallet",
+      "family": "Family",
+      "other": "Other"
+    },
+    "descriptionLabel": "What happened?",
+    "descriptionPlaceholder": "Tell us what happened…",
+    "descriptionMinHint": "Please enter at least 3 characters.",
+    "technicalDetails": "Technical details",
+    "technicalDetailsDesc": "Safe device and app details that help us fix the issue:",
+    "techVersion": "App version",
+    "techRoute": "Page",
+    "techDevice": "Device / Browser",
+    "techScreen": "Screen size",
+    "techLanguage": "Language",
+    "submit": "Send report",
+    "submitting": "Sending…",
+    "successTitle": "Thanks — report sent",
+    "successSubtitle": "We’ve got it.",
+    "errorTitle": "Couldn't send your report. Try again.",
+    "retry": "Try again",
+    "close": "Close"
+  },
+  "points": "Points",
+  "pts": "pts"
 }

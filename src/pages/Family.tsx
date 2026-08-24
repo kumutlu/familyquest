@@ -32,6 +32,7 @@ export function Family() {
     challenges,
     gamificationSummaries,
     walletTransactions,
+    childWallets,
   } = useStore();
 
   const [editingMember, setEditingMember] = useState<any>(null);
@@ -61,6 +62,7 @@ export function Family() {
     challenges,
     gamificationSummaries,
     transactions: walletTransactions,
+    childWallets,
   });
 
   const handleClaimQuest = async (questId: string) => {

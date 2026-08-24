@@ -67,7 +67,8 @@
       "title": "Her şeyi bitirdin!",
       "description": "Yeni görevler için sonra tekrar bak."
     },
-    "walletHeading": "Cüzdanın"
+    "walletHeading": "Cüzdanın",
+    "openWallet": "Cüzdanını aç, bakiye {{balance}}"
   },
   "loading": "Hazırlanıyor…",
   "emptyAction": "Etrafa bir göz at",

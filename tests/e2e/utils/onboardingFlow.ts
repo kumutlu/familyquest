@@ -158,5 +158,5 @@ export async function expectDashboard(page: Page) {
   await expect(page.getByRole('heading', { name: S1_HEADING })).toHaveCount(0);
   // The bottom nav is `md:hidden` (desktop hides it), so assert attachment rather
   // than visibility — its presence confirms AppLayout (not onboarding) rendered.
-  await expect(page.locator('[data-testid="mobile-bottom-nav"]')).toBeAttached({ timeout: 15000 });
+  await expect(page.locator('[data-testid="queki-bottom-nav"], [data-testid="mobile-bottom-nav"]')).toBeAttached({ timeout: 15000 });
 }

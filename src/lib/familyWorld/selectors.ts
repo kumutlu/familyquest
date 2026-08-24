@@ -18,7 +18,8 @@ import { isChildRole, isParentRole, isOwnerRole } from '../roles';
 export function selectMemberSummaries(
   familyMembers: FamilyMemberEntity[],
   currentUser: FamilyMemberEntity | null,
-  gamificationSummaries: GamificationSummaryEntity[] = []
+  gamificationSummaries: GamificationSummaryEntity[] = [],
+  childWallets: { id: string; balance: number }[] = []
 ): MemberSummary[] {
   if (!familyMembers || familyMembers.length === 0) return [];
 
@@ -47,7 +48,13 @@ export function selectMemberSummaries(
 
     // Financial Privacy: only parents or self can see points / wallet balances
     const canViewWallet = !!(isParentViewer || isSelf);
-    const walletBalanceFormatted = canViewWallet ? `${pointsBalance} pts` : undefined;
+
+    // Get canonical wallet balance from childWallets (families/{familyId}/wallets/{childId})
+    const walletDoc = childWallets.find(w => w.id === member.id);
+    const walletBalancePence = walletDoc?.balance ?? 0;
+    const walletBalanceFormatted = canViewWallet && walletDoc
+      ? `£${(walletBalancePence / 100).toFixed(2)}`
+      : undefined;
 
     // Action permissions
     const canSendMoney = !!(
@@ -92,6 +99,7 @@ export function selectMemberSummaries(
       xp,
       points: pointsBalance,
       streakDays,
+      walletBalancePence,
       walletBalanceFormatted,
       canViewWallet,
       isSelf,
@@ -303,6 +311,7 @@ export function selectFamilyWorldViewModel(params: {
   challenges?: ChallengeEntity[];
   gamificationSummaries?: GamificationSummaryEntity[];
   transactions?: TransactionEntity[];
+  childWallets?: { id: string; balance: number }[];
 }): FamilyWorldViewModel {
   const {
     familyMembers = [],
@@ -312,9 +321,10 @@ export function selectFamilyWorldViewModel(params: {
     challenges = [],
     gamificationSummaries = [],
     transactions = [],
+    childWallets = [],
   } = params;
 
-  const members = selectMemberSummaries(familyMembers, currentUser, gamificationSummaries);
+  const members = selectMemberSummaries(familyMembers, currentUser, gamificationSummaries, childWallets);
   const activeChildren = members.filter((m) => m.role === 'child');
   const isSingleChild = activeChildren.length === 1;
 

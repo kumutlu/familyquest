@@ -4,7 +4,7 @@ import type { MemberSummary } from '../../lib/familyWorld/types';
 import { BottomSheet } from '../queki/BottomSheet';
 import { Avatar } from '../ui/Avatar';
 import { TactileButton } from '../queki/TactileButton';
-import { Trophy, Flame, Wallet, ArrowRightLeft, CheckSquare, Settings, Award } from 'lucide-react';
+import { Trophy, Flame, Wallet, ArrowRightLeft, CheckSquare, Settings, Award, Star } from 'lucide-react';
 import { AchievementBadge } from './AchievementBadge';
 import { useNavigate } from 'react-router-dom';
 
@@ -105,6 +105,22 @@ export const MemberDetailSheet: React.FC<MemberDetailSheetProps> = ({
               </span>
             </div>
           )}
+
+          {/* Points Balance (separate from Wallet) */}
+          {member.canViewWallet && member.points > 0 && (
+            <div className="p-3 rounded-xl bg-amber-500/10 dark:bg-amber-500/15 border border-amber-500/20 text-center col-span-2 sm:col-span-1">
+              <div className="flex items-center justify-center text-amber-600 dark:text-amber-400 mb-1">
+                <Star className="w-4 h-4 mr-1" />
+                <span className="text-xs font-bold">{t('common:points', { defaultValue: 'Points' })}</span>
+              </div>
+              <span className="block text-lg font-black text-slate-900 dark:text-white">
+                {member.points.toLocaleString()}
+              </span>
+              <span className="text-[10px] font-medium text-slate-600 dark:text-slate-300">
+                {t('common:pts', { defaultValue: 'pts' })}
+              </span>
+            </div>
+          )}
         </div>
 
         {/* Recent Achievements */}
@@ -141,6 +157,23 @@ export const MemberDetailSheet: React.FC<MemberDetailSheetProps> = ({
             >
               <ArrowRightLeft className="w-4 h-4" />
               {t('detail.sendMoney', { defaultValue: 'Send Money' })}
+            </TactileButton>
+          )}
+
+          {/* Parent managing child's wallet - Add/Withdraw money */}
+          {member.canManage && member.role === 'child' && (
+            <TactileButton
+              onClick={() => {
+                onClose();
+                navigate(`/wallet?recipient=${member.id}`);
+              }}
+              variant="secondary"
+              size="md"
+              fullWidth
+              className="flex items-center justify-center gap-2 font-semibold"
+            >
+              <Wallet className="w-4 h-4" />
+              {t('detail.manageWallet', { defaultValue: 'Manage Wallet' })}
             </TactileButton>
           )}
 

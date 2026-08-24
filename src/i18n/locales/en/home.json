@@ -67,7 +67,8 @@
       "title": "You're all caught up!",
       "description": "Check back later for new quests."
     },
-    "walletHeading": "Your wallet"
+    "walletHeading": "Your wallet",
+    "openWallet": "Open your wallet, balance {{balance}}"
   },
   "loading": "Warming things up…",
   "emptyAction": "Take a look around",

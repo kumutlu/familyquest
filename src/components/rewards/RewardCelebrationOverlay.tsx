@@ -27,7 +27,7 @@ export type RewardCelebrationOverlayProps = {
   onClose: () => void;
 };
 
-const CONFETTI_COLORS = ['#ff6b54', '#ffc84a', '#32d1a0', '#75d7ff', '#ffffff', '#a983ff'];
+const CONFETTI_COLORS = ['#6366f1', '#ffc84a', '#32d1a0', '#75d7ff', '#ffffff', '#a983ff', '#f59e0b'];
 
 type Particle = {
   x: number; y: number; size: number; color: string;

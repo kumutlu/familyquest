@@ -7,9 +7,10 @@
 
    Semantic colour identities (stable across light AND dark):
      brand    → Queki indigo/violet identity      (--color-primary-*)
-     xp       → gold                              (--color-xp-*)
+     xp / currency → gold / warm reward currency  (--color-xp-*)
      wallet   → mint / real money                 (--color-mint-*)
-     rewards  → coral                             (--color-coral-*)
+     rewards  → positive accent variants (violet, blue, mint, gold)
+     danger   → coral / destructive / error       (--color-coral-*)
      streak   → orange                            (--color-streak-*)
      family   → blue                              (--color-family-*)
 
@@ -39,7 +40,7 @@
   --color-mint-600: #059669;
   --color-mint-700: #047857;
 
-  /* ---- Rewards: coral ----------------------------------------------------- */
+  /* ---- Danger / Error / Reject: coral ------------------------------------- */
   --color-coral-50: #fff1f0;
   --color-coral-100: #ffe1dd;
   --color-coral-200: #ffc4bd;

@@ -7,7 +7,7 @@ import { cn } from '../../lib/utils';
  * Each quantity owns a permanent visual identity that never changes across
  * surfaces or themes:
  *   XP      → gold    + lightning glyph   (growth / progression)
- *   Points  → coral-tinted star           (spendable reward currency)
+ *   Points  → gold-tinted star            (spendable reward currency)
  *   Streak  → orange  + flame             (consistency)
  *   Wallet  → mint    + wallet glyph      (real money, always formatted £x.yy)
  *
@@ -65,7 +65,7 @@ export interface PointsDisplayProps {
 export function PointsDisplay({ points, compact = false, className }: PointsDisplayProps) {
   return (
     <div className={cn('flex items-center gap-2', className)} aria-label={`${points} points`}>
-      <span aria-hidden="true" className="flex h-8 w-8 items-center justify-center rounded-xl bg-coral-50 text-coral-500">
+      <span aria-hidden="true" className="flex h-8 w-8 items-center justify-center rounded-xl bg-xp-50 text-xp-500 dark:bg-xp-100 dark:text-xp-400">
         <Star size={18} className="fill-current" />
       </span>
       <div>

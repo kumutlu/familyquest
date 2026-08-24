@@ -1,6 +1,8 @@
+import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Link } from 'react-router-dom';
-import { Compass } from 'lucide-react';
+import { Compass, MessageSquarePlus } from 'lucide-react';
+import { BugReportSheet } from '../../components/bug-report/BugReportSheet';
 import { HelpSearchBox } from '../components/HelpSearchBox';
 import { HelpCategoryGrid } from '../components/HelpCategoryGrid';
 import { HelpArticleCard } from '../components/HelpArticleCard';
@@ -13,8 +15,9 @@ import {
 } from '../useHelpArticles';
 
 export function HelpHome() {
-  const { t, i18n } = useTranslation('help');
+  const { t, i18n } = useTranslation(['help', 'common']);
   const { articles, loading } = useHelpArticles();
+  const [bugReportOpen, setBugReportOpen] = useState(false);
 
   const gettingStarted = gettingStartedArticles(articles);
   const popular = popularArticles(articles);
@@ -111,8 +114,34 @@ export function HelpHome() {
               ))}
             </ul>
           </section>
+
+          {/* Report a problem banner */}
+          <section aria-labelledby="problem-heading" className="rounded-2xl border qk-border-subtle qk-bg-card p-5 text-center sm:text-left flex flex-col sm:flex-row items-center justify-between gap-4">
+            <div>
+              <h2 id="problem-heading" className="text-card-title font-bold qk-text-primary">
+                {t('common:bugReport.prompt')}
+              </h2>
+              <p className="text-meta qk-text-secondary mt-0.5">
+                {t('common:bugReport.promptSubtitle')}
+              </p>
+            </div>
+            <button
+              type="button"
+              onClick={() => setBugReportOpen(true)}
+              data-testid="help-open-bug-report"
+              className="inline-flex min-h-11 items-center justify-center gap-2 rounded-xl bg-primary-500 px-5 py-2.5 text-sm font-button font-bold text-white shadow-sm hover:bg-primary-600 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-500"
+            >
+              <MessageSquarePlus size={18} aria-hidden="true" />
+              {t('common:bugReport.action')}
+            </button>
+          </section>
         </div>
       )}
+
+      <BugReportSheet
+        open={bugReportOpen}
+        onClose={() => setBugReportOpen(false)}
+      />
     </div>
   );
 }

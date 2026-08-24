@@ -19,15 +19,19 @@ async function attachFailure(testInfo: TestInfo | undefined, name: string, page:
   throw new Error(`${name}: ${JSON.stringify(state)}`);
 }
 
+// Queki v2 renamed the shell nav testid to `queki-bottom-nav`; accept both so
+// pre-v2 and v2 shells are covered.
+const SHELL_NAV = '[data-testid="queki-bottom-nav"], [data-testid="mobile-bottom-nav"]';
+
 export async function expectOwnerReady(page: Page, testInfo?: TestInfo) {
   try {
-    await expect(page.locator('[data-testid="mobile-bottom-nav"]')).toBeAttached({ timeout: 20_000 });
+    await expect(page.locator(SHELL_NAV)).toBeAttached({ timeout: 20_000 });
   } catch { await attachFailure(testInfo, 'owner-readiness-terminal-state', page); }
 }
 
 export async function expectManagedChildReady(page: Page, testInfo?: TestInfo) {
   try {
-    await expect(page.locator('[data-testid="mobile-bottom-nav"], [data-testid="required-password-change"]')).toBeAttached({ timeout: 20_000 });
+    await expect(page.locator(`${SHELL_NAV}, [data-testid="required-password-change"]`)).toBeAttached({ timeout: 20_000 });
   } catch { await attachFailure(testInfo, 'managed-child-readiness-terminal-state', page); }
 }
 

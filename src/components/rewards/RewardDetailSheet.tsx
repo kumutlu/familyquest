@@ -5,6 +5,8 @@ import { BottomSheet } from '../queki/BottomSheet';
 import { TactileButton } from '../queki/TactileButton';
 import { RewardIcon } from './RewardCard';
 import type { ShopReward } from '../../lib/rewards/shop';
+import { getRewardVisualVariant, REWARD_ACCENT_STYLES } from '../../lib/rewards/visualVariants';
+import { cn } from '../../lib/utils';
 
 interface RewardDetailSheetProps {
   reward: ShopReward | null;
@@ -44,17 +46,24 @@ export function RewardDetailSheet({
   const outOfStock = reward.availability === 'out_of_stock';
   const inactive = reward.availability === 'inactive';
   const canRedeem = !isParent && !outOfStock && !inactive && reward.affordable && !isRedeeming;
+  const variant = getRewardVisualVariant(reward);
+  const accentStyles = REWARD_ACCENT_STYLES[variant];
 
   return (
     <BottomSheet open onClose={onClose} aria-label={reward.title} title={reward.title}>
       <div className="flex flex-col items-center gap-4 pb-6 text-center" data-testid="reward-detail">
-        <div className="flex h-24 w-24 items-center justify-center rounded-3xl bg-coral-50 text-coral-500 dark:bg-coral-100">
+        <div
+          className={cn(
+            'flex h-24 w-24 items-center justify-center rounded-3xl',
+            accentStyles.iconBg,
+          )}
+        >
           <RewardIcon icon={reward.icon} size={44} />
         </div>
 
         <div>
           <p className="text-card-title font-extrabold qk-text-primary">{reward.title}</p>
-          <p className="mt-1 text-body font-bold text-coral-600" data-testid="reward-detail-cost">
+          <p className="mt-1 text-body font-bold text-xp-600 dark:text-xp-400" data-testid="reward-detail-cost">
             ★ {formatNumber(reward.cost)} · {t('details.points', { value: formatNumber(reward.cost) })}
           </p>
           {reward.inventory !== null && (
@@ -71,19 +80,19 @@ export function RewardDetailSheet({
         )}
 
         {(outOfStock || inactive) && (
-          <p role="status" className="w-full rounded-xl bg-coral-50 p-3 text-body font-semibold text-coral-700 dark:bg-coral-100" data-testid="reward-detail-unavailable">
+          <p role="status" className="w-full rounded-xl qk-bg-inset p-3 text-body font-semibold qk-text-secondary" data-testid="reward-detail-unavailable">
             {outOfStock ? t('details.outOfStock') : t('shop.emptyTitle')}
           </p>
         )}
 
         {!canRedeem && !isParent && !outOfStock && !inactive && !reward.affordable && (
-          <p role="status" className="w-full rounded-xl bg-coral-50 p-3 text-body font-semibold text-coral-700 dark:bg-coral-100" data-testid="reward-detail-not-enough">
+          <p role="status" className="w-full rounded-xl bg-xp-50 p-3 text-body font-semibold text-xp-700 dark:bg-xp-100 dark:text-xp-300" data-testid="reward-detail-not-enough">
             {t('details.notEnoughPoints')}
           </p>
         )}
 
         {error && (
-          <div role="alert" className="w-full rounded-xl bg-coral-50 p-3 text-body font-semibold text-coral-700 dark:bg-coral-100">
+          <div role="alert" className="w-full rounded-xl bg-coral-50 p-3 text-body font-semibold text-coral-700 dark:bg-coral-100 dark:text-coral-300">
             {error}
           </div>
         )}
@@ -106,14 +115,14 @@ export function RewardDetailSheet({
         {!isParent && (
           <>
             <TactileButton
-              variant="coral"
+              variant="primary"
               size="lg"
               fullWidth
               disabled={!canRedeem}
               loading={isRedeeming}
               onClick={() => onRedeem(reward)}
               data-testid="reward-redeem"
-              className="min-h-14 text-lg"
+              className="min-h-14 text-lg shadow-md"
             >
               {isRedeeming ? t('confirm.getting') : t('confirm.getIt')}
             </TactileButton>

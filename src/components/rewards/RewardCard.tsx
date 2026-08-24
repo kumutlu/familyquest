@@ -3,6 +3,7 @@ import { Gamepad2, Gift, Pizza, Ticket } from 'lucide-react';
 import { cn } from '../../lib/utils';
 import { formatNumber } from '../../i18n/format';
 import type { ShopReward } from '../../lib/rewards/shop';
+import { getRewardVisualVariant, REWARD_ACCENT_STYLES } from '../../lib/rewards/visualVariants';
 
 const REWARD_ICON_MAP = {
   Gift,
@@ -22,17 +23,20 @@ interface RewardCardProps {
 }
 
 /**
- * RewardCard — Queki v2 Wave 3 shop tile.
+ * RewardCard — Queki v2 Wave 4.2 shop tile.
  *
- * Visual identity first: a coral icon tile, short title and point cost.
+ * Visual identity: positive accent tile (violet, blue, mint, gold), short title
+ * and warm gold point cost. No destructive red/coral semantics.
  * Real product states only (mirroring the redemption domain):
- *  - available + affordable → full-colour tactile card;
- *  - unaffordable → slightly dimmed with "Need N more" (no fake lock);
+ *  - available + affordable → vibrant tactile card with gold cost pill;
+ *  - unaffordable → slightly muted card with soft gold cost and "Need N more";
  *  - out of stock → greyscale "All gone";
  *  - inactive → not rendered in the child shop at all.
  */
 export function RewardCard({ reward, onOpen }: RewardCardProps) {
   const { t } = useTranslation('rewards');
+  const variant = getRewardVisualVariant(reward);
+  const accentStyles = REWARD_ACCENT_STYLES[variant];
 
   return (
     <button
@@ -40,20 +44,24 @@ export function RewardCard({ reward, onOpen }: RewardCardProps) {
       data-testid="reward-card"
       data-reward-id={reward.id}
       data-affordable={reward.affordable ? 'true' : 'false'}
+      data-variant={variant}
       onClick={() => onOpen(reward)}
       className={cn(
         'group relative flex min-h-44 flex-col items-center justify-between gap-3 rounded-card',
         'qk-bg-card qk-border-subtle qk-shadow-card border p-4 text-center select-none',
         'transition-transform duration-[var(--animate-duration-tap)] ease-tap',
         'hover:-translate-y-0.5 active:translate-y-px active:scale-[0.98]',
-        'focus:outline-none focus-visible:ring-2 focus-visible:ring-coral-500 focus-visible:ring-offset-2',
+        'focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-500 focus-visible:ring-offset-2',
         reward.availability === 'out_of_stock' && 'opacity-60 grayscale',
-        !reward.affordable && reward.availability === 'available' && 'opacity-80',
+        !reward.affordable && reward.availability === 'available' && 'opacity-85',
       )}
     >
       <span
         aria-hidden="true"
-        className="flex h-16 w-16 items-center justify-center rounded-2xl bg-coral-50 text-coral-500 transition-transform duration-[var(--animate-duration-card)] group-hover:scale-105 dark:bg-coral-100"
+        className={cn(
+          'flex h-16 w-16 items-center justify-center rounded-2xl transition-transform duration-[var(--animate-duration-card)] group-hover:scale-105',
+          accentStyles.iconBg,
+        )}
       >
         <RewardIcon icon={reward.icon} size={30} />
       </span>
@@ -66,9 +74,11 @@ export function RewardCard({ reward, onOpen }: RewardCardProps) {
         <span
           className={cn(
             'inline-flex items-center gap-1 rounded-full px-3 py-1 text-meta font-bold',
-            reward.affordable
-              ? 'bg-coral-500 text-white'
-              : 'bg-coral-50 text-coral-600 dark:bg-coral-100 dark:text-coral-600',
+            reward.availability === 'out_of_stock'
+              ? 'qk-bg-inset qk-text-secondary'
+              : reward.affordable
+                ? 'bg-xp-500 text-white dark:bg-xp-600 dark:text-white shadow-sm'
+                : 'bg-xp-50 text-xp-700 border border-xp-200/70 dark:bg-xp-100 dark:text-xp-300 dark:border-xp-500/30',
           )}
         >
           ★ {formatNumber(reward.cost)}

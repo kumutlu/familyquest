@@ -1,12 +1,13 @@
 import { useEffect, useRef, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
-import { User, Settings, LogOut, HelpCircle } from 'lucide-react';
+import { User, Settings, LogOut, HelpCircle, MessageSquarePlus } from 'lucide-react';
 import { Avatar } from '../ui/Avatar';
 import { useStore } from '../../store/useStore';
 import { getRoleLabel } from '../../lib/roles';
 import { signOut } from '../../lib/api';
 import { ProfileEditorModal } from '../profile/ProfileEditorModal';
+import { BugReportSheet } from '../bug-report/BugReportSheet';
 
 const menuItemClass =
   'flex items-center space-x-3 w-full px-4 py-3 text-sm font-semibold text-gray-700 hover:bg-gray-50 transition-colors text-left focus:outline-none focus:bg-gray-50';
@@ -20,8 +21,10 @@ export function ProfileDropdown() {
   const currentUser = useStore(state => state.currentUser);
   const [isOpen, setIsOpen] = useState(false);
   const [editorOpen, setEditorOpen] = useState(false);
+  const [bugReportOpen, setBugReportOpen] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
   const menuRef = useRef<HTMLDivElement>(null);
+  const navigate = useNavigate();
 
   // Close on click outside
   useEffect(() => {
@@ -52,8 +55,6 @@ export function ProfileDropdown() {
   if (!currentUser) return null;
 
   const close = () => setIsOpen(false);
-
-  const navigate = useNavigate();
 
   const handleSignOut = async () => {
     try {
@@ -157,6 +158,20 @@ export function ProfileDropdown() {
               <span>{t('help:nav.helpCenter')}</span>
             </Link>
 
+            <button
+              type="button"
+              role="menuitem"
+              tabIndex={0}
+              onClick={() => {
+                close();
+                setBugReportOpen(true);
+              }}
+              className={menuItemClass}
+            >
+              <MessageSquarePlus size={18} className="text-gray-400" />
+              <span>{t('bugReport.action', { defaultValue: 'Report a problem' })}</span>
+            </button>
+
             <Link
               to="/settings"
               role="menuitem"
@@ -188,6 +203,11 @@ export function ProfileDropdown() {
       {editorOpen && currentUser && (
         <ProfileEditorModal user={currentUser} onClose={() => setEditorOpen(false)} />
       )}
+
+      <BugReportSheet
+        open={bugReportOpen}
+        onClose={() => setBugReportOpen(false)}
+      />
     </div>
   );
 }

@@ -7,6 +7,7 @@ import {
   Sword,
   Flame,
   Gift,
+  Star,
   Swords,
   PartyPopper,
   AlertTriangle,
@@ -150,7 +151,7 @@ export function ChildLivingHome() {
           <LivingHomeCard
             key={item.id}
             data-testid={FOCUS_TESTID[item.kind]}
-            tone="coral"
+            tone="xp"
             icon={<Gift size={22} />}
             title={t('child.rewardAvailable.title', { title: String(item.rewardTitle ?? '') })}
             description={t('child.rewardAvailable.description')}
@@ -242,14 +243,19 @@ export function ChildLivingHome() {
         <div className="mt-4 flex flex-wrap items-center justify-between gap-3">
           <PointsDisplayOnBrand points={currentUser?.rewardPoints ?? 0} />
           {myWallet != null && (
-            <span className="inline-flex items-center gap-2 rounded-full bg-mint-50 py-1 pl-1.5 pr-3" data-testid="child-balance-chip">
+            <button
+              onClick={() => navigate('/wallet')}
+              className="inline-flex items-center gap-2 rounded-full bg-mint-50 py-1 pl-1.5 pr-3 hover:bg-mint-100 active:bg-mint-200 transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-mint-500"
+              data-testid="child-balance-chip"
+              aria-label={t('child.openWallet', { balance: formatMoney(Number(myWallet?.balance ?? 0)) })}
+            >
               <span aria-hidden="true" className="flex h-6 w-6 items-center justify-center rounded-full bg-mint-500 text-white">
                 <WalletIcon size={13} />
               </span>
               <span className="font-balance text-base tabular-nums font-extrabold text-mint-700">
                 {formatMoney(Number(myWallet?.balance ?? 0))}
               </span>
-            </span>
+            </button>
           )}
         </div>
       </Surface>
@@ -306,8 +312,8 @@ function StreakDisplayHero({ days }: { days: number }) {
 function PointsDisplayOnBrand({ points }: { points: number }) {
   return (
     <span className="inline-flex items-center gap-2" aria-label={`${points} points`}>
-      <span aria-hidden="true" className="flex h-8 w-8 items-center justify-center rounded-xl bg-coral-500 text-white">
-        <Gift size={16} />
+      <span aria-hidden="true" className="flex h-8 w-8 items-center justify-center rounded-xl bg-xp-500 text-white">
+        <Star size={16} className="fill-current" />
       </span>
       <span className="font-balance tabular-nums">{points.toLocaleString()}</span>
       <span className="text-meta font-semibold uppercase tracking-wide opacity-75">pts</span>

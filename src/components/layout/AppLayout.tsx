@@ -1,7 +1,7 @@
 import { Suspense, lazy, useEffect, useState } from 'react';
 import { Link, Outlet, useLocation, Navigate, useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
-import { AppWindow, CheckSquare, Gift, ClipboardList } from 'lucide-react';
+import { AppWindow, CheckSquare, Gift, ClipboardList, LayoutGrid } from 'lucide-react';
 import { cn } from '../../lib/utils';
 import { useStore } from '../../store/useStore';
 import { getNavItems } from '../../config/navigation';
@@ -16,6 +16,7 @@ import { markStartupStage } from '../../startupDiagnostics';
 import { QuekiBottomNavigation } from '../queki/QuekiBottomNavigation';
 import { BottomSheet } from '../queki/BottomSheet';
 import { TactileButton } from '../queki/TactileButton';
+import { MoreMenu } from './MoreMenu';
 
 // Creation flows are heavy and belong to the composer only — keep them out of
 // the critical startup path behind route-local lazy chunks.
@@ -52,6 +53,10 @@ export function AppLayout() {
   const [taskModalOpen, setTaskModalOpen] = useState(false);
   const [rewardModalOpen, setRewardModalOpen] = useState(false);
   const [eventModalOpen, setEventModalOpen] = useState(false);
+
+  // Feature-parity hub ("More"): secondary surface for every non-tab product
+  // area (Goals, Wallets, Cat Box, History, Notifications, Settings, Help).
+  const [moreOpen, setMoreOpen] = useState(false);
 
   // Single deterministic source of truth for the global startup gate. Each
   // non-ready phase renders the bounded StartupScreen, which times out into a
@@ -169,6 +174,18 @@ export function AppLayout() {
           </div>
 
           <div className="flex items-center space-x-4">
+            {/* Secondary navigation hub — restores one-tap access to every
+                non-tab feature area lost from the top level in Queki v2. */}
+            <button
+              type="button"
+              data-testid="more-menu-button"
+              aria-label={t('more.title', { defaultValue: 'More' })}
+              aria-haspopup="dialog"
+              onClick={() => setMoreOpen(true)}
+              className="flex h-9 w-9 items-center justify-center rounded-xl text-gray-500 transition-colors hover:bg-gray-100 hover:text-gray-900 dark:text-gray-400 dark:hover:bg-gray-800 dark:hover:text-gray-100"
+            >
+              <LayoutGrid size={20} />
+            </button>
             <NotificationCenter />
             <ProfileDropdown />
           </div>
@@ -221,7 +238,7 @@ export function AppLayout() {
               testId="composer-new-reward"
               icon={<Gift size={20} aria-hidden="true" />}
               label={t('composer.newReward', { defaultValue: 'New reward' })}
-              tone="coral"
+              tone="xp"
               onPress={() => {
                 setComposerOpen(false);
                 setRewardModalOpen(true);
@@ -253,7 +270,7 @@ export function AppLayout() {
               testId="composer-view-rewards"
               icon={<Gift size={20} aria-hidden="true" />}
               label={t('composer.viewRewards', { defaultValue: 'See rewards' })}
-              tone="coral"
+              tone="xp"
               onPress={() => {
                 setComposerOpen(false);
                 navigate('/rewards');
@@ -262,6 +279,9 @@ export function AppLayout() {
           </div>
         )}
       </BottomSheet>
+
+      {/* Feature-parity secondary navigation hub. */}
+      <MoreMenu open={moreOpen} onClose={() => setMoreOpen(false)} role={currentUser?.role} />
 
       {/* Lazy creation forms — mounted only after the composer opened them. */}
       {(taskModalOpen || rewardModalOpen || eventModalOpen) && (
@@ -295,11 +315,12 @@ function ComposerAction({
   icon: React.ReactNode;
   label: string;
   onPress: () => void;
-  tone?: 'brand' | 'coral' | 'family';
+  tone?: 'brand' | 'xp' | 'coral' | 'family';
   testId?: string;
 }) {
   const tones = {
     brand: 'bg-primary-50 text-primary-600 dark:bg-primary-100',
+    xp: 'bg-xp-50 text-xp-600 dark:bg-xp-100 dark:text-xp-400',
     coral: 'bg-coral-50 text-coral-500',
     family: 'bg-family-50 text-family-600',
   } as const;

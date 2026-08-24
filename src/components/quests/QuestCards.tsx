@@ -10,13 +10,13 @@ export interface QuestCardCallbacks {
   submittingId?: string | null;
 }
 
-/** Shared reward chip — coral identity for POINTS (never XP gold, never mint). */
+/** Shared reward chip — warm gold identity for POINTS (reward currency, never coral/error). */
 function PointsChip({ points, className }: { points: number; className?: string }) {
   const { t } = useTranslation('quests');
   return (
     <span
       className={cn(
-        'inline-flex items-center gap-1 rounded-full bg-coral-50 px-2.5 py-1 text-meta font-bold text-coral-600',
+        'inline-flex items-center gap-1 rounded-full bg-xp-50 px-2.5 py-1 text-meta font-bold text-xp-700 dark:bg-xp-100 dark:text-xp-300',
         className,
       )}
       aria-label={t('quest.pointsAria', { points })}

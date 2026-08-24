@@ -155,7 +155,7 @@ export function ParentQuestBoard({
                         : t('parentBoard.sharedBadge')}
                     </p>
                   </div>
-                  <span className="shrink-0 rounded-full bg-coral-50 px-2.5 py-1 text-meta font-bold text-coral-600">
+                  <span className="shrink-0 rounded-full bg-xp-50 px-2.5 py-1 text-meta font-bold text-xp-700 dark:bg-xp-100 dark:text-xp-300">
                     +{view.task.pointsReward ?? 0}
                   </span>
                   {pending && (

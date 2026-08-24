@@ -170,5 +170,11 @@
     "missingCode": "This link is missing an invitation code.",
     "genericError": "We could not check this invitation. Please try again.",
     "manualEntry": "Have a family code instead?"
+  },
+  "detail": {
+    "sendMoney": "Send Money",
+    "viewQuests": "View Quests",
+    "manageChild": "Manage Member",
+    "manageWallet": "Manage Wallet"
   }
 }
