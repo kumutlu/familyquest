@@ -1,14 +1,14 @@
 import { describe, it, expect } from 'vitest';
 import { getNavItems, getQuekiNavItems } from './navigation';
 
-const EXPECTED_DESKTOP_ITEMS = ['nav.home', 'nav.tasks', 'nav.goals', 'nav.rewards', 'nav.family'];
+const EXPECTED_DESKTOP_ITEMS = ['nav.home', 'nav.tasks', 'nav.rewards', 'nav.family'];
 const EXPECTED_MOBILE_ITEMS = ['nav.home', 'nav.tasks', 'nav.rewards', 'nav.family'];
 
 describe('navigation config (single source of truth)', () => {
-  it('exposes Goals directly in the desktop primary navigation', () => {
+  it('keeps Goals out of the simple desktop primary navigation', () => {
     const items = getNavItems();
     expect(items.map((i) => i.labelKey)).toEqual(EXPECTED_DESKTOP_ITEMS);
-    expect(items.map((i) => i.path)).toContain('/goals');
+    expect(items.map((i) => i.path)).not.toContain('/goals');
   });
 
   it('keeps secondary parent areas out of the desktop primary route list', () => {
@@ -18,7 +18,7 @@ describe('navigation config (single source of truth)', () => {
 
   it('maps each item to a valid route path', () => {
     const items = getNavItems();
-    const expectedPaths = ['/', '/tasks', '/goals', '/rewards', '/family'];
+    const expectedPaths = ['/', '/tasks', '/rewards', '/family'];
     expect(items.map((i) => i.path)).toEqual(expectedPaths);
     for (const item of items) {
       expect(typeof item.path).toBe('string');

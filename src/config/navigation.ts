@@ -1,4 +1,4 @@
-import { Home, Users, CheckSquare, Gift, Target } from 'lucide-react';
+import { Home, Users, CheckSquare, Gift } from 'lucide-react';
 
 export interface NavItem {
   labelKey: 'nav.home' | 'nav.tasks' | 'nav.goals' | 'nav.rewards' | 'nav.family';
@@ -8,13 +8,11 @@ export interface NavItem {
 
 // Single source of truth for the application navigation.
 //
-// Desktop primary navigation exposes recurring product areas directly. Mobile
-// deliberately uses the separate compact list below to preserve its five-slot
-// bottom-navigation hierarchy.
+// Keep the desktop header focused on daily family navigation. Secondary
+// product areas remain available from Home and the labelled More surface.
 const desktopNavItems: NavItem[] = [
   { labelKey: 'nav.home', path: '/', icon: Home },
   { labelKey: 'nav.tasks', path: '/tasks', icon: CheckSquare },
-  { labelKey: 'nav.goals', path: '/goals', icon: Target },
   { labelKey: 'nav.rewards', path: '/rewards', icon: Gift },
   { labelKey: 'nav.family', path: '/family', icon: Users },
 ];

@@ -27,7 +27,6 @@ vi.mock('../../config/navigation', () => ({
   getNavItems: () => [
     { labelKey: 'nav.home', path: '/', icon: () => null },
     { labelKey: 'nav.tasks', path: '/tasks', icon: () => null },
-    { labelKey: 'nav.goals', path: '/goals', icon: () => null },
     { labelKey: 'nav.rewards', path: '/rewards', icon: () => null },
     { labelKey: 'nav.family', path: '/family', icon: () => null },
   ],
@@ -82,11 +81,13 @@ describe('AppLayout — mobile bottom navigation layout', () => {
     expect(container.querySelector('main')!.contains(nav)).toBe(false);
   });
 
-  it('shows Goals and a text-labelled More action in desktop navigation', () => {
+  it('keeps the desktop header simple with Home, Tasks, Rewards, Family and More only', () => {
     renderAppLayout();
     const desktopNav = screen.getByTestId('desktop-primary-navigation');
-    expect(desktopNav).toHaveTextContent('Goals');
-    expect(desktopNav).toHaveTextContent('More');
+    expect(desktopNav).toHaveTextContent('HomeTasksRewardsFamilyMore');
+    expect(desktopNav).not.toHaveTextContent('Goals');
+    expect(desktopNav).not.toHaveTextContent('Wallets');
+    expect(desktopNav).not.toHaveTextContent('Pet Box');
     expect(screen.getByTestId('desktop-more-menu-button')).toHaveAccessibleName('More');
   });
 

@@ -46,11 +46,11 @@
     "goals": "Goals",
     "wallets": "Wallets",
     "wallet": "My Wallet",
-    "catBox": "Cat Box",
+    "catBox": "Pet Box",
     "history": "History",
     "notifications": "Notifications",
     "settings": "Settings",
-    "help": "Help"
+    "help": "Help & Feedback"
   },
   "composer": {
     "title": "What do you want to do?",

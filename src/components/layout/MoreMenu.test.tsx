@@ -16,12 +16,24 @@ describe('MoreMenu (Queki v2 feature-parity hub)', () => {
     expect(screen.getByTestId('more-goals')).toBeInTheDocument();
     expect(screen.getByTestId('more-wallets')).toBeInTheDocument();
     expect(screen.getByTestId('more-cat-box')).toBeInTheDocument();
+    expect(screen.getByTestId('more-cat-box')).toHaveTextContent('Pet Box');
     expect(screen.getByTestId('more-history')).toBeInTheDocument();
     expect(screen.getByTestId('more-notifications')).toBeInTheDocument();
     expect(screen.getByTestId('more-settings')).toBeInTheDocument();
-    expect(screen.getByTestId('more-help')).toBeInTheDocument();
+    expect(screen.getByTestId('more-help')).toHaveTextContent('Help & Feedback');
     expect(screen.getByTestId('more-report-problem')).toBeInTheDocument();
     expect(screen.queryByTestId('more-wallet')).not.toBeInTheDocument();
+  });
+
+  it('keeps My Wallet out of the parent menu as well as the owner menu', () => {
+    const { unmount } = renderMenu('parent');
+    expect(screen.queryByTestId('more-wallet')).not.toBeInTheDocument();
+    expect(screen.getByTestId('more-wallets')).toBeInTheDocument();
+    unmount();
+
+    renderMenu('owner');
+    expect(screen.queryByTestId('more-wallet')).not.toBeInTheDocument();
+    expect(screen.getByTestId('more-wallets')).toBeInTheDocument();
   });
 
   it('hides parent-only destinations for children', () => {

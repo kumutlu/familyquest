@@ -46,11 +46,11 @@
     "goals": "Hedefler",
     "wallets": "Cüzdanlar",
     "wallet": "Cüzdanım",
-    "catBox": "Kedi Kutusu",
+    "catBox": "Pet Box",
     "history": "Geçmiş",
     "notifications": "Bildirimler",
     "settings": "Ayarlar",
-    "help": "Yardım"
+    "help": "Yardım ve Geri Bildirim"
   },
   "composer": {
     "title": "Ne yapmak istersin?",
