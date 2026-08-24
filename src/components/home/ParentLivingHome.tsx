@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { useNavigate } from 'react-router-dom';
-import { ClipboardCheck, Target, Swords, Wallet, Sparkles, AlertTriangle, RefreshCw } from 'lucide-react';
+import { Link, useNavigate } from 'react-router-dom';
+import { ChevronRight, ClipboardCheck, Target, Swords, Wallet, Sparkles, AlertTriangle, RefreshCw } from 'lucide-react';
 import { useStore } from '../../store/useStore';
 import { ApprovalCenter } from '../parent/ApprovalCenter';
 import { selectParentPriorities, type ParentPriority } from '../../lib/home/priorities';
@@ -223,7 +223,11 @@ export function ParentLivingHome() {
         </div>
 
         {/* Family wallet aggregate — real money keeps its mint identity even on brand gradient. */}
-        <div className="mt-4 flex items-center gap-3">
+        <Link
+          to="/wallets"
+          aria-label={t('parent.openFamilyWallets', { defaultValue: 'Open Family Wallets' })}
+          className="group mt-4 flex cursor-pointer items-center gap-3 rounded-2xl p-2 -m-2 transition-colors hover:bg-white/10 active:scale-[0.99] focus:outline-none focus-visible:ring-2 focus-visible:ring-white/80"
+        >
           <span aria-hidden="true" className="flex h-9 w-9 items-center justify-center rounded-xl bg-white/15">
             <Wallet size={18} />
           </span>
@@ -238,7 +242,12 @@ export function ParentLivingHome() {
               )}
             </p>
           </div>
-        </div>
+          <ChevronRight
+            size={20}
+            aria-hidden="true"
+            className="ml-auto opacity-70 transition-transform group-hover:translate-x-0.5 group-hover:opacity-100"
+          />
+        </Link>
       </Surface>
 
       {/* ---- Priority cards (max 3, deterministic) -------------------------- */}

@@ -1,31 +1,26 @@
-import { Home, Users, CheckSquare, Gift } from 'lucide-react';
+import { Home, Users, CheckSquare, Gift, Target } from 'lucide-react';
 
 export interface NavItem {
-  labelKey: 'nav.home' | 'nav.tasks' | 'nav.rewards' | 'nav.family';
+  labelKey: 'nav.home' | 'nav.tasks' | 'nav.goals' | 'nav.rewards' | 'nav.family';
   path: string;
   icon: React.ComponentType<{ size?: number; strokeWidth?: number }> | React.FC;
 }
 
 // Single source of truth for the application navigation.
 //
-// Phase 1 navigation simplification: the top-level navigation is reduced to 4
-// items (Home, Tasks, Rewards, Family). The removed tabs (Goals, Pet Box,
-// Wallet/Wallets) keep their routes working — they are reached via deep links,
-// notifications, and in-app navigation — but are no longer top-level tabs.
-//
-// Both the desktop header and the mobile bottom navigation consume this exact
-// same array so the two can never diverge.
-const baseNavItems: NavItem[] = [
+// Desktop primary navigation exposes recurring product areas directly. Mobile
+// deliberately uses the separate compact list below to preserve its five-slot
+// bottom-navigation hierarchy.
+const desktopNavItems: NavItem[] = [
   { labelKey: 'nav.home', path: '/', icon: Home },
   { labelKey: 'nav.tasks', path: '/tasks', icon: CheckSquare },
+  { labelKey: 'nav.goals', path: '/goals', icon: Target },
   { labelKey: 'nav.rewards', path: '/rewards', icon: Gift },
+  { labelKey: 'nav.family', path: '/family', icon: Users },
 ];
 
-// Settings is no longer a top-level tab; it lives in the profile dropdown.
-// Family is moved to the end of the navigation for a cleaner layout.
-// Parent and child share the same top-level navigation.
 export function getNavItems(): NavItem[] {
-  return [...baseNavItems, { labelKey: 'nav.family', path: '/family', icon: Users }];
+  return [...desktopNavItems];
 }
 
 // ---------------------------------------------------------------------------

@@ -1,5 +1,5 @@
 import { render, screen } from '@testing-library/react';
-import { MemoryRouter } from 'react-router-dom';
+import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import i18n from '../i18n/config';
 
@@ -136,6 +136,22 @@ describe('Parent Living Home priorities', () => {
     render(<MemoryRouter><Dashboard /></MemoryRouter>);
     expect(screen.queryByText('Old activity entry')).not.toBeInTheDocument();
     expect(screen.queryByText('Recent Activity')).not.toBeInTheDocument();
+  });
+
+  it('makes the Family Wallet hero a labelled action to the canonical Wallets overview', async () => {
+    store.state = baseState({ childWallets: [{ id: 'c-1', balance: 62537 }] });
+    render(
+      <MemoryRouter initialEntries={['/']}>
+        <Routes>
+          <Route path="/" element={<Dashboard />} />
+          <Route path="/wallets" element={<div>Wallets overview</div>} />
+        </Routes>
+      </MemoryRouter>,
+    );
+    const walletAction = screen.getByRole('link', { name: /open family wallets/i });
+    expect(walletAction).toHaveClass('cursor-pointer');
+    walletAction.click();
+    expect(await screen.findByText('Wallets overview')).toBeInTheDocument();
   });
 
   it('keeps Focus Mode for families whose setup is still incomplete', () => {

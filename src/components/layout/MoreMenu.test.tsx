@@ -3,10 +3,10 @@ import { MemoryRouter, Routes, Route } from 'react-router-dom';
 import { describe, expect, it, vi } from 'vitest';
 import { MoreMenu, getMoreDestinations } from './MoreMenu';
 
-const renderMenu = (role: string | undefined | null) =>
+const renderMenu = (role: string | undefined | null, onReportProblem = vi.fn()) =>
   render(
     <MemoryRouter>
-      <MoreMenu open onClose={vi.fn()} role={role} />
+      <MoreMenu open onClose={vi.fn()} role={role} onReportProblem={onReportProblem} />
     </MemoryRouter>,
   );
 
@@ -20,6 +20,8 @@ describe('MoreMenu (Queki v2 feature-parity hub)', () => {
     expect(screen.getByTestId('more-notifications')).toBeInTheDocument();
     expect(screen.getByTestId('more-settings')).toBeInTheDocument();
     expect(screen.getByTestId('more-help')).toBeInTheDocument();
+    expect(screen.getByTestId('more-report-problem')).toBeInTheDocument();
+    expect(screen.queryByTestId('more-wallet')).not.toBeInTheDocument();
   });
 
   it('hides parent-only destinations for children', () => {
@@ -28,6 +30,7 @@ describe('MoreMenu (Queki v2 feature-parity hub)', () => {
     expect(screen.getByTestId('more-wallet')).toBeInTheDocument();
     expect(screen.queryByTestId('more-cat-box')).not.toBeInTheDocument();
     expect(screen.queryByTestId('more-wallets')).not.toBeInTheDocument();
+    expect(screen.getByTestId('more-report-problem')).toBeInTheDocument();
   });
 
   it('exposes the required parity destinations per role', () => {
@@ -43,11 +46,24 @@ describe('MoreMenu (Queki v2 feature-parity hub)', () => {
     expect(childPaths).not.toContain('/pet-box');
   });
 
+  it('opens the existing report-problem flow and closes More', () => {
+    const onClose = vi.fn();
+    const onReportProblem = vi.fn();
+    render(
+      <MemoryRouter>
+        <MoreMenu open onClose={onClose} role="owner" onReportProblem={onReportProblem} />
+      </MemoryRouter>,
+    );
+    fireEvent.click(screen.getByTestId('more-report-problem'));
+    expect(onClose).toHaveBeenCalledTimes(1);
+    expect(onReportProblem).toHaveBeenCalledTimes(1);
+  });
+
   it('navigates to the destination and closes on selection', () => {
     const onClose = vi.fn();
     render(
       <MemoryRouter initialEntries={['/']}>
-        <MoreMenu open onClose={onClose} role="owner" />
+        <MoreMenu open onClose={onClose} role="owner" onReportProblem={vi.fn()} />
         <Routes>
           <Route path="/goals" element={<span>goals-page</span>} />
         </Routes>

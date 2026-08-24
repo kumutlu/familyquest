@@ -32,6 +32,7 @@
   "nav": {
     "home": "Home",
     "tasks": "Tasks",
+    "goals": "Goals",
     "quests": "Quests",
     "rewards": "Rewards",
     "family": "Family",
@@ -49,7 +50,7 @@
     "history": "History",
     "notifications": "Notifications",
     "settings": "Settings",
-    "help": "Help & Feedback"
+    "help": "Help"
   },
   "composer": {
     "title": "What do you want to do?",
