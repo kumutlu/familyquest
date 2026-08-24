@@ -9,6 +9,7 @@ import {
   Bell,
   Settings,
   CircleHelp,
+  MessageSquarePlus,
 } from 'lucide-react';
 import { BottomSheet } from '../queki/BottomSheet';
 import { TactileButton } from '../queki/TactileButton';
@@ -18,6 +19,7 @@ export interface MoreMenuProps {
   open: boolean;
   onClose: () => void;
   role: string | undefined | null;
+  onReportProblem: () => void;
 }
 
 type MoreLabelKey =
@@ -36,7 +38,7 @@ interface MoreDestination {
   labelKey: MoreLabelKey;
   icon: React.ReactNode;
   /** Which roles see this destination. */
-  roles: 'all' | 'parent';
+  roles: 'all' | 'parent' | 'child';
 }
 
 /**
@@ -54,7 +56,7 @@ interface MoreDestination {
 export const MORE_DESTINATIONS: MoreDestination[] = [
   { testId: 'more-goals', path: '/goals', labelKey: 'more.goals', icon: <Target size={20} aria-hidden="true" />, roles: 'all' },
   { testId: 'more-wallets', path: '/wallets', labelKey: 'more.wallets', icon: <WalletCards size={20} aria-hidden="true" />, roles: 'parent' },
-  { testId: 'more-wallet', path: '/wallet', labelKey: 'more.wallet', icon: <Wallet size={20} aria-hidden="true" />, roles: 'all' },
+  { testId: 'more-wallet', path: '/wallet', labelKey: 'more.wallet', icon: <Wallet size={20} aria-hidden="true" />, roles: 'child' },
   { testId: 'more-cat-box', path: '/pet-box', labelKey: 'more.catBox', icon: <Cat size={20} aria-hidden="true" />, roles: 'parent' },
   { testId: 'more-history', path: '/history', labelKey: 'more.history', icon: <History size={20} aria-hidden="true" />, roles: 'all' },
   { testId: 'more-notifications', path: '/notifications', labelKey: 'more.notifications', icon: <Bell size={20} aria-hidden="true" />, roles: 'all' },
@@ -65,14 +67,16 @@ export const MORE_DESTINATIONS: MoreDestination[] = [
 /** Destinations visible for the given role. */
 export function getMoreDestinations(role: string | undefined | null): MoreDestination[] {
   const parent = isParentRole(role ?? '');
-  return MORE_DESTINATIONS.filter(d => d.roles === 'all' || (d.roles === 'parent' && parent));
+  return MORE_DESTINATIONS.filter(d =>
+    d.roles === 'all' || (d.roles === 'parent' && parent) || (d.roles === 'child' && !parent),
+  );
 }
 
 /**
  * Queki v2 secondary navigation hub ("More"). Role-aware sheet listing every
  * non-tab product area so no feature is ever more than one tap from any screen.
  */
-export function MoreMenu({ open, onClose, role }: MoreMenuProps) {
+export function MoreMenu({ open, onClose, role, onReportProblem }: MoreMenuProps) {
   const { t } = useTranslation('common');
   const navigate = useNavigate();
   const destinations = getMoreDestinations(role);
@@ -107,6 +111,27 @@ export function MoreMenu({ open, onClose, role }: MoreMenuProps) {
             <span className="font-button">{t(destination.labelKey)}</span>
           </TactileButton>
         ))}
+        <TactileButton
+          variant="secondary"
+          size="lg"
+          fullWidth
+          data-testid="more-report-problem"
+          onClick={() => {
+            onClose();
+            onReportProblem();
+          }}
+          className="justify-start gap-3 px-4"
+        >
+          <span
+            aria-hidden="true"
+            className="flex h-9 w-9 items-center justify-center rounded-xl bg-primary-50 text-primary-600 dark:bg-primary-100"
+          >
+            <MessageSquarePlus size={20} />
+          </span>
+          <span className="font-button">
+            {t('bugReport.action', { defaultValue: 'Report a problem' })}
+          </span>
+        </TactileButton>
       </div>
     </BottomSheet>
   );

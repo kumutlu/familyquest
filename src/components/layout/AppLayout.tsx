@@ -1,7 +1,7 @@
 import { Suspense, lazy, useEffect, useState } from 'react';
 import { Link, Outlet, useLocation, Navigate, useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
-import { AppWindow, CheckSquare, Gift, ClipboardList, LayoutGrid } from 'lucide-react';
+import { AppWindow, CheckSquare, Gift, ClipboardList, Menu } from 'lucide-react';
 import { cn } from '../../lib/utils';
 import { useStore } from '../../store/useStore';
 import { getNavItems } from '../../config/navigation';
@@ -17,6 +17,7 @@ import { QuekiBottomNavigation } from '../queki/QuekiBottomNavigation';
 import { BottomSheet } from '../queki/BottomSheet';
 import { TactileButton } from '../queki/TactileButton';
 import { MoreMenu } from './MoreMenu';
+import { BugReportSheet } from '../bug-report/BugReportSheet';
 
 // Creation flows are heavy and belong to the composer only — keep them out of
 // the critical startup path behind route-local lazy chunks.
@@ -57,6 +58,7 @@ export function AppLayout() {
   // Feature-parity hub ("More"): secondary surface for every non-tab product
   // area (Goals, Wallets, Cat Box, History, Notifications, Settings, Help).
   const [moreOpen, setMoreOpen] = useState(false);
+  const [bugReportOpen, setBugReportOpen] = useState(false);
 
   // Single deterministic source of truth for the global startup gate. Each
   // non-ready phase renders the bounded StartupScreen, which times out into a
@@ -152,7 +154,11 @@ export function AppLayout() {
             </Link>
 
             {/* Desktop Navigation */}
-            <nav className="hidden md:flex ml-8 space-x-6">
+            <nav
+              className="hidden md:flex ml-8 items-center space-x-5"
+              data-testid="desktop-primary-navigation"
+              aria-label={t('nav.primary', { defaultValue: 'Primary' })}
+            >
               {navItems.map((item) => {
                 const isActive = location.pathname === item.path;
                 const IconComp = item.icon as any;
@@ -170,6 +176,18 @@ export function AppLayout() {
                   </Link>
                 );
               })}
+              <button
+                type="button"
+                data-testid="desktop-more-menu-button"
+                aria-label={t('more.title', { defaultValue: 'More' })}
+                aria-haspopup="dialog"
+                aria-expanded={moreOpen}
+                onClick={() => setMoreOpen(true)}
+                className="flex cursor-pointer items-center gap-2 rounded-lg px-2 py-1 text-sm font-bold text-gray-500 transition-colors hover:bg-gray-100 hover:text-gray-900 active:scale-[0.98] focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-500 dark:text-gray-400 dark:hover:bg-gray-800 dark:hover:text-gray-100"
+              >
+                <Menu size={17} aria-hidden="true" />
+                <span>{t('more.title', { defaultValue: 'More' })}</span>
+              </button>
             </nav>
           </div>
 
@@ -178,13 +196,15 @@ export function AppLayout() {
                 non-tab feature area lost from the top level in Queki v2. */}
             <button
               type="button"
-              data-testid="more-menu-button"
+              data-testid="mobile-more-menu-button"
               aria-label={t('more.title', { defaultValue: 'More' })}
               aria-haspopup="dialog"
               onClick={() => setMoreOpen(true)}
-              className="flex h-9 w-9 items-center justify-center rounded-xl text-gray-500 transition-colors hover:bg-gray-100 hover:text-gray-900 dark:text-gray-400 dark:hover:bg-gray-800 dark:hover:text-gray-100"
+              aria-expanded={moreOpen}
+              className="flex cursor-pointer items-center gap-1.5 rounded-xl px-2.5 py-2 text-sm font-bold text-gray-500 transition-colors hover:bg-gray-100 hover:text-gray-900 active:scale-[0.98] focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-500 dark:text-gray-400 dark:hover:bg-gray-800 dark:hover:text-gray-100 md:hidden"
             >
-              <LayoutGrid size={20} />
+              <Menu size={20} aria-hidden="true" />
+              <span>{t('more.title', { defaultValue: 'More' })}</span>
             </button>
             <NotificationCenter />
             <ProfileDropdown />
@@ -281,7 +301,13 @@ export function AppLayout() {
       </BottomSheet>
 
       {/* Feature-parity secondary navigation hub. */}
-      <MoreMenu open={moreOpen} onClose={() => setMoreOpen(false)} role={currentUser?.role} />
+      <MoreMenu
+        open={moreOpen}
+        onClose={() => setMoreOpen(false)}
+        role={currentUser?.role}
+        onReportProblem={() => setBugReportOpen(true)}
+      />
+      <BugReportSheet open={bugReportOpen} onClose={() => setBugReportOpen(false)} />
 
       {/* Lazy creation forms — mounted only after the composer opened them. */}
       {(taskModalOpen || rewardModalOpen || eventModalOpen) && (

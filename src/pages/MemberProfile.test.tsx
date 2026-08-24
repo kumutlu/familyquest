@@ -345,4 +345,48 @@ describe('MemberProfile gamification summary', () => {
     );
     expect(screen.getByText('Member not found.')).toBeInTheDocument();
   });
+
+  it('shows a child wallet balance and parent Manage Wallet action on member detail', async () => {
+    store.state = {
+      familyMembers: [{ id: 'child-1', role: 'child', displayName: 'Test Child' }],
+      currentUser: { id: 'parent-1', familyId: 'family-1', role: 'parent' },
+      childWallets: [{ id: 'child-1', balance: 4321 }],
+      loading: false,
+      behaviourEvents: [],
+      gamificationSummaries: [],
+      dailyProgress: [],
+    };
+    render(
+      <MemoryRouter initialEntries={['/family/child-1']}>
+        <Routes>
+          <Route path="/family/:id" element={<MemberProfile />} />
+          <Route path="/wallet" element={<div>Wallet manager</div>} />
+        </Routes>
+      </MemoryRouter>,
+    );
+    expect(screen.getByTestId('member-wallet-balance')).toHaveTextContent('£43.21');
+    const manageWallet = screen.getByRole('link', { name: /manage wallet/i });
+    expect(manageWallet).toHaveAttribute('href', '/wallet?recipient=child-1');
+    manageWallet.click();
+    expect(await screen.findByText('Wallet manager')).toBeInTheDocument();
+    expect(screen.queryByRole('link', { name: /send money/i })).not.toBeInTheDocument();
+  });
+
+  it('does not expose parent wallet management to a child', () => {
+    store.state = {
+      familyMembers: [{ id: 'child-1', role: 'child', displayName: 'Test Child' }],
+      currentUser: { id: 'child-1', familyId: 'family-1', role: 'child' },
+      childWallets: [{ id: 'child-1', balance: 4321 }],
+      loading: false,
+      behaviourEvents: [],
+      gamificationSummaries: [],
+      dailyProgress: [],
+    };
+    render(
+      <MemoryRouter initialEntries={['/family/child-1']}>
+        <Routes><Route path="/family/:id" element={<MemberProfile />} /></Routes>
+      </MemoryRouter>,
+    );
+    expect(screen.queryByRole('link', { name: /manage wallet/i })).not.toBeInTheDocument();
+  });
 });

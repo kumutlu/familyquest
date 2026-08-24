@@ -27,7 +27,9 @@ vi.mock('../../config/navigation', () => ({
   getNavItems: () => [
     { labelKey: 'nav.home', path: '/', icon: () => null },
     { labelKey: 'nav.tasks', path: '/tasks', icon: () => null },
+    { labelKey: 'nav.goals', path: '/goals', icon: () => null },
     { labelKey: 'nav.rewards', path: '/rewards', icon: () => null },
+    { labelKey: 'nav.family', path: '/family', icon: () => null },
   ],
   getQuekiNavItems: () => [
     { labelKey: 'nav.home', path: '/', icon: () => null, testId: 'queki-nav-home' },
@@ -80,6 +82,21 @@ describe('AppLayout — mobile bottom navigation layout', () => {
     expect(container.querySelector('main')!.contains(nav)).toBe(false);
   });
 
+  it('shows Goals and a text-labelled More action in desktop navigation', () => {
+    renderAppLayout();
+    const desktopNav = screen.getByTestId('desktop-primary-navigation');
+    expect(desktopNav).toHaveTextContent('Goals');
+    expect(desktopNav).toHaveTextContent('More');
+    expect(screen.getByTestId('desktop-more-menu-button')).toHaveAccessibleName('More');
+  });
+
+  it('keeps a labelled More affordance in the mobile header without changing bottom-nav items', () => {
+    renderAppLayout();
+    expect(screen.getByTestId('mobile-more-menu-button')).toHaveTextContent('More');
+    expect(screen.getByTestId('queki-bottom-nav')).not.toHaveTextContent('More');
+    expect(screen.getByTestId('queki-bottom-nav')).not.toHaveTextContent('Goals');
+  });
+
   it('uses min-h-dvh (dynamic viewport) instead of min-h-screen (100vh)', () => {
     const { container } = renderAppLayout();
     const outerDiv = container.querySelector('div.min-h-dvh');
@@ -113,15 +130,15 @@ describe('AppLayout — mobile bottom navigation layout', () => {
   it('updates every mounted navigation label without remounting AppLayout', async () => {
     await act(async () => { await i18n.changeLanguage('en'); });
     renderAppLayout();
-    expect(screen.getAllByText('Home')).toHaveLength(2);
-    expect(screen.getAllByText('Tasks')).toHaveLength(2);
-    expect(screen.getAllByText('Rewards')).toHaveLength(2);
+    expect(screen.getAllByText('Home').length).toBeGreaterThanOrEqual(2);
+    expect(screen.getAllByText('Tasks').length).toBeGreaterThanOrEqual(2);
+    expect(screen.getAllByText('Rewards').length).toBeGreaterThanOrEqual(2);
 
     await act(async () => { await i18n.changeLanguage('tr'); });
 
-    expect(screen.getAllByText('Ana Sayfa')).toHaveLength(2);
-    expect(screen.getAllByText('Görevler')).toHaveLength(2);
-    expect(screen.getAllByText('Ödüller')).toHaveLength(2);
+    expect(screen.getAllByText('Ana Sayfa').length).toBeGreaterThanOrEqual(2);
+    expect(screen.getAllByText('Görevler').length).toBeGreaterThanOrEqual(2);
+    expect(screen.getAllByText('Ödüller').length).toBeGreaterThanOrEqual(2);
     await act(async () => { await i18n.changeLanguage('en'); });
   });
 

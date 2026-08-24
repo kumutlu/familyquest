@@ -4,7 +4,7 @@ import { Card, CardContent } from '../components/ui/Card';
 import { PageLoader } from '../components/ui/PageLoader';
 import { Avatar } from '../components/ui/Avatar';
 import { Badge } from '../components/ui/Badge';
-import { ChevronLeft, Star, Flame, Trophy, TrendingUp, TrendingDown, Shield, Award, Zap } from 'lucide-react';
+import { ChevronLeft, Star, Flame, Trophy, TrendingUp, TrendingDown, Shield, Award, Zap, Wallet } from 'lucide-react';
 import { useStore } from '../store/useStore';
 import { ACHIEVEMENTS } from '../lib/achievements';
 import { cn } from '../lib/utils';
@@ -12,6 +12,8 @@ import { formatDate } from '../i18n/format';
 import { HistoryActionControl } from '../components/reversals/HistoryActionControl';
 import { findMemberSummary, resolveGamificationView } from '../lib/gamificationAdapters';
 import type { GamificationSummaryV1 } from '../domain/gamification/types';
+import { formatMoney } from '../lib/walletPresentation';
+import { isParentRole } from '../lib/roles';
 
 export function MemberProfile() {
   const { t } = useTranslation(['profile', 'dashboard']);
@@ -23,6 +25,7 @@ export function MemberProfile() {
     gamificationSummaries,
     myGamificationSummary,
     currentUser,
+    childWallets,
   } = useStore();
 
   if (loading) return <PageLoader label={t('profile:loading')} />;
@@ -69,6 +72,8 @@ export function MemberProfile() {
       : 0;
 
   const userEvents = behaviourEvents.filter(e => e.userId === id).slice(0, 10);
+  const wallet = childWallets?.find((candidate: any) => candidate.id === member.id);
+  const canManageWallet = member.role === 'child' && isParentRole(currentUser?.role ?? '');
 
   return (
     <div className="space-y-6 animate-in fade-in slide-in-from-right-4 duration-300">
@@ -95,6 +100,30 @@ export function MemberProfile() {
           <p className="text-primary-600 font-bold">{t('profile:rewardPoints', { count: member.rewardPoints || 0 })}</p>
         </div>
       </div>
+
+      {canManageWallet && (
+        <section className="rounded-2xl border border-teal-200 bg-teal-50 p-4 dark:border-teal-800 dark:bg-teal-950/30">
+          <div className="flex items-center justify-between gap-4">
+            <div className="flex min-w-0 items-center gap-3">
+              <span aria-hidden="true" className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-teal-500 text-white">
+                <Wallet size={20} />
+              </span>
+              <div>
+                <p className="text-sm font-bold text-teal-800 dark:text-teal-200">Wallet</p>
+                <p data-testid="member-wallet-balance" className="text-xl font-black tabular-nums text-gray-900 dark:text-white">
+                  {formatMoney(Number(wallet?.balance ?? 0))}
+                </p>
+              </div>
+            </div>
+            <Link
+              to={`/wallet?recipient=${member.id}`}
+              className="inline-flex min-h-11 cursor-pointer items-center justify-center rounded-xl bg-teal-600 px-4 text-sm font-bold text-white transition-all hover:bg-teal-700 active:translate-y-0.5 active:scale-[0.98] focus:outline-none focus-visible:ring-2 focus-visible:ring-teal-500 focus-visible:ring-offset-2"
+            >
+              Manage Wallet
+            </Link>
+          </div>
+        </section>
+      )}
 
       {/* Progression — always rendered from the projection or the lifetimeXP fallback */}
       <Card data-testid="profile-progression" className="border-none bg-primary-500 text-white">
