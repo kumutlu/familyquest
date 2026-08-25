@@ -87,6 +87,7 @@ import { SwipeReview } from '../../components/parent/SwipeReview';
 import { TransferArrivalMoment } from '../../components/wallet/TransferArrivalMoment';
 import { MemoryRouter } from 'react-router-dom';
 import i18n from '../../i18n/config';
+import { MoneyPrivacyProvider } from '../../components/privacy/MoneyPrivacyContext';
 
 const TRANSFERS_PATH = 'families/f1/transfer_requests';
 const WALLET_TX_PATH = 'families/f1/wallet_transactions';
@@ -107,7 +108,8 @@ describe('full wallet transfer lifecycle — send → approval → ledger → ar
     harness.subscribedPaths = [];
     harness.serverReads = new Map();
     harness.snapshotNext = new Map();
-    await i18n.loadNamespaces(['wallet', 'quests']);
+    localStorage.clear();
+    await i18n.loadNamespaces(['common', 'wallet', 'quests']);
     api.createTransferRequest.mockResolvedValue(undefined);
     api.approveTransferRequest.mockResolvedValue(undefined);
     useStore.getState().cleanup();
@@ -171,9 +173,11 @@ describe('full wallet transfer lifecycle — send → approval → ledger → ar
 
     // ---- SENDER: staged flow against the authoritative balance ------------
     render(
-      <MemoryRouter>
-        <SendFlowSheet onClose={() => {}} />
-      </MemoryRouter>,
+      <MoneyPrivacyProvider>
+        <MemoryRouter>
+          <SendFlowSheet onClose={() => {}} />
+        </MemoryRouter>
+      </MoneyPrivacyProvider>,
     );
 
     // Eligible recipients only: sibling child, never the parent, never self.
@@ -213,9 +217,11 @@ describe('full wallet transfer lifecycle — send → approval → ledger → ar
       useStore.setState({ bootstrapStatus: { tasks: 'ready', members: 'ready' } as any } as any);
     });
     render(
-      <MemoryRouter>
-        <SwipeReview />
-      </MemoryRouter>,
+      <MoneyPrivacyProvider>
+        <MemoryRouter>
+          <SwipeReview />
+        </MemoryRouter>
+      </MoneyPrivacyProvider>,
     );
     expect(screen.getByTestId('review-kind-transfer')).toBeInTheDocument();
     expect(screen.getByTestId('review-count')).toHaveTextContent('1');
@@ -240,7 +246,9 @@ describe('full wallet transfer lifecycle — send → approval → ledger → ar
       familyData: {},
       currencyCode: 'GBP' as const,
     });
-    const arrival = render(<TransferArrivalMoment {...arrivalProps([])} />);
+    const arrival = render(
+      <MoneyPrivacyProvider><TransferArrivalMoment {...arrivalProps([])} /></MoneyPrivacyProvider>,
+    );
     expect(screen.queryByTestId('transfer-arrival-moment')).not.toBeInTheDocument();
 
     // The authoritative `transfer_in` ledger entry arrives on the live
@@ -249,7 +257,9 @@ describe('full wallet transfer lifecycle — send → approval → ledger → ar
       { id: 'txin-1', type: 'transfer_in', childId: 'child-2', counterpartyChildId: 'child-1', amountPence: 200, status: 'completed' },
     ];
     deliver(WALLET_TX_PATH, snapshot(ledger));
-    arrival.rerender(<TransferArrivalMoment {...arrivalProps(ledger)} />);
+    arrival.rerender(
+      <MoneyPrivacyProvider><TransferArrivalMoment {...arrivalProps(ledger)} /></MoneyPrivacyProvider>,
+    );
     expect(screen.getByTestId('transfer-arrival-moment')).toBeInTheDocument();
     expect(screen.getByTestId('transfer-arrival-text')).toHaveTextContent('Ali');
     expect(screen.getByTestId('transfer-arrival-text')).toHaveTextContent('£2.00');

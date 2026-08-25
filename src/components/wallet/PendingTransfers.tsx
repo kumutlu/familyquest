@@ -3,6 +3,7 @@ import { useTranslation } from 'react-i18next';
 import { requestTime } from '../../lib/walletPresentation';
 import { formatPence, currencyCodeFromSymbol, formatDate } from '../../i18n/format';
 import { EmptyState, ErrorState, TransactionSkeletonRows } from './WalletStates';
+import { WalletMoneyText } from '../privacy/WalletMoneyText';
 
 interface PendingTransfersProps {
   requests: any[];
@@ -76,6 +77,11 @@ export function PendingTransfers({
         <div className="space-y-2">
           {requests.map(r => {
             const amount = Number.isInteger(r.amountPence) ? r.amountPence : 0;
+            const formattedAmount = formatPence(amount, currencyCodeFromSymbol(currency));
+            const requestTitle = t('pendingTransfers.to', {
+              amount: formattedAmount,
+              name: r.toChildName || t('tx.anotherChild'),
+            });
             return (
               <div
                 key={r.id}
@@ -88,11 +94,11 @@ export function PendingTransfers({
                   </div>
                   <div className="min-w-0">
                     <p className="font-semibold text-gray-900 text-sm truncate">
-                      {t('pendingTransfers.to', { amount: formatPence(amount, currencyCodeFromSymbol(currency)), name: r.toChildName || t('tx.anotherChild') })}
+                      <WalletMoneyText>{requestTitle}</WalletMoneyText>
                     </p>
                     <p className="text-xs text-gray-400 mt-0.5 truncate">
                       {requestDateLabel(r.createdAt)}
-                      {r.message ? ` · ${r.message}` : ''}
+                      {r.message ? <> · <WalletMoneyText>{r.message}</WalletMoneyText></> : ''}
                     </p>
                   </div>
                 </div>

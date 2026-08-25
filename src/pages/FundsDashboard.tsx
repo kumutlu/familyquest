@@ -59,7 +59,7 @@ export function FundsDashboard() {
         ) : (
           <div className="text-right">
             <p className="text-xs text-gray-500 font-bold uppercase mb-1">{t('yourWallet')}</p>
-            <p className="text-2xl font-extrabold"><CurrencyDisplay amountPence={myWallet?.balance || 0} className="text-success-600" /></p>
+            <p className="text-2xl font-extrabold"><CurrencyDisplay amountPence={myWallet?.balance || 0} className="text-success-600" privacy="wallet" /></p>
           </div>
         )}
       </div>

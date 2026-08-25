@@ -410,13 +410,14 @@ describe('bootstrap/auth/listener state machine', () => {
     expect(queryShapes).toEqual(expect.arrayContaining([
       expect.objectContaining({ target: 'families/fam1/redemptions', constraints: expect.arrayContaining([expect.objectContaining({ type: 'where', field: 'userId', value: 'user1' })]) }),
       expect.objectContaining({ target: 'families/fam1/wallet_transactions', constraints: expect.arrayContaining([expect.objectContaining({ type: 'where', field: 'childId', value: 'user1' })]) }),
-      expect.objectContaining({ target: 'families/fam1/savings_goals', constraints: expect.arrayContaining([expect.objectContaining({ type: 'where', field: 'childId', value: 'user1' })]) }),
       expect.objectContaining({ target: 'families/fam1/feed', constraints: expect.not.arrayContaining([expect.objectContaining({ type: 'where' })]) }),
       expect.objectContaining({ target: 'families/fam1/transfer_requests', constraints: expect.arrayContaining([expect.objectContaining({ type: 'where', field: 'fromChildId', value: 'user1' })]) }),
       expect.objectContaining({ target: 'families/fam1/petbox_requests', constraints: expect.arrayContaining([expect.objectContaining({ type: 'where', field: 'childId', value: 'user1' })]) }),
       expect.objectContaining({ target: 'families/fam1/money_requests', constraints: expect.arrayContaining([expect.objectContaining({ type: 'where', field: 'requesterId', value: 'user1' })]) }),
       expect.objectContaining({ target: 'families/fam1/money_requests', constraints: expect.arrayContaining([expect.objectContaining({ type: 'where', field: 'requestedFromId', value: 'user1' })]) }),
     ]));
+    expect(listeners.some(item => item.target === 'families/fam1/savings_goals')).toBe(true);
+    expect(queryShapes.some(shape => shape.target === 'families/fam1/savings_goals')).toBe(false);
     const walletQuery = queryShapes.find(shape => shape.target === 'families/fam1/wallet_transactions');
     expect(walletQuery?.constraints).not.toEqual(expect.arrayContaining([expect.objectContaining({ type: 'orderBy' })]));
     const behaviourQuery = queryShapes.find(shape => shape.target === 'families/fam1/behaviour_events');

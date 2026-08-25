@@ -2,6 +2,7 @@ import { render, screen, fireEvent, waitFor } from '@testing-library/react'
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import i18n from '../../i18n/config'
 import { RequestDetailProvider, useRequestDetail } from './RequestDetailContext'
+import { MoneyPrivacyProvider } from '../privacy/MoneyPrivacyContext'
 
 const request = {
   id: 'mr-1',
@@ -44,9 +45,11 @@ describe('RequestDetailContext focus return', () => {
 
   it('returns focus to the triggering element after the sheet closes', async () => {
     render(
-      <RequestDetailProvider>
-        <Harness />
-      </RequestDetailProvider>,
+      <MoneyPrivacyProvider>
+        <RequestDetailProvider>
+          <Harness />
+        </RequestDetailProvider>
+      </MoneyPrivacyProvider>,
     )
 
     const trigger = screen.getByTestId('trigger')

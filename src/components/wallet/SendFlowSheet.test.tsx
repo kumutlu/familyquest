@@ -1,6 +1,9 @@
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { fireEvent, render as rtlRender, screen, waitFor } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import type { ReactElement } from 'react';
 import i18n from '../../i18n/config';
+import { MoneyPrivacyProvider } from '../privacy/MoneyPrivacyContext';
+import { MoneyPrivacyToggle } from '../privacy/MoneyPrivacyToggle';
 
 const api = vi.hoisted(() => ({
   createTransferRequest: vi.fn(),
@@ -11,6 +14,10 @@ const useStoreMock = vi.fn();
 vi.mock('../../store/useStore', () => ({ useStore: (...args: any[]) => useStoreMock(...args) }));
 
 import { SendFlowSheet } from './SendFlowSheet';
+
+function render(ui: ReactElement) {
+  return rtlRender(<MoneyPrivacyProvider>{ui}</MoneyPrivacyProvider>);
+}
 
 function member(overrides: Record<string, unknown> & { id: string }) {
   return {
@@ -39,8 +46,50 @@ function makeStore(overrides: any = {}) {
 describe('SendFlowSheet (Wave 3 staged send)', () => {
   beforeEach(async () => {
     vi.clearAllMocks();
-    await i18n.loadNamespaces(['wallet']);
+    localStorage.clear();
+    await i18n.loadNamespaces(['common', 'wallet']);
     api.createTransferRequest.mockResolvedValue(undefined);
+  });
+
+  it('masks the stored available balance but keeps the typed and review amounts visible', () => {
+    useStoreMock.mockReturnValue(makeStore({ myWallet: { balance: 84_736 } }));
+    render(
+      <>
+        <MoneyPrivacyToggle />
+        <SendFlowSheet onClose={() => {}} />
+      </>,
+    );
+    fireEvent.click(screen.getByText('Ali'));
+
+    const hint = screen.getByTestId('send-balance-hint');
+    expect(hint).toHaveTextContent('£847.36');
+    fireEvent.click(screen.getByRole('button', { name: 'Hide money amounts' }));
+    expect(hint).not.toHaveTextContent('847.36');
+
+    const input = screen.getByTestId('send-amount-input');
+    fireEvent.change(input, { target: { value: '12.34' } });
+    expect(input).toHaveValue('12.34');
+    fireEvent.click(screen.getByTestId('send-review-continue'));
+    expect(screen.getByTestId('send-review-title')).toHaveTextContent('£12.34');
+    expect(screen.getByTestId('send-review-amount')).toHaveTextContent('£12.34');
+  });
+
+  it('does not expose the balance-derived quick-chip range while money is hidden', () => {
+    useStoreMock.mockReturnValue(makeStore({ myWallet: { balance: 250 } }));
+    render(
+      <>
+        <MoneyPrivacyToggle />
+        <SendFlowSheet onClose={() => {}} />
+      </>,
+    );
+    fireEvent.click(screen.getByText('Ali'));
+    expect(screen.getAllByTestId('send-quick-amount').map(chip => chip.textContent)).toEqual(['£1.00', '£2.00']);
+
+    fireEvent.click(screen.getByRole('button', { name: 'Hide money amounts' }));
+
+    expect(screen.queryByTestId('send-quick-amount')).not.toBeInTheDocument();
+    fireEvent.change(screen.getByTestId('send-amount-input'), { target: { value: '1.25' } });
+    expect(screen.getByTestId('send-amount-input')).toHaveValue('1.25');
   });
 
   it('offers only eligible child recipients (no parents, no self)', () => {

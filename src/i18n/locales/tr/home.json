@@ -19,10 +19,6 @@
       "title": "Aile Görevi bitti",
       "description": "\u201c{{title}}\u201d tamamlanmaya hazır."
     },
-    "walletEvent": {
-      "title": "{{name}} para aldı",
-      "description": "Son bir günde cüzdana para geldi."
-    },
     "allCalm": {
       "title": "Her şey sakin",
       "description": "Şu anda seni bekleyen bir şey yok."

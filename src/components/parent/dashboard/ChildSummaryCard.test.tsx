@@ -4,8 +4,12 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import i18n from '../../../i18n/config';
 import { ChildSummaryCard } from './ChildSummaryCard';
 import type { GamificationSummaryView } from '../../../lib/gamificationAdapters';
+import { MoneyPrivacyProvider } from '../../privacy/MoneyPrivacyContext';
+import { useStore } from '../../../store/useStore';
 
-const withRouter = (ui: React.ReactNode) => <MemoryRouter>{ui}</MemoryRouter>;
+const withRouter = (ui: React.ReactNode) => (
+  <MoneyPrivacyProvider><MemoryRouter>{ui}</MemoryRouter></MoneyPrivacyProvider>
+);
 
 const createMockChild = (overrides: any = {}) => ({
   id: 'child-1',
@@ -33,6 +37,8 @@ const createMockSummary = (overrides: Partial<GamificationSummaryView> = {}): Ga
 });
 
 beforeEach(async () => {
+  localStorage.clear();
+  useStore.setState({ currentUser: { id: 'summary-privacy-user' } as any });
   await i18n.loadNamespaces(['dashboard']);
   await i18n.changeLanguage('en');
 });
@@ -42,6 +48,34 @@ afterEach(() => {
 });
 
 describe('ChildSummaryCard', () => {
+  it('masks wallet money without masking level, XP, points, or progress', () => {
+    localStorage.setItem('queki.moneyPrivacy:summary-privacy-user', 'true');
+    const child = createMockChild();
+    const summary = createMockSummary({
+      level: 3,
+      xpTotal: 2500,
+      xpToNextLevel: 500,
+      xpProgressInLevel: 750,
+      todayProgress: 75,
+    });
+
+    render(withRouter(
+      <ChildSummaryCard
+        child={child}
+        walletBalance={4321}
+        pendingTaskCount={0}
+        gamificationSummary={summary}
+      />
+    ));
+
+    expect(document.body.textContent).not.toContain('£43.21');
+    expect(document.body.textContent).toContain('£••••');
+    expect(document.body.textContent).toContain('Level 3');
+    expect(document.body.textContent).toContain('2500 XP');
+    expect(screen.getByText('Points').parentElement).toHaveTextContent('0');
+    expect(document.body.textContent).toContain('75%');
+  });
+
   describe('normal summary', () => {
     it('renders level, XP progress, and streak from gamification summary', () => {
       const child = createMockChild({ displayName: 'Alice' });

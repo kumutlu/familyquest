@@ -1,10 +1,13 @@
-import { render, screen, fireEvent, waitFor } from '@testing-library/react'
+import { render as rtlRender, screen, fireEvent, waitFor } from '@testing-library/react'
 import { describe, it, expect, vi, beforeEach } from 'vitest'
+import type { ReactElement } from 'react'
 import { RequestCard } from './RequestCard'
 import { RequestStatusBadge } from './RequestStatusBadge'
 import { RequestDetailSheet } from './RequestDetailSheet'
 import { normalizeRequest, type NormalizedRequest, type RequestContext } from '../../lib/requestModel'
 import i18n from '../../i18n/config'
+import { MoneyPrivacyProvider } from '../privacy/MoneyPrivacyContext'
+import { MoneyPrivacyToggle } from '../privacy/MoneyPrivacyToggle'
 
 const api = vi.hoisted(() => ({
   approveTaskCompletion: vi.fn(),
@@ -107,8 +110,13 @@ function setCurrentUser(user: any) {
   }
 }
 
+function render(ui: ReactElement) {
+  return rtlRender(<MoneyPrivacyProvider>{ui}</MoneyPrivacyProvider>)
+}
+
 beforeEach(async () => {
   vi.clearAllMocks()
+  localStorage.clear()
   await i18n.loadNamespaces(['requests', 'approvals', 'common'])
   await i18n.changeLanguage('en')
   storeState.current = {
@@ -180,6 +188,21 @@ describe('RequestCard', () => {
     expect(paragraph.className).toContain('line-clamp-2')
     expect(paragraph.className).toContain('break-words')
   })
+
+  it('masks a stored money request summary, amount, and accessible name', async () => {
+    localStorage.setItem('queki.moneyPrivacy:parent-1', 'true')
+    const storedRequest = {
+      ...base,
+      primarySummary: 'Mnalium requested £415.73',
+      amountPence: 41_573,
+    }
+
+    const { container } = render(<RequestCard request={storedRequest} />)
+
+    await waitFor(() => expect(container).not.toHaveTextContent('415.73'))
+    expect(screen.getAllByText('£••••')).toHaveLength(2)
+    expect(screen.getByRole('button')).not.toHaveAccessibleName(/415\.73/)
+  })
 })
 
 describe('Request Detail Sheet — opens for every type', () => {
@@ -208,6 +231,45 @@ describe('Request Detail Sheet — opens for every type', () => {
     expect(screen.getByRole('heading', { name: 'Profile Update Request' })).toBeInTheDocument()
     expect(screen.getByText('Profile Changes')).toBeInTheDocument()
     expect(screen.getAllByText('Mnalium').length).toBeGreaterThan(0)
+  })
+
+  it('masks every stored money value in request details and the approval confirmation', async () => {
+    localStorage.setItem('queki.moneyPrivacy:parent-1', 'true')
+    const storedRequest = { ...moneyRequestRaw, amountPence: 41_573 }
+
+    const { container } = render(<RequestDetailSheet request={storedRequest} onClose={() => {}} />)
+
+    await waitFor(() => expect(container).not.toHaveTextContent('415.73'))
+    expect(screen.getByText('£••••')).toBeInTheDocument()
+    expect(container).toHaveTextContent('£•••• will move from Kemal')
+
+    fireEvent.click(screen.getByRole('button', { name: 'Approve' }))
+    expect(screen.getByText(/You are about to approve/)).not.toHaveTextContent('415.73')
+    expect(container).not.toHaveTextContent('415.73')
+  })
+
+  it('masks and restores an amount-bearing stored rejection reason in the timeline', async () => {
+    localStorage.setItem('queki.moneyPrivacy:parent-1', 'true')
+    const rejectedRequest = {
+      ...moneyRequestRaw,
+      amountPence: 41_573,
+      status: 'rejected',
+      rejectionReason: 'Only £10.00 is affordable',
+      reviewedAt: { toDate: () => new Date('2026-07-16T09:30:00Z') },
+    }
+
+    const { container } = render(
+      <>
+        <MoneyPrivacyToggle />
+        <RequestDetailSheet request={rejectedRequest} onClose={() => {}} />
+      </>,
+    )
+
+    await waitFor(() => expect(container).not.toHaveTextContent('10.00'))
+    expect(container).toHaveTextContent('Only £•••• is affordable')
+
+    fireEvent.click(screen.getByRole('button', { name: 'Show money amounts' }))
+    expect(container).toHaveTextContent('Comment: Only £10.00 is affordable')
   })
 })
 

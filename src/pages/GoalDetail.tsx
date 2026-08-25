@@ -58,7 +58,7 @@ export function GoalDetail() {
 
   // Live listeners for the per-goal contributions ledger and match proposals.
   useEffect(() => {
-    if (!familyData || !goalId) return;
+    if (!familyData || !goalId || !rawGoal) return;
     const base = `families/${familyData.id}/savings_goals/${goalId}`;
     const cUnsub = onSnapshot(
       query(collection(db, `${base}/contributions`), orderBy('createdAt', 'desc')),
@@ -69,7 +69,7 @@ export function GoalDetail() {
       snap => setProposals(snap.docs.map(d => ({ ...(d.data() as MatchProposal), proposalId: d.id }))),
     );
     return () => { cUnsub(); pUnsub(); };
-  }, [familyData, goalId]);
+  }, [familyData, goalId, rawGoal]);
 
   const isTerminal = useMemo(() => {
     if (!goal) return false;

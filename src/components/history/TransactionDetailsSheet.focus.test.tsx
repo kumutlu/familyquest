@@ -1,14 +1,20 @@
-import { fireEvent, render, screen } from '@testing-library/react';
-import { useState } from 'react';
+import { fireEvent, render as rtlRender, screen } from '@testing-library/react';
+import { useState, type ReactElement } from 'react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import i18n from '../../i18n/config';
 import type { NormalizedTransaction } from '../../lib/transactionModel';
+import type { HumanReadableFamilyEvent } from '../../lib/humanReadableFamilyEvent';
+import { MoneyPrivacyProvider } from '../privacy/MoneyPrivacyContext';
 
 vi.mock('../reversals/HistoryActionControl', () => ({
   HistoryActionControl: () => <button type="button">History action</button>,
 }));
 
 import { TransactionDetailsSheet } from './TransactionDetailsSheet';
+
+function render(ui: ReactElement) {
+  return rtlRender(<MoneyPrivacyProvider>{ui}</MoneyPrivacyProvider>);
+}
 
 const transaction: NormalizedTransaction = {
   id: 'tx-1',
@@ -32,6 +38,20 @@ const transaction: NormalizedTransaction = {
   isReversed: false,
 };
 
+const event: HumanReadableFamilyEvent = {
+  transaction,
+  eventKind: 'deposit',
+  amountPence: 100,
+  unit: 'money',
+  currency: '£',
+  timestamp: transaction.timestamp,
+  status: 'completed',
+  sourceType: 'manual',
+  sourceId: 'tx-1',
+  headline: '£1.00 added',
+  metadata: [],
+};
+
 function Harness() {
   const [open, setOpen] = useState(false);
   return (
@@ -40,7 +60,7 @@ function Harness() {
       <TransactionDetailsSheet
         isOpen={open}
         onClose={() => setOpen(false)}
-        transaction={transaction}
+        event={event}
         actionSource={{ sourceKind: 'wallet_transaction', source: { id: 'tx-1' } }}
         currency="£"
       />
@@ -50,7 +70,8 @@ function Harness() {
 
 describe('TransactionDetailsSheet focus containment', () => {
   beforeEach(async () => {
-    await i18n.loadNamespaces(['wallet', 'goals', 'rewards', 'reversals']);
+    localStorage.clear();
+    await i18n.loadNamespaces(['common', 'wallet', 'goals', 'rewards', 'reversals']);
     await i18n.changeLanguage('en');
   });
 

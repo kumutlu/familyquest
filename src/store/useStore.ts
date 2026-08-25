@@ -26,6 +26,7 @@ import {
   startStartupResource,
   type OptionalStartupResource,
 } from '../startupDiagnostics';
+import { normalizeGoalDoc } from '../lib/goalContracts';
 
 export type BootstrapStatus = 'idle' | 'loading' | 'ready' | 'error';
 
@@ -68,6 +69,16 @@ const normalizeRedemptions = (items: any[]) => [...items].sort((left, right) => 
   const timeDifference = timestampMillis(right.redeemedAt || right.createdAt)
     - timestampMillis(left.redeemedAt || left.createdAt);
   return timeDifference || String(left.id).localeCompare(String(right.id));
+});
+
+const normalizeGoalsForStore = (items: any[]) => items.map(item => {
+  const normalized = normalizeGoalDoc(item);
+  return {
+    ...item,
+    ...normalized,
+    id: item.id,
+    goalId: normalized.goalId ?? item.id,
+  };
 });
 
 const emptyFamilyState = () => ({
@@ -865,7 +876,7 @@ export const useStore = create<AppState>((set, get) => ({
           subscribePlanned('redemptions', 'Redemptions', snapshot => set({ redemptions: normalizeRedemptions(docs(snapshot)) }));
           subscribePlanned('walletTransactions', 'Wallet transactions', snapshot => set({ walletTransactions: normalizeHistory(docs(snapshot)) }));
           subscribePlanned('savingsGoals', 'Savings goals', snapshot => {
-            const goals = docs(snapshot);
+            const goals = normalizeGoalsForStore(docs(snapshot));
             set({ savingsGoals: goals });
             subscribeGoalSubcollections(goals.map((goal: any) => goal.id));
           });
@@ -881,7 +892,9 @@ export const useStore = create<AppState>((set, get) => ({
           subscribePlanned('redemptions', 'Redemptions', snapshot => set({ redemptions: normalizeRedemptions(docs(snapshot)) }));
           subscribePlanned('walletTransactions', 'Wallet transactions', snapshot => set({ walletTransactions: normalizeHistory(docs(snapshot)) }));
           subscribePlanned('savingsGoals', 'Savings goals', snapshot => {
-            const goals = docs(snapshot);
+            const goals = normalizeGoalsForStore(docs(snapshot)).filter((goal: any) =>
+              goal.kind === 'family' || goal.childId === currentUser.id,
+            );
             set({ savingsGoals: goals });
             subscribeGoalSubcollections(goals.map((goal: any) => goal.id));
           });

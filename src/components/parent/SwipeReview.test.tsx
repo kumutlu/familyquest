@@ -1,6 +1,7 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { MemoryRouter } from 'react-router-dom';
+import { MoneyPrivacyProvider } from '../privacy/MoneyPrivacyContext';
 
 const api = vi.hoisted(() => ({
   approveTaskCompletion: vi.fn(),
@@ -14,7 +15,12 @@ const api = vi.hoisted(() => ({
 vi.mock('../../lib/api', () => api);
 
 const useStoreMock = vi.fn();
-vi.mock('../../store/useStore', () => ({ useStore: (...args: any[]) => useStoreMock(...args) }));
+vi.mock('../../store/useStore', () => ({
+  useStore: (selector?: (state: any) => unknown) => {
+    const state = useStoreMock();
+    return selector ? selector(state) : state;
+  },
+}));
 
 import { SwipeReview } from './SwipeReview';
 
@@ -45,14 +51,17 @@ function makeStore(overrides: any = {}) {
 
 function renderReview() {
   return render(
-    <MemoryRouter>
-      <SwipeReview />
-    </MemoryRouter>,
+    <MoneyPrivacyProvider>
+      <MemoryRouter>
+        <SwipeReview />
+      </MemoryRouter>
+    </MoneyPrivacyProvider>,
   );
 }
 
 describe('SwipeReview', () => {
   beforeEach(() => {
+    localStorage.clear();
     vi.clearAllMocks();
     api.approveTaskCompletion.mockResolvedValue(undefined);
     api.rejectTaskCompletion.mockResolvedValue(undefined);
@@ -250,6 +259,7 @@ function moneyRequest(overrides: Record<string, unknown> & { id: string }) {
 
 describe('SwipeReview — Wave 3 typed kinds', () => {
   beforeEach(() => {
+    localStorage.clear();
     vi.clearAllMocks();
     api.approveTaskCompletion.mockResolvedValue(undefined);
     api.rejectTaskCompletion.mockResolvedValue(undefined);
@@ -289,6 +299,23 @@ describe('SwipeReview — Wave 3 typed kinds', () => {
     renderReview();
     expect(screen.getByTestId('review-kind-money-request')).toHaveTextContent('Money request');
     expect(screen.getByText(/Waiting for Dad to accept/)).toBeInTheDocument();
+  });
+
+  it('masks a stored money-request amount and money tokens in its message', () => {
+    localStorage.setItem('queki.moneyPrivacy:p1', 'true');
+    useStoreMock.mockReturnValue(
+      makeStore({
+        taskCompletions: [],
+        moneyRequests: [moneyRequest({ id: 'mr1', message: 'Need £7.77 for lunch' })],
+      }),
+    );
+
+    renderReview();
+
+    expect(document.body.textContent).not.toContain('£3.00');
+    expect(document.body.textContent).not.toContain('£7.77');
+    expect(document.body.textContent).toContain('Need');
+    expect(document.body.textContent).toContain('£••••');
   });
 
   it('approving a money request calls the money-request mutation exactly once', async () => {

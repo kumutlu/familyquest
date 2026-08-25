@@ -1,12 +1,16 @@
-import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import { fireEvent, render as rtlRender, screen, waitFor, within } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import type { ReactElement } from 'react';
 import i18n from '../../i18n/config';
 import { bootstrapResources } from '../../lib/bootstrapQueries';
+import { MoneyPrivacyProvider } from '../privacy/MoneyPrivacyContext';
+import { MoneyPrivacyToggle } from '../privacy/MoneyPrivacyToggle';
 
 const store = vi.hoisted(() => ({ state: {} as Record<string, unknown> }));
 
 vi.mock('../../store/useStore', () => ({
-  useStore: () => store.state,
+  useStore: (selector?: (state: typeof store.state) => unknown) =>
+    typeof selector === 'function' ? selector(store.state) : store.state,
 }));
 
 vi.mock('../reversals/HistoryActionControl', () => ({
@@ -16,6 +20,10 @@ vi.mock('../reversals/HistoryActionControl', () => ({
 }));
 
 import { TransactionHistoryScreen } from './TransactionHistoryScreen';
+
+function render(ui: ReactElement) {
+  return rtlRender(<MoneyPrivacyProvider>{ui}</MoneyPrivacyProvider>);
+}
 
 const currentTimestamp = () => ({ toMillis: () => Date.now() });
 const consumedHistoryResources = [
@@ -75,6 +83,8 @@ function baseStore(): Record<string, unknown> {
 }
 
 beforeEach(async () => {
+  localStorage.clear();
+  await i18n.loadNamespaces(['common', 'wallet', 'goals', 'rewards', 'reversals']);
   await i18n.changeLanguage('en');
   store.state = baseStore();
 });
@@ -164,6 +174,57 @@ describe('TransactionHistoryScreen states', () => {
 });
 
 describe('TransactionHistoryScreen interactions', () => {
+  it('toggles money rows, balances, and details without masking points or changing actions', () => {
+    store.state.walletTransactions = [{
+      id: 'private-history-row',
+      type: 'deposit',
+      amountPence: 37_461,
+      balanceAfter: 26_350,
+      status: 'completed',
+      childId: 'child-1',
+      description: 'Private history deposit',
+      createdAt: currentTimestamp(),
+    }];
+    store.state.redemptions = [{
+      id: 'private-history-points',
+      rewardId: 'reward-1',
+      userId: 'child-1',
+      costPaid: 83,
+      status: 'completed',
+      familyId: 'family-1',
+      createdAt: currentTimestamp(),
+      redeemedAt: currentTimestamp(),
+    }];
+
+    render(
+      <>
+        <MoneyPrivacyToggle />
+        <TransactionHistoryScreen />
+      </>,
+    );
+
+    expect(document.body.innerHTML).toContain('374.61');
+    expect(document.body.innerHTML).toContain('263.50');
+    expect(screen.getByText('-83 points')).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Hide money amounts' }));
+
+    expect(document.body.innerHTML).not.toContain('374.61');
+    expect(document.body.innerHTML).not.toContain('263.50');
+    expect(screen.getByText('-83 points')).toBeInTheDocument();
+    const moneyRow = screen.getByRole('button', { name: /added to Alex’s wallet/ });
+    expect(moneyRow).not.toHaveAccessibleName(/374\.61|263\.50/);
+
+    fireEvent.click(moneyRow);
+    expect(screen.getByRole('dialog', { name: 'Transaction Details' })).toBeInTheDocument();
+    expect(document.body.innerHTML).not.toContain('374.61');
+    expect(document.body.innerHTML).not.toContain('263.50');
+
+    fireEvent.click(screen.getByRole('button', { name: 'Show money amounts' }));
+    expect(document.body.innerHTML).toContain('374.61');
+    expect(document.body.innerHTML).toContain('263.50');
+  });
+
   it('uses store reward data and presents point transactions as points', () => {
     store.state.redemptions = [{
       id: 'redemption-1',
@@ -178,7 +239,7 @@ describe('TransactionHistoryScreen interactions', () => {
 
     render(<TransactionHistoryScreen />);
 
-    expect(screen.getByText(/Movie Night/)).toBeInTheDocument();
+    expect(screen.getAllByText(/Movie Night/).length).toBeGreaterThan(0);
     expect(screen.getByText('-75 points')).toBeInTheDocument();
   });
 
@@ -211,7 +272,7 @@ describe('TransactionHistoryScreen interactions', () => {
     expect(expenseFilter).toHaveAttribute('aria-pressed', 'true');
     expect(screen.getByText(/Cinema ticket/)).toBeInTheDocument();
     expect(screen.queryByText(/Pocket money/)).not.toBeInTheDocument();
-    expect(screen.getByText(/-(?:₺|TRY\s*)2\.50/)).toBeInTheDocument();
+    expect(screen.getByTestId('human-readable-event-card')).toHaveTextContent(/-(?:₺|TRY\s*)2\.50/);
   });
 
   it('searches transaction context and clears the query accessibly', async () => {
@@ -247,6 +308,54 @@ describe('TransactionHistoryScreen interactions', () => {
 
     fireEvent.click(screen.getByRole('button', { name: 'Clear search' }));
     expect(screen.getByText(/Bonus/)).toBeInTheDocument();
+  });
+
+  it('uses structured names for parent-history rows and searches linked transfer parties', async () => {
+    store.state.familyMembers = [
+      { id: 'child-1', displayName: 'Alex' },
+      { id: 'child-2', displayName: 'Sam' },
+      { id: 'parent-1', displayName: 'Taylor' },
+    ];
+    store.state.walletTransactions = [{
+      id: 'family-transfer-leg',
+      type: 'transfer_out',
+      amountPence: 400,
+      status: 'completed',
+      childId: 'child-1',
+      counterpartyChildId: 'child-2',
+      transferRequestId: 'family-transfer',
+      actorId: 'parent-1',
+      note: 'Shared project',
+      createdAt: currentTimestamp(),
+    }];
+    store.state.transferRequests = [{
+      id: 'family-transfer',
+      fromChildId: 'child-1',
+      toChildId: 'child-2',
+      amountPence: 400,
+      status: 'approved',
+      createdAt: currentTimestamp(),
+    }];
+
+    render(<TransactionHistoryScreen />);
+
+    expect(screen.getByText(/sent from Alex to Sam/)).toBeInTheDocument();
+    expect(screen.getByText('Performed by: Alex')).toBeInTheDocument();
+    expect(screen.getByText('Approved by: Taylor')).toBeInTheDocument();
+    expect(screen.getByText('Shared project').parentElement).toHaveTextContent('Note: Shared project');
+
+    fireEvent.click(screen.getByRole('button', { name: /sent from Alex to Sam/ }));
+    const details = screen.getByRole('dialog', { name: 'Transaction Details' });
+    expect(within(details).getByText('From')).toBeInTheDocument();
+    expect(within(details).getByText('Sam')).toBeInTheDocument();
+    expect(within(details).getByText('Approved by')).toBeInTheDocument();
+    fireEvent.keyDown(document, { key: 'Escape' });
+
+    fireEvent.change(screen.getByRole('searchbox', { name: 'Search transactions...' }), {
+      target: { value: 'sam' },
+    });
+
+    await waitFor(() => expect(screen.getByText(/sent from Alex to Sam/)).toBeInTheDocument());
   });
 
   it('distinguishes filtered no-results from a truly empty history and clears the filter', () => {
@@ -308,7 +417,7 @@ describe('TransactionHistoryScreen interactions', () => {
 
     render(<TransactionHistoryScreen />);
 
-    expect(await screen.findByText('Para çekildi')).toBeInTheDocument();
+    expect(await screen.findByText(/Alex adlı çocuğun cüzdanından çekildi/)).toBeInTheDocument();
     fireEvent.change(screen.getByRole('searchbox', { name: 'İşlemleri ara...' }), {
       target: { value: 'sinema' },
     });
@@ -335,7 +444,7 @@ describe('TransactionHistoryScreen interactions', () => {
 
     fireEvent.click(screen.getByRole('button', { name: /-75 puan/ }));
     expect(within(screen.getByRole('dialog', { name: 'İşlem Ayrıntıları' }))
-      .getByText('-75 puan')).toBeInTheDocument();
+      .getAllByText('-75 puan').length).toBeGreaterThan(0);
   });
 
   it('opens labelled details and closes them with Escape', () => {
@@ -351,9 +460,10 @@ describe('TransactionHistoryScreen interactions', () => {
 
     render(<TransactionHistoryScreen />);
 
-    fireEvent.click(screen.getByRole('button', { name: /Money withdrawn.*-(?:₺|TRY\s*)2\.50/ }));
+    fireEvent.click(screen.getByRole('button', { name: /withdrawn from Alex’s wallet.*-(?:₺|TRY\s*)2\.50/ }));
     expect(screen.getByRole('dialog', { name: 'Transaction Details' })).toBeInTheDocument();
-    expect(screen.getAllByText(/-(?:₺|TRY\s*)2\.50/).length).toBeGreaterThanOrEqual(2);
+    expect(screen.getByRole('dialog', { name: 'Transaction Details' }))
+      .toHaveTextContent(/-(?:₺|TRY\s*)2\.50/);
     fireEvent.keyDown(document, { key: 'Escape' });
     expect(screen.queryByRole('dialog', { name: 'Transaction Details' })).not.toBeInTheDocument();
   });
@@ -373,7 +483,7 @@ describe('TransactionHistoryScreen interactions', () => {
 
     render(<TransactionHistoryScreen />);
 
-    fireEvent.click(screen.getByRole('button', { name: /Transfer request.*-.*4\.00/ }));
+    fireEvent.click(screen.getByRole('button', { name: /sent from Alex to Sam.*-.*4\.00/ }));
     expect(screen.getByText('history-action:transfer_request:transfer-1')).toBeInTheDocument();
   });
 });

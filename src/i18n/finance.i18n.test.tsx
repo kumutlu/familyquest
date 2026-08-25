@@ -1,4 +1,5 @@
-import { render, screen, cleanup, act } from '@testing-library/react';
+import { render as rtlRender, screen, cleanup, act, fireEvent } from '@testing-library/react';
+import type { ReactElement } from 'react';
 import { MemoryRouter } from 'react-router-dom';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import i18n from './config';
@@ -35,8 +36,14 @@ import { Goals } from '../pages/Goals';
 import { BalanceCard } from '../components/wallet/BalanceCard';
 import { ContributionModal } from '../components/goals/ContributionModal';
 import { TransactionList } from '../components/wallet/TransactionList';
+import { MoneyPrivacyProvider } from '../components/privacy/MoneyPrivacyContext';
+import { MoneyPrivacyToggle } from '../components/privacy/MoneyPrivacyToggle';
 
 const withRouter = (ui: React.ReactNode) => <MemoryRouter>{ui}</MemoryRouter>;
+
+function render(ui: ReactElement) {
+  return rtlRender(<MoneyPrivacyProvider>{ui}</MoneyPrivacyProvider>);
+}
 
 beforeEach(async () => {
   vi.clearAllMocks();
@@ -130,6 +137,24 @@ describe('Finance i18n — Contribution dialog', () => {
     await act(async () => { await i18n.changeLanguage('tr'); });
     render(<ContributionModal goal={goal} isOpen onClose={() => {}} />);
     expect(screen.getByText('Holiday hedefine katkı yap')).toBeInTheDocument();
+  });
+
+  it('masks the source wallet balance while keeping the active contribution amount visible', () => {
+    render(
+      <>
+        <MoneyPrivacyToggle />
+        <ContributionModal goal={goal} isOpen onClose={() => {}} />
+      </>,
+    );
+
+    expect(screen.getByText('£50.00')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Hide money amounts' }));
+    expect(screen.queryByText('£50.00')).not.toBeInTheDocument();
+    expect(screen.getByText('£••••')).toBeInTheDocument();
+
+    const amountInput = screen.getByPlaceholderText('0.00');
+    fireEvent.change(amountInput, { target: { value: '12.34' } });
+    expect(amountInput).toHaveValue(12.34);
   });
 });
 

@@ -99,6 +99,10 @@
     "retry": "Try again",
     "close": "Close"
   },
+  "moneyPrivacy": {
+    "hide": "Hide money amounts",
+    "show": "Show money amounts"
+  },
   "points": "Points",
   "pts": "pts"
 }

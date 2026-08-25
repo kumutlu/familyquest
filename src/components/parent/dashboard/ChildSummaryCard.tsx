@@ -97,7 +97,7 @@ export function ChildSummaryCard({ child, walletBalance, pendingTaskCount, gamif
                 {walletBalance === null ? (
                   <span className="text-xs font-semibold text-gray-400">{t('childCard.unavailable')}</span>
                 ) : (
-                  <CurrencyDisplay amountPence={walletBalance} forceColor={false} />
+                  <CurrencyDisplay amountPence={walletBalance} forceColor={false} privacy="wallet" />
                 )}
               </p>
             </div>

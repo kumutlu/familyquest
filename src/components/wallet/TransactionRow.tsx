@@ -5,6 +5,10 @@ import {
   transactionRowDate,
 } from '../../lib/walletPresentation';
 import { formatPence, currencyCodeFromSymbol } from '../../i18n/format';
+import { MoneyValue } from '../privacy/MoneyValue';
+import { useMoneyPrivacy } from '../privacy/MoneyPrivacyContext';
+import { WalletMoneyText } from '../privacy/WalletMoneyText';
+import { maskWalletMoneyText } from '../privacy/walletMoneyMask';
 
 interface TransactionRowProps {
   tx: any;
@@ -19,6 +23,7 @@ interface TransactionRowProps {
 // +/- prefix AND colour AND an aria-label (never colour alone).
 export function TransactionRow({ tx, currency, nameResolver, currentUserId, onSelect }: TransactionRowProps) {
   const { t } = useTranslation('wallet');
+  const { isMoneyHidden, maskFormattedMoney } = useMoneyPrivacy();
   const p = transactionPresentation(tx, { nameResolver, currentUserId, t });
   const Icon = p.icon;
   const abs = Math.abs(signedTransactionAmount(tx));
@@ -26,7 +31,15 @@ export function TransactionRow({ tx, currency, nameResolver, currentUserId, onSe
   const amountColor =
     p.direction === 'in' ? 'text-success-600' : p.direction === 'out' ? 'text-gray-900' : 'text-gray-500';
   const date = transactionRowDate(tx, new Date(), t);
-  const ariaLabel = `${p.title}. ${p.subtitle ? `${p.subtitle}. ` : ''}${prefix}${formatPence(abs, currencyCodeFromSymbol(currency))}.`;
+  const formattedAmount = formatPence(abs, currencyCodeFromSymbol(currency));
+  const accessibleTitle = isMoneyHidden
+    ? maskWalletMoneyText(p.title, maskFormattedMoney(p.title))
+    : p.title;
+  const accessibleSubtitle = isMoneyHidden
+    ? maskWalletMoneyText(p.subtitle, maskFormattedMoney(p.subtitle))
+    : p.subtitle;
+  const accessibleAmount = isMoneyHidden ? maskFormattedMoney(formattedAmount) : formattedAmount;
+  const ariaLabel = `${accessibleTitle}. ${accessibleSubtitle ? `${accessibleSubtitle}. ` : ''}${prefix}${accessibleAmount}.`;
 
   return (
     <button
@@ -41,9 +54,11 @@ export function TransactionRow({ tx, currency, nameResolver, currentUserId, onSe
           <Icon size={20} aria-hidden="true" />
         </div>
         <div className="min-w-0">
-          <p className="font-semibold text-gray-900 text-sm break-words">{p.title}</p>
+          <p className="font-semibold text-gray-900 text-sm break-words">
+            <WalletMoneyText>{p.title}</WalletMoneyText>
+          </p>
           <p className="text-xs text-gray-400 mt-0.5 break-words">
-            {p.subtitle}
+            <WalletMoneyText>{p.subtitle}</WalletMoneyText>
             {p.subtitle && date ? ' · ' : ''}
             {date}
           </p>
@@ -52,7 +67,7 @@ export function TransactionRow({ tx, currency, nameResolver, currentUserId, onSe
       <div className="flex flex-col items-end shrink-0 text-right">
         <span className={`font-bold tabular-nums ${amountColor}`}>
           {prefix}
-          {formatPence(abs, currencyCodeFromSymbol(currency))}
+          <MoneyValue>{formattedAmount}</MoneyValue>
         </span>
         {p.statusLabel && <span className="text-xs text-gray-400 mt-0.5">{p.statusLabel}</span>}
       </div>

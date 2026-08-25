@@ -26,6 +26,8 @@ import { TactileButton } from '../queki/TactileButton';
 import { BottomSheet } from '../queki/BottomSheet';
 import { triggerHaptic } from '../../lib/interaction/haptics';
 import { playCue } from '../../lib/interaction/sound';
+import { MoneyValue } from '../privacy/MoneyValue';
+import { WalletMoneyText } from '../privacy/WalletMoneyText';
 
 /**
  * SwipeReview — Queki v2 parent fast-review flow (Waves 2 + 3).
@@ -432,9 +434,9 @@ export function SwipeReview() {
                       <p className="truncate text-body font-bold qk-text-primary">{current.counterpartyName}</p>
                     </div>
                     <p className="shrink-0 rounded-full bg-mint-50 px-3 py-1 text-meta font-bold text-mint-700">
-                      {t('review.transferAmount', {
-                        amount: formatPence(current.amountPence ?? 0, resolveFamilyCurrencyCode(familyData)),
-                      })}
+                      <MoneyValue>{t('review.transferAmount', {
+                          amount: formatPence(current.amountPence ?? 0, resolveFamilyCurrencyCode(familyData)),
+                        })}</MoneyValue>
                     </p>
                   </div>
                 )}
@@ -445,9 +447,9 @@ export function SwipeReview() {
                         {t('review.moneyRequestFrom', { name: current.counterpartyName })}
                       </p>
                       <p className="shrink-0 rounded-full bg-blue-50 px-3 py-1 text-meta font-bold text-blue-600">
-                        {t('review.transferAmount', {
-                          amount: formatPence(current.amountPence ?? 0, resolveFamilyCurrencyCode(familyData)),
-                        })}
+                        <MoneyValue>{t('review.transferAmount', {
+                            amount: formatPence(current.amountPence ?? 0, resolveFamilyCurrencyCode(familyData)),
+                          })}</MoneyValue>
                       </p>
                     </div>
                     {current.awaitingAcceptance && (
@@ -459,7 +461,9 @@ export function SwipeReview() {
                   </>
                 )}
                 {current.message && (
-                  <p className="mt-2 truncate text-meta italic qk-text-secondary">“{current.message}”</p>
+                  <p className="mt-2 truncate text-meta italic qk-text-secondary">
+                    “<WalletMoneyText>{current.message}</WalletMoneyText>”
+                  </p>
                 )}
               </div>
 

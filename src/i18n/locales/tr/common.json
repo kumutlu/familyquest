@@ -99,6 +99,10 @@
     "retry": "Tekrar dene",
     "close": "Kapat"
   },
+  "moneyPrivacy": {
+    "hide": "Para tutarlarını gizle",
+    "show": "Para tutarlarını göster"
+  },
   "points": "Puanlar",
   "pts": "puan"
 }

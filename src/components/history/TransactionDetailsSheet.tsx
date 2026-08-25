@@ -4,31 +4,41 @@
  * Bottom sheet with full transaction details.
  */
 
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, type ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
 import {
   getTransactionAmountPrefix,
   getTransactionDisplayAmount,
-  type NormalizedTransaction,
 } from '../../lib/transactionModel';
-import { currencyCodeFromSymbol, formatDate, formatPence } from '../../i18n/format';
+import { formatDate } from '../../i18n/format';
+import type { EventParty, HumanReadableFamilyEvent } from '../../lib/humanReadableFamilyEvent';
 import { Badge } from '../ui/Badge';
 import { HistoryActionControl } from '../reversals/HistoryActionControl';
 import { TransactionIcon } from './TransactionIcon';
 import type { HistoryActionSource } from './historySourceResolver';
+import { MoneyValue } from '../privacy/MoneyValue';
+import { WalletMoneyText } from '../privacy/WalletMoneyText';
 
 interface TransactionDetailsSheetProps {
   isOpen: boolean;
   onClose: () => void;
-  transaction: NormalizedTransaction | null;
-  nameResolver?: (id: string) => string | undefined;
-  goalResolver?: (id: string) => {
-    title?: string;
-    targetAmountPence?: number;
-    currentAmountPence?: number;
-  } | undefined;
+  /** Structured event data used by the history presentation. */
+  event: HumanReadableFamilyEvent | null;
   actionSource?: HistoryActionSource | null;
   currency: string;
+}
+
+function partyName(party: EventParty | undefined): string | undefined {
+  return party?.name;
+}
+
+function DetailRow({ label, children }: { label: string; children: ReactNode }) {
+  return (
+    <div>
+      <span className="text-gray-500 text-sm">{label}</span>
+      <div className="font-medium text-gray-900 text-sm break-words">{children}</div>
+    </div>
+  );
 }
 
 const FOCUSABLE_SELECTOR = [
@@ -43,11 +53,8 @@ const FOCUSABLE_SELECTOR = [
 export function TransactionDetailsSheet({
   isOpen,
   onClose,
-  transaction,
-  nameResolver,
-  goalResolver,
+  event,
   actionSource,
-  currency,
 }: TransactionDetailsSheetProps) {
   const { t } = useTranslation(['wallet', 'goals', 'rewards', 'reversals']);
   const previouslyFocused = useRef<HTMLElement | null>(null);
@@ -104,36 +111,37 @@ export function TransactionDetailsSheet({
     };
   }, [isOpen]);
 
-  if (!isOpen || !transaction) return null;
+  if (!isOpen || !event) return null;
+
+  const selectedTransaction = event.transaction;
 
   const {
-    id,
-    timestamp,
     direction,
-    title,
-    subtitle,
-    balanceAfter,
-    childId,
-    parentRef,
-    goalId,
-    note,
     reversalReason,
-    isReversed,
-    isPending,
-    isCompleted,
-  } = transaction;
+  } = selectedTransaction;
 
   const isCredit = direction === 'in';
-  const amountPrefix = getTransactionAmountPrefix(transaction);
+  const amountPrefix = getTransactionAmountPrefix(selectedTransaction);
   const displayAmount = getTransactionDisplayAmount(
-    transaction,
+    selectedTransaction,
     points => t('wallet:ledger.points', { count: points }),
   );
-  const date = formatDate(new Date(timestamp), undefined, { dateStyle: 'medium', timeStyle: 'short' });
-
-  const childName = childId ? nameResolver?.(childId) : undefined;
-  const parentName = parentRef ? nameResolver?.(parentRef) : undefined;
-  const goal = goalId ? goalResolver?.(goalId) : undefined;
+  const date = typeof event.timestamp === 'number' && Number.isFinite(event.timestamp)
+    ? formatDate(new Date(event.timestamp), undefined, { dateStyle: 'medium', timeStyle: 'short' })
+    : undefined;
+  const reversalDate = typeof event.reversalOccurredAt === 'number' && Number.isFinite(event.reversalOccurredAt)
+    ? formatDate(new Date(event.reversalOccurredAt), undefined, { dateStyle: 'medium', timeStyle: 'short' })
+    : undefined;
+  const childName = partyName(event.subject);
+  const actorName = partyName(event.actor);
+  const approverName = partyName(event.approver);
+  const reverserName = partyName(event.reverser);
+  const fromName = partyName(event.from);
+  const toName = partyName(event.to);
+  const eventStatus = t(`wallet:ledger.activity.status.${event.status}`, {
+    defaultValue: event.status.replaceAll('_', ' '),
+  });
+  const amount = `${amountPrefix}${displayAmount}`;
 
   return (
     <div
@@ -175,100 +183,51 @@ export function TransactionDetailsSheet({
                 isCredit ? 'bg-success-50 text-success-600' : 'bg-danger-50 text-danger-600'
               }`}
             >
-              <TransactionIcon iconName={transaction.icon} size={32} />
+              <TransactionIcon iconName={selectedTransaction.icon} size={32} />
             </div>
             <h2
               className={`text-4xl font-extrabold tabular-nums ${
                 isCredit ? 'text-success-600' : 'text-danger-600'
               }`}
             >
-              {amountPrefix}
-              {displayAmount}
+              {event.unit === 'money' ? <MoneyValue>{amount}</MoneyValue> : amount}
             </h2>
             <p className="text-gray-500 font-medium mt-1 uppercase tracking-wider text-xs">
-              {title}
+              <WalletMoneyText>{event.headline}</WalletMoneyText>
             </p>
-          </div>
-
-          {/* Status badges */}
-          <div className="flex justify-center gap-2">
-            {isPending && <Badge variant="warning">{t('wallet:ledger.details.pending')}</Badge>}
-            {isReversed && <Badge variant="danger">{t('reversals:reversed')}</Badge>}
-            {!isPending && !isReversed && isCompleted && (
-              <Badge variant="default">{t('wallet:ledger.details.completed')}</Badge>
-            )}
           </div>
 
           {/* Detail rows */}
           <div className="bg-gray-50 rounded-2xl p-4 space-y-3">
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <span className="text-gray-500 text-sm">{t('wallet:ledger.details.date')}</span>
-                <p className="font-medium text-gray-900 text-sm">{date}</p>
-              </div>
-              <div>
-                <span className="text-gray-500 text-sm">{t('wallet:ledger.details.type')}</span>
-                <p className="font-medium text-gray-900 text-sm">{title}</p>
-              </div>
-            </div>
-
-            {childName && (
-              <div>
-                <span className="text-gray-500 text-sm">{t('wallet:ledger.details.child')}</span>
-                <p className="font-medium text-gray-900 text-sm">{childName}</p>
-              </div>
+            <DetailRow label={t('wallet:ledger.details.event')}>
+              <WalletMoneyText>{event.headline}</WalletMoneyText>
+            </DetailRow>
+            <DetailRow label={t('wallet:ledger.details.amount')}>
+              {event.unit === 'money' ? <MoneyValue>{amount}</MoneyValue> : amount}
+            </DetailRow>
+            {childName && <DetailRow label={t('wallet:ledger.details.child')}>{childName}</DetailRow>}
+            {fromName && <DetailRow label={t('wallet:ledger.details.from')}>{fromName}</DetailRow>}
+            {toName && <DetailRow label={t('wallet:ledger.details.to')}>{toName}</DetailRow>}
+            {actorName && <DetailRow label={t('wallet:ledger.details.performedBy')}>{actorName}</DetailRow>}
+            {approverName && <DetailRow label={t('wallet:ledger.details.approvedBy')}>{approverName}</DetailRow>}
+            {reverserName && <DetailRow label={t('wallet:ledger.details.reversedBy')}>{reverserName}</DetailRow>}
+            {date && <DetailRow label={t('wallet:ledger.details.dateTime')}>{date}</DetailRow>}
+            {reversalDate && <DetailRow label={t('wallet:ledger.details.reversedAt')}>{reversalDate}</DetailRow>}
+            {event.note && (
+              <DetailRow label={t('wallet:ledger.details.note')}>
+                <WalletMoneyText>{event.note}</WalletMoneyText>
+              </DetailRow>
             )}
-
-            {parentName && (
-              <div>
-                <span className="text-gray-500 text-sm">{t('wallet:ledger.details.actor')}</span>
-                <p className="font-medium text-gray-900 text-sm">{parentName}</p>
-              </div>
+            {reversalReason && (
+              <DetailRow label={t('reversals:modal.reason')}>
+                <WalletMoneyText>{reversalReason}</WalletMoneyText>
+              </DetailRow>
             )}
-
-            {goal && (
-              <div>
-                <span className="text-gray-500 text-sm">{t('goals:title')}</span>
-                <p className="font-medium text-gray-900 text-sm">{goal.title}</p>
-              </div>
-            )}
-
-            {subtitle && (
-              <div>
-                <span className="text-gray-500 text-sm">{t('wallet:ledger.details.fromTo')}</span>
-                <p className="font-medium text-gray-900 text-sm">{subtitle}</p>
-              </div>
-            )}
-
-            {note && (
-              <div>
-                <span className="text-gray-500 text-sm">{t('wallet:ledger.details.note')}</span>
-                <p className="font-medium text-gray-900 text-sm">{note}</p>
-              </div>
-            )}
-
-            {balanceAfter !== undefined && (
-              <div>
-                <span className="text-gray-500 text-sm">{t('wallet:ledger.details.balanceAfter')}</span>
-                <p className="font-medium text-gray-900 text-sm">
-                  {formatPence(balanceAfter, currencyCodeFromSymbol(currency))}
-                </p>
-              </div>
-            )}
-
-            {isReversed && reversalReason && (
-              <div>
-                <span className="text-gray-500 text-sm">{t('reversals:modal.reason')}</span>
-                <p className="font-medium text-gray-900 text-sm">{reversalReason}</p>
-              </div>
-            )}
-
-            <div className="flex justify-between border-t border-gray-200 pt-3 mt-3">
-              <span className="text-gray-400 text-xs">{t('wallet:ledger.details.reference')}</span>
-              <span className="font-mono text-gray-400 text-xs">
-                {String(id).slice(-6).toUpperCase()}
-              </span>
-            </div>
+            <DetailRow label={t('wallet:ledger.details.status')}>
+              <Badge variant={event.status === 'reversed' ? 'danger' : selectedTransaction.isPending ? 'warning' : 'default'}>
+                {eventStatus}
+              </Badge>
+            </DetailRow>
           </div>
 
           {/* Reversal control */}

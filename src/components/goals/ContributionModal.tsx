@@ -71,7 +71,7 @@ export function ContributionModal({ goal, isOpen, onClose, onDone }: {
       <div className="space-y-4">
         <div className="bg-gray-50 rounded-xl p-4 flex items-center justify-between">
           <span className="text-sm text-gray-500 font-medium">{t('contribution.yourBalance')}</span>
-          <span className="font-bold text-gray-900"><CurrencyDisplay amountPence={balance} forceColor={false} /></span>
+          <span className="font-bold text-gray-900"><CurrencyDisplay amountPence={balance} forceColor={false} privacy="wallet" /></span>
         </div>
 
         <div>

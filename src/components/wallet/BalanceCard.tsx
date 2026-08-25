@@ -3,6 +3,7 @@ import { Wallet as WalletIcon } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { formatPence, currencyCodeFromSymbol } from '../../i18n/format';
 import { QUEKI_MOTION, prefersReducedMotion } from '../../design/motion';
+import { MoneyValue } from '../privacy/MoneyValue';
 
 interface BalanceCardProps {
   balance?: number;
@@ -96,7 +97,9 @@ export function BalanceCard({ balance, currency = '£', loading, unavailable }: 
           aria-live="polite"
           data-testid="wallet-balance-value"
         >
-          {unavailable ? t('balanceCard.unavailable') : formatPence(animated, currencyCodeFromSymbol(currency))}
+          {unavailable
+            ? t('balanceCard.unavailable')
+            : <MoneyValue>{formatPence(animated, currencyCodeFromSymbol(currency))}</MoneyValue>}
         </p>
         <p className="mt-2 text-xs text-white/70">{t('balanceCard.label')}</p>
       </div>

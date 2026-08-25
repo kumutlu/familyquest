@@ -1,12 +1,17 @@
-import { fireEvent, render, screen, within } from '@testing-library/react';
-import { useState } from 'react';
+import { fireEvent, render as rtlRender, screen, within } from '@testing-library/react';
+import { useState, type ReactElement } from 'react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import i18n from '../../i18n/config';
 import type { NormalizedTransaction } from '../../lib/transactionModel';
+import type { HumanReadableFamilyEvent } from '../../lib/humanReadableFamilyEvent';
+import { MoneyPrivacyProvider } from '../privacy/MoneyPrivacyContext';
 
 const store = vi.hoisted(() => ({ state: {} as Record<string, unknown> }));
 
-vi.mock('../../store/useStore', () => ({ useStore: () => store.state }));
+vi.mock('../../store/useStore', () => ({
+  useStore: (selector?: (state: typeof store.state) => unknown) =>
+    typeof selector === 'function' ? selector(store.state) : store.state,
+}));
 vi.mock('../../lib/api', () => ({ cancelPendingApproval: vi.fn() }));
 vi.mock('../../lib/reversalApi', async importOriginal => {
   const actual = await importOriginal<typeof import('../../lib/reversalApi')>();
@@ -14,6 +19,10 @@ vi.mock('../../lib/reversalApi', async importOriginal => {
 });
 
 import { TransactionDetailsSheet } from './TransactionDetailsSheet';
+
+function render(ui: ReactElement) {
+  return rtlRender(<MoneyPrivacyProvider>{ui}</MoneyPrivacyProvider>);
+}
 
 const normalizedTransaction: NormalizedTransaction = {
   id: 'wallet-1',
@@ -55,6 +64,21 @@ const rawWallet = {
   },
 };
 
+const event: HumanReadableFamilyEvent = {
+  transaction: normalizedTransaction,
+  eventKind: 'withdrawal',
+  subject: { id: 'child-1', name: 'Alex' },
+  amountPence: -250,
+  unit: 'money',
+  currency: '£',
+  timestamp: normalizedTransaction.timestamp,
+  status: 'completed',
+  sourceType: 'wallet_transaction',
+  sourceId: 'wallet-1',
+  headline: '£2.50 withdrawn from Alex’s wallet',
+  metadata: [],
+};
+
 function NestedDialogHarness() {
   const [open, setOpen] = useState(false);
   return (
@@ -63,7 +87,7 @@ function NestedDialogHarness() {
       <TransactionDetailsSheet
         isOpen={open}
         onClose={() => setOpen(false)}
-        transaction={normalizedTransaction}
+        event={event}
         actionSource={{ sourceKind: 'wallet_transaction', source: rawWallet }}
         currency="£"
       />
@@ -73,7 +97,8 @@ function NestedDialogHarness() {
 
 describe('TransactionDetailsSheet raw reversal source integration', () => {
   beforeEach(async () => {
-    await i18n.loadNamespaces(['wallet', 'goals', 'rewards', 'reversals']);
+    localStorage.clear();
+    await i18n.loadNamespaces(['common', 'wallet', 'goals', 'rewards', 'reversals']);
     await i18n.changeLanguage('en');
     store.state = {
       currentUser: {
@@ -94,7 +119,7 @@ describe('TransactionDetailsSheet raw reversal source integration', () => {
       <TransactionDetailsSheet
         isOpen
         onClose={vi.fn()}
-        transaction={normalizedTransaction}
+        event={event}
         actionSource={{ sourceKind: 'wallet_transaction', source: rawWallet }}
         currency="£"
       />,

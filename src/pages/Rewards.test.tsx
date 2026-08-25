@@ -1,4 +1,5 @@
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { fireEvent, render as rtlRender, screen, waitFor } from '@testing-library/react';
+import type { ReactElement } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import i18n from '../i18n/config';
 
@@ -13,6 +14,11 @@ const useStoreMock = vi.fn();
 vi.mock('../store/useStore', () => ({ useStore: (...args: any[]) => useStoreMock(...args) }));
 
 import { Rewards } from './Rewards';
+import { MoneyPrivacyProvider } from '../components/privacy/MoneyPrivacyContext';
+
+function render(ui: ReactElement) {
+  return rtlRender(<MoneyPrivacyProvider>{ui}</MoneyPrivacyProvider>);
+}
 
 const baseReward = {
   id: 'r1',

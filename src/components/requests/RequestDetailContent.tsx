@@ -20,6 +20,9 @@ import {
   type MoneyRequestIdentity,
 } from '../../lib/moneyRequestContracts';
 import type { NormalizedRequest } from '../../lib/requestModel';
+import { useMoneyPrivacy } from '../privacy/MoneyPrivacyContext';
+import { WalletMoneyText } from '../privacy/WalletMoneyText';
+import { maskWalletMoneyText } from '../privacy/walletMoneyMask';
 
 interface RequestDetailContentProps {
   request: NormalizedRequest;
@@ -61,8 +64,29 @@ export function RequestDetailContent({
   const [processing, setProcessing] = useState(false);
   const [error, setError] = useState('');
   const { t } = useTranslation(['requests', 'approvals']);
+  const { isMoneyHidden, maskFormattedMoney } = useMoneyPrivacy();
 
   const actions = getRequestActions(request.category);
+  const isWalletRequest = request.category === 'money_request' || request.category === 'transfer';
+  const visibleOutcome = isWalletRequest && isMoneyHidden && request.outcome
+    ? {
+        ...request.outcome,
+        ifApproved: maskWalletMoneyText(
+          request.outcome.ifApproved,
+          maskFormattedMoney(request.outcome.ifApproved),
+        ),
+        ifRejected: maskWalletMoneyText(
+          request.outcome.ifRejected,
+          maskFormattedMoney(request.outcome.ifRejected),
+        ),
+      }
+    : request.outcome;
+  const visibleTimeline = isWalletRequest && isMoneyHidden
+    ? request.timeline.map(event => ({
+        ...event,
+        label: maskWalletMoneyText(event.label, maskFormattedMoney(event.label)),
+      }))
+    : request.timeline;
   const isApprover = isParentRole(currentUser?.role);
   const isCreator = !!currentUser?.id && currentUser.id === request.requestedBy?.id;
 
@@ -190,12 +214,20 @@ export function RequestDetailContent({
           <div className="divide-y divide-gray-50">
             <InfoRow label={t('requests:detail.amount')}>
               <span className="font-bold text-gray-900">
-                <CurrencyDisplay amountPence={request.amountPence!} forceColor={false} />
+                <CurrencyDisplay
+                  amountPence={request.amountPence!}
+                  forceColor={false}
+                  privacy={isWalletRequest ? 'wallet' : undefined}
+                />
               </span>
             </InfoRow>
             {request.message && (
               <InfoRow label={t('requests:detail.message')}>
-                <span className="break-words">{request.message}</span>
+                <span className="break-words">
+                  {isWalletRequest
+                    ? <WalletMoneyText>{request.message}</WalletMoneyText>
+                    : request.message}
+                </span>
               </InfoRow>
             )}
             <InfoRow label={t('requests:detail.moneyMoved')}>
@@ -208,12 +240,12 @@ export function RequestDetailContent({
       )}
 
       {/* Outcome */}
-      <RequestOutcomeExplanation outcome={request.outcome} />
+      <RequestOutcomeExplanation outcome={visibleOutcome} />
 
       {/* Timeline */}
       <section>
         <h4 className="text-sm font-bold text-gray-700 uppercase tracking-wider mb-3">{t('requests:detail.timeline')}</h4>
-        <RequestTimeline events={request.timeline} />
+        <RequestTimeline events={visibleTimeline} />
       </section>
 
       {/* Actions / confirmations — sticky footer on mobile so Approve/Reject never get clipped */}
@@ -271,7 +303,11 @@ export function RequestDetailContent({
                   {t('requests:detail.approveConfirmPrefix')}
                   <span className="font-semibold">
                     {request.amountPence != null ? (
-                      <CurrencyDisplay amountPence={request.amountPence} forceColor={false} />
+                      <CurrencyDisplay
+                        amountPence={request.amountPence}
+                        forceColor={false}
+                        privacy={isWalletRequest ? 'wallet' : undefined}
+                      />
                     ) : (
                       request.typeLabel
                     )}

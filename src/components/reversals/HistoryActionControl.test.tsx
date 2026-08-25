@@ -1,4 +1,5 @@
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { fireEvent, render as rtlRender, screen, waitFor, within } from '@testing-library/react';
+import type { ReactElement } from 'react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const api = vi.hoisted(() => ({ reverseTransaction: vi.fn(), cancelPendingApproval: vi.fn() }));
@@ -9,6 +10,12 @@ vi.mock('../../store/useStore', () => ({ useStore: () => store.state }));
 
 import { HistoryActionControl } from './HistoryActionControl';
 import i18n from '../../i18n/config';
+import { MoneyPrivacyProvider } from '../privacy/MoneyPrivacyContext';
+import { MoneyPrivacyToggle } from '../privacy/MoneyPrivacyToggle';
+
+function render(ui: ReactElement) {
+  return rtlRender(<MoneyPrivacyProvider>{ui}</MoneyPrivacyProvider>);
+}
 
 const baseState = () => ({
   currentUser: { id: 'parent-1', familyId: 'family-1', role: 'parent', displayName: 'Parent' },
@@ -19,6 +26,7 @@ const baseState = () => ({
 describe('HistoryActionControl', () => {
   beforeEach(async () => {
     vi.clearAllMocks();
+    localStorage.clear();
     await i18n.loadNamespaces(['reversals']);
     await i18n.changeLanguage('en');
     store.state = baseState();
@@ -31,6 +39,78 @@ describe('HistoryActionControl', () => {
     expect(screen.getByText('Duplicate')).toBeInTheDocument();
     expect(screen.getByText(/2026/)).toBeInTheDocument();
     expect(screen.queryByText(/1970/)).not.toBeInTheDocument();
+  });
+
+  it('masks an amount-bearing persisted reversal reason without changing the audit record', () => {
+    store.state.reversals = [{
+      sourceKind: 'wallet_transaction',
+      sourceId: 'private-reversal',
+      reason: 'Duplicate lunch split £274.65',
+      actorName: 'Owner',
+      completedAt: { toDate: () => new Date('2026-07-13T10:00:00Z') },
+    }];
+    const source = {
+      id: 'private-reversal',
+      type: 'deposit',
+      effectSnapshot: {
+        schemaVersion: 1,
+        entityType: 'wallet_transaction',
+        familyId: 'family-1',
+        actorId: 'parent-1',
+        childId: 'child-1',
+        walletDeltaPence: 100,
+        xpAdjustment: 0,
+      },
+    };
+
+    render(
+      <>
+        <MoneyPrivacyToggle />
+        <HistoryActionControl sourceKind="wallet_transaction" source={source} />
+      </>,
+    );
+
+    expect(document.body).toHaveTextContent('Duplicate lunch split £274.65');
+    fireEvent.click(screen.getByRole('button', { name: 'Hide money amounts' }));
+    expect(document.body.innerHTML).not.toContain('274.65');
+    expect(document.body).toHaveTextContent('Duplicate lunch split £••••');
+
+    fireEvent.click(screen.getByRole('button', { name: 'Show money amounts' }));
+    expect(document.body).toHaveTextContent('Duplicate lunch split £274.65');
+  });
+
+  it('keeps the real nested refund dialog private for stored and derived money values', () => {
+    store.state.childWallets = [{ id: 'child-1', balance: 91_846 }];
+    const source = {
+      id: 'private-refund',
+      type: 'withdrawal',
+      note: 'Correction for £735.91',
+      effectSnapshot: {
+        schemaVersion: 1,
+        entityType: 'wallet_transaction',
+        familyId: 'family-1',
+        actorId: 'parent-1',
+        childId: 'child-1',
+        walletDeltaPence: -64_237,
+        xpAdjustment: 0,
+      },
+    };
+
+    render(
+      <>
+        <MoneyPrivacyToggle />
+        <HistoryActionControl sourceKind="wallet_transaction" source={source} />
+      </>,
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: 'Hide money amounts' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Refund' }));
+
+    const dialog = screen.getByRole('dialog', { name: 'Refund donation' });
+    expect(dialog.innerHTML).not.toContain('735.91');
+    expect(dialog.innerHTML).not.toContain('642.37');
+    expect(dialog.innerHTML).not.toContain('1,560.83');
+    expect(within(dialog).getAllByText('£••••')).toHaveLength(3);
   });
 
   it('routes a real child-created pending request through parent cancellation and updates immediately', async () => {

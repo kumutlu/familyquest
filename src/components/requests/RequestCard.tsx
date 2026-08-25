@@ -5,6 +5,9 @@ import { CurrencyDisplay } from '../ui/CurrencyDisplay';
 import { RequestStatusBadge } from './RequestStatusBadge';
 import { formatDate } from '../../i18n/format';
 import type { NormalizedRequest } from '../../lib/requestModel';
+import { useMoneyPrivacy } from '../privacy/MoneyPrivacyContext';
+import { WalletMoneyText } from '../privacy/WalletMoneyText';
+import { maskWalletMoneyText } from '../privacy/walletMoneyMask';
 
 interface RequestCardProps {
   request: NormalizedRequest;
@@ -30,6 +33,12 @@ function formatDateTime(value: number | null): string {
  * sheet; inline `actions` (if any) stop propagation so they do not also open it.
  */
 export function RequestCard({ request, onOpen, actions, className }: RequestCardProps) {
+  const { isMoneyHidden, maskFormattedMoney } = useMoneyPrivacy();
+  const isWalletRequest = request.category === 'money_request' || request.category === 'transfer';
+  const accessibleSummary = isWalletRequest && isMoneyHidden
+    ? maskWalletMoneyText(request.primarySummary, maskFormattedMoney(request.primarySummary))
+    : request.primarySummary;
+
   const handleKeyDown = (event: React.KeyboardEvent) => {
     if (!onOpen) return;
     if (event.key === 'Enter' || event.key === ' ') {
@@ -42,7 +51,7 @@ export function RequestCard({ request, onOpen, actions, className }: RequestCard
     <div
       role="button"
       tabIndex={0}
-      aria-label={`${request.typeLabel}: ${request.primarySummary}`}
+      aria-label={`${request.typeLabel}: ${accessibleSummary}`}
       onClick={onOpen}
       onKeyDown={handleKeyDown}
       className={cn(
@@ -72,17 +81,25 @@ export function RequestCard({ request, onOpen, actions, className }: RequestCard
           )}
           <div className="min-w-0 flex-1">
             <p className="font-semibold text-gray-900 leading-tight break-words">
-              {request.primarySummary}
+              {isWalletRequest
+                ? <WalletMoneyText>{request.primarySummary}</WalletMoneyText>
+                : request.primarySummary}
             </p>
             {request.secondarySummary && (
               <p className="mt-1 text-sm text-gray-600 line-clamp-2 break-words">
-                {request.secondarySummary}
+                {isWalletRequest
+                  ? <WalletMoneyText>{request.secondarySummary}</WalletMoneyText>
+                  : request.secondarySummary}
               </p>
             )}
             <div className="mt-2 flex items-center gap-2 flex-wrap">
               {request.amountPence != null && (
                 <span className="font-bold text-gray-900">
-                  <CurrencyDisplay amountPence={request.amountPence} forceColor={false} />
+                  <CurrencyDisplay
+                    amountPence={request.amountPence}
+                    forceColor={false}
+                    privacy={isWalletRequest ? 'wallet' : undefined}
+                  />
                 </span>
               )}
               {request.createdAt != null && (

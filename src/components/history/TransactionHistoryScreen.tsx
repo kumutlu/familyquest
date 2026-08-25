@@ -8,14 +8,14 @@ import { useState, useMemo, useCallback } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useStore } from '../../store/useStore';
 import {
-  adaptAllTransactions,
   filterTransactions,
   searchTransactions,
   groupTransactionsByDate,
   type NormalizedTransaction,
   type TransactionFilter,
 } from '../../lib/transactionAdapter';
-import { TransactionCard } from './TransactionCard';
+import { adaptHumanReadableFamilyEvents, type HumanReadableFamilyEvent } from '../../lib/humanReadableFamilyEvent';
+import { HumanReadableEventCard } from './HumanReadableEventCard';
 import { TransactionDetailsSheet } from './TransactionDetailsSheet';
 import { TransactionFilters } from './TransactionFilters';
 import { TransactionSearch } from './TransactionSearch';
@@ -206,9 +206,8 @@ export function TransactionHistoryScreen() {
 
   const fundResolver = useCallback((id: string) => fundMap.get(id), [fundMap]);
 
-  // Adapt all transactions
-  const allTransactions = useMemo(() => {
-    return adaptAllTransactions({
+  const allEvents = useMemo(() => {
+    const events = adaptHumanReadableFamilyEvents({
       walletTransactions,
       reversals,
       goalLedger,
@@ -228,6 +227,26 @@ export function TransactionHistoryScreen() {
         t: transactionT,
       },
     });
+    return events.map(event => ({
+      ...event,
+      transaction: {
+        ...event.transaction,
+        searchText: [
+          event.transaction.searchText,
+          event.subject?.name,
+          event.actor?.name,
+          event.approver?.name,
+          event.reverser?.name,
+          event.from?.name,
+          event.to?.name,
+          event.rewardTitle,
+          event.goalTitle,
+          event.fundName,
+          event.note,
+        ].filter((value): value is string => typeof value === 'string' && value.length > 0)
+          .join(' ').toLocaleLowerCase(),
+      },
+    }));
   }, [
     walletTransactions,
     reversals,
@@ -246,6 +265,16 @@ export function TransactionHistoryScreen() {
     familyId,
     transactionT,
   ]);
+
+  const allTransactions = useMemo(
+    () => allEvents.map(event => event.transaction),
+    [allEvents],
+  );
+
+  const eventByTransactionId = useMemo(
+    () => new Map<string, HumanReadableFamilyEvent>(allEvents.map(event => [event.transaction.id, event])),
+    [allEvents],
+  );
 
   const resolveActionSource = useMemo(() => buildHistoryActionSourceResolver({
     walletTransactions,
@@ -266,6 +295,11 @@ export function TransactionHistoryScreen() {
   const selectedActionSource = useMemo(
     () => resolveActionSource(selectedTransaction),
     [resolveActionSource, selectedTransaction],
+  );
+
+  const selectedEvent = useMemo(
+    () => selectedTransaction ? eventByTransactionId.get(selectedTransaction.id) ?? null : null,
+    [eventByTransactionId, selectedTransaction],
   );
 
   // Apply search
@@ -411,14 +445,16 @@ export function TransactionHistoryScreen() {
                 {group.label}
               </h3>
               <div className="divide-y divide-gray-50">
-                {group.items.map(tx => (
-                  <TransactionCard
-                    key={tx.id}
-                    transaction={tx}
-                    currency={currency}
-                    onClick={() => setSelectedTransaction(tx)}
-                  />
-                ))}
+                {group.items.map(tx => {
+                  const event = eventByTransactionId.get(tx.id);
+                  return event ? (
+                    <HumanReadableEventCard
+                      key={tx.id}
+                      event={event}
+                      onClick={() => setSelectedTransaction(tx)}
+                    />
+                  ) : null;
+                })}
               </div>
             </div>
           ))}
@@ -429,10 +465,8 @@ export function TransactionHistoryScreen() {
       <TransactionDetailsSheet
         isOpen={!!selectedTransaction}
         onClose={() => setSelectedTransaction(null)}
-        transaction={selectedTransaction}
+        event={selectedEvent}
         actionSource={selectedActionSource}
-        nameResolver={nameResolver}
-        goalResolver={goalResolver}
         currency={currency}
       />
     </div>

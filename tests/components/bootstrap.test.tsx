@@ -32,16 +32,19 @@ vi.mock('../../src/lib/firebase', () => ({ db: {}, auth: {} }));
 import { AppLayout } from '../../src/components/layout/AppLayout';
 import { Dashboard } from '../../src/pages/Dashboard';
 import { useStore } from '../../src/store/useStore';
+import { MoneyPrivacyProvider } from '../../src/components/privacy/MoneyPrivacyContext';
 
 function renderApp(path = '/') {
   return render(
     <MemoryRouter initialEntries={[path]}>
-      <Routes>
-        <Route path="/" element={<AppLayout />}>
-          <Route index element={<Dashboard />} />
-          <Route path="onboarding" element={<div>Onboarding Screen</div>} />
-        </Route>
-      </Routes>
+      <MoneyPrivacyProvider>
+        <Routes>
+          <Route path="/" element={<AppLayout />}>
+            <Route index element={<Dashboard />} />
+            <Route path="onboarding" element={<div>Onboarding Screen</div>} />
+          </Route>
+        </Routes>
+      </MoneyPrivacyProvider>
     </MemoryRouter>,
   );
 }

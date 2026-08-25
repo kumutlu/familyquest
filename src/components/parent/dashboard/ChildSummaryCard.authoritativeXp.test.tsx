@@ -4,8 +4,11 @@ import { beforeEach, describe, expect, it } from 'vitest';
 import i18n from '../../../i18n/config';
 import { ChildSummaryCard } from './ChildSummaryCard';
 import type { GamificationSummaryView } from '../../../lib/gamificationAdapters';
+import { MoneyPrivacyProvider } from '../../privacy/MoneyPrivacyContext';
 
-const withRouter = (ui: React.ReactNode) => <MemoryRouter>{ui}</MemoryRouter>;
+const withRouter = (ui: React.ReactNode) => (
+  <MoneyPrivacyProvider><MemoryRouter>{ui}</MemoryRouter></MoneyPrivacyProvider>
+);
 
 const summaryView = (overrides: Partial<GamificationSummaryView> = {}): GamificationSummaryView => ({
   xpTotal: 0,
@@ -23,6 +26,7 @@ const summaryView = (overrides: Partial<GamificationSummaryView> = {}): Gamifica
 });
 
 beforeEach(async () => {
+  localStorage.clear();
   await i18n.loadNamespaces(['dashboard']);
   await i18n.changeLanguage('en');
 });

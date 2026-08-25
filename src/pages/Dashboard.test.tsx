@@ -1,11 +1,15 @@
-import { render, screen } from '@testing-library/react';
+import { render as rtlRender, screen } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
+import type { ReactElement } from 'react';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import i18n from '../i18n/config';
 
 const store = vi.hoisted(() => ({ state: {} as any }));
 
-vi.mock('../store/useStore', () => ({ useStore: () => store.state }));
+vi.mock('../store/useStore', () => ({
+  useStore: (selector?: (state: any) => unknown) => selector ? selector(store.state) : store.state,
+}));
 // The approvals sheet embeds the real Approval Center behind a Wave 1 sheet;
 // its internals are covered by its own tests.
 vi.mock('../components/parent/ApprovalCenter', () => ({
@@ -13,6 +17,15 @@ vi.mock('../components/parent/ApprovalCenter', () => ({
 }));
 
 import { Dashboard } from './Dashboard';
+import { MoneyPrivacyProvider } from '../components/privacy/MoneyPrivacyContext';
+
+function render(ui: ReactElement) {
+  return rtlRender(<MoneyPrivacyProvider>{ui}</MoneyPrivacyProvider>);
+}
+
+beforeEach(() => {
+  localStorage.clear();
+});
 
 const readyBootstrap = {
   members: 'ready',
@@ -51,6 +64,7 @@ function baseState(overrides: Record<string, unknown> = {}) {
     walletTransactions: [],
     myWallet: null,
     childWallets: [],
+    gamificationSummaries: [],
     myGamificationSummary: null,
     myDailyProgress: null,
     bootstrapStatus: readyBootstrap,
@@ -127,6 +141,18 @@ describe('Parent Living Home priorities', () => {
     expect(screen.getByTestId('parent-all-calm')).toBeInTheDocument();
   });
 
+  it('does not promote a recent deposit to a parent priority card', () => {
+    store.state = baseState({
+      walletTransactions: [
+        { id: 'recent-deposit', type: 'deposit', amount: 900, timestamp: new Date(), childId: 'c-1' },
+      ],
+    });
+
+    render(<MemoryRouter><Dashboard /></MemoryRouter>);
+
+    expect(screen.getByTestId('parent-all-calm')).toBeInTheDocument();
+  });
+
   it('never renders the legacy activity feed or reversal history as primary content', () => {
     store.state = baseState({
       feed: [
@@ -160,6 +186,14 @@ describe('Parent Living Home priorities', () => {
     render(<MemoryRouter><Dashboard /></MemoryRouter>);
     expect(screen.getByTestId('dashboard-focus-mode')).toBeInTheDocument();
     expect(screen.queryByTestId('parent-living-home')).not.toBeInTheDocument();
+  });
+
+  it('keeps the global money privacy toggle accessible in Focus Mode', () => {
+    store.state = baseState({ tasks: [], rewards: [] });
+
+    render(<MemoryRouter><Dashboard /></MemoryRouter>);
+
+    expect(screen.getByRole('button', { name: 'Hide money amounts' })).toBeInTheDocument();
   });
 });
 
@@ -210,6 +244,43 @@ describe('Parent Living Home family tools', () => {
     expect(screen.getByTestId('family-tools-wallets')).toHaveTextContent('Total child balance');
     expect(screen.getByTestId('family-tools-wallets')).toHaveTextContent('£100.00');
     expect(screen.getByTestId('family-tools-wallets')).not.toHaveTextContent('£1,099.99');
+  });
+
+  it('masks parent Home wallet values while keeping goals, levels, points, and percentages visible', async () => {
+    const user = userEvent.setup();
+    store.state = baseState({
+      myWallet: { id: 'owner-1', balance: 1_111 },
+      childWallets: [{ id: 'c-1', balance: 2_222 }],
+      familyMembers: [{
+        ...baseState().currentUser,
+        id: 'c-1',
+        role: 'child',
+        displayName: 'Ada',
+        walletBalancePence: 4_321,
+      }],
+      gamificationSummaries: [{ childId: 'c-1', xpTotal: 2_500, level: 3 }],
+      savingsGoals: [{
+        id: 'goal-1',
+        title: 'Bike',
+        status: 'active',
+        currentAmountPence: 820,
+        targetAmountPence: 1_000,
+      }],
+    });
+
+    render(<MemoryRouter><Dashboard /></MemoryRouter>);
+    expect(document.body.textContent).toContain('£33.33');
+    expect(document.body.textContent).toContain('£22.22');
+    expect(document.body.textContent).toContain('£43.21');
+
+    await user.click(screen.getByRole('button', { name: 'Hide money amounts' }));
+
+    expect(document.body.textContent).not.toContain('£33.33');
+    expect(document.body.textContent).not.toContain('£22.22');
+    expect(document.body.textContent).not.toContain('£43.21');
+    expect(document.body.textContent).toContain('Level 3');
+    expect(document.body.textContent).toContain('Level 3 · 0 pts');
+    expect(document.body.textContent).toContain('82%');
   });
 
   it('uses the highest-progress active goal and never a completed goal', () => {
@@ -331,6 +402,28 @@ describe('Family-size adaptation', () => {
     expect(screen.queryByTestId('children-overview-multi')).not.toBeInTheDocument();
   });
 
+  it('announces a single child wallet amount when visible and a digit-free mask when hidden', async () => {
+    const user = userEvent.setup();
+    store.state = baseState({
+      familyMembers: [{
+        id: 'c-1',
+        role: 'child',
+        displayName: 'Ada',
+        walletBalancePence: 4321,
+      }],
+    });
+    render(<MemoryRouter><Dashboard /></MemoryRouter>);
+
+    expect(screen.getByLabelText('Wallet balance £43.21')).toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: 'Hide money amounts' }));
+
+    const hiddenWallet = screen.getByLabelText('Wallet balance £••••');
+    expect(hiddenWallet).toBeInTheDocument();
+    expect(hiddenWallet.getAttribute('aria-label')).not.toMatch(/\p{Nd}/u);
+    expect(screen.queryByLabelText(/43\.21/)).not.toBeInTheDocument();
+  });
+
   it('multi-child families get the scalable overview row', () => {
     store.state = baseState({
       familyMembers: [
@@ -345,6 +438,42 @@ describe('Family-size adaptation', () => {
     expect(screen.getByText('Ada')).toBeInTheDocument();
     expect(screen.getByText('Grace')).toBeInTheDocument();
     expect(screen.getByText('Alan')).toBeInTheDocument();
+  });
+
+  it('renders each crew level from the authoritative gamification summary', () => {
+    store.state = baseState({
+      familyMembers: [
+        { id: 'child-2', role: 'child', displayName: 'Level Two', level: 1 },
+        { id: 'child-3', role: 'child', displayName: 'Level Three', level: 1 },
+        { id: 'child-5', role: 'child', displayName: 'Level Five', level: 1 },
+      ],
+      gamificationSummaries: [
+        { childId: 'child-2', xpTotal: 1_250, level: 2 },
+        { childId: 'child-3', xpTotal: 2_500, level: 3 },
+        { childId: 'child-5', xpTotal: 4_100, level: 5 },
+      ],
+    });
+
+    render(<MemoryRouter><Dashboard /></MemoryRouter>);
+
+    for (const level of [2, 3, 5]) {
+      expect(screen.getByTestId(`crew-level-child-${level}`)).toHaveTextContent(`Level ${level}`);
+    }
+  });
+
+  it('renders a single child level from the authoritative gamification summary', () => {
+    store.state = baseState({
+      familyMembers: [
+        { id: 'child-5', role: 'child', displayName: 'Level Five', level: 1 },
+      ],
+      gamificationSummaries: [
+        { childId: 'child-5', xpTotal: 4_100, level: 5 },
+      ],
+    });
+
+    render(<MemoryRouter><Dashboard /></MemoryRouter>);
+
+    expect(screen.getByText('Level 5 · 0 pts')).toBeInTheDocument();
   });
 });
 
@@ -379,6 +508,33 @@ describe('Child Living Home semantics (XP ≠ points ≠ money)', () => {
   it('renders real money formatted as currency, never a bare number', () => {
     render(<MemoryRouter><Dashboard /></MemoryRouter>);
     expect(screen.getByTestId('child-balance-chip')).toHaveTextContent('£5.00');
+  });
+
+  it('masks the child wallet and stored money-received amount without masking progression or points', async () => {
+    const user = userEvent.setup();
+    store.state = {
+      ...store.state,
+      myWallet: { id: 'w-1', balance: 4_321 },
+      walletTransactions: [
+        { id: 'deposit-1', type: 'deposit', amountPence: 8_765, timestamp: new Date() },
+      ],
+    };
+
+    render(<MemoryRouter><Dashboard /></MemoryRouter>);
+    expect(document.body.textContent).toContain('£43.21');
+    expect(document.body.textContent).toContain('£87.65');
+
+    await user.click(screen.getByRole('button', { name: 'Hide money amounts' }));
+
+    expect(document.body.textContent).not.toContain('£43.21');
+    expect(document.body.textContent).not.toContain('£87.65');
+    expect(screen.getByTestId('child-balance-chip')).not.toHaveAttribute(
+      'aria-label',
+      expect.stringContaining('£43.21'),
+    );
+    expect(document.body.textContent).toContain('240');
+    expect(document.body.textContent).toContain('Lv 2');
+    expect(document.body.textContent).toContain('120');
   });
 
   it('keeps streak meaning independent from both currencies', () => {

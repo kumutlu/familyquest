@@ -1,6 +1,9 @@
-import { render, screen } from '@testing-library/react';
+import { render as rtlRender, screen } from '@testing-library/react';
 import { describe, expect, it, vi, beforeEach } from 'vitest';
 import { MemoryRouter } from 'react-router-dom';
+import type { ReactElement } from 'react';
+import i18n from '../i18n/config';
+import { MoneyPrivacyProvider } from '../components/privacy/MoneyPrivacyContext';
 
 const mockStore: any = {
   currentUser: { id: 'parent-1', familyId: 'family-1', role: 'owner' },
@@ -12,7 +15,8 @@ const mockStore: any = {
 };
 
 vi.mock('../store/useStore', () => ({
-  useStore: () => mockStore,
+  useStore: (selector?: (state: typeof mockStore) => unknown) =>
+    typeof selector === 'function' ? selector(mockStore) : mockStore,
 }));
 vi.mock('../components/wallet/AddMoneyModal', () => ({
   AddMoneyModal: () => <div data-testid="add-money-modal-mock" />,
@@ -20,12 +24,19 @@ vi.mock('../components/wallet/AddMoneyModal', () => ({
 
 import { Wallets } from './Wallets';
 
+function render(ui: ReactElement) {
+  return rtlRender(<MoneyPrivacyProvider>{ui}</MoneyPrivacyProvider>);
+}
+
 const ts = (y: number, m: number, d: number, h = 12) => {
   const date = new Date(y, m, d, h, 0);
   return { toDate: () => date, toMillis: () => date.getTime() };
 };
 
-beforeEach(() => {
+beforeEach(async () => {
+  localStorage.clear();
+  await i18n.loadNamespaces(['common', 'wallet', 'help']);
+  await i18n.changeLanguage('en');
   mockStore.currentUser = { id: 'parent-1', familyId: 'family-1', role: 'owner' };
   mockStore.familyMembers = [
     { id: 'child-1', familyId: 'family-1', role: 'child', displayName: 'Ali' },

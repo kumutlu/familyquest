@@ -1,4 +1,5 @@
-import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import { fireEvent, render as rtlRender, screen, waitFor, within } from '@testing-library/react';
+import type { ReactElement } from 'react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const api = vi.hoisted(() => ({ reverseTransaction: vi.fn(), cancelPendingApproval: vi.fn() }));
@@ -16,6 +17,11 @@ vi.mock('../../store/useStore', () => ({
 
 import { ReversalHistoryPanel } from './ReversalHistoryPanel';
 import i18n from '../../i18n/config';
+import { MoneyPrivacyProvider } from '../privacy/MoneyPrivacyContext';
+
+function render(ui: ReactElement) {
+  return rtlRender(<MoneyPrivacyProvider>{ui}</MoneyPrivacyProvider>);
+}
 
 describe('ReversalHistoryPanel', () => {
   beforeEach(async () => {

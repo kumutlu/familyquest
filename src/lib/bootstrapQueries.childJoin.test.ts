@@ -32,3 +32,14 @@ describe('bootstrap plan — child join requests', () => {
     expect(bootstrapResourcesForRole('parent')).toContain('childJoinRequests')
   })
 })
+
+describe('bootstrap plan — child goal visibility', () => {
+  it('subscribes a child to the family goal collection so presentation filtering can retain family and own goals', () => {
+    const entry = planFor('child').find(item => item.resource === 'savingsGoals')
+
+    expect(entry).toBeDefined()
+    const plannedQuery = (entry?.target as any)._query
+    expect(plannedQuery.path.canonicalString()).toBe('families/family-1/savings_goals')
+    expect(plannedQuery.filters).toHaveLength(0)
+  })
+})

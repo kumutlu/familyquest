@@ -17,7 +17,9 @@ const mockStore: any = {
   retryBootstrap: vi.fn(),
 };
 
-vi.mock('../store/useStore', () => ({ useStore: () => mockStore }));
+vi.mock('../store/useStore', () => ({
+  useStore: (selector?: (state: typeof mockStore) => unknown) => selector ? selector(mockStore) : mockStore,
+}));
 const deleteCancelledGoal = vi.fn().mockResolvedValue(undefined);
 vi.mock('../lib/api', () => ({
   createGoal: vi.fn().mockResolvedValue(undefined),
@@ -40,6 +42,37 @@ beforeEach(() => {
 });
 
 describe('Goals list page', () => {
+  const roleVisibilityGoals = [
+    { id: 'family-holiday', goalId: 'family-holiday', title: 'Family holiday', kind: 'family', targetAmountPence: 10000, currentAmountPence: 0, status: 'active', version: 1 },
+    { id: 'my-bike', goalId: 'my-bike', title: 'My bike', kind: 'child', childId: 'child-1', targetAmountPence: 5000, currentAmountPence: 0, status: 'cancelled', version: 1 },
+    { id: 'sibling-console', goalId: 'sibling-console', title: "Sibling's console", kind: 'child', childId: 'child-2', targetAmountPence: 30000, currentAmountPence: 0, status: 'active', version: 1 },
+  ];
+
+  it('shows a child family goals and only their own child goals without management controls', async () => {
+    mockStore.currentUser = { id: 'child-1', familyId: 'family-1', role: 'child', displayName: 'Alice' };
+    mockStore.savingsGoals = roleVisibilityGoals;
+
+    render(<MemoryRouter><Goals /></MemoryRouter>);
+
+    expect(await screen.findByText('Family holiday')).toBeInTheDocument();
+    expect(screen.getByText('My bike')).toBeInTheDocument();
+    expect(screen.queryByText("Sibling's console")).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /new goal/i })).not.toBeInTheDocument();
+    expect(screen.queryByLabelText('Delete cancelled goal')).not.toBeInTheDocument();
+  });
+
+  it('shows a parent every family goal and management controls', async () => {
+    mockStore.savingsGoals = roleVisibilityGoals;
+
+    render(<MemoryRouter><Goals /></MemoryRouter>);
+
+    expect(await screen.findByText('Family holiday')).toBeInTheDocument();
+    expect(screen.getByText('My bike')).toBeInTheDocument();
+    expect(screen.getByText("Sibling's console")).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /new goal/i })).toBeInTheDocument();
+    expect(screen.getByLabelText('Delete cancelled goal')).toBeInTheDocument();
+  });
+
   it('renders empty family and child goal sections', () => {
     render(<MemoryRouter><Goals /></MemoryRouter>);
     expect(screen.getByText('Goals')).toBeInTheDocument();

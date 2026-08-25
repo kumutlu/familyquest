@@ -5,6 +5,7 @@ import { reverseTransaction } from '../../lib/reversalApi';
 import { useStore } from '../../store/useStore';
 import { formatPence, resolveFamilyCurrencyCode } from '../../i18n/format';
 import { Button } from '../ui/Button';
+import { WalletMoneyText } from '../privacy/WalletMoneyText';
 
 interface ReversalActionModalProps {
   open: boolean;
@@ -158,13 +159,21 @@ export function ReversalActionModal({ open, familyId, historyAction, onClose, on
         <h2 id="reversal-action-title" className="text-xl font-bold text-gray-900">
           {title}
         </h2>
-        <p className="mt-1 text-sm text-gray-600">{historyAction.summary}</p>
+        <p className="mt-1 text-sm text-gray-600">
+          <WalletMoneyText>{historyAction.summary}</WalletMoneyText>
+        </p>
         <div className="mt-4 space-y-2 rounded-2xl bg-gray-50 p-4">
           {historyAction.targets.map(target => (
             <div key={`${target.id}:${target.unit}`} className="text-sm">
               <p className="font-semibold text-gray-900">{target.label}</p>
-              <p className="text-gray-600">{t('modal.original', { value: signedValue(target.originalDelta, target.unit, currencyCode, formatPoints) })}</p>
-              {target.predictedBalance !== undefined && <p className="text-gray-600">{t('modal.predictedBalance', { value: balanceValue(target.predictedBalance, target.unit, currencyCode, formatPoints) })}</p>}
+              <p className="text-gray-600">
+                <WalletMoneyText>{t('modal.original', { value: signedValue(target.originalDelta, target.unit, currencyCode, formatPoints) })}</WalletMoneyText>
+              </p>
+              {target.predictedBalance !== undefined && (
+                <p className="text-gray-600">
+                  <WalletMoneyText>{t('modal.predictedBalance', { value: balanceValue(target.predictedBalance, target.unit, currencyCode, formatPoints) })}</WalletMoneyText>
+                </p>
+              )}
             </div>
           ))}
         </div>

@@ -14,6 +14,10 @@ import {
 import { currencyCodeFromSymbol, formatDate, formatPence } from '../../i18n/format';
 import { Badge } from '../ui/Badge';
 import { TransactionIcon } from './TransactionIcon';
+import { MoneyValue } from '../privacy/MoneyValue';
+import { useMoneyPrivacy } from '../privacy/MoneyPrivacyContext';
+import { WalletMoneyText } from '../privacy/WalletMoneyText';
+import { maskWalletMoneyText } from '../privacy/walletMoneyMask';
 
 interface TransactionCardProps {
   transaction: NormalizedTransaction;
@@ -27,6 +31,7 @@ export const TransactionCard = memo(function TransactionCard({
   onClick,
 }: TransactionCardProps) {
   const { t } = useTranslation(['wallet', 'reversals']);
+  const { isMoneyHidden, maskFormattedMoney } = useMoneyPrivacy();
 
   const {
     timestamp,
@@ -39,6 +44,7 @@ export const TransactionCard = memo(function TransactionCard({
     balanceAfter,
     isPending,
     isReversed,
+    unit,
   } = transaction;
 
   const amountPrefix = getTransactionAmountPrefix(transaction);
@@ -51,7 +57,15 @@ export const TransactionCard = memo(function TransactionCard({
   const date = new Date(timestamp);
   const timeStr = formatDate(date, undefined, { hour: '2-digit', minute: '2-digit' });
 
-  const ariaLabel = `${title}. ${subtitle ? `${subtitle}. ` : ''}${amountPrefix}${displayAmount}.`;
+  const isPrivateMoney = unit === 'money' && isMoneyHidden;
+  const accessibleTitle = isPrivateMoney
+    ? maskWalletMoneyText(title, maskFormattedMoney(title))
+    : title;
+  const accessibleSubtitle = isPrivateMoney
+    ? maskWalletMoneyText(subtitle, maskFormattedMoney(subtitle))
+    : subtitle;
+  const accessibleAmount = isPrivateMoney ? maskFormattedMoney(displayAmount) : displayAmount;
+  const ariaLabel = `${accessibleTitle}. ${accessibleSubtitle ? `${accessibleSubtitle}. ` : ''}${amountPrefix}${accessibleAmount}.`;
 
   return (
     <button
@@ -66,9 +80,11 @@ export const TransactionCard = memo(function TransactionCard({
           <TransactionIcon iconName={icon} size={20} />
         </div>
         <div className="min-w-0">
-          <p className="font-semibold text-gray-900 text-sm break-words">{title}</p>
+          <p className="font-semibold text-gray-900 text-sm break-words">
+            {unit === 'money' ? <WalletMoneyText>{title}</WalletMoneyText> : title}
+          </p>
           <p className="text-xs text-gray-400 mt-0.5 break-words">
-            {subtitle}
+            {unit === 'money' ? <WalletMoneyText>{subtitle}</WalletMoneyText> : subtitle}
             {subtitle && timeStr ? ' · ' : ''}
             {timeStr}
           </p>
@@ -78,7 +94,7 @@ export const TransactionCard = memo(function TransactionCard({
         <div className="flex items-center gap-2">
           <span className={`font-bold tabular-nums ${amountColor}`}>
             {amountPrefix}
-            {displayAmount}
+            {unit === 'money' ? <MoneyValue>{displayAmount}</MoneyValue> : displayAmount}
           </span>
           {isPending && (
             <Badge variant="warning" className="bg-warning-100 text-warning-700 text-xs">
@@ -93,7 +109,7 @@ export const TransactionCard = memo(function TransactionCard({
         </div>
         {balanceAfter !== undefined && (
           <span className="text-xs text-gray-400 mt-0.5">
-            {t('wallet:balance')}: {formatPence(balanceAfter, currencyCodeFromSymbol(currency))}
+            {t('wallet:balance')}: <MoneyValue>{formatPence(balanceAfter, currencyCodeFromSymbol(currency))}</MoneyValue>
           </span>
         )}
       </div>

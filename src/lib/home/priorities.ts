@@ -15,8 +15,7 @@
 export type ParentPriorityKind =
   | 'approvals'
   | 'goal_milestone'
-  | 'challenge_update'
-  | 'wallet_event';
+  | 'challenge_update';
 
 export type ChildFocusKind =
   | 'approval_waiting'
@@ -33,14 +32,11 @@ export interface ParentPriority {
   /** Kind-specific payload for rendering. */
   count?: number;
   title?: string;
-  memberId?: string;
-  memberName?: string;
   goalId?: string;
   goalTitle?: string;
   progressPct?: number;
   challengeId?: string;
   challengeTitle?: string;
-  amountPence?: number;
 }
 
 export interface ChildFocus {
@@ -69,8 +65,6 @@ export interface ParentPrioritiesInput {
   childJoinRequests?: any[];
   savingsGoals?: any[];
   challenges?: any[];
-  walletTransactions?: any[];
-  familyMembers?: any[];
   /** Feature flag mirror — Pet Box requests only count when enabled. */
   petBoxEnabled?: boolean;
 }
@@ -93,7 +87,6 @@ const KIND_ORDER: Record<string, number> = {
   approvals: 0,
   goal_milestone: 1,
   challenge_update: 2,
-  wallet_event: 3,
   // Child
   approval_waiting: 0,
   money_received: 1,
@@ -149,7 +142,7 @@ function sortAndCap<T extends { score: number; kind: string; id: string }>(items
 // Parent Living Home
 // ---------------------------------------------------------------------------
 
-export function selectParentPriorities(input: ParentPrioritiesInput, now: Date = new Date()): ParentPriority[] {
+export function selectParentPriorities(input: ParentPrioritiesInput, _now: Date = new Date()): ParentPriority[] {
   const items: ParentPriority[] = [];
 
   // 1. Approvals waiting — always the single most important thing for a parent.
@@ -189,29 +182,6 @@ export function selectParentPriorities(input: ParentPrioritiesInput, now: Date =
       score: 50,
       challengeId: challenge.id,
       challengeTitle: challenge.title,
-    });
-  }
-
-  // 4. Meaningful wallet event — money that arrived for a child in the last 24h.
-  const dayAgo = now.getTime() - 24 * 60 * 60 * 1000;
-  const recentDeposit = (input.walletTransactions ?? [])
-    .filter(tx => {
-      const type = String(tx?.type ?? '');
-      if (!(type === 'deposit' || type === 'request_payment')) return false;
-      return millis(tx?.timestamp ?? tx?.createdAt) >= dayAgo;
-    })
-    .sort((a, b) => millis(b?.timestamp ?? b?.createdAt) - millis(a?.timestamp ?? a?.createdAt))[0];
-  if (recentDeposit) {
-    const member = (input.familyMembers ?? []).find(m => m?.id === recentDeposit.childId);
-    items.push({
-      id: `wallet:${recentDeposit.id}`,
-      kind: 'wallet_event',
-      score: 40,
-      memberId: recentDeposit.childId,
-      memberName: member?.displayName,
-      amountPence: typeof recentDeposit.amountPence === 'number'
-        ? recentDeposit.amountPence
-        : Number(recentDeposit.amount ?? 0),
     });
   }
 

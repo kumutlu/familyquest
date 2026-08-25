@@ -7,6 +7,7 @@ import { useStore } from '../../store/useStore';
 import { formatDate } from '../../i18n/format';
 import { Badge } from '../ui/Badge';
 import { Button } from '../ui/Button';
+import { WalletMoneyText } from '../privacy/WalletMoneyText';
 import { ReversalActionModal } from './ReversalActionModal';
 
 const cancelKinds: Partial<Record<ReversalSourceKind, PendingApprovalKind>> = {
@@ -47,7 +48,9 @@ export function HistoryActionControl({ sourceKind, source }: { sourceKind: Rever
       {action.reversal ? (
         <div className="text-right text-xs text-gray-600">
           <Badge variant="danger">{sourceKind === 'petbox_request' ? t('refunded') : t('reversed')}</Badge>
-          <p className="mt-1 font-medium">{action.reversal.reason}</p>
+          <p className="mt-1 font-medium">
+            <WalletMoneyText>{action.reversal.reason}</WalletMoneyText>
+          </p>
           <p>{t('byActor', { actor: action.reversal.actorName, date: auditDate(action.reversal.occurredAt) })}</p>
         </div>
       ) : action.action ? (

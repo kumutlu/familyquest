@@ -176,6 +176,85 @@ describe('goals store + bootstrap wiring', () => {
     expect(listener(`families/fam1/savings_goals/${GOAL_ID}/contributions`)).toBeDefined();
   });
 
+  it('keeps only family and own goals in a child store and never plans sibling goal subcollections', () => {
+    authenticatedState('fam1', 'child');
+    useStore.getState().loadFamilyData('user1', 'fam1');
+
+    listener('families/fam1').next(familySnapshot());
+    listener('families/fam1/savings_goals').next(collectionSnapshot([
+      { id: 'family-goal', kind: 'family', title: 'Family holiday' },
+      { id: 'own-goal', kind: 'child', childId: 'user1', title: 'My bike' },
+      { id: 'sibling-goal', kind: 'child', childId: 'user2', title: 'Sibling console' },
+    ]));
+
+    expect(useStore.getState().savingsGoals.map(goal => goal.id)).toEqual([
+      'family-goal',
+      'own-goal',
+    ]);
+    expect(listener('families/fam1/savings_goals/family-goal/contributions')).toBeDefined();
+    expect(listener('families/fam1/savings_goals/own-goal/contributions')).toBeDefined();
+    expect(listeners.some(item => item.target.includes('/sibling-goal/'))).toBe(false);
+
+    listener('families/fam1/savings_goals/family-goal/contributions').next(
+      collectionSnapshot([{ id: 'family-contribution', goalId: 'family-goal' }]),
+    );
+    listener('families/fam1/savings_goals/own-goal/goal_ledger').next(
+      collectionSnapshot([{ id: 'own-ledger', goalId: 'own-goal' }]),
+    );
+    listener('families/fam1/savings_goals/family-goal/match_proposals').next(
+      collectionSnapshot([{ id: 'family-proposal', goalId: 'family-goal' }]),
+    );
+
+    expect(useStore.getState().goalContributions.map(item => item.id)).toEqual(['family-contribution']);
+    expect(useStore.getState().goalLedger.map(item => item.id)).toEqual(['own-ledger']);
+    expect(useStore.getState().goalMatchProposals.map(item => item.id)).toEqual(['family-proposal']);
+  });
+
+  it('normalizes a missing-kind legacy family goal before child filtering and sublistener planning', () => {
+    authenticatedState('fam1', 'child');
+    useStore.getState().loadFamilyData('user1', 'fam1');
+
+    listener('families/fam1').next(familySnapshot());
+    listener('families/fam1/savings_goals').next(collectionSnapshot([
+      { id: 'legacy-family', title: 'Legacy family holiday', targetAmount: 75, currentAmount: 12.5 },
+      { id: 'own-goal', kind: 'child', childId: 'user1', title: 'My bike' },
+      { id: 'sibling-goal', kind: 'child', childId: 'user2', title: 'Sibling console' },
+    ]));
+
+    expect(useStore.getState().savingsGoals).toEqual([
+      expect.objectContaining({
+        id: 'legacy-family',
+        goalId: 'legacy-family',
+        kind: 'family',
+        targetAmountPence: 7500,
+        currentAmountPence: 1250,
+      }),
+      expect.objectContaining({ id: 'own-goal', kind: 'child', childId: 'user1' }),
+    ]);
+    expect(listener('families/fam1/savings_goals/legacy-family/contributions')).toBeDefined();
+    expect(listeners.some(item => item.target.includes('/sibling-goal/'))).toBe(false);
+  });
+
+  it('keeps every family child goal and its subcollection plan for a parent', () => {
+    authenticatedState('fam1', 'parent');
+    useStore.getState().loadFamilyData('user1', 'fam1');
+
+    listener('families/fam1').next(familySnapshot());
+    listener('families/fam1/savings_goals').next(collectionSnapshot([
+      { id: 'family-goal', kind: 'family', title: 'Family holiday' },
+      { id: 'child-one-goal', kind: 'child', childId: 'child1', title: 'First bike' },
+      { id: 'child-two-goal', kind: 'child', childId: 'child2', title: 'Second console' },
+    ]));
+
+    expect(useStore.getState().savingsGoals.map(goal => goal.id)).toEqual([
+      'family-goal',
+      'child-one-goal',
+      'child-two-goal',
+    ]);
+    expect(listener('families/fam1/savings_goals/child-one-goal/goal_ledger')).toBeDefined();
+    expect(listener('families/fam1/savings_goals/child-two-goal/goal_ledger')).toBeDefined();
+  });
+
   it('goalContributionBreakdown groups by type/ownerId from the goal ledger', () => {
     const contributions = [
       { id: 'c1', type: 'child_contribution', ownerId: 'user1', ownerType: 'child', amountPence: 500 },

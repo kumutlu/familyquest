@@ -52,7 +52,7 @@ export function PetBoxConfirmationModal({
           <div className="space-y-3 mb-6 bg-gray-50 p-4 rounded-xl border border-gray-100">
             <div className="flex justify-between text-sm">
               <span className="text-gray-500">{t('currentBalance')}</span>
-              <span className="font-bold text-gray-900"><CurrencyDisplay amountPence={currentBalance} /></span>
+              <span className="font-bold text-gray-900"><CurrencyDisplay amountPence={currentBalance} privacy="wallet" /></span>
             </div>
             <div className="flex justify-between text-sm">
               <span className="text-gray-500">{t('donationAmount')}</span>
@@ -61,7 +61,7 @@ export function PetBoxConfirmationModal({
             <div className="pt-3 mt-3 border-t border-gray-200 flex justify-between">
               <span className="font-bold text-gray-700">{t('newBalance')}</span>
               <span className={`font-bold ${isInsufficient ? 'text-danger-600' : 'text-success-600'}`}>
-                <CurrencyDisplay amountPence={newBalance} />
+                <CurrencyDisplay amountPence={newBalance} privacy="wallet" />
               </span>
             </div>
           </div>

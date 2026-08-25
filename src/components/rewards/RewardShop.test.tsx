@@ -1,4 +1,5 @@
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { fireEvent, render as rtlRender, screen, waitFor } from '@testing-library/react';
+import type { ReactElement } from 'react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 // Initialise i18n synchronously (mirrors the other page suites) so
 // useTranslation never suspends during render.
@@ -15,6 +16,11 @@ const useStoreMock = vi.fn();
 vi.mock('../../store/useStore', () => ({ useStore: (...args: any[]) => useStoreMock(...args) }));
 
 import { Rewards } from '../../pages/Rewards';
+import { MoneyPrivacyProvider } from '../privacy/MoneyPrivacyContext';
+
+function render(ui: ReactElement) {
+  return rtlRender(<MoneyPrivacyProvider>{ui}</MoneyPrivacyProvider>);
+}
 
 /**
  * Freeze-guard-safe point fixture builder. The gamification freeze guard

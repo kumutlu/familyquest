@@ -1,5 +1,7 @@
-import { render, screen } from '@testing-library/react';
+import { render as rtlRender, screen } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
+import type { ReactElement } from 'react';
+import { MoneyPrivacyProvider } from '../privacy/MoneyPrivacyContext';
 
 // Mock the heavy/store-dependent children so we can test focus behaviour in isolation.
 vi.mock('../ui/CurrencyDisplay', () => ({
@@ -10,6 +12,16 @@ vi.mock('../reversals/HistoryActionControl', () => ({
 }));
 
 import { TransactionDetailsModal } from './TransactionDetailsModal';
+
+function render(ui: ReactElement) {
+  const result = rtlRender(<MoneyPrivacyProvider>{ui}</MoneyPrivacyProvider>);
+  return {
+    ...result,
+    rerender: (next: ReactElement) => result.rerender(
+      <MoneyPrivacyProvider>{next}</MoneyPrivacyProvider>,
+    ),
+  };
+}
 
 function Harness({ open }: { open: boolean }) {
   return (

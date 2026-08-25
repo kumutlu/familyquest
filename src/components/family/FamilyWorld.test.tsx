@@ -5,6 +5,8 @@ import '@testing-library/jest-dom/vitest';
 import { FamilyWorld } from './FamilyWorld';
 import type { FamilyWorldViewModel } from '../../lib/familyWorld/types';
 import { BrowserRouter } from 'react-router-dom';
+import { MoneyPrivacyProvider } from '../privacy/MoneyPrivacyContext';
+import { MoneyPrivacyToggle } from '../privacy/MoneyPrivacyToggle';
 
 describe('FamilyWorld Component', () => {
   beforeEach(async () => {
@@ -39,7 +41,7 @@ describe('FamilyWorld Component', () => {
         xp: 350,
         points: 50,
         streakDays: 7,
-        walletBalanceFormatted: '50 pts',
+        walletBalanceFormatted: '£43.21',
         canViewWallet: true,
         isSelf: false,
         canSendMoney: true,
@@ -56,7 +58,7 @@ describe('FamilyWorld Component', () => {
         xp: 350,
         points: 50,
         streakDays: 7,
-        walletBalanceFormatted: '50 pts',
+        walletBalanceFormatted: '£43.21',
         canViewWallet: true,
         isSelf: false,
         canSendMoney: true,
@@ -109,7 +111,10 @@ describe('FamilyWorld Component', () => {
   const renderComponent = (vm: FamilyWorldViewModel = baseViewModel, onClaimQuest = vi.fn()) => {
     return render(
       <BrowserRouter>
-        <FamilyWorld viewModel={vm} onClaimQuest={onClaimQuest} />
+        <MoneyPrivacyProvider>
+          <MoneyPrivacyToggle />
+          <FamilyWorld viewModel={vm} onClaimQuest={onClaimQuest} />
+        </MoneyPrivacyProvider>
       </BrowserRouter>
     );
   };
@@ -140,6 +145,23 @@ describe('FamilyWorld Component', () => {
     expect(screen.getAllByText('Dash').length).toBeGreaterThan(0);
     expect(screen.getByText(/Send money/i)).toBeInTheDocument();
     expect(screen.getByText(/View quests/i)).toBeInTheDocument();
+  });
+
+  it('masks the exact source-wallet balance in the real member detail sheet', async () => {
+    await act(async () => {
+      renderComponent();
+    });
+
+    await act(async () => {
+      fireEvent.click(screen.getByLabelText(/View Dash/i));
+    });
+    expect(screen.getByText('£43.21')).toBeInTheDocument();
+
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: 'Hide money amounts' }));
+    });
+    expect(screen.queryByText('£43.21')).not.toBeInTheDocument();
+    expect(screen.getByText('£••••')).toBeInTheDocument();
   });
 
   it('renders multi-child layout with natural spacing', async () => {

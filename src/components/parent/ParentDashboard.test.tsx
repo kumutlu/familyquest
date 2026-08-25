@@ -1,4 +1,5 @@
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { fireEvent, render as rtlRender, screen, waitFor } from '@testing-library/react';
+import type { ReactElement } from 'react';
 import { MemoryRouter } from 'react-router-dom';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import i18n from '../../i18n/config';
@@ -52,6 +53,11 @@ vi.mock('../dashboard/RewardsSummaryCard', () => ({
 }));
 
 import { ParentDashboard } from './ParentDashboard';
+import { MoneyPrivacyProvider } from '../privacy/MoneyPrivacyContext';
+
+function render(ui: ReactElement) {
+  return rtlRender(<MoneyPrivacyProvider>{ui}</MoneyPrivacyProvider>);
+}
 
 function baseState() {
   return {
@@ -180,7 +186,9 @@ describe('ParentDashboard', () => {
       ...store.state,
       familyMembers: [{ id: 'child-1', role: 'child', isManaged: true }],
     };
-    rendered.rerender(<MemoryRouter><ParentDashboard /></MemoryRouter>);
+    rendered.rerender(
+      <MoneyPrivacyProvider><MemoryRouter><ParentDashboard /></MemoryRouter></MoneyPrivacyProvider>,
+    );
     expect(screen.queryByRole('dialog', { name: 'Set up your family' })).not.toBeInTheDocument();
   });
 

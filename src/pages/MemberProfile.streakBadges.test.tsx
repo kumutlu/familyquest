@@ -2,6 +2,7 @@ import { render, screen } from '@testing-library/react';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import i18n from '../i18n/config';
+import { MoneyPrivacyProvider } from '../components/privacy/MoneyPrivacyContext';
 
 const store = vi.hoisted(() => ({ state: {} as any }));
 
@@ -33,11 +34,13 @@ function readySummary(overrides: Record<string, unknown> = {}) {
 
 function renderProfile(memberId = 'child-1') {
   render(
-    <MemoryRouter initialEntries={[`/family/${memberId}`]}>
-      <Routes>
-        <Route path="/family/:id" element={<MemberProfile />} />
-      </Routes>
-    </MemoryRouter>,
+    <MoneyPrivacyProvider>
+      <MemoryRouter initialEntries={[`/family/${memberId}`]}>
+        <Routes>
+          <Route path="/family/:id" element={<MemberProfile />} />
+        </Routes>
+      </MemoryRouter>
+    </MoneyPrivacyProvider>,
   );
 }
 

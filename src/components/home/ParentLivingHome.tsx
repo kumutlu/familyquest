@@ -15,10 +15,13 @@ import { TactileCard } from '../queki/TactileCard';
 import { LivingHomeCard } from '../queki/LivingHomeCard';
 import { CharacterFrame } from '../queki/CharacterFrame';
 import { QuekiMascot } from '../queki/QuekiMascot';
-import { BalanceChip } from '../queki/semanticDisplays';
 import { StatusBadge } from '../queki/StatusBadge';
 import { BottomSheet } from '../queki/BottomSheet';
 import { TactileButton } from '../queki/TactileButton';
+import { findMemberSummary, resolveGamificationView } from '../../lib/gamificationAdapters';
+import { MoneyPrivacyToggle } from '../privacy/MoneyPrivacyToggle';
+import { MoneyValue } from '../privacy/MoneyValue';
+import { useMoneyPrivacy } from '../privacy/MoneyPrivacyContext';
 
 /**
  * Parent Living Home — Queki v2 Wave 1.
@@ -34,7 +37,6 @@ const PRIORITY_TESTID: Record<ParentPriority['kind'], string> = {
   approvals: 'priority-approvals',
   goal_milestone: 'priority-goal-milestone',
   challenge_update: 'priority-challenge',
-  wallet_event: 'priority-wallet-event',
 };
 
 export function ParentLivingHome() {
@@ -58,7 +60,7 @@ export function ParentLivingHome() {
     childJoinRequests,
     savingsGoals,
     challenges,
-    walletTransactions,
+    gamificationSummaries,
     bootstrapStatus,
     retryFeature,
   } = useStore();
@@ -67,6 +69,10 @@ export function ParentLivingHome() {
   const [isAddChildOpen, setIsAddChildOpen] = useState(false);
 
   const children = useMemo(() => familyMembers.filter(m => m?.role === 'child'), [familyMembers]);
+  const resolveCrewLevel = (child: any) => {
+    const summary = findMemberSummary(gamificationSummaries, null, child.id);
+    return resolveGamificationView(summary, child).level;
+  };
   const isSingleChild = children.length === 1;
   const canAccessPetBox = isPetBoxEnabled(familyData);
 
@@ -105,11 +111,9 @@ export function ParentLivingHome() {
         childJoinRequests,
         savingsGoals,
         challenges,
-        walletTransactions,
-        familyMembers,
         petBoxEnabled: true,
       }),
-    [taskCompletions, transferRequests, moneyRequests, petboxRequests, profileUpdateRequests, goalRequests, childJoinRequests, savingsGoals, challenges, walletTransactions, familyMembers],
+    [taskCompletions, transferRequests, moneyRequests, petboxRequests, profileUpdateRequests, goalRequests, childJoinRequests, savingsGoals, challenges],
   );
 
   const approvalsCount = priorities.find(p => p.kind === 'approvals')?.count ?? 0;
@@ -129,7 +133,10 @@ export function ParentLivingHome() {
   const focus = getFocusModeState({ familyMembers, rewards, tasks, joinRequests: [], currentUser });
   if (focus.isFocusMode) {
     return (
-      <div data-testid="dashboard-focus-mode">
+      <div className="space-y-3" data-testid="dashboard-focus-mode">
+        <div className="flex justify-end">
+          <MoneyPrivacyToggle className="qk-bg-card qk-shadow-card" />
+        </div>
         <FocusModeDashboard onAddChild={() => setIsAddChildOpen(true)} />
         {isAddChildOpen && (
           <AddChildModal familyId={currentUser.familyId} onClose={() => setIsAddChildOpen(false)} />
@@ -185,21 +192,6 @@ export function ParentLivingHome() {
             onPress={() => navigate('/tasks')}
           />
         );
-      case 'wallet_event':
-        return (
-          <LivingHomeCard
-            key={priority.id}
-            data-testid={PRIORITY_TESTID[priority.kind]}
-            tone="mint"
-            icon={<Wallet size={22} />}
-            title={t('parent.walletEvent.title', {
-              name: priority.memberName ?? t('family:memberFallback', { defaultValue: 'A family member' }),
-              amount: formatMoney(priority.amountPence ?? 0),
-            })}
-            description={t('parent.walletEvent.description')}
-            onPress={() => navigate('/wallets')}
-          />
-        );
     }
   };
 
@@ -249,31 +241,36 @@ export function ParentLivingHome() {
         </div>
 
         {/* Family wallet aggregate — real money keeps its mint identity even on brand gradient. */}
-        <Link
-          to="/wallets"
-          aria-label={t('parent.openFamilyWallets', { defaultValue: 'Open Family Wallets' })}
-          className="group mt-4 flex cursor-pointer items-center gap-3 rounded-2xl p-2 -m-2 transition-colors hover:bg-white/10 active:scale-[0.99] focus:outline-none focus-visible:ring-2 focus-visible:ring-white/80"
-        >
-          <span aria-hidden="true" className="flex h-9 w-9 items-center justify-center rounded-xl bg-white/15">
-            <Wallet size={18} />
-          </span>
-          <div>
-            <p className="text-meta font-semibold uppercase tracking-wide opacity-75">
-              {t('parent.familyBalanceLabel')}
-            </p>
-            <p className="font-balance tabular-nums" data-testid="parent-family-balance">
-              {formatMoney(
-                (myWallet?.balance ?? 0) +
-                  (childWallets ?? []).reduce((sum: number, wallet: any) => sum + Number(wallet?.balance ?? 0), 0),
-              )}
-            </p>
-          </div>
-          <ChevronRight
-            size={20}
-            aria-hidden="true"
-            className="ml-auto opacity-70 transition-transform group-hover:translate-x-0.5 group-hover:opacity-100"
-          />
-        </Link>
+        <div className="mt-4 flex items-center gap-2">
+          <Link
+            to="/wallets"
+            aria-label={t('parent.openFamilyWallets', { defaultValue: 'Open Family Wallets' })}
+            className="group -m-2 flex min-w-0 flex-1 cursor-pointer items-center gap-3 rounded-2xl p-2 transition-colors hover:bg-white/10 active:scale-[0.99] focus:outline-none focus-visible:ring-2 focus-visible:ring-white/80"
+          >
+            <span aria-hidden="true" className="flex h-9 w-9 items-center justify-center rounded-xl bg-white/15">
+              <Wallet size={18} />
+            </span>
+            <div>
+              <p className="text-meta font-semibold uppercase tracking-wide opacity-75">
+                {t('parent.familyBalanceLabel')}
+              </p>
+              <p className="font-balance tabular-nums" data-testid="parent-family-balance">
+                <MoneyValue>
+                  {formatMoney(
+                    (myWallet?.balance ?? 0) +
+                      (childWallets ?? []).reduce((sum: number, wallet: any) => sum + Number(wallet?.balance ?? 0), 0),
+                  )}
+                </MoneyValue>
+              </p>
+            </div>
+            <ChevronRight
+              size={20}
+              aria-hidden="true"
+              className="ml-auto opacity-70 transition-transform group-hover:translate-x-0.5 group-hover:opacity-100"
+            />
+          </Link>
+          <MoneyPrivacyToggle className="shrink-0 bg-white/15 text-white hover:bg-white/25 hover:text-white focus-visible:ring-white/80 focus-visible:ring-offset-0" />
+        </div>
       </Surface>
 
       {/* ---- Priority cards (max 3, deterministic) -------------------------- */}
@@ -303,20 +300,24 @@ export function ParentLivingHome() {
         <section aria-label={t('parent.childrenHeading')}>
           <h2 className="mb-3 text-card-title qk-text-primary">{t('parent.childrenHeading')}</h2>
           {isSingleChild ? (
-            <SingleChildOverview child={children[0]} />
+            <SingleChildOverview child={children[0]} level={resolveCrewLevel(children[0])} />
           ) : (
             <div className="flex gap-3 overflow-x-auto pb-2" data-testid="children-overview-multi">
-              {children.map(child => (
-                <TactileCard
-                  key={child.id}
-                  onPress={() => navigate(`/family/${child.id}`)}
-                  className="flex min-w-36 flex-col items-center gap-2 p-4"
-                >
-                  <CharacterFrame src={child.avatarUrl} fallback={child.displayName} size={56} ringColor={child.colour} />
-                  <p className="text-body font-bold qk-text-primary">{child.displayName}</p>
-                  <StatusBadge tone="xp">Lv {child.level ?? 1}</StatusBadge>
-                </TactileCard>
-              ))}
+              {children.map(child => {
+                const level = resolveCrewLevel(child);
+                return (
+                  <TactileCard
+                    key={child.id}
+                    onPress={() => navigate(`/family/${child.id}`)}
+                    className="flex min-w-36 flex-col items-center gap-2 p-4"
+                    data-testid={`crew-level-${child.id}`}
+                  >
+                    <CharacterFrame src={child.avatarUrl} fallback={child.displayName} size={56} ringColor={child.colour} />
+                    <p className="text-body font-bold qk-text-primary">{child.displayName}</p>
+                    <StatusBadge tone="xp">Level {level}</StatusBadge>
+                  </TactileCard>
+                );
+              })}
             </div>
           )}
         </section>
@@ -344,7 +345,7 @@ export function ParentLivingHome() {
             {childWalletTotal === undefined ? <p className="mt-2 text-body qk-text-secondary">{t('parent.familyTools.unavailable')}</p>
               : childWallets.length === 0 ? <p className="mt-2 text-body qk-text-secondary">{t('parent.familyTools.noChildWallets')}</p>
               : <>
-                  <p className="mt-2 font-balance tabular-nums text-mint-700">{formatMoney(childWalletTotal)}</p>
+                  <p className="mt-2 font-balance tabular-nums text-mint-700"><MoneyValue>{formatMoney(childWalletTotal)}</MoneyValue></p>
                   <p className="text-meta font-semibold qk-text-secondary">{t('parent.familyTools.totalChildBalance')}</p>
                 </>}
           </TactileCard>
@@ -387,9 +388,14 @@ function FamilyToolIcon({ children, tone }: { children: React.ReactNode; tone: '
   return <span aria-hidden="true" className={`flex h-12 w-12 items-center justify-center rounded-2xl ${colours[tone]}`}>{children}</span>;
 }
 
-function SingleChildOverview({ child }: { child: any }) {
+function SingleChildOverview({ child, level }: { child: any; level: number }) {
   const { t } = useTranslation('home');
   const navigate = useNavigate();
+  const { isMoneyHidden, maskFormattedMoney } = useMoneyPrivacy();
+  const formattedWalletBalance = formatMoney(Number(child.walletBalancePence ?? 0));
+  const accessibleWalletBalance = isMoneyHidden
+    ? maskFormattedMoney(formattedWalletBalance)
+    : formattedWalletBalance;
   return (
     <TactileCard
       onPress={() => navigate(`/family/${child.id}`)}
@@ -400,10 +406,20 @@ function SingleChildOverview({ child }: { child: any }) {
       <div className="min-w-0 flex-1">
         <p className="text-card-title qk-text-primary">{child.displayName}</p>
         <p className="mt-0.5 text-meta qk-text-secondary">
-          {t('parent.childSubtitle', { level: child.level ?? 1, points: child.rewardPoints ?? 0 })}
+          {t('parent.childSubtitle', { level, points: child.rewardPoints ?? 0 })}
         </p>
       </div>
-      <BalanceChip balancePence={Number(child.walletBalancePence ?? 0)} />
+      <span
+        className="inline-flex items-center gap-1.5 rounded-full bg-mint-50 py-1 pl-1.5 pr-3"
+        aria-label={`Wallet balance ${accessibleWalletBalance}`}
+      >
+        <span aria-hidden="true" className="flex h-6 w-6 items-center justify-center rounded-full bg-mint-500 text-white">
+          <Wallet size={13} />
+        </span>
+        <MoneyValue className="font-balance text-base tabular-nums font-extrabold text-mint-700">
+          {formattedWalletBalance}
+        </MoneyValue>
+      </span>
     </TactileCard>
   );
 }

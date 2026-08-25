@@ -1,6 +1,8 @@
 import { act, render, screen } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import i18n from '../../i18n/config';
+import { MoneyPrivacyProvider } from '../privacy/MoneyPrivacyContext';
+import { MoneyPrivacyToggle } from '../privacy/MoneyPrivacyToggle';
 
 const useStoreMock = vi.fn();
 vi.mock('../../store/useStore', () => ({ useStore: (...args: any[]) => useStoreMock(...args) }));
@@ -24,32 +26,66 @@ function tx(overrides: Record<string, unknown> & { id: string }) {
 
 function renderMoment(transactions: any[]) {
   return render(
-    <TransferArrivalMoment
-      transactions={transactions}
-      currentUserId="me"
-      familyMembers={members}
-      familyData={{}}
-      currencyCode="GBP"
-    />,
+    <MoneyPrivacyProvider>
+      <TransferArrivalMoment
+        transactions={transactions}
+        currentUserId="me"
+        familyMembers={members}
+        familyData={{}}
+        currencyCode="GBP"
+      />
+    </MoneyPrivacyProvider>,
   );
 }
 
 describe('TransferArrivalMoment (Wave 3 recipient feedback)', () => {
   beforeEach(async () => {
     vi.clearAllMocks();
-    await i18n.loadNamespaces(['wallet']);
+    localStorage.clear();
+    await i18n.loadNamespaces(['common', 'wallet']);
+  });
+
+  it('masks a newly arrived stored transfer and restores it when privacy is toggled back', () => {
+    const props = {
+      currentUserId: 'me',
+      familyMembers: members,
+      familyData: {},
+      currencyCode: 'GBP' as const,
+    };
+    const { rerender } = render(
+      <MoneyPrivacyProvider>
+        <MoneyPrivacyToggle />
+        <TransferArrivalMoment transactions={[]} {...props} />
+      </MoneyPrivacyProvider>,
+    );
+
+    rerender(
+      <MoneyPrivacyProvider>
+        <MoneyPrivacyToggle />
+        <TransferArrivalMoment transactions={[tx({ id: 'private-arrival', amountPence: 76_543 })]} {...props} />
+      </MoneyPrivacyProvider>,
+    );
+    expect(screen.getByTestId('transfer-arrival-text')).toHaveTextContent('£765.43');
+
+    act(() => screen.getByRole('button', { name: 'Hide money amounts' }).click());
+    expect(screen.getByTestId('transfer-arrival-text')).not.toHaveTextContent('765.43');
+
+    act(() => screen.getByRole('button', { name: 'Show money amounts' }).click());
+    expect(screen.getByTestId('transfer-arrival-text')).toHaveTextContent('£765.43');
   });
 
   it('never replays history on load or reload (baseline snapshot)', () => {
     const { rerender } = renderMoment([tx({ id: 't1' }), tx({ id: 't2' })]);
     rerender(
-      <TransferArrivalMoment
-        transactions={[tx({ id: 't1' }), tx({ id: 't2' })]}
-        currentUserId="me"
-        familyMembers={members}
-        familyData={{}}
-        currencyCode="GBP"
-      />,
+      <MoneyPrivacyProvider>
+        <TransferArrivalMoment
+          transactions={[tx({ id: 't1' }), tx({ id: 't2' })]}
+          currentUserId="me"
+          familyMembers={members}
+          familyData={{}}
+          currencyCode="GBP"
+        />
+      </MoneyPrivacyProvider>,
     );
     expect(screen.queryByTestId('transfer-arrival-moment')).not.toBeInTheDocument();
   });
@@ -60,13 +96,15 @@ describe('TransferArrivalMoment (Wave 3 recipient feedback)', () => {
 
     act(() => {
       rerender(
-        <TransferArrivalMoment
-          transactions={[tx({ id: 'new-1' })]}
-          currentUserId="me"
-          familyMembers={members}
-          familyData={{}}
-          currencyCode="GBP"
-        />,
+        <MoneyPrivacyProvider>
+          <TransferArrivalMoment
+            transactions={[tx({ id: 'new-1' })]}
+            currentUserId="me"
+            familyMembers={members}
+            familyData={{}}
+            currencyCode="GBP"
+          />
+        </MoneyPrivacyProvider>,
       );
     });
     expect(screen.getByTestId('transfer-arrival-moment')).toBeInTheDocument();
@@ -76,13 +114,15 @@ describe('TransferArrivalMoment (Wave 3 recipient feedback)', () => {
     // The same document appearing again in a later snapshot must not re-fire.
     act(() => {
       rerender(
-        <TransferArrivalMoment
-          transactions={[tx({ id: 'new-1' })]}
-          currentUserId="me"
-          familyMembers={members}
-          familyData={{}}
-          currencyCode="GBP"
-        />,
+        <MoneyPrivacyProvider>
+          <TransferArrivalMoment
+            transactions={[tx({ id: 'new-1' })]}
+            currentUserId="me"
+            familyMembers={members}
+            familyData={{}}
+            currencyCode="GBP"
+          />
+        </MoneyPrivacyProvider>,
       );
     });
     expect(screen.getAllByTestId('transfer-arrival-moment')).toHaveLength(1);
@@ -92,17 +132,19 @@ describe('TransferArrivalMoment (Wave 3 recipient feedback)', () => {
     const { rerender } = renderMoment([]);
     act(() => {
       rerender(
-        <TransferArrivalMoment
-          transactions={[
-            tx({ id: 'out-1', type: 'transfer_out' }),
-            tx({ id: 'dep-1', type: 'deposit' }),
-            tx({ id: 'other-child', childId: 'ali' }),
-          ]}
-          currentUserId="me"
-          familyMembers={members}
-          familyData={{}}
-          currencyCode="GBP"
-        />,
+        <MoneyPrivacyProvider>
+          <TransferArrivalMoment
+            transactions={[
+              tx({ id: 'out-1', type: 'transfer_out' }),
+              tx({ id: 'dep-1', type: 'deposit' }),
+              tx({ id: 'other-child', childId: 'ali' }),
+            ]}
+            currentUserId="me"
+            familyMembers={members}
+            familyData={{}}
+            currencyCode="GBP"
+          />
+        </MoneyPrivacyProvider>,
       );
     });
     expect(screen.queryByTestId('transfer-arrival-moment')).not.toBeInTheDocument();
@@ -112,13 +154,15 @@ describe('TransferArrivalMoment (Wave 3 recipient feedback)', () => {
     const { rerender } = renderMoment([]);
     act(() => {
       rerender(
-        <TransferArrivalMoment
-          transactions={[tx({ id: 'new-1' })]}
-          currentUserId="me"
-          familyMembers={members}
-          familyData={{}}
-          currencyCode="GBP"
-        />,
+        <MoneyPrivacyProvider>
+          <TransferArrivalMoment
+            transactions={[tx({ id: 'new-1' })]}
+            currentUserId="me"
+            familyMembers={members}
+            familyData={{}}
+            currencyCode="GBP"
+          />
+        </MoneyPrivacyProvider>,
       );
     });
     act(() => {

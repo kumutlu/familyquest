@@ -14,6 +14,7 @@ import { findMemberSummary, resolveGamificationView } from '../lib/gamificationA
 import type { GamificationSummaryV1 } from '../domain/gamification/types';
 import { formatMoney } from '../lib/walletPresentation';
 import { isParentRole } from '../lib/roles';
+import { MoneyValue } from '../components/privacy/MoneyValue';
 
 export function MemberProfile() {
   const { t } = useTranslation(['profile', 'dashboard']);
@@ -111,7 +112,7 @@ export function MemberProfile() {
               <div>
                 <p className="text-sm font-bold text-teal-800 dark:text-teal-200">Wallet</p>
                 <p data-testid="member-wallet-balance" className="text-xl font-black tabular-nums text-gray-900 dark:text-white">
-                  {formatMoney(Number(wallet?.balance ?? 0))}
+                  <MoneyValue>{formatMoney(Number(wallet?.balance ?? 0))}</MoneyValue>
                 </p>
               </div>
             </div>

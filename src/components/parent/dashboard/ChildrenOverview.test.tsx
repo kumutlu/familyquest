@@ -3,8 +3,11 @@ import { MemoryRouter } from 'react-router-dom';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import i18n from '../../../i18n/config';
 import { ChildrenOverview } from './ChildrenOverview';
+import { MoneyPrivacyProvider } from '../../privacy/MoneyPrivacyContext';
 
-const withRouter = (ui: React.ReactNode) => <MemoryRouter>{ui}</MemoryRouter>;
+const withRouter = (ui: React.ReactNode) => (
+  <MoneyPrivacyProvider><MemoryRouter>{ui}</MemoryRouter></MoneyPrivacyProvider>
+);
 
 const store = vi.hoisted(() => ({
   state: {

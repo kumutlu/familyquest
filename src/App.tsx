@@ -30,6 +30,7 @@ import { HelpSearchResults } from './help/pages/HelpSearchResults';
 import { useStore, logAuthTrace } from './store/useStore';
 import { initForegroundMessaging } from './lib/pushNotifications';
 import { RequestDetailProvider } from './components/requests/RequestDetailContext';
+import { MoneyPrivacyProvider } from './components/privacy/MoneyPrivacyContext';
 import { Suspense, useEffect } from 'react';
 import { consumeGoogleRedirectResult } from './lib/googleRedirectAuth';
 import { markStartupStage } from './startupDiagnostics';
@@ -65,9 +66,8 @@ function App() {
   return (
     <Suspense fallback={<div data-testid="route-translations-loading" aria-busy="true" className="min-h-screen bg-gray-50" />}>
       <Router>
-        <RequestDetailProvider>
-          <E2EBootstrapDiagnostics />
-          <Routes>
+        <E2EBootstrapDiagnostics />
+        <Routes>
           <Route path="/login" element={<Login />} />
           <Route path="/signup" element={<Signup />} />
           <Route path="/join-family" element={<JoinFamily />} />
@@ -86,7 +86,13 @@ function App() {
           <Route path="/terms" element={<TermsOfService />} />
           <Route path="/account-deletion" element={<AccountDeletion />} />
 
-          <Route path="/" element={<AppLayout />}>
+          <Route path="/" element={
+            <MoneyPrivacyProvider>
+              <RequestDetailProvider>
+                <AppLayout />
+              </RequestDetailProvider>
+            </MoneyPrivacyProvider>
+          }>
             <Route index element={<Dashboard />} />
             <Route path="family" element={<Family />} />
             <Route path="family/:id" element={<MemberProfile />} />
@@ -111,8 +117,7 @@ function App() {
             <Route path="help/category/:categoryId" element={<HelpCategoryPage />} />
             <Route path="help/:articleId" element={<HelpArticlePage />} />
           </Route>
-          </Routes>
-        </RequestDetailProvider>
+        </Routes>
       </Router>
     </Suspense>
   );

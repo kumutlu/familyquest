@@ -1,6 +1,10 @@
-import { fireEvent, render, screen } from '@testing-library/react';
+import { fireEvent, render as rtlRender, screen, within } from '@testing-library/react';
 import { describe, expect, it, vi, beforeEach } from 'vitest';
 import { MemoryRouter } from 'react-router-dom';
+import type { ReactElement } from 'react';
+import i18n from '../i18n/config';
+import { MoneyPrivacyProvider } from '../components/privacy/MoneyPrivacyContext';
+import { MoneyPrivacyToggle } from '../components/privacy/MoneyPrivacyToggle';
 
 // Mutable store so each test can supply its own slice of state.
 const mockStore: any = {
@@ -18,7 +22,8 @@ const mockStore: any = {
 };
 
 vi.mock('../store/useStore', () => ({
-  useStore: () => mockStore,
+  useStore: (selector?: (state: typeof mockStore) => unknown) =>
+    typeof selector === 'function' ? selector(mockStore) : mockStore,
 }));
 vi.mock('../components/wallet/TransactionDetailsModal', () => ({
   TransactionDetailsModal: ({ isOpen, transaction }: any) =>
@@ -33,10 +38,20 @@ vi.mock('../components/wallet/RequestMoneyModal', () => ({
 
 import { Wallet } from './Wallet';
 
+function render(ui: ReactElement) {
+  return rtlRender(<MoneyPrivacyProvider>{ui}</MoneyPrivacyProvider>);
+}
+
 const daysAgo = (n: number) => ({ toDate: () => new Date(Date.now() - n * 86_400_000) });
 const thisMonth = () => ({ toDate: () => new Date() });
+const previousMonth = () => ({
+  toDate: () => new Date(new Date().getFullYear(), new Date().getMonth() - 1, 15),
+});
 
-beforeEach(() => {
+beforeEach(async () => {
+  localStorage.clear();
+  await i18n.loadNamespaces(['common', 'wallet', 'help']);
+  await i18n.changeLanguage('en');
   mockStore.currentUser = { id: 'child-1', familyId: 'family-1', role: 'child', displayName: 'Muhammed Osman' };
   mockStore.myWallet = { balance: 0 };
   mockStore.familyData = { id: 'family-1', currency: '£' };
@@ -47,6 +62,97 @@ beforeEach(() => {
   mockStore.bootstrapError = null;
   mockStore.featureErrors = {};
   mockStore.bootstrapStatus = {};
+});
+
+describe('Wallet money privacy', () => {
+  it('toggles stored balance, insight, pending, and transaction amounts without aria leakage', () => {
+    mockStore.myWallet = { balance: 64_219 };
+    mockStore.familyMembers = [
+      { id: 'child-2', familyId: 'family-1', role: 'child', displayName: 'Sibling' },
+    ];
+    mockStore.walletTransactions = [
+      {
+        id: 'private-row',
+        childId: 'child-1',
+        type: 'transfer_out',
+        amountPence: -51_873,
+        counterpartyChildId: 'child-2',
+        status: 'completed',
+        timestamp: previousMonth(),
+      },
+      {
+        id: 'private-insight',
+        childId: 'child-1',
+        type: 'deposit',
+        amountPence: 40_762,
+        description: 'Monthly pocket money',
+        status: 'completed',
+        timestamp: thisMonth(),
+      },
+    ];
+    mockStore.transferRequests = [{
+      id: 'private-pending',
+      fromChildId: 'child-1',
+      toChildId: 'child-2',
+      toChildName: 'Sibling',
+      amountPence: 29_651,
+      status: 'pending',
+      createdAt: thisMonth(),
+    }];
+
+    render(
+      <>
+        <MoneyPrivacyToggle />
+        <MemoryRouter><Wallet /></MemoryRouter>
+      </>,
+    );
+
+    for (const amount of ['642.19', '518.73', '407.62', '296.51']) {
+      expect(document.body.innerHTML).toContain(amount);
+    }
+
+    fireEvent.click(screen.getByRole('button', { name: 'Hide money amounts' }));
+
+    for (const amount of ['642.19', '518.73', '407.62', '296.51']) {
+      expect(document.body.innerHTML).not.toContain(amount);
+    }
+    for (const row of screen.getAllByTestId('transaction-row')) {
+      expect(row).not.toHaveAccessibleName(/518\.73|407\.62/);
+    }
+
+    fireEvent.click(screen.getByRole('button', { name: 'Show money amounts' }));
+
+    for (const amount of ['642.19', '518.73', '407.62', '296.51']) {
+      expect(document.body.innerHTML).toContain(amount);
+    }
+  });
+
+  it('keeps an active Add Money amount and immediate confirmation visible while stored balance is hidden', () => {
+    mockStore.currentUser = { id: 'parent-1', familyId: 'family-1', role: 'parent', displayName: 'Parent' };
+    mockStore.familyMembers = [
+      { id: 'child-1', familyId: 'family-1', role: 'child', displayName: 'Alex' },
+    ];
+    mockStore.childWallets = [{ id: 'child-1', balance: 86_420 }];
+
+    render(
+      <>
+        <MoneyPrivacyToggle />
+        <MemoryRouter><Wallet /></MemoryRouter>
+      </>,
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: 'Hide money amounts' }));
+    expect(document.body.innerHTML).not.toContain('864.20');
+
+    fireEvent.click(screen.getByTestId('add-money-btn'));
+    const dialog = screen.getByRole('dialog');
+    const input = within(dialog).getByLabelText(/amount/i) as HTMLInputElement;
+    fireEvent.change(input, { target: { value: '12.34' } });
+
+    expect(input).toHaveValue(12.34);
+    expect(within(dialog).getByRole('button', { name: 'Add £12.34' })).toBeInTheDocument();
+    expect(document.body.innerHTML).not.toContain('864.20');
+  });
 });
 
 describe('1. Child sees the banking-style wallet layout', () => {
@@ -222,7 +328,8 @@ describe('12. Approved outgoing transfer counts in Money Out', () => {
         <Wallet />
       </MemoryRouter>,
     );
-    expect(screen.getByText('£5.00')).toBeInTheDocument(); // Money Out
+    const card = screen.getByText('Money Out').closest('div')?.parentElement;
+    expect(card).toHaveTextContent('£5.00');
   });
 });
 
@@ -237,7 +344,8 @@ describe('13. Approved incoming transfer counts in Money In', () => {
         <Wallet />
       </MemoryRouter>,
     );
-    expect(screen.getByText('£2.00')).toBeInTheDocument(); // Money In
+    const card = screen.getByText('Money In').closest('div')?.parentElement;
+    expect(card).toHaveTextContent('£2.00');
   });
 });
 
@@ -252,7 +360,8 @@ describe('14. Deposit counts in Money In', () => {
         <Wallet />
       </MemoryRouter>,
     );
-    expect(screen.getByText('£3.00')).toBeInTheDocument(); // Money In
+    const card = screen.getByText('Money In').closest('div')?.parentElement;
+    expect(card).toHaveTextContent('£3.00');
   });
 });
 
@@ -267,7 +376,8 @@ describe('15. Withdrawal counts in Money Out', () => {
         <Wallet />
       </MemoryRouter>,
     );
-    expect(screen.getByText('£1.50')).toBeInTheDocument(); // Money Out
+    const card = screen.getByText('Money Out').closest('div')?.parentElement;
+    expect(card).toHaveTextContent('£1.50');
   });
 });
 

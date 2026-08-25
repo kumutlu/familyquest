@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { render, screen } from '@testing-library/react';
+import { render as rtlRender, screen } from '@testing-library/react';
+import type { ReactElement } from 'react';
 import { createInstance } from 'i18next';
 import { I18nextProvider } from 'react-i18next';
 import i18n, { NAMESPACES, bootstrapI18n } from './index';
@@ -9,6 +10,7 @@ import { BalanceCard } from '../components/wallet/BalanceCard';
 import { QuickActions } from '../components/wallet/QuickActions';
 import { PendingTransfers } from '../components/wallet/PendingTransfers';
 import { SendMoneyModal } from '../components/wallet/SendMoneyModal';
+import { MoneyPrivacyProvider } from '../components/privacy/MoneyPrivacyContext';
 
 // The Send Money modal only needs enough store state to render its form.
 vi.mock('../store/useStore', () => ({
@@ -30,6 +32,10 @@ const RAW_KEYS = [
   'pendingTransfers.title',
   'accountHeader.subtitle',
 ];
+
+function render(ui: ReactElement) {
+  return rtlRender(ui, { wrapper: MoneyPrivacyProvider });
+}
 
 /**
  * `src/test/setup.ts` blanket-injects resource bundles, which hides the exact

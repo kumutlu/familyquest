@@ -18,6 +18,7 @@ import { HistoryActionControl } from '../reversals/HistoryActionControl';
 import type { ReversalSourceKind } from '../../lib/reversalApi';
 import { currencySymbolFromCode, formatDate, resolveFamilyCurrencyCode } from '../../i18n/format';
 import { RequestCard } from '../requests/RequestCard';
+import { WalletMoneyText } from '../privacy/WalletMoneyText';
 import { useRequestDetail } from '../requests/RequestDetailContext';
 import { normalizeRequest, type RequestCategory, type RequestContext } from '../../lib/requestModel';
 import { isPendingApprovalStatus } from '../../lib/requestStatus';
@@ -381,10 +382,20 @@ export function ApprovalCenter() {
             <Avatar src={avatarSrc} fallback={fallback} size="sm" />
             <div>
               <h4 className="text-xs font-bold text-gray-500 uppercase tracking-wider mb-1">{title}</h4>
-              <p className="font-semibold text-gray-900 leading-tight mb-1">{description}</p>
+              <p className="font-semibold text-gray-900 leading-tight mb-1">
+                {item.category === 'transfer'
+                  ? <WalletMoneyText>{description}</WalletMoneyText>
+                  : description}
+              </p>
               <div className="flex items-center gap-2">
                 {amount > 0 && (
-                  <span className="font-bold text-gray-900"><CurrencyDisplay amountPence={amount} forceColor={false} /></span>
+                  <span className="font-bold text-gray-900">
+                    <CurrencyDisplay
+                      amountPence={amount}
+                      forceColor={false}
+                      privacy={item.category === 'transfer' ? 'wallet' : undefined}
+                    />
+                  </span>
                 )}
                 {badge}
               </div>

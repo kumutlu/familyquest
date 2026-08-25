@@ -14,10 +14,12 @@ import {
   type TransferMemberLike,
 } from '../../lib/wallet/transferFlow';
 import { currencySymbolFromCode, formatPence, type SupportedCurrencyCode } from '../../i18n/format';
+import { WalletMoneyText } from '../privacy/WalletMoneyText';
 import type { TFunction } from 'i18next';
 import { cn } from '../../lib/utils';
 import { triggerHaptic } from '../../lib/interaction/haptics';
 import { playCue } from '../../lib/interaction/sound';
+import { useMoneyPrivacy } from '../privacy/MoneyPrivacyContext';
 
 interface SendFlowSheetProps {
   onClose: () => void;
@@ -59,6 +61,7 @@ function friendlyError(err: any, t: TFunction<'wallet'>): string {
 export function SendFlowSheet({ onClose, currencyCode = 'GBP' }: SendFlowSheetProps) {
   const { t } = useTranslation('wallet');
   const { currentUser, familyMembers, myWallet } = useStore();
+  const { isMoneyHidden } = useMoneyPrivacy();
 
   const [stage, setStage] = useState<Stage>('who');
   const [recipientId, setRecipientId] = useState<string | null>(null);
@@ -73,6 +76,7 @@ export function SendFlowSheet({ onClose, currencyCode = 'GBP' }: SendFlowSheetPr
 
   // Canonical balance source: families/{familyId}/wallets/{childId}.balance
   const balance = myWallet?.balance || 0;
+  const quickAmounts = isMoneyHidden ? [] : quickAmountsForBalance(balance);
 
   const recipients = useMemo(
     () =>
@@ -253,13 +257,15 @@ export function SendFlowSheet({ onClose, currencyCode = 'GBP' }: SendFlowSheetPr
                 />
               </div>
               <p id="send-balance-hint" className="mt-2 text-meta qk-text-secondary" data-testid="send-balance-hint">
-                {t('send.availableBalance', { amount: formatPence(balance, currencyCode) })}
+                <WalletMoneyText>
+                  {t('send.availableBalance', { amount: formatPence(balance, currencyCode) })}
+                </WalletMoneyText>
               </p>
             </div>
 
-            {quickAmountsForBalance(balance).length > 0 && (
+            {quickAmounts.length > 0 && (
               <div className="mt-4 flex flex-wrap justify-center gap-2" role="group" aria-label={t('send.quickAmounts')}>
-                {quickAmountsForBalance(balance).map(pence => (
+                {quickAmounts.map(pence => (
                   <button
                     key={pence}
                     type="button"

@@ -6,6 +6,7 @@ import { HistoryActionControl } from '../reversals/HistoryActionControl';
 import type { ReversalSourceKind } from '../../lib/reversalApi';
 import { signedTransactionAmount, transactionPresentation } from '../../lib/walletPresentation';
 import { formatDate } from '../../i18n/format';
+import { WalletMoneyText } from '../privacy/WalletMoneyText';
 
 interface TransactionDetailsModalProps {
   isOpen: boolean;
@@ -148,10 +149,10 @@ export function TransactionDetailsModal({
               }`}
             >
               {isCredit ? '+' : '-'}
-              <CurrencyDisplay amountPence={txAmount} forceColor={false} />
+              <CurrencyDisplay amountPence={txAmount} forceColor={false} privacy="wallet" />
             </h2>
             <p className="text-gray-500 font-medium mt-1 uppercase tracking-wider text-xs">
-              {txTitle}
+              <WalletMoneyText>{txTitle}</WalletMoneyText>
             </p>
           </div>
 
@@ -171,7 +172,9 @@ export function TransactionDetailsModal({
             {detailRows.map(row => (
               <div key={row.label} className="flex justify-between gap-4">
                 <span className="text-gray-500 text-sm shrink-0">{row.label}</span>
-                <span className="font-medium text-gray-900 text-sm text-right">{row.value}</span>
+                <span className="font-medium text-gray-900 text-sm text-right">
+                  <WalletMoneyText>{row.value}</WalletMoneyText>
+                </span>
               </div>
             ))}
             <div className="flex justify-between border-t border-gray-200 pt-3 mt-3">

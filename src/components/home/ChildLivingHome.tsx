@@ -25,6 +25,9 @@ import { QuekiMascot } from '../queki/QuekiMascot';
 import { XPDisplay } from '../queki/semanticDisplays';
 import { ProgressBar } from '../queki/Progress';
 import { TactileButton } from '../queki/TactileButton';
+import { MoneyPrivacyToggle } from '../privacy/MoneyPrivacyToggle';
+import { MoneyValue } from '../privacy/MoneyValue';
+import { useMoneyPrivacy } from '../privacy/MoneyPrivacyContext';
 
 /**
  * Child Living Home — Queki v2 Wave 1.
@@ -46,6 +49,7 @@ const FOCUS_TESTID: Record<ChildFocus['kind'], string> = {
 export function ChildLivingHome() {
   const { t } = useTranslation('home');
   const navigate = useNavigate();
+  const { isMoneyHidden, maskFormattedMoney } = useMoneyPrivacy();
   const {
     currentUser,
     tasks,
@@ -106,18 +110,22 @@ export function ChildLivingHome() {
             onPress={() => navigate('/tasks')}
           />
         );
-      case 'money_received':
+      case 'money_received': {
+        const formattedAmount = formatMoney(item.amountPence ?? 0);
         return (
           <LivingHomeCard
             key={item.id}
             data-testid={FOCUS_TESTID[item.kind]}
             tone="mint"
             icon={<WalletIcon size={22} />}
-            title={t('child.moneyReceived.title', { amount: formatMoney(item.amountPence ?? 0) })}
+            title={t('child.moneyReceived.title', {
+              amount: isMoneyHidden ? maskFormattedMoney(formattedAmount) : formattedAmount,
+            })}
             description={t('child.moneyReceived.description')}
             onPress={() => navigate('/wallet')}
           />
         );
+      }
       case 'next_quest':
         return (
           <LivingHomeCard
@@ -176,6 +184,10 @@ export function ChildLivingHome() {
   const coreResourcesFailed =
     bootstrapStatus &&
     (['tasks', 'members'] as const).some(resource => bootstrapStatus[resource] === 'error');
+
+  const formattedWalletBalance = myWallet == null
+    ? null
+    : formatMoney(Number(myWallet.balance ?? 0));
 
   if (coreResourcesFailed) {
     return (
@@ -242,21 +254,26 @@ export function ChildLivingHome() {
         {/* Points vs wallet — deliberately different rows, never interchangeable. */}
         <div className="mt-4 flex flex-wrap items-center justify-between gap-3">
           <PointsDisplayOnBrand points={currentUser?.rewardPoints ?? 0} />
-          {myWallet != null && (
-            <button
-              onClick={() => navigate('/wallet')}
-              className="inline-flex items-center gap-2 rounded-full bg-mint-50 py-1 pl-1.5 pr-3 hover:bg-mint-100 active:bg-mint-200 transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-mint-500"
-              data-testid="child-balance-chip"
-              aria-label={t('child.openWallet', { balance: formatMoney(Number(myWallet?.balance ?? 0)) })}
-            >
-              <span aria-hidden="true" className="flex h-6 w-6 items-center justify-center rounded-full bg-mint-500 text-white">
-                <WalletIcon size={13} />
-              </span>
-              <span className="font-balance text-base tabular-nums font-extrabold text-mint-700">
-                {formatMoney(Number(myWallet?.balance ?? 0))}
-              </span>
-            </button>
-          )}
+          <div className="flex items-center gap-1">
+            {formattedWalletBalance != null && (
+              <button
+                onClick={() => navigate('/wallet')}
+                className="inline-flex items-center gap-2 rounded-full bg-mint-50 py-1 pl-1.5 pr-3 hover:bg-mint-100 active:bg-mint-200 transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-mint-500"
+                data-testid="child-balance-chip"
+                aria-label={t('child.openWallet', {
+                  balance: isMoneyHidden ? maskFormattedMoney(formattedWalletBalance) : formattedWalletBalance,
+                })}
+              >
+                <span aria-hidden="true" className="flex h-6 w-6 items-center justify-center rounded-full bg-mint-500 text-white">
+                  <WalletIcon size={13} />
+                </span>
+                <MoneyValue className="font-balance text-base tabular-nums font-extrabold text-mint-700">
+                  {formattedWalletBalance}
+                </MoneyValue>
+              </button>
+            )}
+            <MoneyPrivacyToggle className="shrink-0 bg-white/15 text-white hover:bg-white/25 hover:text-white focus-visible:ring-white/80 focus-visible:ring-offset-0" />
+          </div>
         </div>
       </Surface>
 
@@ -320,4 +337,3 @@ function PointsDisplayOnBrand({ points }: { points: number }) {
     </span>
   );
 }
-

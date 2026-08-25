@@ -235,7 +235,11 @@ export function createBootstrapQueryPlan(
       { resource: 'taskCompletions', key: 'taskCompletions', kind: 'query', target: collection(db, `${familyPath}/task_completions`) },
       { resource: 'redemptions', key: 'redemptions', kind: 'query', target: query(collection(db, `${familyPath}/redemptions`), where('userId', '==', userId)) },
       { resource: 'walletTransactions', key: 'walletTransactions', kind: 'query', target: query(collection(db, `${familyPath}/wallet_transactions`), where('childId', '==', userId)) },
-      { resource: 'savingsGoals', key: 'savingsGoals', kind: 'query', target: query(collection(db, `${familyPath}/savings_goals`), where('childId', '==', userId)) },
+      // Family members may read this collection under the existing rules. The
+      // store immediately normalizes and filters the snapshot before Zustand
+      // publication or goal-subcollection listener planning. This is a
+      // presentation/store boundary, not sibling confidentiality at fetch time.
+      { resource: 'savingsGoals', key: 'savingsGoals', kind: 'query', target: collection(db, `${familyPath}/savings_goals`) },
       // NOTE: intentionally NO orderBy here for goalRequests or transferRequests.
       // A `where('childId','==',uid)` plus `orderBy('createdAt','desc')` requires a composite
       // index. Filtering by the childId alone uses the automatic single-field index,

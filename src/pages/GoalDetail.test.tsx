@@ -58,9 +58,9 @@ beforeEach(() => {
   (cancelGoal as any).mockClear();
 });
 
-function renderDetail() {
+function renderDetail(goalId = 'g1') {
   return render(
-    <MemoryRouter initialEntries={['/goals/g1']}>
+    <MemoryRouter initialEntries={[`/goals/${goalId}`]}>
       <Routes>
         <Route path="/goals/:goalId" element={<GoalDetail />} />
       </Routes>
@@ -69,6 +69,18 @@ function renderDetail() {
 }
 
 describe('Goal detail page', () => {
+  it('does not subscribe to goal history for a direct sibling goal URL absent from the child store', () => {
+    mockStore.savingsGoals = [
+      { id: 'family-goal', title: 'Family holiday', kind: 'family', targetAmountPence: 10000, currentAmountPence: 1000, status: 'active', version: 1 },
+      { id: 'g1', title: 'Bike', kind: 'child', childId: 'child-1', targetAmountPence: 10000, currentAmountPence: 6000, status: 'active', version: 1 },
+    ];
+
+    renderDetail('sibling-goal');
+
+    expect(screen.getByText('Goal not found.')).toBeInTheDocument();
+    expect(firestoreMock.onSnapshot).not.toHaveBeenCalled();
+  });
+
   it('shows contribution breakdown derived from the ledger', async () => {
     renderDetail();
     // Push a ledger with a child contribution + parent contribution + auto match.

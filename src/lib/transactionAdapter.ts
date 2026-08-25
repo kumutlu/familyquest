@@ -350,6 +350,11 @@ interface TransactionSeed {
   category?: TransactionCategory;
   childId?: string;
   parentRef?: string;
+  actorId?: string;
+  reviewerId?: string;
+  reviewerName?: string;
+  fromChildId?: string;
+  counterpartyChildId?: string;
   goalId?: string;
   rewardId?: string;
   transferRequestId?: string;
@@ -397,6 +402,11 @@ function buildTransaction(
     source: seed.source,
     childId: seed.childId,
     parentRef: seed.parentRef,
+    actorId: seed.actorId,
+    reviewerId: seed.reviewerId,
+    reviewerName: seed.reviewerName,
+    fromChildId: seed.fromChildId,
+    counterpartyChildId: seed.counterpartyChildId,
     goalId: seed.goalId,
     rewardId: seed.rewardId,
     transferRequestId: seed.transferRequestId,
@@ -406,6 +416,7 @@ function buildTransaction(
     reversalId,
     reversalReason: reversal ? stringValue(reversal.reason) : undefined,
     reversalActorName: reversal ? stringValue(reversal.actorName) : undefined,
+    reversalActorId: reversal ? stringValue(reversal.actorId) : undefined,
     reversalOccurredAt,
     note: seed.note,
     reversible: isReversibleType(seed.type) && isCompletedStatus(status) && !isReversed,
@@ -518,6 +529,7 @@ function normalizeWallet(
   const amountPence = walletAmount(record, type, opts.currentUserId);
   const childId = stringValue(record.childId);
   const parentRef = stringValue(record.parentRef) ?? stringValue(record.createdBy);
+  const actorId = stringValue(record.actorId);
   const counterpartyId = stringValue(record.counterpartyChildId);
   const fromChildId = stringValue(record.fromChildId);
   const goalId = stringValue(record.goalId);
@@ -606,6 +618,9 @@ function normalizeWallet(
     category,
     childId,
     parentRef,
+    actorId,
+    fromChildId,
+    counterpartyChildId: counterpartyId,
     goalId,
     transferRequestId,
     moneyRequestId,
@@ -782,6 +797,8 @@ function normalizeTransferRequest(
     sourceId: record.id,
     childId: record.fromChildId,
     transferRequestId: record.id,
+    reviewerId: stringValue(record.reviewedBy),
+    reviewerName: stringValue(record.reviewedByName),
     note: stringValue(record.message) ?? stringValue(record.rejectionReason),
     searchTerms: [fromName, toName],
   }, opts, getReversal(reversals, 'transfer_request', record.id));
@@ -816,6 +833,8 @@ function normalizeMoneyRequest(
     sourceId: record.id,
     childId: record.requesterId,
     moneyRequestId: record.id,
+    reviewerId: stringValue(record.reviewedBy),
+    reviewerName: stringValue(record.reviewedByName),
     note: stringValue(record.message) ?? stringValue(record.rejectionReason),
     searchTerms: [requesterName, requestedFromName],
   }, opts, getReversal(reversals, 'money_request', record.id));

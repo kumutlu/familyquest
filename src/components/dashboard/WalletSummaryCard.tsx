@@ -71,7 +71,7 @@ export function WalletSummaryCard() {
         <CardContent>
           <p className="text-xs font-medium uppercase text-gray-500">Total children balance</p>
           <p className="text-2xl font-extrabold text-gray-900">
-            <CurrencyDisplay amountPence={totalBalance} forceColor={false} />
+            <CurrencyDisplay amountPence={totalBalance} forceColor={false} privacy="wallet" />
           </p>
           <p className="mt-1 text-xs text-gray-500">
             {linkedCount} of {memberCount} child {memberCount === 1 ? 'wallet' : 'wallets'} linked
@@ -95,7 +95,7 @@ export function WalletSummaryCard() {
       <CardContent>
         <p className="text-xs font-medium uppercase text-gray-500">Current balance</p>
         <p className="text-2xl font-extrabold text-success-600">
-          <CurrencyDisplay amountPence={balance} forceColor={false} />
+          <CurrencyDisplay amountPence={balance} forceColor={false} privacy="wallet" />
         </p>
       </CardContent>
     </Card>

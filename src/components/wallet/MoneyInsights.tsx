@@ -1,6 +1,7 @@
 import { ArrowDownRight, ArrowUpRight, Clock } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { formatPence, currencyCodeFromSymbol } from '../../i18n/format';
+import { MoneyValue } from '../privacy/MoneyValue';
 
 interface MoneyInsightsProps {
   moneyIn: number;
@@ -46,7 +47,7 @@ function InsightCard({ label, amount, currency, icon, iconBg, valueClass, spanTw
           </p>
         ) : (
           <p className={`text-base font-bold tabular-nums ${valueClass} break-words`}>
-            {formatPence(amount as number, currencyCodeFromSymbol(currency))}
+            <MoneyValue>{formatPence(amount as number, currencyCodeFromSymbol(currency))}</MoneyValue>
           </p>
         )}
       </div>

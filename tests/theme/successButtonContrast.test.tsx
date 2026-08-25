@@ -47,6 +47,7 @@ vi.mock('../../src/store/useStore', () => ({
 }));
 
 import { ApprovalCenter } from '../../src/components/parent/ApprovalCenter';
+import { MoneyPrivacyProvider } from '../../src/components/privacy/MoneyPrivacyContext';
 import { RequestDetailProvider } from '../../src/components/requests/RequestDetailContext';
 import { contrastRatio, resolveToken, type Rgb } from './themeTokens';
 
@@ -70,9 +71,11 @@ const moneyRequestPendingAcceptance = {
 
 function renderApprovalCenter() {
   return render(
-    <RequestDetailProvider>
-      <ApprovalCenter />
-    </RequestDetailProvider>,
+    <MoneyPrivacyProvider>
+      <RequestDetailProvider>
+        <ApprovalCenter />
+      </RequestDetailProvider>
+    </MoneyPrivacyProvider>,
   );
 }
 

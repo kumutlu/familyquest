@@ -6,6 +6,7 @@ import { TactileButton } from '../queki/TactileButton';
 import { triggerHaptic } from '../../lib/interaction/haptics';
 import { playCue } from '../../lib/interaction/sound';
 import { formatPence, resolveFamilyCurrencyCode, type SupportedCurrencyCode } from '../../i18n/format';
+import { WalletMoneyText } from '../privacy/WalletMoneyText';
 
 interface ArrivalTransactionLike {
   id?: string;
@@ -95,10 +96,12 @@ export function TransferArrivalMoment({
       </p>
       <CharacterFrame src={arrival.avatarUrl} fallback={arrival.fromName} size={88} hero />
       <p className="text-center text-2xl font-extrabold" data-testid="transfer-arrival-text">
-        {t('arrival.received', {
-          name: arrival.fromName,
-          amount: formatPence(arrival.amountPence, code),
-        })}
+        <WalletMoneyText>
+          {t('arrival.received', {
+            name: arrival.fromName,
+            amount: formatPence(arrival.amountPence, code),
+          })}
+        </WalletMoneyText>
       </p>
       <TactileButton variant="secondary" onClick={() => setArrival(null)} data-testid="transfer-arrival-dismiss">
         {t('arrival.dismiss')}

@@ -1,5 +1,6 @@
-import { fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { fireEvent, render as rtlRender, screen, waitFor, within } from '@testing-library/react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
+import type { ReactElement } from 'react'
 import i18n from '../../i18n/config'
 
 const api = vi.hoisted(() => ({
@@ -36,12 +37,19 @@ vi.mock('../../store/useStore', () => ({ useStore: (selector?: any) => (typeof s
 
 import { ApprovalCenter } from './ApprovalCenter'
 import { RequestDetailProvider } from '../requests/RequestDetailContext'
+import { MoneyPrivacyProvider } from '../privacy/MoneyPrivacyContext'
+import { MoneyPrivacyToggle } from '../privacy/MoneyPrivacyToggle'
+
+function render(ui: ReactElement) {
+  return rtlRender(<MoneyPrivacyProvider>{ui}</MoneyPrivacyProvider>)
+}
 
 function renderApprovalCenter() {
   return render(
-    <RequestDetailProvider>
-      <ApprovalCenter />
-    </RequestDetailProvider>
+    <>
+      <MoneyPrivacyToggle />
+      <RequestDetailProvider><ApprovalCenter /></RequestDetailProvider>
+    </>,
   )
 }
 
@@ -51,6 +59,10 @@ function deferred() {
   const promise = new Promise<void>((res, rej) => { resolve = res; reject = rej })
   return { promise, resolve, reject }
 }
+
+beforeEach(() => {
+  localStorage.clear()
+})
 
 describe('ApprovalCenter interaction contract', () => {
   beforeEach(async () => {
@@ -75,9 +87,10 @@ describe('ApprovalCenter interaction contract', () => {
     api.approveTaskCompletion.mockReturnValue(pending.promise)
     renderApprovalCenter()
 
-    const approveButtons = screen.getAllByRole('button', { name: 'Approve' })
-    fireEvent.click(approveButtons[0])
-    fireEvent.click(approveButtons[0])
+    const taskCard = screen.getByText(/Tidy room/).closest('.rounded-2xl') as HTMLElement
+    const approveButton = within(taskCard).getByRole('button', { name: 'Approve' })
+    fireEvent.click(approveButton)
+    fireEvent.click(approveButton)
 
     expect(api.approveTaskCompletion).toHaveBeenCalledTimes(1)
     expect(screen.getByRole('button', { name: 'Approving…' })).toBeDisabled()
@@ -150,6 +163,32 @@ describe('ApprovalCenter interaction contract', () => {
 
     await waitFor(() => expect(api.approveTransferRequest).toHaveBeenCalledWith('family-1', 'same-id'))
     expect(screen.queryByText(/no longer have permission/i)).not.toBeInTheDocument()
+  })
+
+  it('masks a stored transfer approval but leaves a Cat Box approval amount visible', async () => {
+    localStorage.setItem('queki.moneyPrivacy:owner-1', 'true')
+    state.current = {
+      ...state.current,
+      taskCompletions: [],
+      transferRequests: [{
+        id: 'private-transfer', fromChildId: 'child-1', toChildId: 'child-2',
+        amountPence: 51_924, message: 'Please send £413.73', status: 'pending',
+      }],
+      petboxRequests: [{
+        id: 'visible-cat-box', childId: 'child-1', childName: 'Ada', fundName: 'Milo',
+        amountPence: 25_861, status: 'pending',
+      }],
+    }
+
+    const { container } = renderApprovalCenter()
+
+    await waitFor(() => expect(container).not.toHaveTextContent('413.73'))
+    expect(screen.getAllByText('£••••')).toHaveLength(2)
+    expect(screen.getByText('£258.61')).toBeInTheDocument()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Show money amounts' }))
+    expect(screen.getByText(/Please send £413\.73/)).toBeInTheDocument()
+    expect(screen.getByText('£519.24')).toBeInTheDocument()
   })
 
   it('renders a Profile Update Request card and approves it through the shared flow', async () => {
@@ -240,6 +279,22 @@ describe('pending_acceptance money requests', () => {
     expect(screen.queryByText(/Mnalium requested/)).not.toBeInTheDocument();
   });
 
+  it('masks the stored request amount in the approval card and accessible name', async () => {
+    localStorage.setItem('queki.moneyPrivacy:owner-1', 'true')
+    state.current = {
+      ...baseState,
+      moneyRequests: [{ ...moneyRequestPendingAcceptance, amountPence: 41_573 }],
+    }
+
+    const { container } = renderApprovalCenter()
+
+    await waitFor(() => expect(container).not.toHaveTextContent('415.73'))
+    expect(screen.getAllByText('£••••')).toHaveLength(2)
+    expect(screen.getByRole('button', { name: /Money Request/ })).not.toHaveAccessibleName(/415\.73/)
+    expect(screen.getByRole('button', { name: 'Accept' })).toBeEnabled()
+    expect(screen.getByRole('button', { name: 'Reject' })).toBeEnabled()
+  })
+
   it('opens the shared Request Detail modal when the whole card is tapped', () => {
     state.current = { ...baseState, moneyRequests: [moneyRequestPendingAcceptance] };
     renderApprovalCenter();
@@ -289,7 +344,7 @@ describe('pending_acceptance money requests', () => {
     await waitFor(() => expect(screen.getByText('Pending (0)')).toBeInTheDocument());
   });
 
-  it('resolved (approved) money requests appear only in History, not Pending', () => {
+  it('resolved (approved) money requests appear only in History, not Pending', async () => {
     state.current = {
       ...baseState,
       moneyRequests: [{ ...moneyRequestPendingAcceptance, status: 'approved', reviewedAt: { toDate: () => new Date() } }],
@@ -298,7 +353,7 @@ describe('pending_acceptance money requests', () => {
 
     expect(screen.getByText('Pending (0)')).toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: 'History' }));
-    expect(screen.getByText(/Mnalium requested/)).toBeInTheDocument();
+    expect(await screen.findByText(/Mnalium requested/)).toBeInTheDocument();
     expect(screen.getAllByText('Approved').length).toBeGreaterThan(0);
   });
 })

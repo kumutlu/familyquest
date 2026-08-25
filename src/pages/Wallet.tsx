@@ -26,6 +26,7 @@ import { ErrorState, TransactionSkeletonRows } from '../components/wallet/Wallet
 import { currencySymbolFromCode, resolveFamilyCurrencyCode, formatPence } from '../i18n/format';
 import { AddMoneyModal } from '../components/wallet/AddMoneyModal';
 import { TactileButton } from '../components/queki/TactileButton';
+import { MoneyValue } from '../components/privacy/MoneyValue';
 
 // Re-exported for backward compatibility with helpers previously defined here.
 export {
@@ -208,7 +209,7 @@ export function Wallet() {
                         {child.displayName}
                       </h4>
                       <p className="mt-1 text-2xl font-extrabold tabular-nums" data-testid={`wallet-balance-${child.id}`}>
-                        {formatPence(balance, currencyCode)}
+                        <MoneyValue>{formatPence(balance, currencyCode)}</MoneyValue>
                       </p>
                       <p className="text-xs text-white/70 uppercase font-bold tracking-wider">{t('allowance.balance')}</p>
                     </div>

@@ -5,10 +5,13 @@ import i18n from '../i18n/config';
 
 const store = vi.hoisted(() => ({ state: {} as any }));
 
-vi.mock('../store/useStore', () => ({ useStore: () => store.state }));
+vi.mock('../store/useStore', () => ({
+  useStore: (selector?: (state: any) => unknown) => selector ? selector(store.state) : store.state,
+}));
 vi.mock('../components/reversals/HistoryActionControl', () => ({ HistoryActionControl: () => null }));
 
 import { MemberProfile } from './MemberProfile';
+import { MoneyPrivacyProvider } from '../components/privacy/MoneyPrivacyContext';
 
 const readyProjection = (childId: string, xpTotal: number, level: number) => ({
   schemaVersion: 1,
@@ -30,15 +33,18 @@ const readyProjection = (childId: string, xpTotal: number, level: number) => ({
 
 const renderProfile = (path = '/family/child-1') =>
   render(
-    <MemoryRouter initialEntries={[path]}>
-      <Routes>
-        <Route path="/family/:id" element={<MemberProfile />} />
-      </Routes>
-    </MemoryRouter>,
+    <MoneyPrivacyProvider>
+      <MemoryRouter initialEntries={[path]}>
+        <Routes>
+          <Route path="/family/:id" element={<MemberProfile />} />
+        </Routes>
+      </MemoryRouter>
+    </MoneyPrivacyProvider>,
   );
 
 describe('MemberProfile progression section', () => {
   beforeEach(async () => {
+    localStorage.clear();
     await i18n.loadNamespaces(['profile', 'dashboard']);
     await i18n.changeLanguage('en');
     store.state = {
@@ -106,6 +112,7 @@ describe('MemberProfile progression section', () => {
 
 describe('MemberProfile progression for a parent viewing another member', () => {
   beforeEach(async () => {
+    localStorage.clear();
     await i18n.loadNamespaces(['profile', 'dashboard']);
     await i18n.changeLanguage('en');
     store.state = {
@@ -157,6 +164,24 @@ describe('MemberProfile progression for a parent viewing another member', () => 
 
     expect(screen.getByTestId('profile-level')).toHaveTextContent('Level 2');
     expect(screen.getByTestId('profile-lifetime-xp')).toHaveTextContent('1250');
+  });
+
+  it('matches the same authoritative level fixture used by the Home crew cards', () => {
+    const crew = [
+      { id: 'child-2', displayName: 'Level Two', xpTotal: 1_250, level: 2 },
+      { id: 'child-3', displayName: 'Level Three', xpTotal: 2_500, level: 3 },
+      { id: 'child-5', displayName: 'Level Five', xpTotal: 4_100, level: 5 },
+    ];
+    store.state.familyMembers = crew.map(({ id, displayName }) => (
+      { id, role: 'child', displayName, level: 1 }
+    ));
+    store.state.gamificationSummaries = crew.map(({ id, xpTotal, level }) => readyProjection(id, xpTotal, level));
+
+    for (const { id, level } of crew) {
+      const page = renderProfile(`/family/${id}`);
+      expect(screen.getByTestId('profile-level')).toHaveTextContent(`Level ${level}`);
+      page.unmount();
+    }
   });
 
   it('renders the parent own progression when viewing self', () => {

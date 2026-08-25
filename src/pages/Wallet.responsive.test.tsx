@@ -1,7 +1,9 @@
-import { fireEvent, render, screen } from '@testing-library/react';
+import { fireEvent, render as rtlRender, screen } from '@testing-library/react';
 import { describe, expect, it, vi, beforeEach } from 'vitest';
 import { MemoryRouter } from 'react-router-dom';
+import type { ReactElement } from 'react';
 import i18n from '../i18n/config';
+import { MoneyPrivacyProvider } from '../components/privacy/MoneyPrivacyContext';
 
 // Mutable store so each test can supply its own slice of state.
 const mockStore: any = {
@@ -19,7 +21,8 @@ const mockStore: any = {
 };
 
 vi.mock('../store/useStore', () => ({
-  useStore: () => mockStore,
+  useStore: (selector?: (state: typeof mockStore) => unknown) =>
+    typeof selector === 'function' ? selector(mockStore) : mockStore,
 }));
 vi.mock('../components/wallet/TransactionDetailsModal', () => ({
   TransactionDetailsModal: ({ isOpen, transaction }: any) =>
@@ -35,10 +38,15 @@ vi.mock('../components/wallet/RequestMoneyModal', () => ({
 import { Wallet } from './Wallet';
 import { PENDING_TRANSFER_STATUSES, isPendingTransferStatus } from '../lib/requestStatus';
 
+function render(ui: ReactElement) {
+  return rtlRender(<MoneyPrivacyProvider>{ui}</MoneyPrivacyProvider>);
+}
+
 const daysAgo = (n: number) => ({ toDate: () => new Date(Date.now() - n * 86_400_000) });
 
 beforeEach(async () => {
-  await i18n.loadNamespaces(['wallet']);
+  localStorage.clear();
+  await i18n.loadNamespaces(['common', 'wallet', 'help']);
   await i18n.changeLanguage('en');
   mockStore.currentUser = { id: 'child-1', familyId: 'family-1', role: 'child', displayName: 'Muhammed Osman' };
   mockStore.myWallet = { balance: 0 };

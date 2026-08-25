@@ -1,4 +1,5 @@
-import { render, screen } from '@testing-library/react';
+import { render as rtlRender, screen } from '@testing-library/react';
+import type { ReactElement } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import i18n from '../i18n/config';
 
@@ -36,6 +37,11 @@ const useStoreMock = vi.fn();
 vi.mock('../store/useStore', () => ({ useStore: (...args: any[]) => useStoreMock(...args) }));
 
 import { Rewards } from './Rewards';
+import { MoneyPrivacyProvider } from '../components/privacy/MoneyPrivacyContext';
+
+function render(ui: ReactElement) {
+  return rtlRender(<MoneyPrivacyProvider>{ui}</MoneyPrivacyProvider>);
+}
 
 // Fixed instant so the relative-time label is deterministic ("2 weeks ago").
 const FIXTURE_NOW = new Date('2026-08-06T21:18:00Z');

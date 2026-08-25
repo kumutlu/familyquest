@@ -1,4 +1,5 @@
-import { render, screen } from '@testing-library/react';
+import { render as rtlRender, screen } from '@testing-library/react';
+import type { ReactElement } from 'react';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import i18n from '../i18n/config';
@@ -12,8 +13,11 @@ const store = vi.hoisted(() => ({
     dailyProgress: [],
   } as any,
 }));
+const baselineFamilyMember = store.state.familyMembers[0];
 
-vi.mock('../store/useStore', () => ({ useStore: () => store.state }));
+vi.mock('../store/useStore', () => ({
+  useStore: (selector?: (state: any) => unknown) => selector ? selector(store.state) : store.state,
+}));
 vi.mock('../components/reversals/HistoryActionControl', () => ({ HistoryActionControl: () => null }));
 vi.mock('../components/dashboard/GamificationSummaryCard', () => ({
   GamificationSummaryCard: ({ summary }: { summary: any }) => (
@@ -24,6 +28,15 @@ vi.mock('../components/dashboard/GamificationSummaryCard', () => ({
 }));
 
 import { MemberProfile } from './MemberProfile';
+import { MoneyPrivacyProvider } from '../components/privacy/MoneyPrivacyContext';
+
+function render(ui: ReactElement) {
+  return rtlRender(<MoneyPrivacyProvider>{ui}</MoneyPrivacyProvider>);
+}
+
+beforeEach(() => {
+  localStorage.clear();
+});
 
 describe('MemberProfile gamification summary', () => {
   beforeEach(async () => {
@@ -370,6 +383,38 @@ describe('MemberProfile gamification summary', () => {
     manageWallet.click();
     expect(await screen.findByText('Wallet manager')).toBeInTheDocument();
     expect(screen.queryByRole('link', { name: /send money/i })).not.toBeInTheDocument();
+  });
+
+  it('masks Member Detail wallet money without masking level, XP, points, or percentage', () => {
+    store.state = {
+      familyMembers: [baselineFamilyMember],
+      currentUser: { id: 'parent-1', familyId: 'family-1', role: 'parent' },
+      childWallets: [{ id: 'child-1', balance: 4321 }],
+      loading: false,
+      behaviourEvents: [],
+      gamificationSummaries: [{
+        childId: 'child-1',
+        xpTotal: 2_500,
+        level: 3,
+        currentStreak: 2,
+        bestStreak: 5,
+      }],
+      dailyProgress: [],
+    };
+    localStorage.setItem('queki.moneyPrivacy:parent-1', 'true');
+
+    render(
+      <MemoryRouter initialEntries={['/family/child-1']}>
+        <Routes><Route path="/family/:id" element={<MemberProfile />} /></Routes>
+      </MemoryRouter>,
+    );
+
+    expect(document.body.textContent).not.toContain('£43.21');
+    expect(screen.getByTestId('member-wallet-balance')).toHaveTextContent('£••••');
+    expect(screen.getByTestId('profile-level')).toHaveTextContent('Level 3');
+    expect(screen.getByTestId('profile-lifetime-xp')).toHaveTextContent('2500');
+    expect(screen.getByTestId('profile-reward-points')).toHaveTextContent('100');
+    expect(document.body.textContent).toContain('50%');
   });
 
   it('does not expose parent wallet management to a child', () => {

@@ -8,6 +8,7 @@ import { Button } from '../components/ui/Button';
 import { Modal } from '../components/ui/Modal';
 import { createGoal, deleteCancelledGoal } from '../lib/api';
 import { normalizeGoalDoc, type GoalKind, type ParentContributionInput } from '../lib/goalContracts';
+import { isParentRole } from '../lib/roles';
 import { Target, Plus } from 'lucide-react';
 import { currencySymbolFromCode, resolveFamilyCurrencyCode } from '../i18n/format';
 
@@ -45,6 +46,10 @@ export function Goals() {
 
   const familyGoals = goals.filter(g => g.kind === 'family');
   const childGoals = goals.filter(g => g.kind === 'child');
+  const isParent = isParentRole(currentUser?.role);
+  const visibleChildGoals = isParent
+    ? childGoals
+    : childGoals.filter(goal => goal.childId === currentUser?.id);
 
   const children = familyMembers.filter(m => m.role === 'child');
 
@@ -146,15 +151,17 @@ const confirmDelete = async () => {
           </div>
           <p className="text-sm text-gray-500 font-medium mt-1">{t('page.subtitle')}</p>
         </div>
-        <Button onClick={() => setShowCreate(true)}>
-          <Plus size={18} className="mr-1" /> {t('newGoal')}
-        </Button>
+        {isParent && (
+          <Button onClick={() => setShowCreate(true)}>
+            <Plus size={18} className="mr-1" /> {t('newGoal')}
+          </Button>
+        )}
       </div>
 
-      <Section title={t('list.familyGoals')} goals={familyGoals} onOpen={(id) => navigate(`/goals/${id}`)} onDelete={openDelete} emptyHint={t('list.emptyFamily')} />
-      <Section title={t('list.childGoals')} goals={childGoals} onOpen={(id) => navigate(`/goals/${id}`)} onDelete={openDelete} emptyHint={t('list.emptyChild')} />
+      <Section title={t('list.familyGoals')} goals={familyGoals} onOpen={(id) => navigate(`/goals/${id}`)} onDelete={isParent ? openDelete : undefined} emptyHint={t('list.emptyFamily')} />
+      <Section title={t('list.childGoals')} goals={visibleChildGoals} onOpen={(id) => navigate(`/goals/${id}`)} onDelete={isParent ? openDelete : undefined} emptyHint={t('list.emptyChild')} />
 
-      <Modal
+      {isParent && <Modal
         isOpen={showCreate}
         onClose={() => { reset(); setShowCreate(false); }}
         title={t('create.title')}
@@ -296,9 +303,9 @@ const confirmDelete = async () => {
 
           {error && <p className="text-sm text-danger-600 font-medium">{error}</p>}
         </div>
-      </Modal>
+      </Modal>}
 
-      <Modal
+      {isParent && <Modal
         isOpen={pendingDelete !== null}
         onClose={closeDelete}
         title={t('delete.title')}
@@ -315,7 +322,7 @@ const confirmDelete = async () => {
           {t('delete.body')}
         </p>
         {deleteError && <p className="mt-3 text-sm text-danger-600 font-medium">{deleteError}</p>}
-      </Modal>
+      </Modal>}
     </div>
   );
 }

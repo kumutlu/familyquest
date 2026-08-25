@@ -62,9 +62,6 @@ describe('selectParentPriorities', () => {
           { goalId: 'g1', title: 'Bike', status: 'active', currentAmountPence: 900, targetAmountPence: 1000 },
         ],
         challenges: [{ id: 'ch1', title: 'Clean week', status: 'completed' }],
-        walletTransactions: [
-          { id: 'w1', type: 'deposit', amount: 500, timestamp: HOUR_AGO.toISOString(), childId: 'kid-1' },
-        ],
       },
       NOW,
     );
@@ -102,17 +99,17 @@ describe('selectParentPriorities', () => {
     expect(result).toHaveLength(0);
   });
 
-  it('only counts recent deposits as wallet events', () => {
-    const twoDaysAgo = new Date(NOW.getTime() - 48 * 60 * 60 * 1000);
-    const result = selectParentPriorities(
-      {
-        walletTransactions: [
-          { id: 'old', type: 'deposit', amount: 900, timestamp: twoDaysAgo.toISOString() },
-        ],
-      },
-      NOW,
-    );
-    expect(result).toHaveLength(0);
+  it('never promotes a recent deposit to a parent priority', () => {
+    const recentDeposit = {
+      id: 'recent-deposit',
+      type: 'deposit',
+      amount: 900,
+      timestamp: HOUR_AGO,
+      childId: 'kid-1',
+    };
+    const input = { savingsGoals: [], walletTransactions: [recentDeposit] };
+    const result = selectParentPriorities(input, NOW);
+    expect(result.some(item => String(item.kind) === 'wallet_event')).toBe(false);
   });
 
   it('never mutates its input arrays', () => {
@@ -155,6 +152,22 @@ describe('selectChildFocus', () => {
     );
     expect(result[0]?.kind).toBe('approval_waiting');
     expect(result[0]?.count).toBe(1);
+  });
+
+  it('still surfaces money received from a recent deposit', () => {
+    const result = selectChildFocus(
+      {
+        currentUser: CHILD,
+        walletTransactions: [
+          { id: 'recent-deposit', type: 'deposit', amount: 900, timestamp: HOUR_AGO },
+        ],
+      },
+      NOW,
+    );
+
+    expect(result).toEqual([
+      expect.objectContaining({ kind: 'money_received', amountPence: 900 }),
+    ]);
   });
 
   it('shows the next incomplete assigned quest', () => {

@@ -1,4 +1,5 @@
-import { render, screen, fireEvent } from '@testing-library/react';
+import { render as rtlRender, screen, fireEvent } from '@testing-library/react';
+import type { ReactElement } from 'react';
 import { MemoryRouter } from 'react-router-dom';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -9,26 +10,34 @@ vi.mock('react-router-dom', async () => {
 });
 
 import { WalletSummaryCard } from './WalletSummaryCard';
+import { MoneyPrivacyProvider } from '../privacy/MoneyPrivacyContext';
 
 const baseStore = {
   currentUser: { id: 'u-1', familyId: 'f-1', role: 'child', displayName: 'Kid' },
   myWallet: { id: 'w-1', balance: 1234 },
   childWallets: [] as any[],
   familyMembers: [] as any[],
+  familyData: null as any,
   bootstrapStatus: { wallets: 'ready', members: 'ready' } as any,
 };
 
 vi.mock('../../store/useStore', () => ({
-  useStore: () => baseStore,
+  useStore: (selector?: (state: typeof baseStore) => unknown) => selector ? selector(baseStore) : baseStore,
 }));
+
+function render(ui: ReactElement) {
+  return rtlRender(<MoneyPrivacyProvider>{ui}</MoneyPrivacyProvider>);
+}
 
 describe('WalletSummaryCard', () => {
   beforeEach(() => {
+    localStorage.clear();
     h.navigate.mockClear();
     baseStore.currentUser = { id: 'u-1', familyId: 'f-1', role: 'child', displayName: 'Kid' };
     baseStore.myWallet = { id: 'w-1', balance: 1234 };
     baseStore.childWallets = [];
     baseStore.familyMembers = [];
+    baseStore.familyData = null;
     baseStore.bootstrapStatus = { wallets: 'ready', members: 'ready' };
   });
 
@@ -86,6 +95,30 @@ describe('WalletSummaryCard', () => {
     const card = screen.getByTestId('wallet-summary');
     fireEvent.click(card);
     expect(h.navigate).toHaveBeenCalledWith('/wallets');
+  });
+
+  it.each([
+    ['child', 'u-1', 1234],
+    ['parent', 'p-1', 750],
+  ] as const)('masks the %s wallet summary when privacy is enabled', (role, userId, amountPence) => {
+    baseStore.currentUser = { id: userId, familyId: 'f-1', role, displayName: 'User' };
+    if (role === 'parent') {
+      baseStore.childWallets = [
+        { id: 'c-1', balance: 500 },
+        { id: 'c-2', balance: 250 },
+      ];
+      baseStore.familyMembers = [
+        { id: 'c-1', role: 'child' },
+        { id: 'c-2', role: 'child' },
+      ];
+    }
+    localStorage.setItem(`queki.moneyPrivacy:${userId}`, 'true');
+
+    render(<MemoryRouter><WalletSummaryCard /></MemoryRouter>);
+
+    const formatted = amountPence === 1234 ? '£12.34' : '£7.50';
+    expect(document.body.textContent).not.toContain(formatted);
+    expect(screen.getByTestId('wallet-summary')).toHaveTextContent('£••••');
   });
 
   it('owner is treated as parent (links to /wallets)', () => {

@@ -19,10 +19,6 @@
       "title": "Family Quest finished",
       "description": "\u201c{{title}}\u201d is ready to wrap up."
     },
-    "walletEvent": {
-      "title": "{{name}} received {{amount}}",
-      "description": "A wallet top-up landed in the last day."
-    },
     "allCalm": {
       "title": "All quiet",
       "description": "Nothing needs you right now."

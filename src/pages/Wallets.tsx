@@ -7,13 +7,15 @@ import { isChildRole, isParentRole } from '../lib/roles';
 import { Navigate } from 'react-router-dom';
 import { useState } from 'react';
 import { AddMoneyModal } from '../components/wallet/AddMoneyModal';
-import { transactionPresentation } from '../lib/walletPresentation';
-import { formatPence, formatDate as i18nFormatDate, resolveFamilyCurrencyCode } from '../i18n/format';
+import { formatPence, resolveFamilyCurrencyCode } from '../i18n/format';
 import { CharacterFrame } from '../components/queki/CharacterFrame';
 import { TactileButton } from '../components/queki/TactileButton';
+import { MoneyValue } from '../components/privacy/MoneyValue';
+import { adaptHumanReadableFamilyEvents } from '../lib/humanReadableFamilyEvent';
+import { WalletActivityRow, type WalletActivityEvent } from '../components/wallet/WalletActivityRow';
 
 export function Wallets() {
-  const { currentUser, familyData, familyMembers, loading, walletTransactions, childWallets } = useStore();
+  const { currentUser, familyData, familyMembers, loading, walletTransactions, childWallets, transferRequests, moneyRequests } = useStore();
   const { t } = useTranslation('wallet');
   const currencyCode = resolveFamilyCurrencyCode(familyData);
   const [selectedChildId, setSelectedChildId] = useState<string | null>(null);
@@ -26,32 +28,42 @@ export function Wallets() {
 
   const children = familyMembers.filter(m => isChildRole(m.role));
 
-  const formatDate = (ts: any) => {
-    if (!ts) return '';
-    return i18nFormatDate(ts.toDate(), undefined, { day: 'numeric', month: 'short', year: 'numeric' });
-  };
-
-  const getRecentTransactions = (childId: string) => {
-    const txs = walletTransactions
-      .filter(tx => tx.childId === childId)
-      .sort((a, b) => {
-        const aTime = a.createdAt?.toMillis() || 0;
-        const bTime = b.createdAt?.toMillis() || 0;
-        return bTime - aTime;
-      });
-    return txs.slice(0, 3);
-  };
-
   const formatAmount = (amountPence: number) => {
     return formatPence(amountPence, currencyCode);
   };
 
-  // Single source of truth for activity labels: walletPresentation.transactionPresentation
-  // (which delegates transfer rows to transferTitle). No local ad-hoc formatting here.
   const nameResolver = (id: string) => familyMembers.find(m => m.id === id)?.displayName;
+  const walletEvents = adaptHumanReadableFamilyEvents({
+    walletTransactions,
+    transferRequests,
+    moneyRequests,
+    opts: { currency: currencyCode, nameResolver, currentUserId: currentUser?.id, t },
+  });
+  const adaptedIds = new Set(walletEvents.map(event => event.transaction.id));
+  const legacyEvents: WalletActivityEvent[] = walletTransactions.flatMap(tx => {
+    if (adaptedIds.has(tx.id) || !tx.id || !tx.childId || !nameResolver(tx.childId)) return [];
+    const headline = typeof tx.description === 'string' && tx.description ? tx.description : t('allowance.activity.legacyTransaction');
+    const timestamp = tx.createdAt?.toMillis?.();
+    return [{
+      transaction: { id: tx.id, title: headline, subtitle: '', amountPence: 0, unit: 'money' } as WalletActivityEvent['transaction'],
+      eventKind: 'unknown',
+      subject: { id: tx.childId, name: nameResolver(tx.childId) },
+      amountPence: 0,
+      unit: 'money',
+      currency: currencyCode,
+      timestamp: typeof timestamp === 'number' ? timestamp : undefined,
+      status: 'completed',
+      sourceType: 'wallet_transaction',
+      sourceId: tx.id,
+      headline,
+      metadata: [],
+    }];
+  });
 
-  const formatTransactionLabel = (tx: any) =>
-    transactionPresentation(tx, { nameResolver, t }).title;
+  const getRecentEvents = (childId: string) => [...walletEvents, ...legacyEvents]
+    .filter(event => event.sourceType === 'wallet_transaction' && event.subject?.id === childId)
+    .sort((a, b) => (b.timestamp ?? 0) - (a.timestamp ?? 0))
+    .slice(0, 3);
 
   return (
     <div className="space-y-6 animate-in fade-in duration-300 pb-8">
@@ -70,7 +82,7 @@ export function Wallets() {
       ) : (
         <div className="grid gap-4 sm:grid-cols-2" data-testid="parent-wallet-list">
           {children.map(child => {
-            const recentTxs = getRecentTransactions(child.id);
+            const recentEvents = getRecentEvents(child.id);
             // Canonical balance source: families/{familyId}/wallets/{childId}.balance
             // The wallet document id equals the child's user document id (auth UID),
             // which is the same identifier used by wallet_transactions.childId.
@@ -95,7 +107,7 @@ export function Wallets() {
                         )}
                       </h4>
                       <p className="mt-1 text-2xl font-extrabold tabular-nums" data-testid={`wallet-balance-${child.id}`}>
-                        {formatAmount(balance)}
+                        <MoneyValue>{formatAmount(balance)}</MoneyValue>
                       </p>
                       <p className="text-xs text-white/70 uppercase font-bold tracking-wider">{t('allowance.balance')}</p>
                     </div>
@@ -113,22 +125,12 @@ export function Wallets() {
 
                 <div className="qk-bg-inset p-4">
                   <h5 className="text-xs font-bold qk-text-secondary uppercase tracking-wider mb-3">{t('allowance.recentActivity')}</h5>
-                  {recentTxs.length === 0 ? (
+                  {recentEvents.length === 0 ? (
                     <p className="text-sm qk-text-secondary">{t('allowance.noRecent')}</p>
                   ) : (
                     <div className="space-y-2">
-                      {recentTxs.map(tx => (
-                        <div key={tx.id} className="flex justify-between items-center text-sm rounded-xl qk-bg-card border qk-border-subtle p-2.5">
-                          <div className="min-w-0">
-                            <p className="font-medium qk-text-primary truncate">
-                              {formatTransactionLabel(tx)}
-                            </p>
-                            {tx.note && <p className="text-xs qk-text-secondary mt-0.5 truncate">{tx.note}</p>}
-                          </div>
-                          <span className="text-[10px] qk-text-secondary font-medium shrink-0 ml-2">
-                            {formatDate(tx.createdAt)}
-                          </span>
-                        </div>
+                      {recentEvents.map(event => (
+                        <WalletActivityRow key={event.transaction.id} event={event} />
                       ))}
                     </div>
                   )}

@@ -119,6 +119,21 @@ export interface NormalizedTransaction {
   /** Related parent ID (if applicable) */
   parentRef?: string;
 
+  /** Stored actor ID when it has a distinct semantic role from parentRef. */
+  actorId?: string;
+
+  /** Stored reviewer ID for a resolved request. */
+  reviewerId?: string;
+
+  /** Stored reviewer name snapshot for a resolved request. */
+  reviewerName?: string;
+
+  /** Related transfer sender ID (if applicable). */
+  fromChildId?: string;
+
+  /** Related transfer counterparty ID (if applicable). */
+  counterpartyChildId?: string;
+
   /** Related goal ID (if applicable) */
   goalId?: string;
 
@@ -148,6 +163,9 @@ export interface NormalizedTransaction {
 
   /** Reversal actor name */
   reversalActorName?: string;
+
+  /** Stored ID of the actor that reversed this transaction. */
+  reversalActorId?: string;
 
   /** Reversal timestamp */
   reversalOccurredAt?: number;

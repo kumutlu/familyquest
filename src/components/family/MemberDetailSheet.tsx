@@ -7,6 +7,7 @@ import { TactileButton } from '../queki/TactileButton';
 import { Trophy, Flame, Wallet, ArrowRightLeft, CheckSquare, Settings, Award, Star } from 'lucide-react';
 import { AchievementBadge } from './AchievementBadge';
 import { useNavigate } from 'react-router-dom';
+import { MoneyValue } from '../privacy/MoneyValue';
 
 interface MemberDetailSheetProps {
   member: MemberSummary | null;
@@ -98,7 +99,7 @@ export const MemberDetailSheet: React.FC<MemberDetailSheetProps> = ({
                 <span className="text-xs font-bold">{t('common:wallet', { defaultValue: 'Wallet' })}</span>
               </div>
               <span className="block text-lg font-black text-slate-900 dark:text-white">
-                {member.walletBalanceFormatted}
+                <MoneyValue>{member.walletBalanceFormatted}</MoneyValue>
               </span>
               <span className="text-[10px] font-medium text-slate-600 dark:text-slate-300">
                 {t('common:balance', { defaultValue: 'Balance' })}
