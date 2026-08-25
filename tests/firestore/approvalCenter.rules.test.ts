@@ -120,6 +120,31 @@ afterAll(async () => {
 
 describe('Approval Center Actions', () => {
 
+  it('preserves atomic owner bootstrap family creation', async () => {
+    const bootstrapOwnerId = 'approval-bootstrap-owner';
+    const bootstrapFamilyId = 'approval-bootstrap-family';
+    await testEnv.withSecurityRulesDisabled(async (context: any) => {
+      await setDoc(doc(context.firestore(), 'users', bootstrapOwnerId), {
+        uid: bootstrapOwnerId,
+        role: 'parent',
+        displayName: 'Bootstrap Owner',
+      });
+    });
+
+    const db = testEnv.authenticatedContext(bootstrapOwnerId).firestore();
+    const batch = writeBatch(db);
+    batch.set(doc(db, 'families', bootstrapFamilyId), {
+      name: 'Bootstrap Family',
+      inviteCode: 'BST123',
+    });
+    batch.update(doc(db, 'users', bootstrapOwnerId), {
+      familyId: bootstrapFamilyId,
+      role: 'owner',
+    });
+
+    await assertSucceeds(batch.commit());
+  });
+
   it('denies direct client-created join requests, including requester-supplied roles', async () => {
     const db = testEnv.authenticatedContext('joiner1').firestore();
     await assertFails(setDoc(doc(db, `families/${familyId}/join_requests/forged`), {

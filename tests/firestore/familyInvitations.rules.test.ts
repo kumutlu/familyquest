@@ -7,8 +7,8 @@
 // may assign.
 // ---------------------------------------------------------------------------
 
-import { initializeTestEnvironment, assertFails } from '@firebase/rules-unit-testing';
-import { doc, getDoc, setDoc, updateDoc, deleteDoc, serverTimestamp } from 'firebase/firestore';
+import { initializeTestEnvironment, assertFails, assertSucceeds } from '@firebase/rules-unit-testing';
+import { doc, getDoc, setDoc, updateDoc, deleteDoc, serverTimestamp, writeBatch } from 'firebase/firestore';
 import { readFileSync } from 'fs';
 import { describe, it, beforeAll, afterAll, beforeEach } from 'vitest';
 
@@ -82,6 +82,44 @@ describe('invitation records', () => {
 });
 
 describe('invitation-derived join requests', () => {
+  it('preserves atomic approval of a pending legacy invitation request', async () => {
+    const db = testEnv.authenticatedContext(ownerId).firestore();
+    const batch = writeBatch(db);
+    batch.set(doc(db, 'users', joinerId), {
+      uid: joinerId,
+      joinRequestId: joinerId,
+      familyId,
+      role: 'child',
+      displayName: 'Joiner',
+      avatarUrl: 'avatar',
+      rewardPoints: 0,
+      lifetimeXP: 0,
+      currentStreak: 0,
+      longestStreak: 0,
+      lastActiveDate: serverTimestamp(),
+    }, { merge: true });
+    batch.set(doc(db, `families/${familyId}/wallets/${joinerId}`), {
+      balance: 0,
+      createdAt: serverTimestamp(),
+      migratedFromLegacy: true,
+    });
+    batch.update(doc(db, requestPath), {
+      status: 'approved',
+      assignedRole: 'child',
+      reviewedBy: ownerId,
+      reviewedByName: 'Owner',
+      reviewedAt: serverTimestamp(),
+    });
+    batch.set(doc(db, `families/${familyId}/feed/join_${joinerId}`), {
+      actorId: ownerId,
+      type: 'custom',
+      text: 'Joiner joined through a legacy invitation',
+      timestamp: serverTimestamp(),
+    });
+
+    await assertSucceeds(batch.commit());
+  });
+
   it('reject an approval that assigns a different role than the invitation', async () => {
     const db = testEnv.authenticatedContext(ownerId).firestore();
     await assertFails(updateDoc(doc(db, requestPath), {

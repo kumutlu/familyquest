@@ -1729,6 +1729,30 @@ service cloud.firestore {
       allow read, write: if false;
     }
 
+    // ADULT INVITATION V2 — SERVER-ONLY ROOT COLLECTIONS
+    // Invitation credentials, idempotency state, and preview abuse counters are
+    // owned exclusively by the trusted backend. Clients receive only validated
+    // callable projections and may never read or forge these records directly.
+    match /familyInvitations/{invitationId} {
+      allow read, write: if false;
+    }
+    match /adultInvitationCreationIdempotency/{operationId} {
+      allow read, write: if false;
+    }
+    match /adultInvitationAcceptanceIdempotency/{operationId} {
+      allow read, write: if false;
+    }
+    match /adultInvitationRevocationIdempotency/{operationId} {
+      allow read, write: if false;
+    }
+    match /adultInvitationPreviewRateLimits/{limitKey} {
+      allow read, write: if false;
+    }
+    // Reserved compatibility name from the approved Task 3 contract.
+    match /adultInvitationRateLimits/{limitKey} {
+      allow read, write: if false;
+    }
+
     match /familyDeletionJobs/{jobId} {
       allow read, write: if false;
     }
