@@ -87,7 +87,23 @@
       "description": "Check back later for new quests."
     },
     "walletHeading": "Your wallet",
-    "openWallet": "Open your wallet, balance {{balance}}"
+    "openWallet": "Open your wallet, balance {{balance}}",
+    "familyTools": {
+      "heading": "Your goals",
+      "viewAll": "View all",
+      "goals": "Goals",
+      "family": "Family goal",
+      "mine": "My goal",
+      "openGoals": "Open Goals",
+      "goalAmounts": "{{current}} of {{target}}",
+      "goalProgressLabel": "Goal progress",
+      "remaining": "{{amount}} to go",
+      "noGoals": "No goals yet — take a look around.",
+      "petBox": "Pet Box",
+      "openPetBox": "Open Pet Box",
+      "petBoxSaved": "saved for your family pets",
+      "noPetBox": "Your family's pet fund lives here."
+    }
   },
   "loading": "Warming things up…",
   "emptyAction": "Take a look around",

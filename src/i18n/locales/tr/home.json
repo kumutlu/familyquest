@@ -87,7 +87,23 @@
       "description": "Yeni görevler için sonra tekrar bak."
     },
     "walletHeading": "Cüzdanın",
-    "openWallet": "Cüzdanını aç, bakiye {{balance}}"
+    "openWallet": "Cüzdanını aç, bakiye {{balance}}",
+    "familyTools": {
+      "heading": "Hedeflerin",
+      "viewAll": "Tümünü gör",
+      "goals": "Hedefler",
+      "family": "Aile hedefi",
+      "mine": "Hedefim",
+      "openGoals": "Hedefleri aç",
+      "goalAmounts": "{{current}} / {{target}}",
+      "goalProgressLabel": "Hedef ilerlemesi",
+      "remaining": "{{amount}} kaldı",
+      "noGoals": "Henüz hedef yok — bir göz at.",
+      "petBox": "Pet Box",
+      "openPetBox": "Pet Box'ı aç",
+      "petBoxSaved": "aile evcil hayvanları için birikti",
+      "noPetBox": "Ailenizin evcil hayvan fonu burada."
+    }
   },
   "loading": "Hazırlanıyor…",
   "emptyAction": "Etrafa bir göz at",

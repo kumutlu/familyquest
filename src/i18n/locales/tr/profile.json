@@ -36,6 +36,15 @@
   "alreadyPending": "Onayınızı bekleyen zaten bir profil değişikliğiniz var.",
   "lockedPremium": "Bu avatar henüz açılmadı. Göndermeden önce açın.",
   "pointsNote": "{{count}} puanınız var. Premium bir avatarı açmak yalnızca bir kez puan harcar; sahip olunan bir avatarı seçmek ücretsizdir.",
+  "creator": {
+    "title": "Karakterini oluştur",
+    "preview": "Avatar önizlemesi",
+    "surprise": "Beni şaşırt",
+    "categories": "Avatar kategorileri",
+    "category": { "base": "Temel", "skin": "Cilt tonu", "hair": "Saç", "face": "Yüz", "accessory": "Aksesuar", "outfit": "Kıyafet", "background": "Arka plan" },
+    "field": { "base": "Temel", "skinTone": "Cilt tonu", "hairStyle": "Stil", "hairColor": "Renk", "face": "Yüz", "accessory": "Aksesuar", "outfit": "Stil", "outfitColor": "Renk", "background": "Arka plan" },
+    "option": {}
+  },
   "avatar": {
     "filterLabel": "Avatarları filtrele",
     "chooseLabel": "Avatar seç",

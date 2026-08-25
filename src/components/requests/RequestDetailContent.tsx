@@ -192,13 +192,13 @@ export function RequestDetailContent({
             <div className="flex items-center gap-2 text-sm">
               <span className="text-gray-500 w-24 shrink-0">{t('requests:detail.avatar')}</span>
               <Avatar
-                src={resolveAvatarImage(request.profileChange.currentAvatarId, request.profileChange.currentAvatar)}
+                src={resolveAvatarImage(request.profileChange.currentAvatarId, request.profileChange.currentAvatar, request.profileChange.currentAvatarConfig)}
                 fallback={(request.profileChange.currentDisplayName || '?')[0]}
                 size="sm"
               />
               <ArrowRight size={14} className="text-gray-400" />
               <Avatar
-                src={resolveAvatarImage(request.profileChange.requestedAvatarId, request.profileChange.requestedAvatar)}
+                src={resolveAvatarImage(request.profileChange.requestedAvatarId, request.profileChange.requestedAvatar, request.profileChange.requestedAvatarConfig)}
                 fallback={(request.profileChange.requestedDisplayName || '?')[0]}
                 size="sm"
               />

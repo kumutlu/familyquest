@@ -27,6 +27,7 @@ import {
   type OptionalStartupResource,
 } from '../startupDiagnostics';
 import { normalizeGoalDoc } from '../lib/goalContracts';
+import { withResolvedAvatar } from '../config/avatarCatalog';
 
 export type BootstrapStatus = 'idle' | 'loading' | 'ready' | 'error';
 
@@ -407,11 +408,11 @@ export const useStore = create<AppState>((set, get) => ({
               get().authUser?.uid !== user.uid ||
               snapshotRevision !== profileSnapshotRevision
             ) return;
-            const validatedProfile = {
+            const validatedProfile = withResolvedAvatar({
               ...profile,
               language,
               ...(familyId ? { familyId } : { familyId: undefined }),
-            };
+            });
             set({ currentUser: validatedProfile, profileLoading: false, bootstrapError: null, profileServerConfirmed: !profileSnapshot.metadata?.fromCache ? true : get().profileServerConfirmed });
             logAuthTrace('profile-request-completed', { hasFamilyId: Boolean(familyId) });
 
@@ -853,7 +854,7 @@ export const useStore = create<AppState>((set, get) => ({
         startStartupResource('WALLETS');
         subscribePlanned('tasks', 'Tasks', snapshot => set({ tasks: docs(snapshot) }));
         subscribePlanned('rewards', 'Rewards', snapshot => set({ rewards: docs(snapshot) }));
-        subscribePlanned('members', 'Members', snapshot => set({ familyMembers: docs(snapshot) }));
+        subscribePlanned('members', 'Members', snapshot => set({ familyMembers: docs(snapshot).map(withResolvedAvatar) }));
 
         if (currentUser?.role === 'parent' || currentUser?.role === 'owner') {
           subscribePlanned('wallets', 'Wallets', snapshot => set({ childWallets: docs(snapshot) }));

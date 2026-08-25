@@ -1629,6 +1629,29 @@ service cloud.firestore {
       return value is string && value in ['en', 'tr'];
     }
 
+    // Presentation-only composable avatar contract. Every field is required,
+    // every value is closed over a fixed enum, and no free-form URL/CSS/SVG
+    // data can enter the profile through this map.
+    function isValidAvatarConfig(data) {
+      return data is map
+        && data.keys().hasOnly(['version', 'base', 'skinTone', 'hairStyle', 'hairColor', 'face', 'accessory', 'outfit', 'outfitColor', 'background'])
+        && data.keys().hasAll(['version', 'base', 'skinTone', 'hairStyle', 'hairColor', 'face', 'accessory', 'outfit', 'outfitColor', 'background'])
+        && data.version == 1
+        && data.base in ['round', 'soft', 'bold']
+        && data.skinTone in ['porcelain', 'fair', 'warm', 'tan', 'brown', 'deep']
+        && data.hairStyle in ['short', 'crop', 'bob', 'waves', 'long', 'curls', 'coils', 'ponytail']
+        && data.hairColor in ['black', 'brown', 'chestnut', 'blonde', 'copper', 'pink', 'purple', 'blue']
+        && data.face in ['smile', 'happy', 'bright', 'calm', 'cheeky']
+        && data.accessory in ['none', 'glasses', 'round-glasses', 'cap', 'beanie', 'headband']
+        && data.outfit in ['tee', 'hoodie', 'jacket', 'sweater']
+        && data.outfitColor in ['purple', 'indigo', 'blue', 'teal', 'green', 'coral', 'pink', 'gold']
+        && data.background in ['lilac', 'sky', 'mint', 'peach', 'sunny', 'berry'];
+    }
+
+    function hasValidOptionalAvatarConfig(data) {
+      return !('avatarConfig' in data) || isValidAvatarConfig(data.avatarConfig);
+    }
+
     function isValidGamificationConfig(data) {
       return data.keys().hasOnly(['schemaVersion', 'dailyGoalPercentage'])
         && data.schemaVersion == 1
@@ -1659,7 +1682,7 @@ service cloud.firestore {
           && isValidLanguage(request.resource.data.language)) ||
         (authProfileId() == uid && !request.resource.data.diff(resource.data).affectedKeys().hasAny([
           'role', 'familyId', 'lifecycle', 'rewardPoints', 'lifetimeXP', 'walletBalance', 'balance', 'lastFundTxId',
-          'displayName', 'avatarUrl', 'avatarId', 'language',
+          'displayName', 'avatarUrl', 'avatarId', 'avatarConfig', 'language',
           // Phase 1 child-login linking fields: server-only (Admin SDK). A client
           // must never be able to set its own login link, username, or flags.
           'hasLogin', 'username', 'loginEnabled', 'requiresPasswordChange', 'authUid'
@@ -1667,7 +1690,8 @@ service cloud.firestore {
         // Owner/parent may self-edit only their own benign profile fields.
         // Children are not isParent, so they remain routed through the approval flow.
         (isParent(resource.data.familyId) && authProfileId() == uid
-          && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['displayName', 'avatarUrl', 'avatarId'])) ||
+          && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['displayName', 'avatarUrl', 'avatarId', 'avatarConfig'])
+          && hasValidOptionalAvatarConfig(request.resource.data)) ||
         (request.resource.data.diff(resource.data).affectedKeys().hasAny(['lastRedemptionId']) && isValidRedemptionDeduction(uid))
           || (request.resource.data.diff(resource.data).affectedKeys().hasAny(['lastTaskCompletionId']) && isValidTaskApprovalMutation(uid))
           || (request.resource.data.diff(resource.data).affectedKeys().hasAny(['lastBehaviourEventId']) && isValidBehaviourPointMutation(uid)) ||
@@ -1678,7 +1702,9 @@ service cloud.firestore {
         // grant 'owner' (no self-escalation to family owner) and may NEVER
         // touch 'lifecycle' (archive/remove/restore are server-only).
         ('familyId' in resource.data && isOwner(resource.data.familyId) && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['role']) && resource.data.get('role', 'null') != 'child' && request.resource.data.role != 'child' && request.resource.data.role != 'owner') ||
-        ('familyId' in resource.data && isParent(resource.data.familyId) && resource.data.get('role', 'null') == 'child' && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['displayName', 'avatarUrl', 'avatarId']))
+        ('familyId' in resource.data && isParent(resource.data.familyId) && resource.data.get('role', 'null') == 'child'
+          && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['displayName', 'avatarUrl', 'avatarId', 'avatarConfig'])
+          && hasValidOptionalAvatarConfig(request.resource.data))
       );
 
       allow create: if isAuthenticated() && (
@@ -2399,15 +2425,27 @@ service cloud.firestore {
           return avatarId == null || avatarId == '' || isStarterAvatar(avatarId)
             || (avatarId != null && exists(/databases/$(database)/documents/families/$(familyId)/users/$(authProfileId())/avatar_unlocks/$(avatarId)));
         }
+        function requestedAvatarConfigIsAllowed() {
+          return !('requestedAvatarConfig' in request.resource.data)
+            || request.resource.data.requestedAvatarConfig == null
+            || isValidAvatarConfig(request.resource.data.requestedAvatarConfig);
+        }
+        function currentAvatarConfigIsAccurate() {
+          let profile = get(/databases/$(database)/documents/users/$(authProfileId())).data;
+          return !('currentAvatarConfig' in request.resource.data)
+            || request.resource.data.currentAvatarConfig == profile.get('avatarConfig', null);
+        }
         allow read: if isParent(familyId) || (isAuthenticated() && resource.data.childId == authProfileId());
         allow create: if isChildInFamily(familyId, authProfileId())
           && request.resource.data.keys().hasAll(['familyId', 'childId', 'childName', 'requestedDisplayName', 'requestedAvatar', 'currentDisplayName', 'currentAvatar', 'status', 'createdAt', 'actorId'])
-          && request.resource.data.keys().hasOnly(['familyId', 'childId', 'childName', 'requestedDisplayName', 'requestedAvatar', 'requestedAvatarId', 'currentDisplayName', 'currentAvatar', 'currentAvatarId', 'status', 'createdAt', 'actorId', 'id'])
+          && request.resource.data.keys().hasOnly(['familyId', 'childId', 'childName', 'requestedDisplayName', 'requestedAvatar', 'requestedAvatarId', 'requestedAvatarConfig', 'currentDisplayName', 'currentAvatar', 'currentAvatarId', 'currentAvatarConfig', 'status', 'createdAt', 'actorId', 'id'])
           && request.resource.data.familyId == familyId
           && request.resource.data.childId == authProfileId()
           && request.resource.data.status == 'pending'
           && request.resource.data.createdAt == request.time
-          && requestedAvatarIsAllowed();
+          && requestedAvatarIsAllowed()
+          && requestedAvatarConfigIsAllowed()
+          && currentAvatarConfigIsAccurate();
         allow update: if (isParent(familyId) && resource.data.status == 'pending'
           && request.resource.data.status in ['approved', 'rejected']
           && request.resource.data.reviewedBy == authProfileId()

@@ -31,6 +31,7 @@ import {
 } from '../../lib/moneyRequestContracts';
 import { isPetBoxEnabled } from '../../lib/familyFeatures';
 import { approveChildJoinRequest, rejectChildJoinRequest } from '../../lib/childJoinApi';
+import { resolveAvatarImage } from '../../config/avatarCatalog';
 
 export function ApprovalCenter() {
   const { t } = useTranslation('approvals');
@@ -347,7 +348,7 @@ export function ApprovalCenter() {
       const requestedName = item.requestedDisplayName || item.childName || child?.displayName || 'A child';
       const currentName = child?.displayName || item.childName || '';
       const nameChanged = requestedName && currentName && requestedName !== currentName;
-      const avatarChanged = Boolean(item.requestedAvatarId) || Boolean(item.requestedAvatar);
+      const avatarChanged = Boolean(item.requestedAvatarId) || Boolean(item.requestedAvatar) || Object.prototype.hasOwnProperty.call(item, 'requestedAvatarConfig');
       const changes: string[] = [];
       if (nameChanged) changes.push(t('change.name', { name: requestedName }));
       if (avatarChanged) changes.push(t('change.avatar'));
@@ -356,7 +357,7 @@ export function ApprovalCenter() {
         childName: item.childName || child?.displayName || 'A child',
         changes: changes.length ? ` (${changes.join(', ')})` : '',
       });
-      avatarSrc = item.requestedAvatar || child?.avatarUrl || '';
+      avatarSrc = resolveAvatarImage(item.requestedAvatarId, item.requestedAvatar || child?.avatarUrl, item.requestedAvatarConfig) || '';
       fallback = (item.childName || child?.displayName || '?')[0] || '?';
     } else if (item.category === 'child_join') {
       title = t('type.childJoinRequest');

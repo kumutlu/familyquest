@@ -10,7 +10,7 @@ const firestore = vi.hoisted(() => {
   })
   return {
     collection, doc, runTransaction: vi.fn(), serverTimestamp: vi.fn(() => ({ server: true })),
-    query: vi.fn(), where: vi.fn(), orderBy: vi.fn(), getDocs: vi.fn(), updateDoc: vi.fn(),
+    query: vi.fn(), where: vi.fn(), orderBy: vi.fn(), getDocs: vi.fn(), updateDoc: vi.fn(), deleteField: vi.fn(() => ({ deleteField: true })),
     reset: () => { id = 0 },
   }
 })
@@ -149,6 +149,38 @@ describe('profile update request API', () => {
   })
 
   describe('submit (child flow)', () => {
+    const avatarConfig = {
+      version: 1 as const, base: 'round' as const, skinTone: 'warm' as const,
+      hairStyle: 'curls' as const, hairColor: 'brown' as const, face: 'smile' as const,
+      accessory: 'glasses' as const, outfit: 'hoodie' as const,
+      outfitColor: 'purple' as const, background: 'mint' as const,
+    }
+
+    it('stores validated requested/current avatar configs without changing unlock data', async () => {
+      const tx = transactionWith({
+        'users/child-1': { familyId: 'family-1', role: 'child', displayName: 'Muhammed Osman', avatarUrl: 'https://old', avatarId: 'starter-cat', avatarConfig: { ...avatarConfig, hairStyle: 'waves' } },
+      })
+      firestore.getDocs.mockResolvedValue({ docs: [] })
+      await submitProfileUpdateRequest('family-1', 'Muhammed', STARTER, { avatarConfig })
+
+      expect(tx.set).toHaveBeenCalledWith(
+        expect.objectContaining({ path: 'families/family-1/profile_update_requests/generated-1' }),
+        expect.objectContaining({
+          requestedAvatarConfig: avatarConfig,
+          currentAvatarConfig: expect.objectContaining({ version: 1, hairStyle: 'waves' }),
+        }),
+      )
+      expect(tx.set).not.toHaveBeenCalledWith(expect.objectContaining({ path: expect.stringContaining('avatar_unlocks') }), expect.anything())
+    })
+
+    it('rejects malformed avatar config before any request write', async () => {
+      transactionWith({ 'users/child-1': { familyId: 'family-1', role: 'child', displayName: 'Muhammed Osman' } })
+      firestore.getDocs.mockResolvedValue({ docs: [] })
+      await expect(submitProfileUpdateRequest('family-1', 'Muhammed', STARTER, {
+        avatarConfig: { ...avatarConfig, background: 'url(https://evil.example)' } as any,
+      })).rejects.toThrow(/avatar configuration/i)
+    })
+
     it('creates a pending request and notifies approvers', async () => {
       const tx = transactionWith({
         'users/child-1': { familyId: 'family-1', role: 'child', displayName: 'Muhammed Osman', avatarUrl: 'https://old', avatarId: 'starter-cat' },
@@ -200,6 +232,43 @@ describe('profile update request API', () => {
   })
 
   describe('approve', () => {
+    const avatarConfig = {
+      version: 1 as const, base: 'round' as const, skinTone: 'warm' as const,
+      hairStyle: 'curls' as const, hairColor: 'brown' as const, face: 'smile' as const,
+      accessory: 'glasses' as const, outfit: 'hoodie' as const,
+      outfitColor: 'purple' as const, background: 'mint' as const,
+    }
+
+    it('applies only a validated requested avatar config during parent approval', async () => {
+      authState.currentUser = { uid: 'owner-1' }
+      const tx = transactionWith({
+        'families/family-1/profile_update_requests/req-config': {
+          childId: 'child-1', childName: 'Muhammed', requestedDisplayName: 'Muhammed',
+          requestedAvatarId: 'starter-cat', requestedAvatar: 'https://old', requestedAvatarConfig: avatarConfig,
+          currentDisplayName: 'Muhammed', currentAvatarId: 'starter-cat', currentAvatar: 'https://old', status: 'pending',
+        },
+        'users/child-1': { familyId: 'family-1', role: 'child', displayName: 'Muhammed', avatarUrl: 'https://old', avatarId: 'starter-cat' },
+        'users/owner-1': { familyId: 'family-1', role: 'owner', displayName: 'Kemal' },
+      })
+      await approveProfileUpdateRequest('family-1', 'req-config')
+      expect(tx.update).toHaveBeenCalledWith(
+        expect.objectContaining({ path: 'users/child-1' }),
+        expect.objectContaining({ avatarConfig }),
+      )
+    })
+
+    it('rejects a malformed requested config instead of applying it', async () => {
+      authState.currentUser = { uid: 'owner-1' }
+      transactionWith({
+        'families/family-1/profile_update_requests/req-config': {
+          childId: 'child-1', requestedDisplayName: 'Muhammed', requestedAvatarConfig: { ...avatarConfig, extra: 'bad' }, status: 'pending',
+        },
+        'users/child-1': { familyId: 'family-1', role: 'child', displayName: 'Muhammed' },
+        'users/owner-1': { familyId: 'family-1', role: 'owner', displayName: 'Kemal' },
+      })
+      await expect(approveProfileUpdateRequest('family-1', 'req-config')).rejects.toThrow(/avatar configuration/i)
+    })
+
     it('updates the profile atomically and notifies the child', async () => {
       authState.currentUser = { uid: 'owner-1' }
       const tx = transactionWith({

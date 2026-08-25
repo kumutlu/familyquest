@@ -12,6 +12,7 @@
 import { isPendingApprovalStatus, isApprovedStatus, isRejectedStatus, isCancelledStatus } from './requestStatus';
 import i18n from '../i18n/config';
 import { formatPence, currencyCodeFromSymbol } from '../i18n/format';
+import type { AvatarConfigV1 } from '../config/avatarConfig';
 
 export type RequestCategory =
   | 'task'
@@ -59,6 +60,8 @@ export interface ProfileChange {
   requestedAvatar?: string;
   currentAvatarId?: string | null;
   requestedAvatarId?: string | null;
+  currentAvatarConfig?: AvatarConfigV1 | null;
+  requestedAvatarConfig?: AvatarConfigV1 | null;
 }
 
 export interface NormalizedRequest {
@@ -374,6 +377,8 @@ const profileUpdateAdapter: RequestAdapter = (raw, ctx) => {
       requestedAvatar: raw.requestedAvatar,
       currentAvatarId: raw.currentAvatarId || null,
       requestedAvatarId: raw.requestedAvatarId || null,
+      currentAvatarConfig: raw.currentAvatarConfig || null,
+      requestedAvatarConfig: raw.requestedAvatarConfig || null,
     },
     moneyMoved: false,
     outcome: {

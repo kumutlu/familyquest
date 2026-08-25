@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Modal } from '../ui/Modal';
 import { Button } from '../ui/Button';
-import { doc, updateDoc } from 'firebase/firestore';
+import { deleteField, doc, updateDoc } from 'firebase/firestore';
 import { db } from '../../lib/firebase';
 import { isChildRole, isOwnerRole, isParentRole } from '../../lib/roles';
 import {
@@ -15,6 +15,8 @@ import { useStore } from '../../store/useStore';
 import { getAvatarById, resolveAvatarImage } from '../../config/avatarCatalog';
 import { AvatarPicker } from './AvatarPicker';
 import { AvatarUnlockSheet } from './AvatarUnlockSheet';
+import { AvatarCreator } from './AvatarCreator';
+import { AVATAR_CONFIG_DEFAULT, normalizeAvatarConfig, type AvatarConfigV1 } from '../../config/avatarConfig';
 
 interface ProfileEditorModalProps {
   user: any;
@@ -39,6 +41,9 @@ export function ProfileEditorModal({ user, onClose }: ProfileEditorModalProps) {
   const { t } = useTranslation(['profile', 'common']);
   const [displayName, setDisplayName] = useState(user?.displayName || '');
   const [selectedAvatarId, setSelectedAvatarId] = useState<string | null>(user?.avatarId || null);
+  const [selectedAvatarConfig, setSelectedAvatarConfig] = useState<AvatarConfigV1 | null>(
+    () => normalizeAvatarConfig(user?.avatarConfig),
+  );
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
@@ -114,6 +119,8 @@ export function ProfileEditorModal({ user, onClose }: ProfileEditorModalProps) {
           update.avatarId = selectedAvatarId;
           update.avatarUrl = resolveAvatarImage(selectedAvatarId, user?.avatarUrl) || '';
         }
+        if (selectedAvatarConfig) update.avatarConfig = selectedAvatarConfig;
+        else if (user?.avatarConfig) update.avatarConfig = deleteField();
         await updateDoc(doc(db, 'users', user.id), update);
         setSuccess(t('saveSuccess'));
         window.setTimeout(onClose, 900);
@@ -140,6 +147,7 @@ export function ProfileEditorModal({ user, onClose }: ProfileEditorModalProps) {
         await submitProfileUpdateRequest(user.familyId, displayName, selectedAvatarId, {
           ownedAvatarIds,
           legacyAvatarUrl: user?.avatarUrl || null,
+          avatarConfig: selectedAvatarConfig,
         });
         setSuccess(t('submittedForApproval'));
         window.setTimeout(onClose, 1400);
@@ -243,6 +251,18 @@ export function ProfileEditorModal({ user, onClose }: ProfileEditorModalProps) {
         </div>
 
         <div>
+          <span className="mb-2 block text-sm font-medium text-gray-700">{t('creator.title')}</span>
+          <AvatarCreator
+            value={selectedAvatarConfig || AVATAR_CONFIG_DEFAULT}
+            onChange={config => {
+              setSelectedAvatarConfig(config);
+              clearStaleError();
+            }}
+            disabled={locked}
+          />
+        </div>
+
+        <div>
           <span className="block text-sm font-medium text-gray-700 mb-1">{t('chooseAvatar')}</span>
           <AvatarPicker
             selectedAvatarId={selectedAvatarId}
@@ -250,6 +270,7 @@ export function ProfileEditorModal({ user, onClose }: ProfileEditorModalProps) {
             pointsBalance={pointsBalance}
             onSelect={id => {
               setSelectedAvatarId(id);
+              setSelectedAvatarConfig(null);
               clearStaleError();
             }}
             onRequestUnlock={setUnlockTarget}

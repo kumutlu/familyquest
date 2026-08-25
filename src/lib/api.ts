@@ -1,6 +1,6 @@
 import {
   collection, doc, setDoc, updateDoc,
-  addDoc, runTransaction, query, where, orderBy, getDocs, getDoc, serverTimestamp, deleteDoc, writeBatch
+  addDoc, runTransaction, query, where, orderBy, getDocs, getDoc, serverTimestamp, deleteDoc, deleteField, writeBatch
 } from 'firebase/firestore';
 import {
   createUserWithEmailAndPassword,
@@ -46,6 +46,7 @@ import {
 import { useStore } from '../store/useStore';
 import { unregisterCurrentDevice } from './pushNotifications';
 import { getAvatarById, getAvatarCost, resolveAvatarImage } from '../config/avatarCatalog';
+import { isValidAvatarConfig, type AvatarConfigV1 } from '../config/avatarConfig';
 import {
   periodKeyFor,
 } from './taskRecurrence';
@@ -3220,8 +3221,12 @@ export const submitProfileUpdateRequest = async (
   familyId: string,
   requestedDisplayName: string,
   requestedAvatarId: string | null,
-  opts?: { ownedAvatarIds?: string[]; legacyAvatarUrl?: string | null },
+  opts?: { ownedAvatarIds?: string[]; legacyAvatarUrl?: string | null; avatarConfig?: AvatarConfigV1 | null },
 ) => {
+  const hasAvatarConfig = !!opts && Object.prototype.hasOwnProperty.call(opts, 'avatarConfig');
+  if (hasAvatarConfig && opts?.avatarConfig !== null && !isValidAvatarConfig(opts?.avatarConfig)) {
+    throw new Error('Invalid avatar configuration.');
+  }
   const currentUserUid = requireActorId();
   const { displayName, avatarId, legacyAvatarUrl } = validateProfileUpdateInput(
     requestedDisplayName,
@@ -3295,7 +3300,7 @@ export const submitProfileUpdateRequest = async (
     // ---------------------------------------------------------------------
     // PHASE C — WRITES ONLY (no transaction.get may occur from here on)
     // ---------------------------------------------------------------------
-    transaction.set(reqRef, {
+    const requestData: Record<string, unknown> = {
       id: reqRef.id,
       familyId,
       childId: currentUserUid,
@@ -3309,7 +3314,12 @@ export const submitProfileUpdateRequest = async (
       status: 'pending',
       createdAt: serverTimestamp(),
       actorId: currentUserUid,
-    });
+    };
+    if (hasAvatarConfig) {
+      requestData.requestedAvatarConfig = opts?.avatarConfig ?? null;
+      requestData.currentAvatarConfig = isValidAvatarConfig(userData.avatarConfig) ? userData.avatarConfig : null;
+    }
+    transaction.set(reqRef, requestData);
 
     const feedRef = doc(collection(db, `families/${familyId}/feed`));
     transaction.set(feedRef, {
@@ -3417,6 +3427,11 @@ export const approveProfileUpdateRequest = async (familyId: string, requestId: s
     }
     const reviewerName = reviewerDoc.data().displayName || 'Parent';
 
+    const hasRequestedAvatarConfig = Object.prototype.hasOwnProperty.call(reqData, 'requestedAvatarConfig');
+    if (hasRequestedAvatarConfig && reqData.requestedAvatarConfig !== null && !isValidAvatarConfig(reqData.requestedAvatarConfig)) {
+      throw new Error('Invalid avatar configuration.');
+    }
+
     // Resolve the notification dedupe read up-front (reads-before-writes).
     const notifPlan = await loadNotificationRecipientsInTransaction(transaction, familyId, {
       type: 'profile_update_approved',
@@ -3438,6 +3453,7 @@ export const approveProfileUpdateRequest = async (familyId: string, requestId: s
     const updateFields: Record<string, unknown> = { displayName: reqData.requestedDisplayName };
     if (nextAvatarId) updateFields.avatarId = nextAvatarId;
     if (nextAvatar) updateFields.avatarUrl = nextAvatar;
+    if (hasRequestedAvatarConfig) updateFields.avatarConfig = reqData.requestedAvatarConfig ?? deleteField();
     transaction.update(userRef, updateFields);
 
     transaction.update(reqRef, {

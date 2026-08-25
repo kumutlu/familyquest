@@ -1,6 +1,6 @@
 import { useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
-import { useNavigate } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import {
   Hourglass,
   Wallet as WalletIcon,
@@ -12,6 +12,9 @@ import {
   PartyPopper,
   AlertTriangle,
   RefreshCw,
+  Target,
+  PawPrint,
+  ArrowRight,
 } from 'lucide-react';
 import { useStore } from '../../store/useStore';
 import { adaptGamificationSummary } from '../../lib/gamificationAdapters';
@@ -28,6 +31,8 @@ import { TactileButton } from '../queki/TactileButton';
 import { MoneyPrivacyToggle } from '../privacy/MoneyPrivacyToggle';
 import { MoneyValue } from '../privacy/MoneyValue';
 import { useMoneyPrivacy } from '../privacy/MoneyPrivacyContext';
+import { selectFeaturedChildGoal } from '../../lib/home/childFamilyTools';
+import { isPetBoxEnabled } from '../../lib/familyFeatures';
 
 /**
  * Child Living Home — Queki v2 Wave 1.
@@ -60,6 +65,9 @@ export function ChildLivingHome() {
     myGamificationSummary,
     myDailyProgress,
     myWallet,
+    savingsGoals,
+    funds,
+    familyData,
     bootstrapStatus,
     retryFeature,
   } = useStore();
@@ -189,6 +197,13 @@ export function ChildLivingHome() {
     ? null
     : formatMoney(Number(myWallet.balance ?? 0));
 
+  const featuredGoal = useMemo(
+    () => selectFeaturedChildGoal(savingsGoals, currentUser?.id),
+    [savingsGoals, currentUser?.id],
+  );
+  const petBoxEnabled = isPetBoxEnabled(familyData);
+  const featuredFund = (funds ?? [])[0];
+
   if (coreResourcesFailed) {
     return (
       <div className="mx-auto max-w-md py-12 text-center" role="alert" data-testid="living-home-error">
@@ -306,6 +321,70 @@ export function ChildLivingHome() {
           {mascotState === 'celebration' ? t('child.mascotCelebrate') : t('child.mascotEncourage')}
         </p>
       </div>
+
+      <section aria-labelledby="child-goals-heading" className="space-y-3">
+        <div className="flex items-center justify-between gap-3">
+          <h2 id="child-goals-heading" className="text-section-title qk-text-primary">{t('child.familyTools.heading')}</h2>
+          <span className="text-meta qk-text-secondary">{t('child.familyTools.viewAll')}</span>
+        </div>
+        <div
+          data-testid="child-family-tools-layout"
+          className={`grid grid-cols-1 gap-4 ${petBoxEnabled ? 'md:grid-cols-2' : ''}`}
+        >
+          <Link
+            to="/goals"
+            aria-label={t('child.familyTools.openGoals')}
+            data-testid="child-goals-card"
+            className="group min-w-0 rounded-card border border-primary-100 bg-gradient-to-br from-primary-50 to-white p-5 qk-shadow-card transition-transform hover:-translate-y-0.5 active:translate-y-0 active:scale-[0.99] focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-500"
+          >
+            <div className="flex items-center justify-between gap-3">
+              <span className="flex h-11 w-11 items-center justify-center rounded-2xl bg-primary-500 text-white"><Target size={22} aria-hidden="true" /></span>
+              <ArrowRight size={18} className="text-primary-400 transition-transform group-hover:translate-x-0.5" aria-hidden="true" />
+            </div>
+            <h3 className="mt-4 text-card-title qk-text-primary">{t('child.familyTools.goals')}</h3>
+            {featuredGoal ? (
+              <>
+                <p className="mt-1 text-meta font-semibold text-primary-600">{t(`child.familyTools.${featuredGoal.context}`)}</p>
+                <p className="mt-1 truncate text-body font-bold qk-text-primary">{featuredGoal.title}</p>
+                <p className="mt-3 font-balance text-lg qk-text-primary">
+                  {t('child.familyTools.goalAmounts', { current: formatMoney(featuredGoal.currentAmountPence), target: formatMoney(featuredGoal.targetAmountPence) })}
+                </p>
+                <ProgressBar className="mt-2" tone="brand" value={featuredGoal.progressPercent} aria-label={t('child.familyTools.goalProgressLabel')} />
+                <div className="mt-2 flex items-center justify-between gap-2 text-meta qk-text-secondary">
+                  <span>{t('child.familyTools.remaining', { amount: formatMoney(featuredGoal.remainingAmountPence) })}</span>
+                  <span className="font-bold text-primary-600">{featuredGoal.progressPercent}%</span>
+                </div>
+              </>
+            ) : (
+              <p className="mt-3 text-body qk-text-secondary">{t('child.familyTools.noGoals')}</p>
+            )}
+          </Link>
+
+          {petBoxEnabled && (
+            <Link
+              to="/pet-box"
+              aria-label={t('child.familyTools.openPetBox')}
+              data-testid="child-pet-box-card"
+              className="group min-w-0 rounded-card border border-mint-100 bg-gradient-to-br from-mint-50 to-white p-5 qk-shadow-card transition-transform hover:-translate-y-0.5 active:translate-y-0 active:scale-[0.99] focus:outline-none focus-visible:ring-2 focus-visible:ring-mint-500"
+            >
+              <div className="flex items-center justify-between gap-3">
+                <span className="flex h-11 w-11 items-center justify-center rounded-2xl bg-mint-500 text-white"><PawPrint size={22} aria-hidden="true" /></span>
+                <ArrowRight size={18} className="text-mint-500 transition-transform group-hover:translate-x-0.5" aria-hidden="true" />
+              </div>
+              <h3 className="mt-4 text-card-title qk-text-primary">{t('child.familyTools.petBox')}</h3>
+              {featuredFund ? (
+                <>
+                  <p className="mt-1 text-body font-bold qk-text-primary">{featuredFund.name}</p>
+                  <p className="mt-3 font-balance text-xl font-extrabold text-mint-700">{formatMoney(Number(featuredFund.balance ?? 0))}</p>
+                  <p className="mt-1 text-meta qk-text-secondary">{t('child.familyTools.petBoxSaved')}</p>
+                </>
+              ) : (
+                <p className="mt-3 text-body qk-text-secondary">{t('child.familyTools.noPetBox')}</p>
+              )}
+            </Link>
+          )}
+        </div>
+      </section>
     </div>
   );
 }

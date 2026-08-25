@@ -72,7 +72,7 @@ describe('ProfileEditorModal', () => {
 
   it('child submits for approval and does NOT call updateDoc', async () => {
     const user = userEvent.setup()
-    renderModal({ id: 'c1', role: 'child', displayName: 'Muhammed Osman', avatarUrl: 'https://old', avatarId: 'starter-cat', rewardPoints: 500, familyId: 'f1' })
+    renderModal({ id: 'c1', role: 'child', displayName: 'Muhammed Osman', avatarUrl: 'https://old', avatarId: 'starter-cat', familyId: 'f1' })
     const nameInput = screen.getByLabelText('Display Name')
     await user.clear(nameInput)
     await user.type(nameInput, 'Muhammed')
@@ -82,9 +82,37 @@ describe('ProfileEditorModal', () => {
     expect(screen.getAllByText(/Changes submitted for parent approval/i).length).toBeGreaterThan(0)
   })
 
+  it('child creator change is submitted through approval as avatarConfig only', async () => {
+    const user = userEvent.setup()
+    renderModal({ id: 'c1', role: 'child', displayName: 'Muhammed Osman', avatarUrl: 'https://old', avatarId: 'starter-cat', familyId: 'f1' })
+    await user.click(screen.getByRole('tab', { name: 'Hair' }))
+    await user.click(screen.getByRole('button', { name: 'Curls' }))
+    await user.click(screen.getByRole('button', { name: 'Submit for approval' }))
+
+    await waitFor(() => expect(submitMock).toHaveBeenCalledWith(
+      'f1',
+      'Muhammed Osman',
+      'starter-cat',
+      expect.objectContaining({ avatarConfig: expect.objectContaining({ version: 1, hairStyle: 'curls' }) }),
+    ))
+    expect(updateDocMock).not.toHaveBeenCalled()
+  })
+
+  it('Cancel after editing the creator does not persist anything', async () => {
+    const onClose = vi.fn()
+    const user = userEvent.setup()
+    render(<ProfileEditorModal user={{ id: 'c1', role: 'child', displayName: 'Ada', familyId: 'f1' }} onClose={onClose} />)
+    await user.click(screen.getByRole('tab', { name: 'Hair' }))
+    await user.click(screen.getByRole('button', { name: 'Curls' }))
+    await user.click(screen.getByRole('button', { name: 'Cancel' }))
+    expect(onClose).toHaveBeenCalledOnce()
+    expect(submitMock).not.toHaveBeenCalled()
+    expect(updateDocMock).not.toHaveBeenCalled()
+  })
+
   it('child cannot directly update profile even when editing fields', async () => {
     const user = userEvent.setup()
-    renderModal({ id: 'c1', role: 'child', displayName: 'Muhammed Osman', avatarUrl: '', avatarId: 'starter-cat', rewardPoints: 500, familyId: 'f1' })
+    renderModal({ id: 'c1', role: 'child', displayName: 'Muhammed Osman', avatarUrl: '', avatarId: 'starter-cat', familyId: 'f1' })
     const nameInput = screen.getByLabelText('Display Name')
     await user.clear(nameInput)
     await user.type(nameInput, 'Hacked')
@@ -95,7 +123,7 @@ describe('ProfileEditorModal', () => {
 
   it('shows a friendly error for an empty name and does not submit', async () => {
     const user = userEvent.setup()
-    renderModal({ id: 'c1', role: 'child', displayName: 'Muhammed Osman', avatarUrl: '', avatarId: 'starter-cat', rewardPoints: 500, familyId: 'f1' })
+    renderModal({ id: 'c1', role: 'child', displayName: 'Muhammed Osman', avatarUrl: '', avatarId: 'starter-cat', familyId: 'f1' })
     const nameInput = screen.getByLabelText('Display Name')
     await user.clear(nameInput)
     await user.type(nameInput, '   ')
@@ -108,14 +136,14 @@ describe('ProfileEditorModal', () => {
 
   it('locks the editor while a profile update is pending', async () => {
     storeState.profileUpdateRequests = [{ childId: 'c1', status: 'pending' }]
-    renderModal({ id: 'c1', role: 'child', displayName: 'Muhammed Osman', avatarUrl: '', avatarId: 'starter-cat', rewardPoints: 500, familyId: 'f1' })
+    renderModal({ id: 'c1', role: 'child', displayName: 'Muhammed Osman', avatarUrl: '', avatarId: 'starter-cat', familyId: 'f1' })
     expect(screen.getByLabelText('Display Name')).toBeDisabled()
     expect(screen.getByRole('button', { name: 'Submit for approval' })).toBeDisabled()
     expect(screen.getByText(/awaiting parent approval\. You cannot submit/i)).toBeInTheDocument()
   })
 
   it('removes the raw Avatar URL input (uses curated picker)', async () => {
-    renderModal({ id: 'c1', role: 'child', displayName: 'Muhammed Osman', avatarUrl: '', avatarId: 'starter-cat', rewardPoints: 500, familyId: 'f1' })
+    renderModal({ id: 'c1', role: 'child', displayName: 'Muhammed Osman', avatarUrl: '', avatarId: 'starter-cat', familyId: 'f1' })
     expect(screen.queryByLabelText(/Avatar URL/i)).toBeNull()
     expect(screen.getByText(/Choose Avatar/i)).toBeInTheDocument()
   })
@@ -142,7 +170,7 @@ describe('ProfileEditorModal', () => {
 
   it('child with no avatar: display-name-only submit sends null avatarId (root-cause payload)', async () => {
     const user = userEvent.setup()
-    renderModal({ id: 'c1', role: 'child', displayName: 'Muhammed Osman', avatarUrl: '', avatarId: null, rewardPoints: 500, familyId: 'f1' })
+    renderModal({ id: 'c1', role: 'child', displayName: 'Muhammed Osman', avatarUrl: '', avatarId: null, familyId: 'f1' })
     const nameInput = screen.getByLabelText('Display Name')
     await user.clear(nameInput)
     await user.type(nameInput, 'Muhammed')
@@ -156,7 +184,7 @@ describe('ProfileEditorModal', () => {
   it('preserves entered changes after a failed submit (no data loss)', async () => {
     const user = userEvent.setup()
     submitMock.mockRejectedValueOnce(new Error('Network error'))
-    renderModal({ id: 'c1', role: 'child', displayName: 'Muhammed Osman', avatarUrl: '', avatarId: 'starter-cat', rewardPoints: 500, familyId: 'f1' })
+    renderModal({ id: 'c1', role: 'child', displayName: 'Muhammed Osman', avatarUrl: '', avatarId: 'starter-cat', familyId: 'f1' })
     const nameInput = screen.getByLabelText('Display Name')
     await user.clear(nameInput)
     await user.type(nameInput, 'Muhammed Jr')
@@ -168,7 +196,7 @@ describe('ProfileEditorModal', () => {
   it('maps a permission-denied error to a child-safe message (no raw internals)', async () => {
     const user = userEvent.setup()
     submitMock.mockRejectedValueOnce({ code: 'permission-denied', message: 'Missing or insufficient permissions.' })
-    renderModal({ id: 'c1', role: 'child', displayName: 'Muhammed Osman', avatarUrl: '', avatarId: 'starter-cat', rewardPoints: 500, familyId: 'f1' })
+    renderModal({ id: 'c1', role: 'child', displayName: 'Muhammed Osman', avatarUrl: '', avatarId: 'starter-cat', familyId: 'f1' })
     const nameInput = screen.getByLabelText('Display Name')
     await user.clear(nameInput)
     await user.type(nameInput, 'Muhammed Jr')

@@ -573,4 +573,77 @@ describe('Child Living Home semantics (XP ≠ points ≠ money)', () => {
     expect(screen.getByTestId('child-living-home')).toBeInTheDocument();
     expect(screen.queryByTestId('child-balance-chip')).not.toBeInTheDocument();
   });
+
+  it('shows a live family goal and opens the canonical Goals route', async () => {
+    store.state = {
+      ...store.state,
+      savingsGoals: [{
+        id: 'family-goal', goalId: 'family-goal', title: 'Robin Hood card', kind: 'family',
+        status: 'active', currentAmountPence: 7_500, targetAmountPence: 10_000,
+      }],
+    };
+    render(
+      <MemoryRouter initialEntries={['/']}>
+        <Routes>
+          <Route path="/" element={<Dashboard />} />
+          <Route path="/goals" element={<div>Goals destination</div>} />
+        </Routes>
+      </MemoryRouter>,
+    );
+
+    const card = screen.getByRole('link', { name: /open goals/i });
+    expect(card).toHaveTextContent('Robin Hood card');
+    expect(card).toHaveTextContent('£75.00 of £100.00');
+    expect(card).toHaveTextContent('75%');
+    await userEvent.click(card);
+    expect(await screen.findByText('Goals destination')).toBeInTheDocument();
+  });
+
+  it('never renders a sibling-private goal supplied at the presentation boundary', () => {
+    store.state = {
+      ...store.state,
+      savingsGoals: [{
+        id: 'sibling-goal', title: 'Sibling console', kind: 'child', childId: 'child-2',
+        status: 'active', currentAmountPence: 9_500, targetAmountPence: 10_000,
+      }],
+    };
+    render(<MemoryRouter><Dashboard /></MemoryRouter>);
+
+    expect(screen.queryByText('Sibling console')).not.toBeInTheDocument();
+    expect(screen.getByTestId('child-goals-card')).toHaveTextContent('No goals yet');
+  });
+
+  it('shows Pet Box only when enabled and opens its canonical route', async () => {
+    store.state = {
+      ...store.state,
+      familyData: { name: 'The Testers', petBoxEnabled: true },
+      funds: [{ id: 'pet-1', name: 'Milo', species: 'cat', balance: 2_500, emergencyGoal: 5_000 }],
+    };
+    const view = render(
+      <MemoryRouter initialEntries={['/']}>
+        <Routes>
+          <Route path="/" element={<Dashboard />} />
+          <Route path="/pet-box" element={<div>Pet Box destination</div>} />
+        </Routes>
+      </MemoryRouter>,
+    );
+
+    const card = screen.getByRole('link', { name: /open pet box/i });
+    expect(card).toHaveTextContent('Milo');
+    expect(card).toHaveTextContent('£25.00');
+    await userEvent.click(card);
+    expect(await screen.findByText('Pet Box destination')).toBeInTheDocument();
+
+    view.unmount();
+    store.state = { ...store.state, familyData: { name: 'The Testers', petBoxEnabled: false } };
+    render(<MemoryRouter><Dashboard /></MemoryRouter>);
+    expect(screen.queryByTestId('child-pet-box-card')).not.toBeInTheDocument();
+  });
+
+  it('uses a one-column mobile-safe grid without a horizontal carousel', () => {
+    render(<MemoryRouter><Dashboard /></MemoryRouter>);
+    const layout = screen.getByTestId('child-family-tools-layout');
+    expect(layout).toHaveClass('grid', 'grid-cols-1');
+    expect(layout).not.toHaveClass('overflow-x-auto');
+  });
 });

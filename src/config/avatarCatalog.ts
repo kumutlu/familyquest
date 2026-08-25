@@ -119,10 +119,23 @@ export const TIER_LABELS: Record<AvatarTier, string> = {
  * old DiceBear link) so existing profiles keep rendering. Never trusts a raw
  * URL when a valid catalog id is present.
  */
-export function resolveAvatarImage(avatarId: string | null | undefined, legacyAvatarUrl?: string | null): string | undefined {
+export function resolveAvatarImage(
+  avatarId: string | null | undefined,
+  legacyAvatarUrl?: string | null,
+  avatarConfig?: AvatarConfigV1 | unknown,
+): string | undefined {
+  if (isValidAvatarConfig(avatarConfig)) return avatarConfigToDataUrl(avatarConfig);
   const def = getAvatarById(avatarId);
   if (def) return def.imageUrl;
   return legacyAvatarUrl || undefined;
+}
+
+/** Resolve a profile's presentation URL in memory without mutating persistence. */
+export function withResolvedAvatar<T extends Record<string, any>>(profile: T): T {
+  return {
+    ...profile,
+    avatarUrl: resolveAvatarImage(profile.avatarId, profile.avatarUrl, profile.avatarConfig),
+  };
 }
 
 /**
@@ -138,3 +151,4 @@ export function mapLegacyUrlToAvatarId(legacyUrl: string | null | undefined): st
   const match = AVATAR_CATALOG.find(a => a.tier === 'starter' && seed === `starter-${a.id.replace('starter-', '')}` || a.imageUrl.includes(`seed=${seed}`));
   return match?.id;
 }
+import { avatarConfigToDataUrl, isValidAvatarConfig, type AvatarConfigV1 } from './avatarConfig';

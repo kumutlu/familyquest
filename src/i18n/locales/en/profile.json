@@ -36,6 +36,15 @@
   "alreadyPending": "You already have a profile change waiting for approval.",
   "lockedPremium": "This avatar has not been unlocked yet. Unlock it before submitting.",
   "pointsNote": "You have {{count}} points. Unlocking a premium avatar costs points once; selecting an owned avatar is free.",
+  "creator": {
+    "title": "Create your character",
+    "preview": "Avatar preview",
+    "surprise": "Surprise me",
+    "categories": "Avatar categories",
+    "category": { "base": "Base", "skin": "Skin tone", "hair": "Hair", "face": "Face", "accessory": "Accessories", "outfit": "Outfit", "background": "Background" },
+    "field": { "base": "Base", "skinTone": "Skin tone", "hairStyle": "Style", "hairColor": "Colour", "face": "Face", "accessory": "Accessory", "outfit": "Style", "outfitColor": "Colour", "background": "Background" },
+    "option": {}
+  },
   "avatar": {
     "filterLabel": "Filter avatars",
     "chooseLabel": "Choose an avatar",

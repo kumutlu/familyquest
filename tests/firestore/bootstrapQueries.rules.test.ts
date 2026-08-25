@@ -147,7 +147,11 @@ describe('production bootstrap query plan against Firestore rules', () => {
     expect(results.get('feed')).toEqual(expect.arrayContaining([
       'family-wide', 'child-visible', 'sibling-only', 'parent-only', 'public',
     ]))
-    expect(results.get('savingsGoals')).toEqual(['own'])
+    // Savings goals are intentionally fetched family-wide because family goals
+    // must be visible to children. The store immediately normalizes and filters
+    // this snapshot to family goals + the signed-in child's own goals before
+    // publication or subcollection listener planning.
+    expect(results.get('savingsGoals')).toEqual(['own', 'sibling'])
     expect(results.get('walletTransactions')).toEqual(expect.arrayContaining(['own-legacy', 'own-v2']))
     expect(results.get('walletTransactions')).not.toContain('sibling')
     expect(results.get('behaviourEvents')).toEqual(expect.arrayContaining(['legacy', 'v2']))

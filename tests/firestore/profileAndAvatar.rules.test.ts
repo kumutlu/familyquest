@@ -10,6 +10,13 @@ const parentId = 'parent456';
 const ownerId = 'owner123';
 const childId = 'child789';
 const siblingId = 'sibling012';
+const otherFamilyId = 'otherFamily';
+const otherParentId = 'otherParent';
+
+const validAvatarConfig = {
+  version: 1, base: 'round', skinTone: 'warm', hairStyle: 'curls', hairColor: 'brown',
+  face: 'smile', accessory: 'glasses', outfit: 'hoodie', outfitColor: 'purple', background: 'mint',
+};
 
 beforeAll(async () => {
   testEnv = await initializeTestEnvironment({
@@ -33,6 +40,8 @@ beforeEach(async () => {
     await setDoc(doc(db, 'users', siblingId), {
       familyId, role: 'child', displayName: 'Muhammed', avatarUrl: '', rewardPoints: 50, lifetimeXP: 50,
     });
+    await setDoc(doc(db, 'families', otherFamilyId), { name: 'Other Family', currencyCode: 'GBP' });
+    await setDoc(doc(db, 'users', otherParentId), { familyId: otherFamilyId, role: 'parent', displayName: 'Other Parent' });
     // A legitimate premium unlock record for child789.
     await setDoc(doc(db, `families/${familyId}/users/${childId}/avatar_unlocks`, 'rare-neon'), {
       avatarId: 'rare-neon', userId: childId, familyId, costPoints: 150, source: 'points', actorId: childId,
@@ -54,6 +63,63 @@ const baseRequest = (child: string, avatarId: string | null) => ({
 });
 
 describe('PROFILE REQUEST permission bug (Part A.20)', () => {
+  it('allows a child to request a valid allowlisted avatarConfig for only their profile', async () => {
+    const db = testEnv.authenticatedContext(childId).firestore();
+    await assertSucceeds(setDoc(doc(db, `families/${familyId}/profile_update_requests`, 'config-ok'), {
+      ...baseRequest(childId, null), id: 'config-ok',
+      requestedAvatarConfig: validAvatarConfig,
+      currentAvatarConfig: null,
+    }));
+  });
+
+  it.each([
+    ['wrong version', { ...validAvatarConfig, version: 2 }],
+    ['unknown value', { ...validAvatarConfig, hairStyle: 'external-url' }],
+    ['extra field', { ...validAvatarConfig, url: 'https://evil.example/avatar.svg' }],
+    ['missing field', Object.fromEntries(Object.entries(validAvatarConfig).filter(([key]) => key !== 'face'))],
+    ['wrong type', { ...validAvatarConfig, background: ['mint'] }],
+  ])('denies avatarConfig with %s', async (_name, requestedAvatarConfig) => {
+    const db = testEnv.authenticatedContext(childId).firestore();
+    await assertFails(setDoc(doc(db, `families/${familyId}/profile_update_requests`, `bad-${String(_name).replaceAll(' ', '-')}`), {
+      ...baseRequest(childId, null),
+      id: `bad-${String(_name).replaceAll(' ', '-')}`,
+      requestedAvatarConfig,
+      currentAvatarConfig: null,
+    }));
+  });
+
+  it('denies a valid config request targeting a sibling', async () => {
+    const db = testEnv.authenticatedContext(childId).firestore();
+    await assertFails(setDoc(doc(db, `families/${familyId}/profile_update_requests`, 'sibling-config'), {
+      ...baseRequest(siblingId, null), id: 'sibling-config', actorId: childId,
+      requestedAvatarConfig: validAvatarConfig, currentAvatarConfig: null,
+    }));
+  });
+
+  it('denies a valid config request through another family path', async () => {
+    const db = testEnv.authenticatedContext(childId).firestore();
+    await assertFails(setDoc(doc(db, `families/${otherFamilyId}/profile_update_requests`, 'cross-family-config'), {
+      ...baseRequest(childId, null), id: 'cross-family-config', familyId: otherFamilyId,
+      requestedAvatarConfig: validAvatarConfig, currentAvatarConfig: null,
+    }));
+  });
+
+  it('still denies direct child avatarConfig updates', async () => {
+    const db = testEnv.authenticatedContext(childId).firestore();
+    await assertFails(updateDoc(doc(db, 'users', childId), { avatarConfig: validAvatarConfig }));
+  });
+
+  it('allows the same-family parent to apply a valid config but no unrelated field', async () => {
+    const db = testEnv.authenticatedContext(parentId).firestore();
+    await assertSucceeds(updateDoc(doc(db, 'users', childId), { avatarConfig: validAvatarConfig }));
+    await assertFails(updateDoc(doc(db, 'users', childId), { avatarConfig: validAvatarConfig, rewardPoints: 99_999 }));
+  });
+
+  it('denies a different-family parent applying the config', async () => {
+    const db = testEnv.authenticatedContext(otherParentId).firestore();
+    await assertFails(updateDoc(doc(db, 'users', childId), { avatarConfig: validAvatarConfig }));
+  });
+
   it('1. child profile request succeeds under production-equivalent rules', async () => {
     const db = testEnv.authenticatedContext(childId).firestore();
     await assertSucceeds(setDoc(doc(db, `families/${familyId}/profile_update_requests`, 'req1'), baseRequest(childId, 'starter-robot')));

@@ -124,6 +124,10 @@ function makeCtx(db: any): MemberLifecycleContext {
 }
 
 const FAMILY_ID = 'F1';
+const AVATAR_CONFIG = {
+  version: 1, base: 'round', skinTone: 'warm', hairStyle: 'curls', hairColor: 'brown',
+  face: 'smile', accessory: 'glasses', outfit: 'hoodie', outfitColor: 'purple', background: 'mint',
+};
 
 function seedStandardFamily(db: any) {
   db.store.set(`families/${FAMILY_ID}`, { inviteCode: 'ABC123', name: 'Test Family' });
@@ -131,7 +135,7 @@ function seedStandardFamily(db: any) {
   seedUser(db, 'parent1', { familyId: FAMILY_ID, role: 'parent', displayName: 'Parent' });
   seedUser(db, 'adult1', { familyId: FAMILY_ID, role: 'adult', displayName: 'Adult' });
   seedUser(db, 'child1', {
-    familyId: FAMILY_ID, role: 'child', isManaged: true, displayName: 'Managed Child',
+    familyId: FAMILY_ID, role: 'child', isManaged: true, displayName: 'Managed Child', avatarConfig: AVATAR_CONFIG,
   });
   seedUser(db, 'childSelf', {
     familyId: FAMILY_ID, role: 'child', isManaged: false, displayName: 'Self Child',
@@ -220,6 +224,11 @@ describe('archiveMember — authorization', () => {
     expect(db.store.has(`families/${FAMILY_ID}/gamification_events/ge1`)).toBe(true);
     expect(db.store.has('users/child1')).toBe(true); // account preserved
   });
+
+  it('preserves avatarConfig in the archived family-member projection', async () => {
+    await archiveMemberImpl(makeCtx(db), 'owner1', { targetUid: 'child1', clientReqId: REQ });
+    expect(db.store.get(`families/${FAMILY_ID}/users/child1`).avatarConfig).toEqual(AVATAR_CONFIG);
+  });
 });
 
 // ---------------------------------------------------------------------------
@@ -242,6 +251,12 @@ describe('restoreMember — authorization', () => {
     await archiveMemberImpl(makeCtx(db), 'owner1', { targetUid: 'child1', clientReqId: REQ });
     const r = await restoreMemberImpl(makeCtx(db), 'parent1', { targetUid: 'child1', clientReqId: REQ });
     expect(r.lifecycle).toBe('active');
+  });
+
+  it('preserves avatarConfig in the restored family-member projection', async () => {
+    await archiveMemberImpl(makeCtx(db), 'owner1', { targetUid: 'child1', clientReqId: REQ });
+    await restoreMemberImpl(makeCtx(db), 'owner1', { targetUid: 'child1', clientReqId: REQ });
+    expect(db.store.get(`families/${FAMILY_ID}/users/child1`).avatarConfig).toEqual(AVATAR_CONFIG);
   });
 
   it('parent CANNOT restore a non-child (NOT_AUTHORIZED)', async () => {

@@ -165,6 +165,7 @@ export async function archiveMemberImpl(
       uid: targetUid,
       displayName: target.displayName,
       avatarUrl: target.avatarUrl ?? '',
+      avatarConfig: target.avatarConfig ?? null,
       role: target.role,
       lifecycle: 'archived',
       archivedAt: FieldValue.serverTimestamp(),
@@ -228,6 +229,7 @@ export async function restoreMemberImpl(
       uid: targetUid,
       displayName: target.displayName,
       avatarUrl: target.avatarUrl ?? '',
+      avatarConfig: target.avatarConfig ?? null,
       role: target.role,
       lifecycle: 'active',
     }, { merge: true });
