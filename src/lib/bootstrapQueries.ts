@@ -76,6 +76,16 @@ export const bootstrapCompositeIndexes = [
       { fieldPath: 'createdAtMs', order: 'DESCENDING' },
     ],
   },
+  // Auth bootstrap discovers a signed-in user's pending legacy request across
+  // every family without knowing its familyId first.
+  {
+    collectionGroup: 'join_requests',
+    queryScope: 'COLLECTION_GROUP',
+    fields: [
+      { fieldPath: 'uid', order: 'ASCENDING' },
+      { fieldPath: 'status', order: 'ASCENDING' },
+    ],
+  },
   {
     collectionGroup: 'transfer_requests',
     queryScope: 'COLLECTION',

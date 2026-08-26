@@ -171,6 +171,14 @@
     "genericError": "Bu daveti kontrol edemedik. Lütfen tekrar dene.",
     "manualEntry": "Bunun yerine aile kodun mu var?"
   },
+  "membershipPending": {
+    "pendingTitle": "İsteğin onay bekliyor",
+    "pendingBody": "Bir aile sahibinin isteğini onaylaması gerekiyor. Onaydan sonra Queki aileni otomatik olarak açacak.",
+    "pendingAction": "Tekrar kontrol et",
+    "recoveryTitle": "Aile erişimini doğrulayamadık",
+    "recoveryBody": "Üyeliğin değişmiş veya aile geçici olarak kullanılamıyor olabilir. Erişimini güvenle doğrulamak için tekrar dene.",
+    "recoveryAction": "Tekrar dene"
+  },
   "adultInvite": {
     "title": "Bir aileye katıl",
     "validating": "Davetin kontrol ediliyor…",

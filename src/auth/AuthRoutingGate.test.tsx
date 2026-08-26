@@ -2,6 +2,7 @@ import { render, screen } from '@testing-library/react';
 import { MemoryRouter, Route, Routes, useLocation } from 'react-router-dom';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
+import { rememberPendingInvite as rememberLegacyInvite } from '../lib/inviteLink';
 import { capturePendingInvite } from './pendingInviteIntent';
 import {
   AuthRoutingGate,
@@ -16,10 +17,11 @@ const storeState = vi.hoisted(() => ({
   authStatus: 'authenticated' as 'initializing' | 'authenticated' | 'unauthenticated',
   authUser: { uid: 'u1' } as any,
   currentUser: { id: 'u1', familyId: undefined, role: 'parent' } as any,
+  familyData: null as any,
   profileServerConfirmed: true,
   appReady: true,
   bootstrapError: null as string | null,
-  pendingMembershipStatus: 'none' as 'idle' | 'loading' | 'none' | 'pending' | 'recovery',
+  pendingMembershipStatus: 'none' as 'idle' | 'loading' | 'settling' | 'none' | 'pending' | 'recovery',
   bootstrapAttempt: 0,
   retryBootstrap: vi.fn(),
 }));
@@ -34,6 +36,7 @@ const readyInput: AuthRouteDecisionInput = {
   authStatus: 'authenticated',
   authUser: { uid: 'u1' },
   currentUser: { id: 'u1', familyId: undefined },
+  familyLifecycleState: undefined,
   profileServerConfirmed: true,
   appReady: true,
   bootstrapError: null,
@@ -68,6 +71,7 @@ beforeEach(() => {
   storeState.authStatus = 'authenticated';
   storeState.authUser = { uid: 'u1' };
   storeState.currentUser = { id: 'u1', familyId: undefined, role: 'parent' };
+  storeState.familyData = null;
   storeState.profileServerConfirmed = true;
   storeState.appReady = true;
   storeState.bootstrapError = null;
@@ -129,6 +133,43 @@ describe('deriveAuthRouteDecision', () => {
     })).toBe('app');
   });
 
+  it('requires canonical active member and family lifecycle before routing to the app', () => {
+    for (const lifecycle of [undefined, 'active']) {
+      expect(deriveAuthRouteDecision({
+        ...readyInput,
+        currentUser: { id: 'u1', familyId: 'family-1', lifecycle },
+        familyLifecycleState: 'active',
+      })).toBe('app');
+    }
+
+    for (const lifecycle of ['archived', 'removed', 'inactive', 'deleting', 'recovery']) {
+      expect(deriveAuthRouteDecision({
+        ...readyInput,
+        currentUser: { id: 'u1', familyId: 'family-1', lifecycle },
+        familyLifecycleState: 'active',
+      })).toBe('pendingMembership');
+    }
+
+    for (const familyLifecycleState of ['deleting', 'deleted', 'inactive', 'recovery']) {
+      expect(deriveAuthRouteDecision({
+        ...readyInput,
+        currentUser: { id: 'u1', familyId: 'family-1', lifecycle: 'active' },
+        familyLifecycleState,
+      })).toBe('pendingMembership');
+    }
+
+    expect(deriveAuthRouteDecision({
+      ...readyInput,
+      currentUser: { id: 'u1', familyId: 'family-1', lifecycle: 'active', status: 'disabled' },
+      familyLifecycleState: 'active',
+    })).toBe('pendingMembership');
+    expect(deriveAuthRouteDecision({
+      ...readyInput,
+      currentUser: { id: 'u1', familyId: 'family-1', lifecycle: 'active', disabled: true },
+      familyLifecycleState: 'active',
+    })).toBe('pendingMembership');
+  });
+
   it('routes pending or recovery membership ahead of creation onboarding', () => {
     for (const pendingMembershipStatus of ['pending', 'recovery'] as const) {
       expect(deriveAuthRouteDecision({
@@ -175,6 +216,18 @@ describe('deriveAuthRouteDecision', () => {
     expect(deriveAuthRouteDecision(signedOut)).toBe('publicOnboarding');
     expect(deriveAuthRouteDecision({ ...signedOut, pathname: '/wallet' })).toBe('login');
   });
+
+  it('keeps an auth observer error on recoverable startup instead of signed-out routing', () => {
+    expect(deriveAuthRouteDecision({
+      ...readyInput,
+      authStatus: 'unauthenticated',
+      authUser: null,
+      currentUser: null,
+      profileServerConfirmed: false,
+      appReady: false,
+      bootstrapError: '[Auth observer] unavailable: try again',
+    })).toBe('startup');
+  });
 });
 
 describe('AuthRoutingGate navigation', () => {
@@ -189,6 +242,18 @@ describe('AuthRoutingGate navigation', () => {
     capturePendingInvite(TOKEN_B);
     renderGate(`/invite/${TOKEN}`);
     expect(screen.getByTestId('current-path')).toHaveTextContent(`/invite/${TOKEN}`);
+  });
+
+  it('keeps a valid canonical URL token ahead of a stored legacy invite', () => {
+    rememberLegacyInvite('ABC123');
+    renderGate(`/invite/${TOKEN}`);
+    expect(screen.getByTestId('current-path')).toHaveTextContent(`/invite/${TOKEN}`);
+  });
+
+  it('keeps a valid legacy URL code ahead of a stored v2 invite', () => {
+    capturePendingInvite(TOKEN_B);
+    renderGate('/join?code=ABC123');
+    expect(screen.getByTestId('current-path')).toHaveTextContent('/join?code=ABC123');
   });
 
   it('routes an authenticated no-family user without invite to /no-family', () => {

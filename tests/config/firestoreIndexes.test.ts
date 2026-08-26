@@ -30,6 +30,19 @@ describe('Firestore composite index configuration', () => {
     })
   })
 
+  it('supports cross-family pending membership discovery with the production collection-group index', () => {
+    const indexConfig = JSON.parse(readFileSync('firestore.indexes.json', 'utf8'))
+
+    expect(indexConfig.indexes).toContainEqual({
+      collectionGroup: 'join_requests',
+      queryScope: 'COLLECTION_GROUP',
+      fields: [
+        { fieldPath: 'uid', order: 'ASCENDING' },
+        { fieldPath: 'status', order: 'ASCENDING' },
+      ],
+    })
+  })
+
   it('keeps the transfer_requests index in sync with the child pending-query shape', () => {
     // The child pending-transfer query filters by `fromChildId` only (no orderBy),
     // so it relies on the automatic single-field index and must NOT require a

@@ -6,6 +6,7 @@ import '@testing-library/jest-dom/vitest';
 import i18n from '../../i18n/config';
 import { AppLayout } from './AppLayout';
 import { useStore } from '../../store/useStore';
+import { AuthRoutingGate } from '../../auth/AuthRoutingGate';
 
 // --- Mocks ---------------------------------------------------------------
 
@@ -13,14 +14,18 @@ const mockStoreState = {
   authStatus: 'authenticated',
   authUser: { uid: 'u1' },
   currentUser: { id: 'u1', familyId: 'f1', role: 'parent' },
+  profileServerConfirmed: true,
   appReady: true,
   familyMembers: [],
-  familyData: { id: 'f1', setup: { welcomePromptCompleted: true } },
+  familyData: { id: 'f1', lifecycleState: 'active', setup: { welcomePromptCompleted: true } },
   familyLoading: false,
   bootstrapStatus: { family: 'ready', members: 'ready' },
   bootstrapError: null,
+  pendingMembershipStatus: 'none',
+  bootstrapAttempt: 0,
   retryBootstrap: vi.fn(),
 };
+let activeStoreState: any = mockStoreState;
 
 vi.mock('../../store/useStore', () => ({
   useStore: vi.fn((selector: any) => (selector ? selector(mockStoreState) : mockStoreState)),
@@ -42,75 +47,73 @@ vi.mock('../../config/navigation', () => ({
 
 vi.mock('./ProfileDropdown', () => ({ ProfileDropdown: () => <div>ProfileDropdown</div> }));
 vi.mock('./NotificationCenter', () => ({ NotificationCenter: () => <div>NotificationCenter</div> }));
+vi.mock('../challenges/ChildChallengeCelebration', () => ({ ChildChallengeCelebration: () => null }));
+vi.mock('../bug-report/BugReportSheet', () => ({ BugReportSheet: () => null }));
 
-// Capture programmatic navigation so we can assert the startup/recovery
-// sign-out lands on /login.
-const { mockNavigate } = vi.hoisted(() => ({ mockNavigate: vi.fn() }));
-vi.mock('react-router-dom', async (importOriginal) => {
-  const actual = (await importOriginal()) as typeof import('react-router-dom');
-  return { ...actual, useNavigate: () => mockNavigate };
-});
-
-// Sign-out is the only api import AppLayout uses here.
+// Sign-out is the only API action exercised by the global routing gate here.
 const { mockApiSignOut } = vi.hoisted(() => ({ mockApiSignOut: vi.fn(async () => {}) }));
 vi.mock('../../lib/api', () => ({ signOut: mockApiSignOut }));
+vi.mock('../../lib/firebase', () => ({ auth: {}, db: {} }));
+vi.mock('../../lib/childLoginApi', () => ({
+  completeChildPasswordChange: vi.fn(async () => {}),
+  mapChildLoginError: () => 'Unable to update password.',
+  validatePasswordClient: () => null,
+}));
 
 // --- Harnesses -----------------------------------------------------------
 
-// AppLayout owns "/", with a few nested protected routes. Top-level
-// "/onboarding" and "/login" stand in for the real public routes so we can
-// assert where an unauthenticated visitor is sent.
+// AuthRoutingGate owns entry routing around the real AppLayout shell.
 function renderAt(path: string, storeState: any = {}) {
   const state = { ...mockStoreState, ...storeState };
+  activeStoreState = state;
   (useStore as any).mockImplementation((selector: any) => (selector ? selector(state) : state));
   return render(
     <MemoryRouter initialEntries={[path]}>
-      <Routes>
-        <Route path="/" element={<AppLayout />}>
-          <Route index element={<div>DASHBOARD</div>} />
-          <Route path="wallet" element={<div>WALLET</div>} />
-          <Route path="goals" element={<div>GOALS</div>} />
-        </Route>
-        <Route path="/onboarding" element={<div>ONBOARDING FRONT DOOR</div>} />
-        <Route path="/login" element={<div>LOGIN PAGE</div>} />
-      </Routes>
+      <AuthRoutingGate>
+        <Routes>
+          <Route path="/" element={<AppLayout />}>
+            <Route index element={<div>DASHBOARD</div>} />
+            <Route path="wallet" element={<div>WALLET</div>} />
+            <Route path="goals" element={<div>GOALS</div>} />
+          </Route>
+          <Route path="/onboarding" element={<div>ONBOARDING FRONT DOOR</div>} />
+          <Route path="/login" element={<div>LOGIN PAGE</div>} />
+          <Route path="/no-family" element={<div>NO FAMILY CHOICE</div>} />
+          <Route path="/join/pending" element={<div>PENDING MEMBERSHIP</div>} />
+        </Routes>
+      </AuthRoutingGate>
     </MemoryRouter>,
   );
 }
 
-// Harness for exercising AppLayout's own /onboarding guard (AppLayout is the
-// element rendered at /onboarding via a nested route, mirroring the legacy
-// nested-route shape used by the existing guard test).
 function renderAppLayoutAt(path: string, storeState: any = {}) {
-  const state = { ...mockStoreState, ...storeState };
-  (useStore as any).mockImplementation((selector: any) => (selector ? selector(state) : state));
-  return render(
-    <MemoryRouter initialEntries={[path]}>
-      <Routes>
-        <Route path="/" element={<AppLayout />}>
-          <Route index element={<div>DASHBOARD</div>} />
-          <Route path="onboarding" element={<div>NESTED ONBOARDING</div>} />
-        </Route>
-      </Routes>
-    </MemoryRouter>,
-  );
+  return renderAt(path, storeState);
 }
 
 const signedOut = {
   authStatus: 'unauthenticated',
   authUser: null,
   currentUser: null,
+  profileServerConfirmed: false,
   appReady: true,
 };
 
 beforeEach(async () => {
   vi.clearAllMocks();
+  mockApiSignOut.mockImplementation(async () => {
+    activeStoreState.authStatus = 'unauthenticated';
+    activeStoreState.authUser = null;
+    activeStoreState.currentUser = null;
+    activeStoreState.profileServerConfirmed = false;
+    activeStoreState.appReady = true;
+    activeStoreState.bootstrapError = null;
+  });
   await i18n.changeLanguage('en');
 });
 
 // --- Entry routing -------------------------------------------------------
 
-describe('AppLayout — unauthenticated entry routing', () => {
+describe('AuthRoutingGate around AppLayout — unauthenticated entry routing', () => {
   it('sends a clean signed-out visitor from / to /onboarding (Refined Queki front door)', () => {
     renderAt('/', signedOut);
     expect(screen.getByText('ONBOARDING FRONT DOOR')).toBeInTheDocument();
@@ -138,7 +141,7 @@ describe('AppLayout — unauthenticated entry routing', () => {
   });
 });
 
-describe('AppLayout — auth initialization', () => {
+describe('AuthRoutingGate around AppLayout — auth initialization', () => {
   it('keeps the startup/bootstrap UI while auth is initializing at / (no premature redirect)', () => {
     renderAt('/', {
       authStatus: 'initializing',
@@ -153,7 +156,7 @@ describe('AppLayout — auth initialization', () => {
   });
 });
 
-describe('AppLayout — authenticated guards (must remain unchanged)', () => {
+describe('AuthRoutingGate around AppLayout — authenticated guards', () => {
   it('established parent with family lands on the dashboard at /', () => {
     renderAt('/', {
       authStatus: 'authenticated',
@@ -169,17 +172,18 @@ describe('AppLayout — authenticated guards (must remain unchanged)', () => {
       authUser: { uid: 'owner-1' },
       currentUser: { id: 'owner-1', familyId: 'family-x', role: 'owner' },
     });
-    expect(screen.queryByText('NESTED ONBOARDING')).not.toBeInTheDocument();
+    expect(screen.queryByText('ONBOARDING FRONT DOOR')).not.toBeInTheDocument();
     expect(screen.getByText('DASHBOARD')).toBeInTheDocument();
   });
 
-  it('parent without family is sent into onboarding/setup from /', () => {
+  it('parent without family is sent to the explicit create-or-join choice from /', () => {
     renderAt('/', {
       authStatus: 'authenticated',
       authUser: { uid: 'parent-1' },
       currentUser: { id: 'parent-1', familyId: null, role: 'parent' },
     });
-    expect(screen.getByText('ONBOARDING FRONT DOOR')).toBeInTheDocument();
+    expect(screen.getByText('NO FAMILY CHOICE')).toBeInTheDocument();
+    expect(screen.queryByText('ONBOARDING FRONT DOOR')).not.toBeInTheDocument();
     expect(screen.queryByText('DASHBOARD')).not.toBeInTheDocument();
   });
 
@@ -189,12 +193,12 @@ describe('AppLayout — authenticated guards (must remain unchanged)', () => {
       authUser: { uid: 'child-1' },
       currentUser: { id: 'child-1', familyId: 'family-x', role: 'child', isManaged: true },
     });
-    expect(screen.queryByText('NESTED ONBOARDING')).not.toBeInTheDocument();
+    expect(screen.queryByText('ONBOARDING FRONT DOOR')).not.toBeInTheDocument();
     expect(screen.getByText('DASHBOARD')).toBeInTheDocument();
   });
 });
 
-describe('AppLayout — sign-out companion fix', () => {
+describe('AuthRoutingGate around AppLayout — sign-out recovery', () => {
   it('navigates to /login (replace) after sign-out from the startup/recovery screen', async () => {
     const user = userEvent.setup();
     // Authenticated session that hit a bootstrap error → StartupScreen with a
@@ -211,6 +215,6 @@ describe('AppLayout — sign-out companion fix', () => {
     await user.click(signOutButton);
 
     await waitFor(() => expect(mockApiSignOut).toHaveBeenCalledTimes(1));
-    await waitFor(() => expect(mockNavigate).toHaveBeenCalledWith('/login', { replace: true }));
+    await waitFor(() => expect(screen.getByText('LOGIN PAGE')).toBeInTheDocument());
   });
 });
