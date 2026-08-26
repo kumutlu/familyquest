@@ -110,7 +110,7 @@ export function isPendingInviteFresh(intent: PendingInviteIntent, now = Date.now
   return isPendingInviteIntent(intent)
     && Number.isSafeInteger(now)
     && now >= intent.capturedAt
-    && now - intent.capturedAt <= INVITATION_TTL_MS;
+    && now - intent.capturedAt < INVITATION_TTL_MS;
 }
 
 /** Captures the route token as minimal, untrusted resume state for auth redirects/reloads. */
@@ -123,7 +123,12 @@ export function capturePendingInvite(token: string, now = Date.now()): PendingIn
   return intent;
 }
 
-function readValidatedStoredIntent(): PendingInviteIntent | null {
+type StoredIntentCopies = {
+  session: PendingInviteIntent | null;
+  local: PendingInviteIntent | null;
+};
+
+function readValidatedStoredIntents(now: number): StoredIntentCopies {
   const sessionRaw = readStorage(sessionStore());
   const localRaw = readStorage(localStore());
   const sessionIntent = parseIntent(sessionRaw);
@@ -131,32 +136,61 @@ function readValidatedStoredIntent(): PendingInviteIntent | null {
 
   if ((sessionRaw !== null && !sessionIntent) || (localRaw !== null && !localIntent)) {
     clearPendingInvite('stale');
-    return null;
+    return { session: null, local: null };
   }
 
-  return sessionIntent ?? localIntent;
+  if ((sessionIntent && !isPendingInviteFresh(sessionIntent, now))
+    || (localIntent && !isPendingInviteFresh(localIntent, now))) {
+    clearPendingInvite('stale');
+    return { session: null, local: null };
+  }
+
+  return { session: sessionIntent, local: localIntent };
+}
+
+/**
+ * Reconciles the tab-scoped and reload-scoped copies without allowing a
+ * hidden same-token UID binding to be discarded by session precedence.
+ */
+function reconcileStoredIntents(copies: StoredIntentCopies): PendingInviteIntent | null {
+  const selected = copies.session ?? copies.local;
+  if (!selected) return null;
+
+  const sameToken = [copies.session, copies.local]
+    .filter((intent): intent is PendingInviteIntent => intent !== null && intent.token === selected.token);
+  const boundUids = [...new Set(
+    sameToken
+      .map(intent => intent.authUid)
+      .filter((authUid): authUid is string => authUid !== undefined),
+  )];
+
+  if (boundUids.length === 1 && selected.authUid === undefined) {
+    return { ...selected, authUid: boundUids[0] };
+  }
+
+  return selected;
 }
 
 /** Reads the freshest valid intent, preferring the tab-scoped session copy. */
 export function readPendingInvite(now = Date.now()): PendingInviteIntent | null {
-  const intent = readValidatedStoredIntent();
-  if (!intent) return null;
-
-  if (!isPendingInviteFresh(intent, now)) {
-    clearPendingInvite('stale');
-    return null;
-  }
-
-  return intent;
+  return reconcileStoredIntents(readValidatedStoredIntents(now));
 }
 
 /** Binds a captured intent to its authenticated account without allowing a silent account switch. */
 export function bindPendingInviteToUid(uid: string): PendingInviteIntent | null {
   if (!isValidAuthUid(uid)) throw new Error('INVALID_AUTH_UID');
 
-  const intent = readValidatedStoredIntent();
+  const copies = readValidatedStoredIntents(Date.now());
+  const intent = reconcileStoredIntents(copies);
   if (!intent) return null;
-  if (intent.authUid && intent.authUid !== uid) throw new Error('INVITE_ACCOUNT_MISMATCH');
+
+  const sameTokenBindings = [copies.session, copies.local]
+    .filter((copy): copy is PendingInviteIntent => copy !== null && copy.token === intent.token)
+    .map(copy => copy.authUid)
+    .filter((authUid): authUid is string => authUid !== undefined);
+  if (sameTokenBindings.some(authUid => authUid !== uid)) {
+    throw new Error('INVITE_ACCOUNT_MISMATCH');
+  }
 
   const boundIntent: PendingInviteIntent = { ...intent, authUid: uid };
   writeIntent(boundIntent);
