@@ -36,6 +36,7 @@ import { Suspense, useEffect } from 'react';
 import { consumeGoogleRedirectResult } from './lib/googleRedirectAuth';
 import { markStartupStage } from './startupDiagnostics';
 import { E2EBootstrapDiagnostics } from './components/E2EBootstrapDiagnostics';
+import { AuthRoutingGate } from './auth/AuthRoutingGate';
 
 function App() {
   const initAuth = useStore(state => state.initAuth);
@@ -67,8 +68,10 @@ function App() {
   return (
     <Suspense fallback={<div data-testid="route-translations-loading" aria-busy="true" className="min-h-screen bg-gray-50" />}>
       <Router>
-        <E2EBootstrapDiagnostics />
-        <Routes>
+        <RequestDetailProvider>
+          <E2EBootstrapDiagnostics />
+          <AuthRoutingGate>
+          <Routes>
           <Route path="/login" element={<Login />} />
           <Route path="/signup" element={<Signup />} />
           <Route path="/join-family" element={<JoinFamily />} />
@@ -92,9 +95,7 @@ function App() {
 
           <Route path="/" element={
             <MoneyPrivacyProvider>
-              <RequestDetailProvider>
-                <AppLayout />
-              </RequestDetailProvider>
+              <AppLayout />
             </MoneyPrivacyProvider>
           }>
             <Route index element={<Dashboard />} />
@@ -121,7 +122,9 @@ function App() {
             <Route path="help/category/:categoryId" element={<HelpCategoryPage />} />
             <Route path="help/:articleId" element={<HelpArticlePage />} />
           </Route>
-        </Routes>
+          </Routes>
+          </AuthRoutingGate>
+        </RequestDetailProvider>
       </Router>
     </Suspense>
   );

@@ -1,5 +1,5 @@
-import { Suspense, lazy, useEffect, useState } from 'react';
-import { Link, Outlet, useLocation, Navigate, useNavigate } from 'react-router-dom';
+import { Suspense, lazy, useState } from 'react';
+import { Link, Outlet, useLocation, useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { AppWindow, CheckSquare, Gift, ClipboardList, Menu } from 'lucide-react';
 import { cn } from '../../lib/utils';
@@ -9,10 +9,6 @@ import { ProfileDropdown } from './ProfileDropdown';
 import { NotificationCenter } from './NotificationCenter';
 import { MandatoryChildPasswordChange } from '../auth/MandatoryChildPasswordChange';
 import { ChildChallengeCelebration } from '../challenges/ChildChallengeCelebration';
-import { StartupScreen } from './StartupScreen';
-import { deriveStartupPhase } from './startupState';
-import { signOut } from '../../lib/api';
-import { markStartupStage } from '../../startupDiagnostics';
 import { QuekiBottomNavigation } from '../queki/QuekiBottomNavigation';
 import { BottomSheet } from '../queki/BottomSheet';
 import { TactileButton } from '../queki/TactileButton';
@@ -38,13 +34,7 @@ export function AppLayout() {
   const [logoFailed, setLogoFailed] = useState(false);
   const location = useLocation();
   const navigate = useNavigate();
-  const authStatus = useStore(state => state.authStatus);
-  const authUser = useStore(state => state.authUser);
   const currentUser = useStore(state => state.currentUser);
-  const appReady = useStore(state => state.appReady);
-  const bootstrapError = useStore(state => state.bootstrapError);
-  const bootstrapAttempt = useStore(state => state.bootstrapAttempt);
-  const retryBootstrap = useStore(state => state.retryBootstrap);
   const familyMembers = useStore(state => state.familyMembers);
 
   // Wave 1 Action Composer state (sheet + lazily-mounted creation forms).
@@ -59,61 +49,6 @@ export function AppLayout() {
   // area (Goals, Wallets, Cat Box, History, Notifications, Settings, Help).
   const [moreOpen, setMoreOpen] = useState(false);
   const [bugReportOpen, setBugReportOpen] = useState(false);
-
-  // Single deterministic source of truth for the global startup gate. Each
-  // non-ready phase renders the bounded StartupScreen, which times out into a
-  // recoverable error instead of spinning forever.
-  const startupPhase = deriveStartupPhase({
-    authStatus,
-    authUser,
-    currentUser,
-    appReady,
-    bootstrapError,
-  });
-
-  useEffect(() => {
-    if (startupPhase === 'ready') markStartupStage('ROUTE_RENDERED');
-  }, [startupPhase]);
-
-  if (startupPhase !== 'ready') {
-    return (
-      <StartupScreen
-        phase={startupPhase}
-        attempt={bootstrapAttempt}
-        error={bootstrapError}
-        onRetry={retryBootstrap}
-        onSignOut={
-          authUser
-            ? () => {
-                void signOut()
-                  .then(() => navigate('/login', { replace: true }))
-                  .catch(() => {});
-              }
-            : undefined
-        }
-      />
-    );
-  }
-
-  // Not logged in -> the bare root becomes the Refined Queki onboarding front
-  // door; every other unauthenticated route still falls through to Login so
-  // protected deep links are preserved. Auth is already resolved here (the
-  // startup gate above short-circuits while initializing), so we never
-  // prematurely redirect during bootstrap.
-  if (authStatus === 'unauthenticated' || authUser === null) {
-    return <Navigate to={location.pathname === '/' ? '/onboarding' : '/login'} replace />;
-  }
-
-  // Logged in, user doc exists, but no familyId -> Onboarding (unless already there)
-  if (currentUser && !currentUser.familyId && location.pathname !== '/onboarding') {
-    return <Navigate to="/onboarding" replace />;
-  }
-
-  // Logged in with a family -> onboarding is complete and must never render
-  // again, even when the route is opened directly or restored from history.
-  if (currentUser?.familyId && location.pathname === '/onboarding') {
-    return <Navigate to="/" replace />;
-  }
 
   if (
     currentUser?.role === 'child' &&
