@@ -1696,12 +1696,6 @@ service cloud.firestore {
           || (request.resource.data.diff(resource.data).affectedKeys().hasAny(['lastTaskCompletionId']) && isValidTaskApprovalMutation(uid))
           || (request.resource.data.diff(resource.data).affectedKeys().hasAny(['lastBehaviourEventId']) && isValidBehaviourPointMutation(uid)) ||
         (!('familyId' in resource.data) && 'familyId' in request.resource.data ? isValidOwnerBootstrap(uid) || isValidJoinProfileUpdate(uid) : false) ||
-        // Owner may adjust a member's role via the client ONLY in the legacy
-        // join-approval path; the canonical, audited role change is the
-        // server-authoritative changeMemberRole callable. Clients may NEVER
-        // grant 'owner' (no self-escalation to family owner) and may NEVER
-        // touch 'lifecycle' (archive/remove/restore are server-only).
-        ('familyId' in resource.data && isOwner(resource.data.familyId) && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['role']) && resource.data.get('role', 'null') != 'child' && request.resource.data.role != 'child' && request.resource.data.role != 'owner') ||
         ('familyId' in resource.data && isParent(resource.data.familyId) && resource.data.get('role', 'null') == 'child'
           && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['displayName', 'avatarUrl', 'avatarId', 'avatarConfig'])
           && hasValidOptionalAvatarConfig(request.resource.data))
@@ -1834,6 +1828,12 @@ service cloud.firestore {
       // previewInvitation callable instead, so no family information leaks
       // before the invitation has been validated.
       match /invitations/{inviteCode} {
+        allow read, write: if false;
+      }
+
+      // Adult invitation acceptance audit records are written exclusively by
+      // the trusted backend transaction and are never client-readable/writable.
+      match /adultInvitationEvents/{eventId} {
         allow read, write: if false;
       }
 
