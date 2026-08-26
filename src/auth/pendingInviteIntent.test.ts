@@ -188,6 +188,14 @@ describe('pending adult invitation intent', () => {
     )).toBe(false);
   });
 
+  it('treats a malformed matching-clear candidate as a safe no-op', () => {
+    const now = Date.now();
+    capturePendingInvite(TOKEN_B, now);
+
+    expect(clearPendingInviteIfMatches({ token: 'not-a-token' }, 'invalid')).toBe(false);
+    expect(readPendingInvite(now + 1)).toMatchObject({ token: TOKEN_B });
+  });
+
   it('does not treat a future capture timestamp as fresh', () => {
     expect(isPendingInviteFresh({ version: 2, token: TOKEN, capturedAt: 2_001 }, 2_000)).toBe(false);
   });

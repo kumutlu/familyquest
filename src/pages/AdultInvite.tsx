@@ -169,6 +169,7 @@ export function AdultInvite() {
   const [profileName, setProfileName] = useState('');
   const [profileSaving, setProfileSaving] = useState(false);
   const [profileSaveError, setProfileSaveError] = useState(false);
+  const [profileCompletionRequired, setProfileCompletionRequired] = useState(false);
 
   useEffect(() => {
     const generation = ++lifecycleGeneration.current;
@@ -199,6 +200,7 @@ export function AdultInvite() {
     setProfileName('');
     setProfileSaving(false);
     setProfileSaveError(false);
+    setProfileCompletionRequired(false);
 
     try {
       const pending = readPendingInvite();
@@ -283,6 +285,21 @@ export function AdultInvite() {
       current.uid === scope.uid;
   }, []);
 
+  const applyFailure = useCallback((error: unknown, keepProfileForm: boolean) => {
+    const code = invitationFailureCode(error);
+    setFailure(code);
+    if (code === 'ALREADY_IN_ANOTHER_FAMILY' || code === 'INVITE_ACCOUNT_MISMATCH') {
+      setProfileCompletionRequired(false);
+      setPhase('conflict');
+    } else if (CONFIRMED_TERMINAL_CODES.has(code)) {
+      setProfileCompletionRequired(false);
+      setPhase('terminal');
+    } else {
+      setProfileCompletionRequired(keepProfileForm || code === 'PROFILE_REQUIRED');
+      setPhase('confirming');
+    }
+  }, []);
+
   const performAcceptance = useCallback(async (scope: InviteOperationScope) => {
     if (!preview || !authUser || !isOperationScopeCurrent(scope)) return;
     try {
@@ -311,23 +328,16 @@ export function AdultInvite() {
       navigate(result.destination, { replace: true });
     } catch (error) {
       if (!isOperationScopeCurrent(scope)) return;
-      const code = invitationFailureCode(error);
-      setFailure(code);
-      if (code === 'ALREADY_IN_ANOTHER_FAMILY' || code === 'INVITE_ACCOUNT_MISMATCH') {
-        setPhase('conflict');
-      } else if (CONFIRMED_TERMINAL_CODES.has(code)) {
-        setPhase('terminal');
-      } else {
-        setPhase('confirming');
-      }
+      applyFailure(error, false);
     }
-  }, [authUser, isOperationScopeCurrent, navigate, preview, refreshCurrentUser]);
+  }, [applyFailure, authUser, isOperationScopeCurrent, navigate, preview, refreshCurrentUser]);
 
   const handleAccept = useCallback(async () => {
     const scope = captureOperationScope();
     if (!scope || !preview) return;
     setPhase('accepting');
     setFailure(null);
+    setProfileCompletionRequired(false);
     await performAcceptance(scope);
   }, [captureOperationScope, performAcceptance, preview]);
 
@@ -349,18 +359,18 @@ export function AdultInvite() {
       });
       if (!isOperationScopeCurrent(scope)) return;
       setFailure(null);
+      setProfileCompletionRequired(false);
       setPhase('accepting');
       if (!isOperationScopeCurrent(scope)) return;
       await performAcceptance(scope);
-    } catch {
+    } catch (error) {
       if (!isOperationScopeCurrent(scope)) return;
-      setProfileSaveError(true);
-      setFailure('PROFILE_REQUIRED');
-      setPhase('confirming');
+      setProfileSaveError(false);
+      applyFailure(error, true);
     } finally {
       if (isOperationScopeCurrent(scope)) setProfileSaving(false);
     }
-  }, [captureOperationScope, isOperationScopeCurrent, performAcceptance, profileName]);
+  }, [applyFailure, captureOperationScope, isOperationScopeCurrent, performAcceptance, profileName]);
 
   const roleLabel = preview?.intendedRole === 'adult'
     ? t('adultInvite.roleAdult')
@@ -446,7 +456,7 @@ export function AdultInvite() {
                 {t(failureTranslationKey(failure))}
               </p>
             )}
-            {failure === 'PROFILE_REQUIRED' ? (
+            {profileCompletionRequired ? (
               <div className="space-y-3">
                 <label htmlFor="adult-invite-display-name" className="block text-sm font-semibold text-gray-700 dark:text-slate-200">
                   {t('adultInvite.profileName')}
