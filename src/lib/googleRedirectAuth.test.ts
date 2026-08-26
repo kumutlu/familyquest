@@ -1,5 +1,13 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
+import {
+  bindPendingInviteToUid,
+  capturePendingInvite,
+  readPendingInvite,
+} from '../auth/pendingInviteIntent';
+
+const TOKEN = 'CwsLCwsLCwsLCwsLCwsLCwsLCwsLCwsLCwsLCwsLCws';
+
 const authMocks = vi.hoisted(() => ({
   getRedirectResult: vi.fn(),
   signInWithPopup: vi.fn(),
@@ -23,6 +31,8 @@ describe('Google redirect authentication', () => {
   beforeEach(() => {
     vi.resetModules();
     vi.clearAllMocks();
+    sessionStorage.clear();
+    localStorage.clear();
   });
 
   it('initiates redirect authentication on mobile browsers', async () => {
@@ -49,5 +59,57 @@ describe('Google redirect authentication', () => {
       credential: null,
       error: 'redirect-state-missing',
     });
+  });
+
+  it('accepts only a single-slash internal absolute return path', async () => {
+    const { safeInternalReturnPath } = await import('./googleRedirectAuth');
+
+    expect(safeInternalReturnPath(`/invite/${TOKEN}?source=email#join`)).toBe(
+      `/invite/${TOKEN}?source=email#join`,
+    );
+    expect(safeInternalReturnPath('/onboarding')).toBe('/onboarding');
+  });
+
+  it.each([
+    null,
+    '',
+    'invite/path',
+    '//evil.example/invite',
+    'https://evil.example/invite',
+    'javascript:alert(1)',
+    '/\\evil.example/invite',
+    '/invite\\..\\evil',
+    '/%2f%2fevil.example/invite',
+    '/%5cevil.example/invite',
+    '/%252f%252fevil.example/invite',
+    '/invite/%00hidden',
+    '/invite/line\nbreak',
+  ])('rejects unsafe return path %j', async value => {
+    const { safeInternalReturnPath } = await import('./googleRedirectAuth');
+    expect(safeInternalReturnPath(value)).toBeNull();
+  });
+
+  it('binds a fresh pending invite to the redirect-authenticated UID', async () => {
+    capturePendingInvite(TOKEN);
+    authMocks.getRedirectResult.mockResolvedValue({ user: { uid: 'uid-1' } });
+
+    const { consumeGoogleRedirectResult } = await import('./googleRedirectAuth');
+    await consumeGoogleRedirectResult();
+
+    expect(readPendingInvite()).toMatchObject({ token: TOKEN, authUid: 'uid-1' });
+  });
+
+  it('returns a stable mismatch without clearing or rebinding the pending invite', async () => {
+    capturePendingInvite(TOKEN);
+    bindPendingInviteToUid('uid-1');
+    const credential = { user: { uid: 'uid-2' } };
+    authMocks.getRedirectResult.mockResolvedValue(credential);
+
+    const { consumeGoogleRedirectResult } = await import('./googleRedirectAuth');
+    await expect(consumeGoogleRedirectResult()).resolves.toEqual({
+      credential,
+      error: 'invite-account-mismatch',
+    });
+    expect(readPendingInvite()).toMatchObject({ token: TOKEN, authUid: 'uid-1' });
   });
 });

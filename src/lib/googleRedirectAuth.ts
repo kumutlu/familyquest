@@ -6,11 +6,27 @@ import {
   type UserCredential,
 } from 'firebase/auth';
 import { doc, getDoc, serverTimestamp, setDoc } from 'firebase/firestore';
+import { bindPendingInviteToUid } from '../auth/pendingInviteIntent';
 import { auth, db, googleProvider } from './firebase';
 
 export type RedirectBootstrapResult =
   | { credential: UserCredential | null; error: null }
-  | { credential: null; error: 'redirect-state-missing' };
+  | { credential: null; error: 'redirect-state-missing' }
+  | { credential: UserCredential; error: 'invite-account-mismatch' };
+
+const UNSAFE_RETURN_CHARACTERS = /[\\\u0000-\u001f\u007f-\u009f]/;
+const UNSAFE_ENCODED_RETURN_CHARACTERS = /%(?:25|2f|5c|0[0-9a-f]|1[0-9a-f]|7f)/i;
+
+/**
+ * Validates an untrusted auth return value without normalising it. Only a
+ * same-origin absolute path beginning with exactly one literal slash is safe.
+ */
+export function safeInternalReturnPath(value: string | null): string | null {
+  if (!value || value[0] !== '/' || value[1] === '/') return null;
+  if (UNSAFE_RETURN_CHARACTERS.test(value)) return null;
+  if (UNSAFE_ENCODED_RETURN_CHARACTERS.test(value)) return null;
+  return value;
+}
 
 const isMobileBrowser = () => {
   const nav = navigator as Navigator & { userAgentData?: { mobile?: boolean } };
@@ -52,7 +68,17 @@ export function consumeGoogleRedirectResult(): Promise<RedirectBootstrapResult> 
   if (redirectBootstrap) return redirectBootstrap;
   redirectBootstrap = getRedirectResult(auth)
     .then(async credential => {
-      if (credential) await ensureGoogleUserProfile(credential.user);
+      if (credential) {
+        await ensureGoogleUserProfile(credential.user);
+        try {
+          bindPendingInviteToUid(credential.user.uid);
+        } catch (error) {
+          if ((error as Error)?.message === 'INVITE_ACCOUNT_MISMATCH') {
+            return { credential, error: 'invite-account-mismatch' } as const;
+          }
+          throw error;
+        }
+      }
       return { credential, error: null } as const;
     })
     .catch(error => {

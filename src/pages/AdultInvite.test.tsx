@@ -191,7 +191,45 @@ describe('AdultInvite', () => {
     await user.click(await screen.findByRole('button', { name: 'Continue with Google' }));
 
     expect(authApi.signInWithGoogle).toHaveBeenCalledTimes(1);
-    expect(readPendingInvite()?.token).toBe(TOKEN);
+    expect(readPendingInvite()).toMatchObject({ token: TOKEN, authUid: 'uid-1' });
+    expect(invitationApi.acceptAdultInvitation).not.toHaveBeenCalled();
+  });
+
+  it('surfaces a stable popup account mismatch without clearing or rebinding intent', async () => {
+    capturePendingInvite(TOKEN);
+    const { bindPendingInviteToUid } = await import('../auth/pendingInviteIntent');
+    bindPendingInviteToUid('uid-1');
+    state.authStatus = 'unauthenticated';
+    state.authUser = null;
+    state.currentUser = null;
+    authApi.signInWithGoogle.mockResolvedValue({ uid: 'uid-2' });
+    const user = userEvent.setup();
+    renderInvite();
+
+    await user.click(await screen.findByRole('button', { name: 'Continue with Google' }));
+
+    expect(await screen.findByRole('alert')).toHaveTextContent(
+      'This invitation is linked to a different signed-in account.',
+    );
+    expect(readPendingInvite()).toMatchObject({ token: TOKEN, authUid: 'uid-1' });
+    expect(invitationApi.acceptAdultInvitation).not.toHaveBeenCalled();
+  });
+
+  it('surfaces a redirect account mismatch without clearing or rebinding intent', async () => {
+    capturePendingInvite(TOKEN);
+    const { bindPendingInviteToUid } = await import('../auth/pendingInviteIntent');
+    bindPendingInviteToUid('uid-1');
+    state.authUser = {
+      uid: 'uid-2',
+      getIdToken: vi.fn(async () => 'uid-2-token'),
+    };
+    state.currentUser = { id: 'uid-2', displayName: 'Taylor' };
+    renderInvite();
+
+    expect(await screen.findByRole('alert')).toHaveTextContent(
+      'This invitation is linked to a different signed-in account.',
+    );
+    expect(readPendingInvite()).toMatchObject({ token: TOKEN, authUid: 'uid-1' });
     expect(invitationApi.acceptAdultInvitation).not.toHaveBeenCalled();
   });
 
