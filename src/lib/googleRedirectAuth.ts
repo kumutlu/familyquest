@@ -15,17 +15,39 @@ export type RedirectBootstrapResult =
   | { credential: UserCredential; error: 'invite-account-mismatch' };
 
 const UNSAFE_RETURN_CHARACTERS = /[\\\s\p{Z}\u0000-\u001f\u007f-\u009f]/u;
-const UNSAFE_ENCODED_RETURN_CHARACTERS = /%(?:25|2f|5c|0[0-9a-f]|1[0-9a-f]|7f)/i;
+const PERCENT_ENCODING = /%[0-9a-f]{2}/i;
+const MALFORMED_PERCENT_ENCODING = /%(?![0-9a-f]{2})/i;
 
-function decodedReturnPathIsUnsafe(value: string): boolean {
-  try {
-    const decoded = decodeURIComponent(value);
-    return decoded[0] !== '/'
-      || decoded[1] === '/'
-      || UNSAFE_RETURN_CHARACTERS.test(decoded);
-  } catch {
-    return true;
+function decodedLayersAreUnsafe(value: string, authorityBearingPath: boolean): boolean {
+  if (MALFORMED_PERCENT_ENCODING.test(value)) return true;
+  if (UNSAFE_RETURN_CHARACTERS.test(value)) return true;
+  if (authorityBearingPath && (value[0] !== '/' || value[1] === '/')) return true;
+  if (!PERCENT_ENCODING.test(value)) return false;
+
+  if (!authorityBearingPath) {
+    try {
+      return UNSAFE_RETURN_CHARACTERS.test(decodeURIComponent(value));
+    } catch {
+      return true;
+    }
   }
+
+  let current = value;
+  for (let layer = 0; layer <= value.length; layer += 1) {
+    if (UNSAFE_RETURN_CHARACTERS.test(current)) return true;
+    if (authorityBearingPath && (current[0] !== '/' || current[1] === '/')) return true;
+    if (!PERCENT_ENCODING.test(current)) return false;
+
+    try {
+      const decoded = decodeURIComponent(current);
+      if (decoded === current) return false;
+      current = decoded;
+    } catch {
+      return true;
+    }
+  }
+
+  return true;
 }
 
 /**
@@ -33,10 +55,14 @@ function decodedReturnPathIsUnsafe(value: string): boolean {
  * same-origin absolute path beginning with exactly one literal slash is safe.
  */
 export function safeInternalReturnPath(value: string | null): string | null {
-  if (!value || value[0] !== '/' || value[1] === '/') return null;
-  if (UNSAFE_RETURN_CHARACTERS.test(value)) return null;
-  if (UNSAFE_ENCODED_RETURN_CHARACTERS.test(value)) return null;
-  if (decodedReturnPathIsUnsafe(value)) return null;
+  if (!value) return null;
+
+  const suffixIndex = value.search(/[?#]/);
+  const path = suffixIndex === -1 ? value : value.slice(0, suffixIndex);
+  const queryAndHash = suffixIndex === -1 ? '' : value.slice(suffixIndex);
+
+  if (decodedLayersAreUnsafe(path, true)) return null;
+  if (queryAndHash && decodedLayersAreUnsafe(queryAndHash, false)) return null;
   return value;
 }
 
