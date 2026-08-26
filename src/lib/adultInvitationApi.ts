@@ -2,6 +2,7 @@ import { httpsCallable } from 'firebase/functions';
 import { functions } from './firebase';
 
 export type AdultRole = 'parent' | 'adult';
+export type FamilyMembershipRole = 'owner' | 'parent' | 'adult' | 'child';
 
 export interface CreateAdultInvitationInput {
   intendedRole: AdultRole;
@@ -14,6 +15,12 @@ export interface PreviewAdultInvitationInput {
 
 export interface AcceptAdultInvitationInput {
   token: string;
+  clientReqId: string;
+}
+
+export interface CompleteAdultInvitationProfileInput {
+  token: string;
+  displayName: string;
   clientReqId: string;
 }
 
@@ -39,7 +46,7 @@ export interface AdultInvitationPreview {
 export interface AdultInvitationAcceptance {
   result: 'joined' | 'already_member';
   familyId: string;
-  role: AdultRole;
+  role: FamilyMembershipRole;
   destination: '/';
 }
 
@@ -69,6 +76,16 @@ export async function acceptAdultInvitation(
   const callable = httpsCallable<AcceptAdultInvitationInput, AdultInvitationAcceptance>(
     functions,
     'acceptAdultInvitation',
+  );
+  return (await callable(input)).data;
+}
+
+export async function completeAdultInvitationProfile(
+  input: CompleteAdultInvitationProfileInput,
+): Promise<{ success: true }> {
+  const callable = httpsCallable<CompleteAdultInvitationProfileInput, { success: true }>(
+    functions,
+    'completeAdultInvitationProfile',
   );
   return (await callable(input)).data;
 }

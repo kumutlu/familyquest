@@ -20,6 +20,7 @@ vi.mock('firebase-functions/v2/https', () => ({
 
 import {
   acceptAdultInvitationImpl,
+  completeAdultInvitationProfileImpl,
   createAdultInvitationImpl,
   generateAdultInvitationToken,
   hashAdultInvitationToken,
@@ -228,6 +229,10 @@ describe('adult invitation v2 callables', () => {
     previewAdultInvitationImpl({ token }, request, fixture.context);
   const accept = (token: string, uid = 'joiner-1', clientReqId = 'req-accept-001') =>
     acceptAdultInvitationImpl({ token, clientReqId }, auth(uid), fixture.context);
+  const completeProfile = (
+    input: any,
+    uid = 'joiner-1',
+  ) => completeAdultInvitationProfileImpl(input, auth(uid), fixture.context);
   const revoke = (invitationId: string, uid = 'owner-1', clientReqId = 'req-revoke-001') =>
     revokeAdultInvitationImpl({ invitationId, clientReqId }, auth(uid), fixture.context);
 
@@ -361,12 +366,17 @@ describe('adult invitation v2 callables', () => {
       uid: 'joiner-1', role: 'adult', lifecycle: 'active',
     });
     await expect(accept(TOKEN)).resolves.toEqual({
-      result: 'already_member', familyId: 'family-1', role: 'parent', destination: '/',
+      result: 'already_member', familyId: 'family-1', role: 'adult', destination: '/',
     });
     expect(fixture.documents.get(`familyInvitations/${invitationId}`)).toMatchObject({
       status: 'accepted', acceptedBy: 'joiner-1',
     });
     expect(fixture.documents.get('users/joiner-1')?.role).toBe('adult');
+    expect(fixture.documents.get(
+      'adultInvitationAcceptanceIdempotency/joiner-1_req-accept-001',
+    )?.role).toBe('adult');
+    expect(fixture.documents.get('families/family-1/adultInvitationEvents/event-0001')?.role)
+      .toBe('adult');
 
     const otherToken = generateAdultInvitationToken(() => Buffer.alloc(32, 12));
     const otherId = hashAdultInvitationToken(otherToken);
@@ -410,6 +420,83 @@ describe('adult invitation v2 callables', () => {
       unauthenticated(),
       fixture.context,
     )).rejects.toMatchObject({ message: 'AUTH_REQUIRED' });
+  });
+
+  it('repairs only the minimal display-name profile needed by invitation acceptance', async () => {
+    seedV2(fixture.documents);
+    fixture.documents.delete('users/joiner-1');
+
+    await expect(completeProfile({
+      token: TOKEN,
+      displayName: '  Alex Smith  ',
+      clientReqId: 'req-profile-001',
+    })).resolves.toEqual({ success: true });
+    expect(fixture.documents.get('users/joiner-1')).toEqual({
+      uid: 'joiner-1',
+      displayName: 'Alex Smith',
+    });
+    expect(fixture.documents.get('users/joiner-1')).not.toHaveProperty('familyId');
+    expect(fixture.documents.get('users/joiner-1')).not.toHaveProperty('role');
+
+    fixture.documents.set('users/joiner-1', {
+      uid: 'joiner-1',
+      displayName: '   ',
+      avatarUrl: '/keep.png',
+    });
+    await expect(completeProfile({
+      token: TOKEN,
+      displayName: 'Alex Jones',
+      clientReqId: 'req-profile-002',
+    })).resolves.toEqual({ success: true });
+    expect(fixture.documents.get('users/joiner-1')).toEqual({
+      uid: 'joiner-1',
+      displayName: 'Alex Jones',
+      avatarUrl: '/keep.png',
+    });
+
+    await expect(completeProfile({
+      token: TOKEN,
+      displayName: 'Alex Jones',
+      clientReqId: 'req-profile-002',
+    })).resolves.toEqual({ success: true });
+  });
+
+  it('keeps profile repair authenticated, invitation-scoped, and authority-free', async () => {
+    seedV2(fixture.documents);
+
+    await expect(completeAdultInvitationProfileImpl({
+      token: TOKEN,
+      displayName: 'Alex',
+      clientReqId: 'req-profile-003',
+    }, unauthenticated(), fixture.context)).rejects.toMatchObject({ message: 'AUTH_REQUIRED' });
+    await expect(completeProfile({
+      token: TOKEN,
+      displayName: 'Alex',
+      clientReqId: 'req-profile-004',
+      role: 'owner',
+    })).rejects.toMatchObject({ message: 'BAD_REQUEST' });
+    await expect(completeProfile({
+      token: TOKEN,
+      displayName: 'Alex',
+      clientReqId: 'req-profile-005',
+      familyId: 'attacker-family',
+    })).rejects.toMatchObject({ message: 'BAD_REQUEST' });
+    await expect(completeProfile({
+      token: TOKEN,
+      displayName: '   ',
+      clientReqId: 'req-profile-006',
+    })).rejects.toMatchObject({ message: 'INVALID_DISPLAY_NAME' });
+    await expect(completeProfile({
+      token: TOKEN,
+      displayName: 'x'.repeat(81),
+      clientReqId: 'req-profile-007',
+    })).rejects.toMatchObject({ message: 'INVALID_DISPLAY_NAME' });
+    await expect(completeProfile({
+      token: TOKEN,
+      displayName: 'Already Complete',
+      clientReqId: 'req-profile-008',
+    })).resolves.toEqual({ success: true });
+    expect(fixture.documents.get('users/joiner-1')?.displayName).toBe('Joiner');
   });
 
   it('same-user acceptance replay is idempotent', async () => {

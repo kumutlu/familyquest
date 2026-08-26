@@ -8,6 +8,7 @@ import {
 import { HttpsError, onCall, type CallableRequest } from 'firebase-functions/v2/https';
 
 export type AdultRole = 'parent' | 'adult';
+export type FamilyMembershipRole = 'owner' | 'parent' | 'adult' | 'child';
 
 export const INVITATION_TTL_MS = 7 * 24 * 60 * 60 * 1000;
 
@@ -88,6 +89,12 @@ export interface AcceptAdultInvitationInput {
   clientReqId: string;
 }
 
+export interface CompleteAdultInvitationProfileInput {
+  token: string;
+  displayName: string;
+  clientReqId: string;
+}
+
 export interface RevokeAdultInvitationInput {
   invitationId: string;
   clientReqId: string;
@@ -110,7 +117,7 @@ export interface AdultInvitationPreview {
 export interface AdultInvitationAcceptance {
   result: 'joined' | 'already_member';
   familyId: string;
-  role: AdultRole;
+  role: FamilyMembershipRole;
   destination: '/';
 }
 
@@ -145,6 +152,28 @@ function validateClientReqId(value: unknown): string {
     throw httpsError('invalid-argument', 'INVALID_REQUEST_ID');
   }
   return value;
+}
+
+function validateDisplayName(value: unknown): string {
+  if (typeof value !== 'string') {
+    throw httpsError('invalid-argument', 'INVALID_DISPLAY_NAME');
+  }
+  const displayName = value.trim();
+  if (
+    displayName.length < 1 ||
+    displayName.length > 80 ||
+    /[\u0000-\u001F\u007F]/.test(displayName)
+  ) {
+    throw httpsError('invalid-argument', 'INVALID_DISPLAY_NAME');
+  }
+  return displayName;
+}
+
+function canonicalMembershipRole(value: unknown): FamilyMembershipRole {
+  if (value === 'owner' || value === 'parent' || value === 'adult' || value === 'child') {
+    return value;
+  }
+  throw httpsError('failed-precondition', 'INVALID_PROFILE_ROLE');
 }
 
 function validateRole(value: unknown): AdultRole {
@@ -457,7 +486,7 @@ export async function acceptAdultInvitationImpl(
       return {
         result: operation.result as 'joined' | 'already_member',
         familyId: String(operation.familyId),
-        role: operation.role as AdultRole,
+        role: operation.role as FamilyMembershipRole,
         destination: '/',
       };
     }
@@ -473,9 +502,9 @@ export async function acceptAdultInvitationImpl(
     if (invitation.status === 'accepted' && invitation.acceptedBy === uid) {
       if (profileFamilyId === invitation.familyId) {
         return {
-          result: 'joined',
+          result: 'already_member',
           familyId: invitation.familyId,
-          role: invitation.intendedRole,
+          role: canonicalMembershipRole(profile.role),
           destination: '/',
         };
       }
@@ -486,6 +515,9 @@ export async function acceptAdultInvitationImpl(
     const alreadyMember = profileFamilyId === invitation.familyId && isActiveMember(profile) &&
       (!membershipSnapshot.exists || isActiveMember(membership));
     const result: 'joined' | 'already_member' = alreadyMember ? 'already_member' : 'joined';
+    const resultRole = alreadyMember
+      ? canonicalMembershipRole(profile.role)
+      : invitation.intendedRole;
     const acceptedAt = toTimestamp(context, now);
     const eventId = context.eventId?.() ?? createHash('sha256')
       .update(`${uid}:${clientReqId}`, 'utf8')
@@ -522,7 +554,7 @@ export async function acceptAdultInvitationImpl(
       requesterUid: uid,
       invitationId,
       familyId: invitation.familyId,
-      role: invitation.intendedRole,
+      role: resultRole,
       result,
       phase: 'complete',
       createdAt: acceptedAt,
@@ -530,17 +562,89 @@ export async function acceptAdultInvitationImpl(
     transaction.set(eventRef, {
       event: result === 'joined' ? 'adult_invitation_joined' : 'adult_invitation_already_member',
       memberUid: uid,
-      role: invitation.intendedRole,
+      role: resultRole,
       createdAt: acceptedAt,
     });
 
     return {
       result,
       familyId: invitation.familyId,
-      role: invitation.intendedRole,
+      role: resultRole,
       destination: '/',
     };
   });
+}
+
+/**
+ * Repairs only an absent/blank display name for an authenticated invitation
+ * recipient. Membership authority remains exclusively in acceptance.
+ */
+export async function completeAdultInvitationProfileImpl(
+  input: CompleteAdultInvitationProfileInput,
+  request: CallableRequest<CompleteAdultInvitationProfileInput>,
+  context: AdultInvitationContext,
+): Promise<{ success: true }> {
+  assertInputShape(input, ['token', 'displayName', 'clientReqId']);
+  const uid = requireUid(request);
+  const displayName = validateDisplayName(input.displayName);
+  const clientReqId = validateClientReqId(input.clientReqId);
+  const invitationId = invitationIdFor(input.token);
+  const invitationRef = context.db.doc(`familyInvitations/${invitationId}`);
+  const profileRef = context.db.doc(`users/${uid}`);
+  const operationRef = context.db.doc(
+    `adultInvitationProfileCompletionIdempotency/${uid}_${clientReqId}`,
+  );
+  const now = dateNow(context);
+
+  await context.db.runTransaction(async (transaction: Transaction) => {
+    const invitationSnapshot = await transaction.get(invitationRef);
+    if (!invitationSnapshot.exists) throw httpsError('not-found', 'INVALID_INVITATION');
+    const invitation = invitationRecord(invitationSnapshot.data() as DocumentData | undefined);
+    assertInvitationActive(invitation, now, uid);
+    const familyRef = context.db.doc(`families/${invitation.familyId}`);
+    const [familySnapshot, profileSnapshot, operationSnapshot] = await Promise.all([
+      transaction.get(familyRef),
+      transaction.get(profileRef),
+      transaction.get(operationRef),
+    ]);
+    const family = familySnapshot.data() as DocumentData | undefined;
+    if (!familySnapshot.exists || !isActiveFamily(family)) {
+      throw httpsError('failed-precondition', 'FAMILY_UNAVAILABLE');
+    }
+    if (operationSnapshot.exists) {
+      const operation = operationSnapshot.data() as DocumentData;
+      if (
+        operation.operation !== 'complete-adult-invitation-profile' ||
+        operation.invitationId !== invitationId ||
+        operation.displayName !== displayName
+      ) {
+        throw httpsError('already-exists', 'REQUEST_ID_REUSED');
+      }
+      return;
+    }
+
+    const profile = profileSnapshot.data() as DocumentData | undefined;
+    const profileFamilyId = typeof profile?.familyId === 'string' && profile.familyId
+      ? profile.familyId
+      : undefined;
+    if (profileFamilyId && profileFamilyId !== invitation.familyId) {
+      throw httpsError('failed-precondition', 'ALREADY_IN_ANOTHER_FAMILY');
+    }
+    const completedAt = toTimestamp(context, now);
+    if (!(typeof profile?.displayName === 'string' && profile.displayName.trim())) {
+      transaction.set(profileRef, { uid, displayName }, { merge: true });
+    }
+    transaction.set(operationRef, {
+      operation: 'complete-adult-invitation-profile',
+      requesterUid: uid,
+      invitationId,
+      displayName,
+      phase: 'complete',
+      createdAt: completedAt,
+    });
+  });
+
+  return { success: true };
 }
 
 export async function revokeAdultInvitationImpl(
@@ -628,6 +732,11 @@ export const previewAdultInvitation = onCall(
 export const acceptAdultInvitation = onCall(
   { region: 'europe-west1', enforceAppCheck: false },
   request => acceptAdultInvitationImpl(request.data, request, productionContext()),
+);
+
+export const completeAdultInvitationProfile = onCall(
+  { region: 'europe-west1', enforceAppCheck: false },
+  request => completeAdultInvitationProfileImpl(request.data, request, productionContext()),
 );
 
 export const revokeAdultInvitation = onCall(

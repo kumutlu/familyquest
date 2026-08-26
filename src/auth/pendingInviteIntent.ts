@@ -208,3 +208,33 @@ export function clearPendingInvite(reason: PendingInviteClearReason): void {
     }
   }
 }
+
+/** Removes only copies belonging to the terminal token/account operation. */
+export function clearPendingInviteIfMatches(
+  expected: { token: string; authUid?: string },
+  reason: PendingInviteClearReason,
+): boolean {
+  void reason;
+  if (!isCanonicalInvitationToken(expected.token)) {
+    throw new Error('INVALID_INVITATION_TOKEN');
+  }
+  if (expected.authUid !== undefined && !isValidAuthUid(expected.authUid)) {
+    throw new Error('INVALID_AUTH_UID');
+  }
+
+  let cleared = false;
+  for (const storage of stores()) {
+    const intent = parseIntent(readStorage(storage));
+    const matches = intent?.token === expected.token && (
+      expected.authUid === undefined || intent.authUid === expected.authUid
+    );
+    if (!matches) continue;
+    try {
+      storage.removeItem(PENDING_ADULT_INVITE_KEY);
+      cleared = true;
+    } catch {
+      // Best-effort cleanup is safe when browser storage is blocked.
+    }
+  }
+  return cleared;
+}

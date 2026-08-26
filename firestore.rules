@@ -1710,6 +1710,9 @@ service cloud.firestore {
     match /adultInvitationAcceptanceIdempotency/{operationId} {
       allow read, write: if false;
     }
+    match /adultInvitationProfileCompletionIdempotency/{operationId} {
+      allow read, write: if false;
+    }
     match /adultInvitationRevocationIdempotency/{operationId} {
       allow read, write: if false;
     }

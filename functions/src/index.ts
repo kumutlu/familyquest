@@ -288,6 +288,7 @@ export {
   createAdultInvitation,
   previewAdultInvitation,
   acceptAdultInvitation,
+  completeAdultInvitationProfile,
   revokeAdultInvitation,
 } from './adultInvitations';
 

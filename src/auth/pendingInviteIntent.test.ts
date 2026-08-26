@@ -4,6 +4,7 @@ import {
   bindPendingInviteToUid,
   capturePendingInvite,
   clearPendingInvite,
+  clearPendingInviteIfMatches,
   isPendingInviteFresh,
   PENDING_ADULT_INVITE_KEY,
   readPendingInvite,
@@ -161,6 +162,30 @@ describe('pending adult invitation intent', () => {
 
     expect(sessionStorage.getItem(PENDING_ADULT_INVITE_KEY)).toBeNull();
     expect(localStorage.getItem(PENDING_ADULT_INVITE_KEY)).toBeNull();
+  });
+
+  it('clears only storage copies matching the completed token and account', () => {
+    const now = Date.now();
+    sessionStorage.setItem(PENDING_ADULT_INVITE_KEY, JSON.stringify({
+      version: 2, token: TOKEN, capturedAt: now, authUid: 'uid-a',
+    }));
+    localStorage.setItem(PENDING_ADULT_INVITE_KEY, JSON.stringify({
+      version: 2, token: TOKEN_B, capturedAt: now, authUid: 'uid-b',
+    }));
+
+    expect(clearPendingInviteIfMatches(
+      { token: TOKEN, authUid: 'uid-a' },
+      'joined',
+    )).toBe(true);
+    expect(sessionStorage.getItem(PENDING_ADULT_INVITE_KEY)).toBeNull();
+    expect(JSON.parse(localStorage.getItem(PENDING_ADULT_INVITE_KEY)!)).toMatchObject({
+      token: TOKEN_B,
+      authUid: 'uid-b',
+    });
+    expect(clearPendingInviteIfMatches(
+      { token: TOKEN, authUid: 'uid-a' },
+      'joined',
+    )).toBe(false);
   });
 
   it('does not treat a future capture timestamp as fresh', () => {

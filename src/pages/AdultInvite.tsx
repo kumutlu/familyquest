@@ -1,25 +1,65 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
-import { doc, setDoc } from 'firebase/firestore';
 import { Button } from '../components/ui/Button';
 import { GoogleButton } from '../components/ui/GoogleButton';
 import { PublicAuthShell } from '../onboarding/components/PublicAuthShell';
 import { signInWithGoogle } from '../lib/api';
 import {
   acceptAdultInvitation,
+  completeAdultInvitationProfile,
   previewAdultInvitation,
   type AdultInvitationPreview,
 } from '../lib/adultInvitationApi';
 import {
   bindPendingInviteToUid,
   capturePendingInvite,
-  clearPendingInvite,
+  clearPendingInviteIfMatches,
   readPendingInvite,
   type PendingInviteClearReason,
 } from '../auth/pendingInviteIntent';
 import { useStore } from '../store/useStore';
-import { db } from '../lib/firebase';
+
+type InviteOperationScope = {
+  generation: number;
+  token: string;
+  uid: string;
+};
+
+type ScopedRequestId = {
+  key: string;
+  value: string;
+};
+
+const previewRequests = new Map<string, Promise<AdultInvitationPreview>>();
+
+function previewAdultInvitationOnce(token: string): Promise<AdultInvitationPreview> {
+  const existing = previewRequests.get(token);
+  if (existing) return existing;
+
+  const request = previewAdultInvitation({ token });
+  previewRequests.set(token, request);
+  void request.then(
+    () => {
+      if (previewRequests.get(token) === request) previewRequests.delete(token);
+    },
+    () => {
+      if (previewRequests.get(token) === request) previewRequests.delete(token);
+    },
+  );
+  return request;
+}
+
+function scopedRequestId(
+  reference: React.MutableRefObject<ScopedRequestId | null>,
+  scope: InviteOperationScope,
+): string {
+  const key = `${scope.token}\u0000${scope.uid}`;
+  if (reference.current?.key !== key) {
+    reference.current = { key, value: crypto.randomUUID() };
+  }
+  return reference.current.value;
+}
 
 type Phase =
   | 'validating'
@@ -114,9 +154,11 @@ export function AdultInvite() {
   const { t } = useTranslation('family');
   const authStatus = useStore(state => state.authStatus);
   const authUser = useStore(state => state.authUser);
-  const currentUser = useStore(state => state.currentUser);
   const refreshCurrentUser = useStore(state => state.refreshCurrentUser);
-  const requestId = useRef(crypto.randomUUID());
+  const lifecycleGeneration = useRef(0);
+  const lifecycle = useRef({ generation: 0, token: '', uid: '', mounted: false });
+  const acceptRequestId = useRef<ScopedRequestId | null>(null);
+  const profileRequestId = useRef<ScopedRequestId | null>(null);
 
   const [phase, setPhase] = useState<Phase>('validating');
   const [preview, setPreview] = useState<AdultInvitationPreview | null>(null);
@@ -129,10 +171,34 @@ export function AdultInvite() {
   const [profileSaveError, setProfileSaveError] = useState(false);
 
   useEffect(() => {
+    const generation = ++lifecycleGeneration.current;
+    lifecycle.current = {
+      generation,
+      token,
+      uid: authUser?.uid ?? '',
+      mounted: true,
+    };
+    acceptRequestId.current = null;
+    profileRequestId.current = null;
+    return () => {
+      if (lifecycle.current.generation === generation) {
+        lifecycle.current = {
+          ...lifecycle.current,
+          generation: ++lifecycleGeneration.current,
+          mounted: false,
+        };
+      }
+    };
+  }, [authUser?.uid, token]);
+
+  useEffect(() => {
     let cancelled = false;
     setPhase('validating');
     setPreview(null);
     setFailure(null);
+    setProfileName('');
+    setProfileSaving(false);
+    setProfileSaveError(false);
 
     try {
       const pending = readPendingInvite();
@@ -143,7 +209,7 @@ export function AdultInvite() {
       return () => { cancelled = true; };
     }
 
-    previewAdultInvitation({ token })
+    previewAdultInvitationOnce(token)
       .then(result => {
         if (cancelled) return;
         setPreview(result);
@@ -176,8 +242,8 @@ export function AdultInvite() {
       return;
     }
 
-    setPhase(currentUser ? 'confirming' : 'validating');
-  }, [authStatus, authUser?.uid, currentUser, preview]);
+    setPhase('confirming');
+  }, [authStatus, authUser?.uid, preview]);
 
   const handleGoogle = useCallback(async () => {
     setGooglePending(true);
@@ -192,31 +258,59 @@ export function AdultInvite() {
   }, []);
 
   const leave = useCallback((reason: PendingInviteClearReason = 'left') => {
-    clearPendingInvite(reason);
+    clearPendingInviteIfMatches({ token }, reason);
     navigate('/', { replace: true });
-  }, [navigate]);
+  }, [navigate, token]);
 
-  const handleAccept = useCallback(async () => {
-    if (!authUser?.uid || !preview || !currentUser) return;
-    setPhase('accepting');
-    setFailure(null);
+  const captureOperationScope = useCallback((): InviteOperationScope | null => {
+    const current = lifecycle.current;
+    if (
+      !current.mounted ||
+      !authUser?.uid ||
+      current.token !== token ||
+      current.uid !== authUser.uid
+    ) {
+      return null;
+    }
+    return { generation: current.generation, token, uid: authUser.uid };
+  }, [authUser?.uid, token]);
+
+  const isOperationScopeCurrent = useCallback((scope: InviteOperationScope): boolean => {
+    const current = lifecycle.current;
+    return current.mounted &&
+      current.generation === scope.generation &&
+      current.token === scope.token &&
+      current.uid === scope.uid;
+  }, []);
+
+  const performAcceptance = useCallback(async (scope: InviteOperationScope) => {
+    if (!preview || !authUser || !isOperationScopeCurrent(scope)) return;
     try {
       // The server alone derives family and role from the invitation record.
       const result = await acceptAdultInvitation({
-        token,
-        clientReqId: requestId.current,
+        token: scope.token,
+        clientReqId: scopedRequestId(acceptRequestId, scope),
       });
+      if (!isOperationScopeCurrent(scope)) return;
 
       // Publish authoritative membership locally before entering AppLayout. This
       // prevents a successful recipient with a not-yet-updated listener snapshot
       // from being mistaken for a generic no-family onboarding user.
       await authUser.getIdToken(true);
-      refreshCurrentUser(authUser.uid, { familyId: result.familyId, role: result.role });
-      clearPendingInvite(result.result === 'already_member' ? 'already-member' : 'joined');
+      if (!isOperationScopeCurrent(scope)) return;
+      refreshCurrentUser(scope.uid, { familyId: result.familyId, role: result.role });
+      if (!isOperationScopeCurrent(scope)) return;
+      clearPendingInviteIfMatches(
+        { token: scope.token, authUid: scope.uid },
+        result.result === 'already_member' ? 'already-member' : 'joined',
+      );
+      if (!isOperationScopeCurrent(scope)) return;
       setSuccessResult(result.result);
       setPhase('success');
+      if (!isOperationScopeCurrent(scope)) return;
       navigate(result.destination, { replace: true });
     } catch (error) {
+      if (!isOperationScopeCurrent(scope)) return;
       const code = invitationFailureCode(error);
       setFailure(code);
       if (code === 'ALREADY_IN_ANOTHER_FAMILY' || code === 'INVITE_ACCOUNT_MISMATCH') {
@@ -227,11 +321,20 @@ export function AdultInvite() {
         setPhase('confirming');
       }
     }
-  }, [authUser, currentUser, navigate, preview, refreshCurrentUser, token]);
+  }, [authUser, isOperationScopeCurrent, navigate, preview, refreshCurrentUser]);
+
+  const handleAccept = useCallback(async () => {
+    const scope = captureOperationScope();
+    if (!scope || !preview) return;
+    setPhase('accepting');
+    setFailure(null);
+    await performAcceptance(scope);
+  }, [captureOperationScope, performAcceptance, preview]);
 
   const handleCompleteProfile = useCallback(async () => {
     const displayName = profileName.trim();
-    if (!authUser?.uid || !displayName) {
+    const scope = captureOperationScope();
+    if (!scope || !displayName) {
       setProfileSaveError(true);
       return;
     }
@@ -239,19 +342,25 @@ export function AdultInvite() {
     setProfileSaving(true);
     setProfileSaveError(false);
     try {
-      // This repair writes only the minimal identity field required by the
-      // acceptance callable. Family and role remain exclusively server-owned.
-      await setDoc(doc(db, 'users', authUser.uid), { displayName }, { merge: true });
+      await completeAdultInvitationProfile({
+        token: scope.token,
+        displayName,
+        clientReqId: scopedRequestId(profileRequestId, scope),
+      });
+      if (!isOperationScopeCurrent(scope)) return;
       setFailure(null);
-      await handleAccept();
+      setPhase('accepting');
+      if (!isOperationScopeCurrent(scope)) return;
+      await performAcceptance(scope);
     } catch {
+      if (!isOperationScopeCurrent(scope)) return;
       setProfileSaveError(true);
       setFailure('PROFILE_REQUIRED');
       setPhase('confirming');
     } finally {
-      setProfileSaving(false);
+      if (isOperationScopeCurrent(scope)) setProfileSaving(false);
     }
-  }, [authUser?.uid, handleAccept, profileName]);
+  }, [captureOperationScope, isOperationScopeCurrent, performAcceptance, profileName]);
 
   const roleLabel = preview?.intendedRole === 'adult'
     ? t('adultInvite.roleAdult')
@@ -346,6 +455,7 @@ export function AdultInvite() {
                   id="adult-invite-display-name"
                   type="text"
                   autoComplete="name"
+                  maxLength={80}
                   value={profileName}
                   onChange={event => setProfileName(event.target.value)}
                   className="block min-h-11 w-full rounded-xl border border-gray-300 bg-white px-4 py-2 text-gray-900 focus:border-primary-500 focus:outline-none focus:ring-2 focus:ring-primary-500 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-100"
@@ -398,7 +508,7 @@ export function AdultInvite() {
                 </Button>
               )}
               <Button fullWidth variant="ghost" onClick={() => {
-                clearPendingInvite('left');
+                clearPendingInviteIfMatches({ token }, 'left');
                 navigate('/join-family', { replace: true });
               }}>
                 {t('adultInvite.manualJoin')}
