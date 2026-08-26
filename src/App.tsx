@@ -14,6 +14,7 @@ import { Login } from './pages/Login';
 import { Signup } from './pages/Signup';
 import { JoinFamily } from './pages/JoinFamily';
 import { JoinInvite } from './pages/JoinInvite';
+import { AdultInvite } from './pages/AdultInvite';
 import { OnboardingFlow } from './onboarding/OnboardingFlow';
 import { PrivacyPolicy } from './pages/legal/PrivacyPolicy';
 import { TermsOfService } from './pages/legal/TermsOfService';
@@ -74,6 +75,9 @@ function App() {
           {/* Code-specific invitation link. Public: the invitation is
               validated server-side before any family detail is rendered. */}
           <Route path="/join" element={<JoinInvite />} />
+          {/* Opaque adult invitations own their auth/confirmation journey and
+              must run before the authenticated AppLayout onboarding guard. */}
+          <Route path="/invite/:token" element={<AdultInvite />} />
 
           {/* Public pre-auth onboarding. Rendered OUTSIDE <AppLayout> so it is
               reachable by unauthenticated visitors; it carries its own internal
