@@ -3,6 +3,19 @@ import { render, screen, waitFor, act } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter } from 'react-router-dom';
 
+const TOKEN = 'CwsLCwsLCwsLCwsLCwsLCwsLCwsLCwsLCwsLCwsLCws';
+const navigate = vi.hoisted(() => vi.fn());
+const storeState = vi.hoisted(() => ({
+  authStatus: 'unauthenticated' as 'unauthenticated' | 'authenticated',
+  authUser: null as { uid: string } | null,
+  bootstrapError: null as string | null,
+}));
+
+vi.mock('react-router-dom', async importOriginal => {
+  const actual = await importOriginal<typeof import('react-router-dom')>();
+  return { ...actual, useNavigate: () => navigate };
+});
+
 // --- Mock the auth API surface used by the Parent tab ---
 const apiMocks = vi.hoisted(() => ({
   signIn: vi.fn(async () => ({ user: {} })),
@@ -44,15 +57,16 @@ vi.mock('../lib/firebase', () => ({
 
 // --- Mock the store so the page renders (unauthenticated) ---
 vi.mock('../store/useStore', () => ({
-  useStore: (selector: any) => selector({ authStatus: 'unauthenticated' }),
+  useStore: (selector: any) => selector(storeState),
 }));
 
 import { Login } from './Login';
 import i18n from '../i18n/config';
+import { capturePendingInvite, readPendingInvite } from '../auth/pendingInviteIntent';
 
-function renderLogin() {
+function renderLogin(path = '/login') {
   return render(
-    <MemoryRouter>
+    <MemoryRouter initialEntries={[path]}>
       <Login />
     </MemoryRouter>,
   );
@@ -61,6 +75,12 @@ function renderLogin() {
 const GENERIC_ERROR = 'We could not sign you in. Please check your Family Code, username, and password, then try again.';
 
 beforeEach(() => {
+  navigate.mockClear();
+  sessionStorage.clear();
+  localStorage.clear();
+  storeState.authStatus = 'unauthenticated';
+  storeState.authUser = null;
+  storeState.bootstrapError = null;
   apiMocks.signIn.mockClear();
   apiMocks.signInWithGoogle.mockClear();
   childApiMocks.signInChild.mockClear();
@@ -69,6 +89,69 @@ beforeEach(() => {
   // Default: success path.
   childApiMocks.signInChild.mockResolvedValue({ customToken: 'tok-123' });
   authMocks.signInWithCustomToken.mockResolvedValue({ user: {} });
+});
+
+describe('Login — validated authentication return', () => {
+  it('keeps and binds the parent invite after popup authentication', async () => {
+    capturePendingInvite(TOKEN);
+    const user = userEvent.setup();
+    const path = `/login?next=${encodeURIComponent(`/invite/${TOKEN}`)}`;
+    const view = renderLogin(path);
+
+    await user.click(screen.getByRole('button', { name: /sign in with google/i }));
+    storeState.authStatus = 'authenticated';
+    storeState.authUser = { uid: 'uid-1' };
+    view.rerender(
+      <MemoryRouter initialEntries={[path]}>
+        <Login />
+      </MemoryRouter>,
+    );
+
+    await waitFor(() => expect(navigate).toHaveBeenCalledWith(`/invite/${TOKEN}`, { replace: true }));
+    expect(readPendingInvite()).toMatchObject({ token: TOKEN, authUid: 'uid-1' });
+  });
+
+  it('prefers a fresh pending v2 invite over a generic validated next path', async () => {
+    capturePendingInvite(TOKEN);
+    const view = renderLogin('/login?next=%2Fonboarding');
+
+    storeState.authStatus = 'authenticated';
+    storeState.authUser = { uid: 'uid-1' };
+    view.rerender(
+      <MemoryRouter initialEntries={['/login?next=%2Fonboarding']}>
+        <Login />
+      </MemoryRouter>,
+    );
+
+    await waitFor(() => expect(navigate).toHaveBeenCalledWith(`/invite/${TOKEN}`, { replace: true }));
+  });
+
+  it('preserves a validated next path when switching to Signup', () => {
+    const next = `/invite/${TOKEN}`;
+    renderLogin(`/login?next=${encodeURIComponent(next)}`);
+
+    expect(screen.getByRole('link', { name: /don't have an account\? sign up/i })).toHaveAttribute(
+      'href',
+      `/signup?next=${encodeURIComponent(next)}`,
+    );
+  });
+
+  it('rejects an external next path from navigation and the Signup link', async () => {
+    const path = '/login?next=https%3A%2F%2Fevil.example%2Fsteal';
+    const view = renderLogin(path);
+    expect(screen.getByRole('link', { name: /don't have an account\? sign up/i })).toHaveAttribute('href', '/signup');
+
+    storeState.authStatus = 'authenticated';
+    storeState.authUser = { uid: 'uid-1' };
+    view.rerender(
+      <MemoryRouter initialEntries={[path]}>
+        <Login />
+      </MemoryRouter>,
+    );
+
+    await waitFor(() => expect(navigate).toHaveBeenCalledWith('/', { replace: true }));
+    expect(navigate).not.toHaveBeenCalledWith('https://evil.example/steal', expect.anything());
+  });
 });
 
 // Ensure the `auth` namespace is loaded and the language is English before each

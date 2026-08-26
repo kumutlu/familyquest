@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Link, useNavigate, useLocation } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { Button } from '../components/ui/Button';
@@ -8,6 +8,8 @@ import { postAuthDestination } from '../lib/inviteLink';
 import { PublicAuthShell } from '../onboarding/components/PublicAuthShell';
 import { OnboardingVisual } from '../onboarding/components/OnboardingVisual';
 import { FamilyHomeScene } from '../onboarding/visuals/OnboardingScenes';
+import { bindPendingInviteToUid, readPendingInvite } from '../auth/pendingInviteIntent';
+import { safeInternalReturnPath } from '../lib/googleRedirectAuth';
 
 export function Signup() {
   const { t } = useTranslation(['auth', 'common']);
@@ -19,22 +21,40 @@ export function Signup() {
   const navigate = useNavigate();
   const location = useLocation();
   const authStatus = useStore(state => state.authStatus);
+  const authUser = useStore(state => state.authUser);
+  const navigationStarted = useRef(false);
 
   // When the visitor reached signup from the pre-auth onboarding flow, return
   // them to /onboarding after auth so the post-auth setup (P1–P3) resumes. The
   // value is validated to avoid an open redirect.
-  const next = new URLSearchParams(location.search).get('next');
-  const returnTo = next === '/onboarding' ? '/onboarding' : null;
+  const returnTo = safeInternalReturnPath(new URLSearchParams(location.search).get('next'));
+  const pendingInvite = readPendingInvite();
+  const pendingInvitePath = pendingInvite
+    ? `/invite/${encodeURIComponent(pendingInvite.token)}`
+    : null;
+  const authReturnPath = pendingInvitePath ?? returnTo;
+  const loginPath = authReturnPath
+    ? `/login?next=${encodeURIComponent(authReturnPath)}`
+    : '/login';
 
   // Once Firebase Auth reports the user as authenticated, the AppLayout route
   // guard performs the redirect to the correct protected route.
   useEffect(() => {
-    if (authStatus === 'authenticated') {
-      // Resume a pending invitation when the visitor came from a /join link,
-      // or return to onboarding when that was the entry point.
-      navigate(returnTo || postAuthDestination('/'), { replace: true });
+    if (authStatus !== 'authenticated' || !authUser?.uid || navigationStarted.current) return;
+
+    try {
+      bindPendingInviteToUid(authUser.uid);
+    } catch {
+      // The canonical invite route owns stable account-mismatch UX.
     }
-  }, [authStatus, navigate, returnTo]);
+
+    const resumedInvite = readPendingInvite();
+    const destination = resumedInvite
+      ? `/invite/${encodeURIComponent(resumedInvite.token)}`
+      : returnTo ?? postAuthDestination('/');
+    navigationStarted.current = true;
+    navigate(destination, { replace: true });
+  }, [authStatus, authUser?.uid, navigate, returnTo]);
 
   if (authStatus === 'authenticated') {
     return null;
@@ -137,7 +157,7 @@ export function Signup() {
           </div>
 
           <div className="mt-6 text-center">
-            <Link to="/login" className="text-sm font-medium text-primary-600 hover:text-primary-500">{t('auth:hasAccount')} {t('auth:signIn')}</Link>
+            <Link to={loginPath} className="text-sm font-medium text-primary-600 hover:text-primary-500">{t('auth:hasAccount')} {t('auth:signIn')}</Link>
           </div>
         </div>
       </div>

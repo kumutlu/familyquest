@@ -251,9 +251,12 @@ export function AdultInvite() {
     setGooglePending(true);
     setFailure(null);
     try {
-      await signInWithGoogle();
-    } catch {
-      setFailure('UNKNOWN');
+      const authenticatedUser = await signInWithGoogle();
+      if (authenticatedUser?.uid) bindPendingInviteToUid(authenticatedUser.uid);
+    } catch (error) {
+      const code = invitationFailureCode(error);
+      setFailure(code);
+      if (code === 'INVITE_ACCOUNT_MISMATCH') setPhase('conflict');
     } finally {
       setGooglePending(false);
     }
