@@ -26,20 +26,64 @@ describe('pending adult invitation intent', () => {
     expect(localStorage.getItem(PENDING_ADULT_INVITE_KEY)).not.toMatch(/familyId|familyName|role|email/);
   });
 
-  it('clears stale intent from both stores after seven days', () => {
+  it('clears intent at exactly seven days and treats the TTL as strict', () => {
     capturePendingInvite(TOKEN, 1_000);
 
-    expect(readPendingInvite(1_000 + 7 * DAY_MS + 1)).toBeNull();
+    const atExpiry = 1_000 + 7 * DAY_MS;
+    const intent = { version: 2 as const, token: TOKEN, capturedAt: 1_000 };
+    expect(isPendingInviteFresh(intent, atExpiry)).toBe(false);
+    expect(readPendingInvite(atExpiry)).toBeNull();
     expect(sessionStorage.getItem(PENDING_ADULT_INVITE_KEY)).toBeNull();
     expect(localStorage.getItem(PENDING_ADULT_INVITE_KEY)).toBeNull();
   });
 
   it('does not silently rebind an invite to a different authenticated account', () => {
-    capturePendingInvite(TOKEN, 1_000);
+    const now = Date.now();
+    capturePendingInvite(TOKEN, now);
     bindPendingInviteToUid('uid-a');
 
     expect(() => bindPendingInviteToUid('uid-b')).toThrow('INVITE_ACCOUNT_MISMATCH');
-    expect(readPendingInvite(2_000)?.authUid).toBe('uid-a');
+    expect(readPendingInvite(now + 1_000)?.authUid).toBe('uid-a');
+  });
+
+  it('rejects a bind when local storage has a same-token binding hidden by an unbound session copy', () => {
+    const now = Date.now();
+    sessionStorage.setItem(PENDING_ADULT_INVITE_KEY, JSON.stringify({
+      version: 2, token: TOKEN, capturedAt: now,
+    }));
+    localStorage.setItem(PENDING_ADULT_INVITE_KEY, JSON.stringify({
+      version: 2, token: TOKEN, capturedAt: now, authUid: 'uid-b',
+    }));
+
+    expect(() => bindPendingInviteToUid('uid-a')).toThrow('INVITE_ACCOUNT_MISMATCH');
+    expect(JSON.parse(sessionStorage.getItem(PENDING_ADULT_INVITE_KEY)!)).not.toHaveProperty('authUid');
+    expect(JSON.parse(localStorage.getItem(PENDING_ADULT_INVITE_KEY)!)).toMatchObject({ authUid: 'uid-b' });
+  });
+
+  it('rejects differing valid bindings across session and local storage without overwriting either', () => {
+    const now = Date.now();
+    sessionStorage.setItem(PENDING_ADULT_INVITE_KEY, JSON.stringify({
+      version: 2, token: TOKEN, capturedAt: now, authUid: 'uid-a',
+    }));
+    localStorage.setItem(PENDING_ADULT_INVITE_KEY, JSON.stringify({
+      version: 2, token: TOKEN, capturedAt: now, authUid: 'uid-b',
+    }));
+
+    expect(() => bindPendingInviteToUid('uid-a')).toThrow('INVITE_ACCOUNT_MISMATCH');
+    expect(JSON.parse(sessionStorage.getItem(PENDING_ADULT_INVITE_KEY)!)).toMatchObject({ authUid: 'uid-a' });
+    expect(JSON.parse(localStorage.getItem(PENDING_ADULT_INVITE_KEY)!)).toMatchObject({ authUid: 'uid-b' });
+  });
+
+  it('falls back to the local binding after session storage is lost', () => {
+    const now = Date.now();
+    capturePendingInvite(TOKEN, now);
+    bindPendingInviteToUid('uid-a');
+    sessionStorage.clear();
+
+    expect(bindPendingInviteToUid('uid-a')).toEqual({
+      version: 2, token: TOKEN, capturedAt: now, authUid: 'uid-a',
+    });
+    expect(() => bindPendingInviteToUid('uid-b')).toThrow('INVITE_ACCOUNT_MISMATCH');
   });
 
   it('rejects padded, incorrectly-sized, and non-canonical base64url tokens', () => {
@@ -76,10 +120,11 @@ describe('pending adult invitation intent', () => {
   });
 
   it('binds the authenticated UID and mirrors the updated envelope', () => {
-    capturePendingInvite(TOKEN, 1_000);
+    const now = Date.now();
+    capturePendingInvite(TOKEN, now);
 
     expect(bindPendingInviteToUid('uid-a')).toEqual({
-      version: 2, token: TOKEN, capturedAt: 1_000, authUid: 'uid-a',
+      version: 2, token: TOKEN, capturedAt: now, authUid: 'uid-a',
     });
     expect(JSON.parse(sessionStorage.getItem(PENDING_ADULT_INVITE_KEY)!)).toEqual(
       JSON.parse(localStorage.getItem(PENDING_ADULT_INVITE_KEY)!),
