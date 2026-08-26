@@ -13,10 +13,12 @@ const projectId = 'familyquest-adult-invitations-rules';
 const familyId = 'adult-invite-family';
 const ownerId = 'adult-invite-owner';
 const parentId = 'adult-invite-parent';
+const adultId = 'adult-invite-adult';
 const joinerId = 'adult-invite-joiner';
 const invitationHash = 'a'.repeat(64);
 
 const invitationPath = `familyInvitations/${invitationHash}`;
+const eventPath = `families/${familyId}/adultInvitationEvents/accept-event-0001`;
 const serverOnlyPaths = [
   'adultInvitationCreationIdempotency/owner_req-create-0001',
   'adultInvitationAcceptanceIdempotency/joiner_req-accept-0001',
@@ -62,6 +64,7 @@ beforeEach(async () => {
     await setDoc(doc(db, 'families', familyId), { name: 'Adult Invite Family' });
     await setDoc(doc(db, 'users', ownerId), { uid: ownerId, familyId, role: 'owner' });
     await setDoc(doc(db, 'users', parentId), { uid: parentId, familyId, role: 'parent' });
+    await setDoc(doc(db, 'users', adultId), { uid: adultId, familyId, role: 'adult' });
     await setDoc(doc(db, 'users', joinerId), { uid: joinerId, role: 'parent' });
     await setDoc(doc(db, invitationPath), {
       ...forgedInvitation,
@@ -75,6 +78,11 @@ beforeEach(async () => {
       uid: parentId,
       role: 'parent',
       lifecycle: 'active',
+    });
+    await setDoc(doc(db, eventPath), {
+      type: 'invitation_accepted',
+      memberUid: joinerId,
+      intendedRole: 'parent',
     });
   });
 });
@@ -124,6 +132,35 @@ describe('membership authority remains server-owned', () => {
       }));
       await assertFails(updateDoc(existingProjection, { role: 'owner' }));
       await assertFails(deleteDoc(existingProjection));
+    },
+  );
+
+  it.each([
+    ['owner self-demotion to parent', ownerId, 'parent'],
+    ['owner self-demotion to adult', ownerId, 'adult'],
+    ['existing parent role change', parentId, 'adult'],
+    ['existing adult role change', adultId, 'parent'],
+    ['owner grant to an existing parent', parentId, 'owner'],
+    ['child assignment to an existing adult', adultId, 'child'],
+  ] as const)('denies %s', async (_caseName, targetId, nextRole) => {
+    const db = contextFor('owner').firestore();
+    await assertFails(updateDoc(doc(db, 'users', targetId), { role: nextRole }));
+  });
+});
+
+describe('v2 adult invitation audit events are server-only', () => {
+  it.each(['owner', 'parent', 'joiner'] as const)(
+    'denies %s every direct read/write of adult invitation events',
+    async identity => {
+      const db = contextFor(identity).firestore();
+      await assertFails(getDoc(doc(db, eventPath)));
+      await assertFails(setDoc(doc(db, eventPath), {
+        type: 'invitation_accepted',
+        memberUid: identity,
+        intendedRole: 'owner',
+      }));
+      await assertFails(updateDoc(doc(db, eventPath), { intendedRole: 'owner' }));
+      await assertFails(deleteDoc(doc(db, eventPath)));
     },
   );
 });
