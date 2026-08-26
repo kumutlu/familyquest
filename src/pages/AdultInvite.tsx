@@ -19,6 +19,7 @@ import {
   type PendingInviteClearReason,
 } from '../auth/pendingInviteIntent';
 import { useStore } from '../store/useStore';
+import { mapAuthErrorKey, type AuthErrorKey } from '../auth/authErrorMessage';
 
 type InviteOperationScope = {
   generation: number;
@@ -151,7 +152,7 @@ function failureTranslationKey(code: InviteFailureCode): FailureTranslationKey {
 export function AdultInvite() {
   const { token = '' } = useParams<{ token: string }>();
   const navigate = useNavigate();
-  const { t } = useTranslation('family');
+  const { t } = useTranslation(['family', 'auth']);
   const authStatus = useStore(state => state.authStatus);
   const authUser = useStore(state => state.authUser);
   const refreshCurrentUser = useStore(state => state.refreshCurrentUser);
@@ -163,6 +164,7 @@ export function AdultInvite() {
   const [phase, setPhase] = useState<Phase>('validating');
   const [preview, setPreview] = useState<AdultInvitationPreview | null>(null);
   const [failure, setFailure] = useState<InviteFailureCode | null>(null);
+  const [authFailureKey, setAuthFailureKey] = useState<AuthErrorKey | null>(null);
   const [validationAttempt, setValidationAttempt] = useState(0);
   const [googlePending, setGooglePending] = useState(false);
   const [successResult, setSuccessResult] = useState<'joined' | 'already_member' | null>(null);
@@ -197,6 +199,7 @@ export function AdultInvite() {
     setPhase('validating');
     setPreview(null);
     setFailure(null);
+    setAuthFailureKey(null);
     setProfileName('');
     setProfileSaving(false);
     setProfileSaveError(false);
@@ -250,13 +253,18 @@ export function AdultInvite() {
   const handleGoogle = useCallback(async () => {
     setGooglePending(true);
     setFailure(null);
+    setAuthFailureKey(null);
     try {
       const authenticatedUser = await signInWithGoogle();
       if (authenticatedUser?.uid) bindPendingInviteToUid(authenticatedUser.uid);
     } catch (error) {
       const code = invitationFailureCode(error);
-      setFailure(code);
-      if (code === 'INVITE_ACCOUNT_MISMATCH') setPhase('conflict');
+      if (code === 'INVITE_ACCOUNT_MISMATCH') {
+        setFailure(code);
+        setPhase('conflict');
+      } else {
+        setAuthFailureKey(mapAuthErrorKey(error, { pendingInvite: true }));
+      }
     } finally {
       setGooglePending(false);
     }
@@ -424,9 +432,9 @@ export function AdultInvite() {
 
         {phase === 'unauthenticated' && preview && (
           <div className="mt-6 space-y-3">
-            {failure && (
+            {(failure || authFailureKey) && (
               <p role="alert" className="text-sm text-red-600 dark:text-red-400">
-                {t(failureTranslationKey(failure))}
+                {authFailureKey ? t(authFailureKey) : t(failureTranslationKey(failure!))}
               </p>
             )}
             <GoogleButton onClick={handleGoogle} disabled={googlePending}>

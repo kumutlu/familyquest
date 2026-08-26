@@ -23,6 +23,13 @@ import { CodeInvitationScene } from '../onboarding/visuals/OnboardingScenes';
 
 type Phase = 'validating' | 'invalid' | 'ready' | 'joining' | 'pending';
 
+const TERMINAL_INVITATION_ERRORS = new Set<InvitationErrorKey>([
+  'family:join.invalid',
+  'family:join.expired',
+  'family:join.revoked',
+  'family:join.used',
+]);
+
 /**
  * Code-specific join route (`/join?code=XXXXXX`).
  *
@@ -64,7 +71,9 @@ export function JoinInvite() {
       })
       .catch(error => {
         if (cancelled) return;
-        setErrorKey(mapInvitationErrorKey(error));
+        const key = mapInvitationErrorKey(error);
+        if (TERMINAL_INVITATION_ERRORS.has(key)) clearPendingInvite();
+        setErrorKey(key);
         setPhase('invalid');
       });
     return () => { cancelled = true; };
@@ -80,7 +89,9 @@ export function JoinInvite() {
       clearPendingInvite();
       setPhase('pending');
     } catch (error) {
-      setErrorKey(mapInvitationErrorKey(error));
+      const key = mapInvitationErrorKey(error);
+      if (TERMINAL_INVITATION_ERRORS.has(key)) clearPendingInvite();
+      setErrorKey(key);
       setPhase('invalid');
     }
   }, [code]);

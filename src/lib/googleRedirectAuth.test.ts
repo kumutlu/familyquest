@@ -84,6 +84,18 @@ describe('Google redirect authentication', () => {
     '/%252f%252fevil.example/invite',
     '/invite/%00hidden',
     '/invite/line\nbreak',
+    '/invite/trailing ',
+    '/invite/non\u00a0breaking',
+    '/invite/em\u2003space',
+    '/invite/line\u2028separator',
+    '/invite/paragraph\u2029separator',
+    '/invite/%20space',
+    '/invite/%c2%85control',
+    '/invite/%c2%a0space',
+    '/invite/%e2%80%a8separator',
+    '/invite/%e2%80%a9separator',
+    '/invite/%25c2%2585control',
+    '/invite/%25e2%2580%25a8separator',
   ])('rejects unsafe return path %j', async value => {
     const { safeInternalReturnPath } = await import('./googleRedirectAuth');
     expect(safeInternalReturnPath(value)).toBeNull();

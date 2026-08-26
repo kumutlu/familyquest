@@ -106,6 +106,7 @@ beforeEach(async () => {
   invitationApi.completeAdultInvitationProfile.mockResolvedValue({ success: true });
   authApi.signInWithGoogle.mockResolvedValue({ uid: 'uid-1' });
   routeState.token = TOKEN;
+  await i18n.loadNamespaces(['family', 'auth']);
   await act(async () => { await i18n.changeLanguage('en'); });
 });
 
@@ -212,6 +213,28 @@ describe('AdultInvite', () => {
       'This invitation is linked to a different signed-in account.',
     );
     expect(readPendingInvite()).toMatchObject({ token: TOKEN, authUid: 'uid-1' });
+    expect(invitationApi.acceptAdultInvitation).not.toHaveBeenCalled();
+  });
+
+  it('renders friendly popup-cancel copy without exposing raw Firebase text', async () => {
+    state.authStatus = 'unauthenticated';
+    state.authUser = null;
+    state.currentUser = null;
+    const raw = 'Firebase raw auth/popup-closed-by-user';
+    authApi.signInWithGoogle.mockRejectedValue({
+      code: 'auth/popup-closed-by-user',
+      message: raw,
+    });
+    const user = userEvent.setup();
+    renderInvite();
+
+    await user.click(await screen.findByRole('button', { name: 'Continue with Google' }));
+
+    const alert = await screen.findByRole('alert');
+    expect(alert).toHaveTextContent('Google sign-in was cancelled. Your invitation is still here.');
+    expect(alert).not.toHaveTextContent(raw);
+    expect(alert).not.toHaveTextContent('auth/');
+    expect(readPendingInvite()?.token).toBe(TOKEN);
     expect(invitationApi.acceptAdultInvitation).not.toHaveBeenCalled();
   });
 
