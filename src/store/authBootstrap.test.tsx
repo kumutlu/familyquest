@@ -32,9 +32,11 @@ const firestoreState = vi.hoisted(() => ({
   pendingMembershipDocs: [] as any[],
   pendingMembershipError: null as any,
   pendingMembershipListener: null as ((snapshot: any) => void) | null,
+  profileListener: null as ((snapshot: any) => void) | null,
 }));
 
 const firestoreWrites = vi.hoisted(() => ({ setDoc: vi.fn() }));
+const familyCreation = vi.hoisted(() => ({ createFamilyAndParent: vi.fn() }));
 
 vi.mock('firebase/auth', () => ({
   onAuthStateChanged: vi.fn((_auth, next, error) => {
@@ -70,6 +72,7 @@ vi.mock('firebase/firestore', () => ({
       }
       return () => {};
     }
+    firestoreState.profileListener = next;
     // Immediately deliver the configured snapshot (or error) to mimic a
     // server-resolved event. We do NOT deliver a fromCache event first so the
     // test focuses on the authoritative resolve path.
@@ -109,7 +112,10 @@ vi.mock('../lib/firebase', () => ({
   googleProvider: {},
 }));
 
-vi.mock('../lib/api', () => ({ signOut: vi.fn(async () => {}) }));
+vi.mock('../lib/api', () => ({
+  signOut: vi.fn(async () => {}),
+  createFamilyAndParent: familyCreation.createFamilyAndParent,
+}));
 
 // AppLayout renders NotificationCenter which subscribes to Firestore. Mock the
 // hook so the test focuses purely on the auth/route-guard flow.
@@ -216,7 +222,9 @@ beforeEach(() => {
   firestoreState.pendingMembershipDocs = [];
   firestoreState.pendingMembershipError = null;
   firestoreState.pendingMembershipListener = null;
+  firestoreState.profileListener = null;
   firestoreWrites.setDoc.mockClear();
+  familyCreation.createFamilyAndParent.mockClear();
   resetStore();
   // initAuth registers the onAuthStateChanged listener.
   act(() => {
@@ -259,6 +267,52 @@ describe('auth bootstrap regression', () => {
     await waitFor(() => expect(useStore.getState().pendingMembershipStatus).toBe('pending'));
     expect(useStore.getState().appReady).toBe(true);
     expect(useStore.getState().currentUser?.familyId).toBeUndefined();
+    expect(familyCreation.createFamilyAndParent).not.toHaveBeenCalled();
+    expect(firestoreWrites.setDoc).not.toHaveBeenCalled();
+  });
+
+  it('does not expose no-family readiness when approval removes pending before the profile callback', async () => {
+    firestoreState.profileSnapshot = makeProfileSnapshot(null);
+    firestoreState.pendingMembershipDocs = [{ id: 'user-1' }];
+    fireSignedIn();
+    await waitFor(() => expect(useStore.getState().pendingMembershipStatus).toBe('pending'));
+
+    firestoreState.profileSnapshot = makeProfileSnapshot('fam-approved');
+    act(() => {
+      firestoreState.pendingMembershipListener?.({
+        docs: [],
+        metadata: { fromCache: false },
+      });
+    });
+
+    expect(useStore.getState().pendingMembershipStatus).toBe('settling');
+    expect(useStore.getState().appReady).toBe(false);
+    await waitFor(() => expect(useStore.getState().currentUser?.familyId).toBe('fam-approved'));
+    expect(useStore.getState().appReady).toBe(true);
+  });
+
+  it('keeps approved membership stable when the profile callback arrives before pending removal', async () => {
+    firestoreState.profileSnapshot = makeProfileSnapshot(null);
+    firestoreState.pendingMembershipDocs = [{ id: 'user-1' }];
+    fireSignedIn();
+    await waitFor(() => expect(useStore.getState().pendingMembershipStatus).toBe('pending'));
+
+    const approvedProfile = makeProfileSnapshot('fam-approved');
+    firestoreState.profileSnapshot = approvedProfile;
+    act(() => {
+      firestoreState.profileListener?.({ ...approvedProfile, metadata: { fromCache: false } });
+    });
+    await waitFor(() => expect(useStore.getState().currentUser?.familyId).toBe('fam-approved'));
+
+    act(() => {
+      firestoreState.pendingMembershipListener?.({
+        docs: [],
+        metadata: { fromCache: false },
+      });
+    });
+
+    expect(useStore.getState().currentUser?.familyId).toBe('fam-approved');
+    expect(useStore.getState().appReady).toBe(true);
   });
 
   it('observes a legacy pending request created after no-family bootstrap', async () => {
@@ -287,6 +341,7 @@ describe('auth bootstrap regression', () => {
 
     await waitFor(() => expect(useStore.getState().bootstrapError).toContain('permission-denied'));
     expect(useStore.getState().appReady).toBe(false);
+    expect(familyCreation.createFamilyAndParent).not.toHaveBeenCalled();
     expect(firestoreWrites.setDoc).not.toHaveBeenCalled();
   });
 
@@ -428,6 +483,8 @@ describe('auth bootstrap regression', () => {
       expect(useStore.getState().appReady).toBe(true);
     });
     expect(container.textContent).not.toContain('Login Page');
+    expect(familyCreation.createFamilyAndParent).not.toHaveBeenCalled();
+    expect(firestoreWrites.setDoc).not.toHaveBeenCalled();
   });
 
   it('3. authenticated user profile loading succeeds: dashboard loading ends', async () => {

@@ -171,6 +171,14 @@
     "genericError": "We could not check this invitation. Please try again.",
     "manualEntry": "Have a family code instead?"
   },
+  "membershipPending": {
+    "pendingTitle": "Your request is waiting for approval",
+    "pendingBody": "A family owner needs to approve your request. Queki will open your family automatically after approval.",
+    "pendingAction": "Check again",
+    "recoveryTitle": "We couldn't verify your family access",
+    "recoveryBody": "Your membership may have changed, or the family may be temporarily unavailable. Try again to verify your access safely.",
+    "recoveryAction": "Try again"
+  },
   "adultInvite": {
     "title": "Join a family",
     "validating": "Checking your invitation…",

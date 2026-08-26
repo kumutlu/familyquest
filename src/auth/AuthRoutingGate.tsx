@@ -2,7 +2,7 @@ import { type ReactNode, useEffect } from 'react';
 import { Navigate, useLocation, useNavigate } from 'react-router-dom';
 
 import { signOut } from '../lib/api';
-import { readPendingInvite as readLegacyInvite } from '../lib/inviteLink';
+import { readCodeFromSearch, readPendingInvite as readLegacyInvite } from '../lib/inviteLink';
 import { markStartupStage } from '../startupDiagnostics';
 import { StartupScreen } from '../components/layout/StartupScreen';
 import { useStore } from '../store/useStore';
@@ -18,12 +18,19 @@ export type AuthRouteDecision =
   | 'publicOnboarding'
   | 'login';
 
-export type PendingMembershipStatus = 'idle' | 'loading' | 'none' | 'pending' | 'recovery';
+export type PendingMembershipStatus = 'idle' | 'loading' | 'settling' | 'none' | 'pending' | 'recovery';
 
 export interface AuthRouteDecisionInput {
   authStatus: 'initializing' | 'authenticated' | 'unauthenticated';
   authUser: { uid?: string } | null | undefined;
-  currentUser: { id?: string; familyId?: string | null } | null;
+  currentUser: {
+    id?: string;
+    familyId?: string | null;
+    lifecycle?: unknown;
+    status?: unknown;
+    disabled?: unknown;
+  } | null;
+  familyLifecycleState?: unknown;
   profileServerConfirmed: boolean;
   appReady: boolean;
   bootstrapError: string | null;
@@ -35,7 +42,9 @@ export interface AuthRouteDecisionInput {
   search: string;
 }
 
-const CURRENT_V2_INVITE = /^\/invite\/[^/]+\/?$/;
+const CURRENT_V2_INVITE = /^\/invite\/([^/]+)\/?$/;
+const CANONICAL_V2_TOKEN = /^[A-Za-z0-9_-]{43}$/;
+const LEGACY_INVITE_CODE = /^[A-Z0-9]{6}$/;
 const PUBLIC_PASSTHROUGH_PATHS = new Set([
   '/join-family',
   '/privacy',
@@ -46,14 +55,40 @@ const PUBLIC_PASSTHROUGH_PATHS = new Set([
 const isCurrentCreateRoute = (pathname: string, search: string) =>
   pathname === '/onboarding' && new URLSearchParams(search).get('mode') === 'create';
 
+const currentV2Token = (pathname: string) => {
+  const token = CURRENT_V2_INVITE.exec(pathname)?.[1] ?? '';
+  return CANONICAL_V2_TOKEN.test(token) ? token : null;
+};
+
+const currentLegacyCode = (pathname: string, search: string) => {
+  if (pathname !== '/join') return null;
+  const code = readCodeFromSearch(search);
+  return LEGACY_INVITE_CODE.test(code) ? code : null;
+};
+
+const hasActiveMembershipLifecycle = (input: AuthRouteDecisionInput) => {
+  const member = input.currentUser;
+  if (!member?.familyId) return false;
+  if (member.lifecycle !== undefined && member.lifecycle !== 'active') return false;
+  if (member.status === 'deleted' || member.status === 'disabled' || member.disabled === true) return false;
+  return input.familyLifecycleState === undefined || input.familyLifecycleState === 'active';
+};
+
 /** Pure priority table for all auth, invitation, membership, and creation routing. */
 export function deriveAuthRouteDecision(input: AuthRouteDecisionInput): AuthRouteDecision {
-  const currentV2Invite = CURRENT_V2_INVITE.test(input.pathname);
-  const currentLegacyInvite = input.pathname === '/join';
+  const validCurrentV2Invite = currentV2Token(input.pathname) !== null;
+  const validCurrentLegacyInvite = currentLegacyCode(input.pathname, input.search) !== null;
 
   // Recipient routes own preview and terminal error UX even before Firebase Auth
   // resolves. URL and stored invitation intent outrank generic auth routing.
-  if (currentV2Invite || input.pendingInviteToken || currentLegacyInvite || input.legacyInviteCode) {
+  if (
+    validCurrentV2Invite ||
+    validCurrentLegacyInvite ||
+    input.pendingInviteToken ||
+    input.legacyInviteCode ||
+    CURRENT_V2_INVITE.test(input.pathname) ||
+    input.pathname === '/join'
+  ) {
     return 'invite';
   }
 
@@ -63,6 +98,14 @@ export function deriveAuthRouteDecision(input: AuthRouteDecisionInput): AuthRout
 
   if (input.authStatus === 'initializing') return 'startup';
 
+  // An observer failure can set authStatus to unauthenticated as its fallback.
+  // The recorded error is authoritative and must remain recoverable startup,
+  // never masquerade as a normal signed-out route decision.
+  if (
+    input.bootstrapError &&
+    (input.authStatus === 'unauthenticated' || input.authUser === null || input.pendingMembershipStatus !== 'recovery')
+  ) return 'startup';
+
   if (input.authStatus === 'unauthenticated' || input.authUser === null) {
     if (input.pathname === '/' || input.pathname === '/onboarding') return 'publicOnboarding';
     return 'login';
@@ -71,17 +114,20 @@ export function deriveAuthRouteDecision(input: AuthRouteDecisionInput): AuthRout
   // No authenticated redirect is safe until the server has confirmed the
   // profile. Cached identity can render startup context, but cannot choose a
   // family, no-family, pending-membership, or creation destination.
-  if (input.bootstrapError && input.pendingMembershipStatus !== 'recovery') return 'startup';
   if (!input.authUser?.uid || !input.currentUser || !input.profileServerConfirmed) return 'startup';
 
   if (input.pendingMembershipStatus === 'recovery') return 'pendingMembership';
   if (!input.appReady) return 'startup';
 
   if (input.currentUser.familyId) {
-    return 'app';
+    return hasActiveMembershipLifecycle(input) ? 'app' : 'pendingMembership';
   }
 
-  if (input.pendingMembershipStatus === 'idle' || input.pendingMembershipStatus === 'loading') {
+  if (
+    input.pendingMembershipStatus === 'idle' ||
+    input.pendingMembershipStatus === 'loading' ||
+    input.pendingMembershipStatus === 'settling'
+  ) {
     return 'startup';
   }
   if (input.pendingMembershipStatus === 'pending') {
@@ -124,6 +170,7 @@ export function AuthRoutingGate({
   const authStatus = useStore(state => state.authStatus);
   const authUser = useStore(state => state.authUser);
   const currentUser = useStore(state => state.currentUser);
+  const familyData = useStore(state => state.familyData);
   const profileServerConfirmed = useStore(state => state.profileServerConfirmed);
   const appReady = useStore(state => state.appReady);
   const bootstrapError = useStore(state => state.bootstrapError);
@@ -137,6 +184,7 @@ export function AuthRoutingGate({
     authStatus: authStatus ?? 'authenticated',
     authUser,
     currentUser,
+    familyLifecycleState: familyData?.lifecycleState,
     profileServerConfirmed,
     appReady,
     bootstrapError,
@@ -177,12 +225,15 @@ export function AuthRoutingGate({
   }
 
   if (decision === 'invite') {
-    if (CURRENT_V2_INVITE.test(location.pathname)) return children;
+    if (currentV2Token(location.pathname)) return children;
+    if (currentLegacyCode(location.pathname, location.search)) return children;
     if (pendingInvite && location.pathname !== `/invite/${pendingInvite.token}`) {
       return <Navigate to={`/invite/${encodeURIComponent(pendingInvite.token)}`} replace />;
     }
-    if (location.pathname === '/join') return children;
-    return <Navigate to={`/join?code=${encodeURIComponent(legacyInviteCode ?? '')}`} replace />;
+    if (legacyInviteCode) {
+      return <Navigate to={`/join?code=${encodeURIComponent(legacyInviteCode)}`} replace />;
+    }
+    return children;
   }
 
   if (decision === 'pendingMembership') {

@@ -15,6 +15,7 @@ import { Signup } from './pages/Signup';
 import { JoinFamily } from './pages/JoinFamily';
 import { JoinInvite } from './pages/JoinInvite';
 import { AdultInvite } from './pages/AdultInvite';
+import { PendingMembership } from './pages/PendingMembership';
 import { OnboardingFlow } from './onboarding/OnboardingFlow';
 import { PrivacyPolicy } from './pages/legal/PrivacyPolicy';
 import { TermsOfService } from './pages/legal/TermsOfService';
@@ -81,6 +82,7 @@ function App() {
           {/* Opaque adult invitations own their auth/confirmation journey and
               must run before the authenticated AppLayout onboarding guard. */}
           <Route path="/invite/:token" element={<AdultInvite />} />
+          <Route path="/join/pending" element={<PendingMembership />} />
 
           {/* Public pre-auth onboarding. Rendered OUTSIDE <AppLayout> so it is
               reachable by unauthenticated visitors; it carries its own internal
