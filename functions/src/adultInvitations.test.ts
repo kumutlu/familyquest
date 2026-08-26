@@ -507,6 +507,49 @@ describe('adult invitation v2 callables', () => {
     expect(first.result).toBe('joined');
   });
 
+  it('preserves a committed joined replay after the user moves to another family', async () => {
+    seedV2(fixture.documents);
+    await expect(accept(TOKEN)).resolves.toEqual({
+      result: 'joined', familyId: 'family-1', role: 'parent', destination: '/',
+    });
+
+    fixture.documents.set('users/joiner-1', {
+      uid: 'joiner-1', displayName: 'Joiner', familyId: 'family-2', role: 'adult', lifecycle: 'active',
+    });
+
+    await expect(accept(TOKEN)).resolves.toEqual({
+      result: 'joined', familyId: 'family-1', role: 'parent', destination: '/',
+    });
+  });
+
+  it('preserves a committed joined replay after the user becomes inactive', async () => {
+    seedV2(fixture.documents);
+    await expect(accept(TOKEN)).resolves.toEqual({
+      result: 'joined', familyId: 'family-1', role: 'parent', destination: '/',
+    });
+
+    fixture.documents.set('users/joiner-1', {
+      uid: 'joiner-1', displayName: 'Joiner', familyId: 'family-1', role: 'parent', lifecycle: 'archived',
+    });
+
+    await expect(accept(TOKEN)).resolves.toEqual({
+      result: 'joined', familyId: 'family-1', role: 'parent', destination: '/',
+    });
+  });
+
+  it('preserves a committed joined replay after its membership projection disappears', async () => {
+    seedV2(fixture.documents);
+    await expect(accept(TOKEN)).resolves.toEqual({
+      result: 'joined', familyId: 'family-1', role: 'parent', destination: '/',
+    });
+
+    fixture.documents.delete('families/family-1/users/joiner-1');
+
+    await expect(accept(TOKEN)).resolves.toEqual({
+      result: 'joined', familyId: 'family-1', role: 'parent', destination: '/',
+    });
+  });
+
   it('replays already_member with the current canonical active same-family profile role', async () => {
     seedV2(fixture.documents);
     fixture.documents.set('users/joiner-1', {
@@ -558,6 +601,32 @@ describe('adult invitation v2 callables', () => {
     await expect(accept(TOKEN)).rejects.toMatchObject({
       message: 'INVITATION_ALREADY_USED',
     });
+  });
+
+  it('rejects already_member replay when its canonical membership projection is missing', async () => {
+    seedV2(fixture.documents);
+    fixture.documents.set('users/joiner-1', {
+      uid: 'joiner-1', displayName: 'Joiner', familyId: 'family-1', role: 'adult', lifecycle: 'active',
+    });
+    fixture.documents.set('families/family-1/users/joiner-1', {
+      uid: 'joiner-1', role: 'adult', lifecycle: 'active',
+    });
+    await expect(accept(TOKEN)).resolves.toEqual({
+      result: 'already_member', familyId: 'family-1', role: 'adult', destination: '/',
+    });
+    const operationPath = 'adultInvitationAcceptanceIdempotency/joiner-1_req-accept-001';
+    const eventPath = 'families/family-1/adultInvitationEvents/event-0001';
+    const operationBefore = { ...fixture.documents.get(operationPath) };
+    const eventBefore = { ...fixture.documents.get(eventPath) };
+
+    fixture.documents.delete('families/family-1/users/joiner-1');
+
+    await expect(accept(TOKEN)).rejects.toMatchObject({
+      message: 'INVITATION_ALREADY_USED',
+    });
+    expect(fixture.documents.get(operationPath)).toEqual(operationBefore);
+    expect(fixture.documents.get(eventPath)).toEqual(eventBefore);
+    expect(fixture.documents.has('families/family-1/users/joiner-1')).toBe(false);
   });
 
   it('revokes only an active invitation owned by the caller family owner', async () => {

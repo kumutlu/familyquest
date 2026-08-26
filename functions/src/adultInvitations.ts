@@ -463,6 +463,30 @@ export async function acceptAdultInvitationImpl(
         transaction.get(membershipRef),
         transaction.get(operationRef),
       ]);
+    const operation = operationSnapshot.exists
+      ? operationSnapshot.data() as DocumentData
+      : undefined;
+    if (operation) {
+      if (
+        operation.operation !== 'accept-adult-invitation' ||
+        operation.invitationId !== invitationId ||
+        operation.familyId !== invitation.familyId ||
+        (operation.result !== 'joined' && operation.result !== 'already_member')
+      ) {
+        throw httpsError('already-exists', 'REQUEST_ID_REUSED');
+      }
+      if (operation.result === 'joined') {
+        if (operation.role !== 'parent' && operation.role !== 'adult') {
+          throw httpsError('already-exists', 'REQUEST_ID_REUSED');
+        }
+        return {
+          result: 'joined',
+          familyId: operation.familyId,
+          role: operation.role,
+          destination: '/',
+        };
+      }
+    }
     const family = familySnapshot.data() as DocumentData | undefined;
     if (!familySnapshot.exists || !isActiveFamily(family)) {
       throw httpsError('failed-precondition', 'FAMILY_UNAVAILABLE');
@@ -485,36 +509,17 @@ export async function acceptAdultInvitationImpl(
     const membership = membershipSnapshot.data() as DocumentData | undefined;
     const hasActiveSameFamilyMembership = profileFamilyId === invitation.familyId &&
       isActiveMember(profile) &&
-      (!membershipSnapshot.exists || isActiveMember(membership));
+      membershipSnapshot.exists &&
+      isActiveMember(membership);
 
-    if (operationSnapshot.exists) {
-      const operation = operationSnapshot.data() as DocumentData;
-      if (
-        operation.operation !== 'accept-adult-invitation' ||
-        operation.invitationId !== invitationId ||
-        operation.familyId !== invitation.familyId ||
-        (operation.result !== 'joined' && operation.result !== 'already_member')
-      ) {
-        throw httpsError('already-exists', 'REQUEST_ID_REUSED');
-      }
+    if (operation) {
       if (!hasActiveSameFamilyMembership) {
         throw httpsError('failed-precondition', 'INVITATION_ALREADY_USED');
       }
-      if (operation.result === 'already_member') {
-        return {
-          result: 'already_member',
-          familyId: invitation.familyId,
-          role: canonicalMembershipRole(profile.role),
-          destination: '/',
-        };
-      }
-      if (operation.role !== 'parent' && operation.role !== 'adult') {
-        throw httpsError('already-exists', 'REQUEST_ID_REUSED');
-      }
       return {
-        result: 'joined',
+        result: 'already_member',
         familyId: invitation.familyId,
-        role: operation.role,
+        role: canonicalMembershipRole(profile.role),
         destination: '/',
       };
     }
