@@ -11,6 +11,7 @@ import {
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 const TOKEN = 'CwsLCwsLCwsLCwsLCwsLCwsLCwsLCwsLCwsLCwsLCws';
+const TOKEN_B = 'BwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwc';
 
 beforeEach(() => {
   sessionStorage.clear();
@@ -74,6 +75,30 @@ describe('pending adult invitation intent', () => {
     expect(JSON.parse(localStorage.getItem(PENDING_ADULT_INVITE_KEY)!)).toMatchObject({ authUid: 'uid-b' });
   });
 
+  it('rejects a bind when fresh session and local copies are different tokens bound to different accounts', () => {
+    const now = Date.now();
+    const sessionIntent = { version: 2, token: TOKEN, capturedAt: now, authUid: 'uid-a' };
+    const localIntent = { version: 2, token: TOKEN_B, capturedAt: now, authUid: 'uid-b' };
+    sessionStorage.setItem(PENDING_ADULT_INVITE_KEY, JSON.stringify(sessionIntent));
+    localStorage.setItem(PENDING_ADULT_INVITE_KEY, JSON.stringify(localIntent));
+
+    expect(() => bindPendingInviteToUid('uid-a')).toThrow('INVITE_ACCOUNT_MISMATCH');
+    expect(JSON.parse(sessionStorage.getItem(PENDING_ADULT_INVITE_KEY)!)).toEqual(sessionIntent);
+    expect(JSON.parse(localStorage.getItem(PENDING_ADULT_INVITE_KEY)!)).toEqual(localIntent);
+  });
+
+  it('preserves a bound local different-token invite when session is unbound', () => {
+    const now = Date.now();
+    const sessionIntent = { version: 2, token: TOKEN, capturedAt: now };
+    const localIntent = { version: 2, token: TOKEN_B, capturedAt: now, authUid: 'uid-b' };
+    sessionStorage.setItem(PENDING_ADULT_INVITE_KEY, JSON.stringify(sessionIntent));
+    localStorage.setItem(PENDING_ADULT_INVITE_KEY, JSON.stringify(localIntent));
+
+    expect(() => bindPendingInviteToUid('uid-a')).toThrow('INVITE_ACCOUNT_MISMATCH');
+    expect(JSON.parse(sessionStorage.getItem(PENDING_ADULT_INVITE_KEY)!)).toEqual(sessionIntent);
+    expect(JSON.parse(localStorage.getItem(PENDING_ADULT_INVITE_KEY)!)).toEqual(localIntent);
+  });
+
   it('falls back to the local binding after session storage is lost', () => {
     const now = Date.now();
     capturePendingInvite(TOKEN, now);
@@ -108,12 +133,11 @@ describe('pending adult invitation intent', () => {
   });
 
   it('prefers a valid session intent over a valid local fallback', () => {
-    const localToken = 'BwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwc';
     sessionStorage.setItem(PENDING_ADULT_INVITE_KEY, JSON.stringify({
       version: 2, token: TOKEN, capturedAt: 1_000,
     }));
     localStorage.setItem(PENDING_ADULT_INVITE_KEY, JSON.stringify({
-      version: 2, token: localToken, capturedAt: 1_001,
+      version: 2, token: TOKEN_B, capturedAt: 1_001,
     }));
 
     expect(readPendingInvite(2_000)).toEqual({ version: 2, token: TOKEN, capturedAt: 1_000 });

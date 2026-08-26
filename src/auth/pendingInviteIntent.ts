@@ -184,11 +184,11 @@ export function bindPendingInviteToUid(uid: string): PendingInviteIntent | null 
   const intent = reconcileStoredIntents(copies);
   if (!intent) return null;
 
-  const sameTokenBindings = [copies.session, copies.local]
-    .filter((copy): copy is PendingInviteIntent => copy !== null && copy.token === intent.token)
+  const storedBindings = [copies.session, copies.local]
+    .filter((copy): copy is PendingInviteIntent => copy !== null)
     .map(copy => copy.authUid)
     .filter((authUid): authUid is string => authUid !== undefined);
-  if (sameTokenBindings.some(authUid => authUid !== uid)) {
+  if (storedBindings.some(authUid => authUid !== uid)) {
     throw new Error('INVITE_ACCOUNT_MISMATCH');
   }
 
