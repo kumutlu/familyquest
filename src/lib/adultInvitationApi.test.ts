@@ -10,6 +10,7 @@ vi.mock('./firebase', () => ({ functions: { region: 'europe-west1' } }));
 
 import {
   acceptAdultInvitation,
+  completeAdultInvitationProfile,
   createAdultInvitation,
   previewAdultInvitation,
   revokeAdultInvitation,
@@ -85,6 +86,30 @@ describe('adultInvitationApi', () => {
     );
     const payload = callable.mock.calls[0][0];
     expect(payload).toEqual({ token, clientReqId: 'request-accept-1' });
+    expect(payload).not.toHaveProperty('familyId');
+    expect(payload).not.toHaveProperty('role');
+  });
+
+  it('repairs a minimal invite profile without client-selected authority', async () => {
+    callable.mockResolvedValue({ data: { success: true } });
+    const token = 'CwsLCwsLCwsLCwsLCwsLCwsLCwsLCwsLCwsLCwsLCws';
+
+    await expect(completeAdultInvitationProfile({
+      token,
+      displayName: 'Alex Smith',
+      clientReqId: 'request-profile-1',
+    })).resolves.toEqual({ success: true });
+
+    expect(httpsCallable).toHaveBeenCalledWith(
+      { region: 'europe-west1' },
+      'completeAdultInvitationProfile',
+    );
+    const payload = callable.mock.calls[0][0];
+    expect(payload).toEqual({
+      token,
+      displayName: 'Alex Smith',
+      clientReqId: 'request-profile-1',
+    });
     expect(payload).not.toHaveProperty('familyId');
     expect(payload).not.toHaveProperty('role');
   });

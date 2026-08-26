@@ -1,3 +1,4 @@
+import { StrictMode } from 'react';
 import { act, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
@@ -5,6 +6,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import i18n from '../i18n/config';
 
 const TOKEN = 'CwsLCwsLCwsLCwsLCwsLCwsLCwsLCwsLCwsLCwsLCws';
+const TOKEN_B = 'BwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwc';
 const ISO = '2026-09-02T12:00:00.000Z';
 
 const navigate = vi.hoisted(() => vi.fn());
@@ -12,11 +14,11 @@ const order = vi.hoisted(() => [] as string[]);
 const invitationApi = vi.hoisted(() => ({
   previewAdultInvitation: vi.fn(),
   acceptAdultInvitation: vi.fn(),
+  completeAdultInvitationProfile: vi.fn(),
 }));
 const authApi = vi.hoisted(() => ({ signInWithGoogle: vi.fn() }));
-const profileApi = vi.hoisted(() => ({
-  doc: vi.fn((_db: unknown, collection: string, uid: string) => ({ path: `${collection}/${uid}` })),
-  setDoc: vi.fn(),
+const routeState = vi.hoisted(() => ({
+  token: 'CwsLCwsLCwsLCwsLCwsLCwsLCwsLCwsLCwsLCwsLCws',
 }));
 const state = vi.hoisted(() => ({
   authStatus: 'authenticated' as 'initializing' | 'authenticated' | 'unauthenticated',
@@ -30,13 +32,6 @@ const state = vi.hoisted(() => ({
 
 vi.mock('../lib/adultInvitationApi', () => invitationApi);
 vi.mock('../lib/api', () => authApi);
-vi.mock('../lib/firebase', () => ({ db: { kind: 'firestore' } }));
-vi.mock('firebase/firestore', () => ({
-  doc: (database: unknown, collection: string, uid: string) =>
-    profileApi.doc(database, collection, uid),
-  setDoc: (reference: unknown, data: unknown, options: unknown) =>
-    profileApi.setDoc(reference, data, options),
-}));
 vi.mock('../store/useStore', () => ({
   useStore: (selector: any) => selector(state),
 }));
@@ -44,6 +39,7 @@ vi.mock('react-router-dom', async importOriginal => {
   const actual = await importOriginal<typeof import('react-router-dom')>();
   return {
     ...actual,
+    useParams: () => ({ token: routeState.token }),
     useNavigate: () => (path: string, options?: unknown) => {
       order.push('navigate');
       return navigate(path, options);
@@ -54,21 +50,37 @@ vi.mock('react-router-dom', async importOriginal => {
 import { readPendingInvite } from '../auth/pendingInviteIntent';
 import { AdultInvite } from './AdultInvite';
 
-function renderInvite(path = `/invite/${TOKEN}`) {
-  return render(
-    <MemoryRouter initialEntries={[path]}>
+function InviteTree({ strict = false }: { strict?: boolean }) {
+  const tree = (
+    <MemoryRouter initialEntries={[`/invite/${TOKEN}`]}>
       <Routes>
         <Route path="/invite/:token" element={<AdultInvite />} />
         <Route path="/login" element={<div>Email login</div>} />
         <Route path="/signup" element={<div>Email signup</div>} />
         <Route path="/join-family" element={<div>Manual family code</div>} />
       </Routes>
-    </MemoryRouter>,
+    </MemoryRouter>
   );
+  return strict ? <StrictMode>{tree}</StrictMode> : tree;
+}
+
+function renderInvite(path = `/invite/${TOKEN}`, strict = false) {
+  routeState.token = path.match(/^\/invite\/([^?]+)/)?.[1] ?? '';
+  return render(<InviteTree strict={strict} />);
+}
+
+function deferred<T>() {
+  let resolve!: (value: T) => void;
+  let reject!: (reason?: unknown) => void;
+  const promise = new Promise<T>((resolvePromise, rejectPromise) => {
+    resolve = resolvePromise;
+    reject = rejectPromise;
+  });
+  return { promise, resolve, reject };
 }
 
 beforeEach(async () => {
-  vi.clearAllMocks();
+  vi.resetAllMocks();
   order.length = 0;
   sessionStorage.clear();
   localStorage.clear();
@@ -91,20 +103,62 @@ beforeEach(async () => {
     role: 'parent',
     destination: '/',
   });
+  invitationApi.completeAdultInvitationProfile.mockResolvedValue({ success: true });
   authApi.signInWithGoogle.mockResolvedValue({ uid: 'uid-1' });
-  profileApi.setDoc.mockResolvedValue(undefined);
+  routeState.token = TOKEN;
   await act(async () => { await i18n.changeLanguage('en'); });
 });
 
 describe('AdultInvite', () => {
-  it('captures and previews the URL token before rendering family data', () => {
-    invitationApi.previewAdultInvitation.mockReturnValue(new Promise(() => {}));
+  it('captures and previews the URL token before rendering family data', async () => {
+    const preview = deferred<any>();
+    invitationApi.previewAdultInvitation.mockReturnValue(preview.promise);
     renderInvite();
 
     expect(screen.getByRole('status')).toHaveTextContent('Checking your invitation…');
     expect(screen.queryByText(/The Smiths/)).not.toBeInTheDocument();
     expect(readPendingInvite()?.token).toBe(TOKEN);
     expect(invitationApi.previewAdultInvitation).toHaveBeenCalledWith({ token: TOKEN });
+    await act(async () => preview.resolve({
+      familyDisplayName: 'The Smiths',
+      intendedRole: 'parent',
+      expiresAt: ISO,
+      status: 'active',
+    }));
+  });
+
+  it('deduplicates the in-flight token preview under StrictMode', async () => {
+    const preview = deferred<any>();
+    invitationApi.previewAdultInvitation.mockReturnValue(preview.promise);
+    const view = renderInvite(`/invite/${TOKEN}`, true);
+    view.rerender(<></>);
+    view.rerender(<InviteTree strict />);
+
+    expect(invitationApi.previewAdultInvitation).toHaveBeenCalledTimes(1);
+    await act(async () => preview.resolve({
+      familyDisplayName: 'The Smiths',
+      intendedRole: 'parent',
+      expiresAt: ISO,
+      status: 'active',
+    }));
+    expect(await screen.findByText('Join The Smiths as a parent?')).toBeInTheDocument();
+  });
+
+  it('does not retain a rejected preview when the user retries', async () => {
+    invitationApi.previewAdultInvitation
+      .mockRejectedValueOnce(new Error('UNKNOWN'))
+      .mockResolvedValueOnce({
+        familyDisplayName: 'The Smiths',
+        intendedRole: 'parent',
+        expiresAt: ISO,
+        status: 'active',
+      });
+    const user = userEvent.setup();
+    renderInvite();
+
+    await user.click(await screen.findByRole('button', { name: 'Try again' }));
+    expect(await screen.findByText('Join The Smiths as a parent?')).toBeInTheDocument();
+    expect(invitationApi.previewAdultInvitation).toHaveBeenCalledTimes(2);
   });
 
   it('offers Google and both existing email auth paths without accepting', async () => {
@@ -177,8 +231,8 @@ describe('AdultInvite', () => {
     expect(screen.getByText('Role: Adult')).toBeInTheDocument();
   });
 
-  it('completes a minimal profile inside the invite journey before retrying acceptance', async () => {
-    state.currentUser = { id: 'uid-1' };
+  it('repairs a missing profile through the server and retries with the exact accept payload', async () => {
+    state.currentUser = null;
     invitationApi.acceptAdultInvitation
       .mockRejectedValueOnce(new Error('PROFILE_REQUIRED'))
       .mockResolvedValueOnce({
@@ -199,11 +253,19 @@ describe('AdultInvite', () => {
     await user.click(screen.getByRole('button', { name: 'Save name and join' }));
 
     await waitFor(() => expect(navigate).toHaveBeenCalledWith('/', { replace: true }));
-    expect(profileApi.setDoc).toHaveBeenCalledWith(
-      { path: 'users/uid-1' },
-      { displayName: 'Alex Smith' },
-      { merge: true },
-    );
+    expect(invitationApi.completeAdultInvitationProfile).toHaveBeenCalledWith({
+      token: TOKEN,
+      displayName: 'Alex Smith',
+      clientReqId: expect.any(String),
+    });
+    const acceptPayloads = invitationApi.acceptAdultInvitation.mock.calls.map(call => call[0]);
+    expect(acceptPayloads).toEqual([
+      { token: TOKEN, clientReqId: expect.any(String) },
+      { token: TOKEN, clientReqId: expect.any(String) },
+    ]);
+    expect(acceptPayloads[0]).not.toHaveProperty('displayName');
+    expect(acceptPayloads[0]).not.toHaveProperty('role');
+    expect(acceptPayloads[0]).not.toHaveProperty('familyId');
     expect(invitationApi.acceptAdultInvitation).toHaveBeenCalledTimes(2);
   });
 
@@ -230,7 +292,7 @@ describe('AdultInvite', () => {
     invitationApi.acceptAdultInvitation.mockResolvedValue({
       result: 'already_member',
       familyId: 'family-1',
-      role: 'parent',
+      role: 'adult',
       destination: '/',
     });
     const user = userEvent.setup();
@@ -242,7 +304,145 @@ describe('AdultInvite', () => {
       "You're already part of this family. Opening your dashboard…",
     );
     expect(readPendingInvite()).toBeNull();
+    expect(state.refreshCurrentUser).toHaveBeenCalledWith('uid-1', {
+      familyId: 'family-1',
+      role: 'adult',
+    });
     expect(navigate).toHaveBeenCalledWith('/', { replace: true });
+  });
+
+  it('keeps one accept request id when retrying after an ambiguous refresh failure', async () => {
+    state.authUser.getIdToken = vi.fn()
+      .mockRejectedValueOnce(new Error('network lost after commit'))
+      .mockResolvedValueOnce('fresh-token');
+    const user = userEvent.setup();
+    renderInvite();
+
+    await user.click(await screen.findByRole('button', { name: 'Join family' }));
+    await user.click(await screen.findByRole('button', { name: 'Join family' }));
+
+    await waitFor(() => expect(navigate).toHaveBeenCalledWith('/', { replace: true }));
+    expect(invitationApi.acceptAdultInvitation).toHaveBeenCalledTimes(2);
+    expect(invitationApi.acceptAdultInvitation.mock.calls[0][0].clientReqId)
+      .toBe(invitationApi.acceptAdultInvitation.mock.calls[1][0].clientReqId);
+  });
+
+  it('keeps one profile request id when retrying an ambiguous repair', async () => {
+    invitationApi.acceptAdultInvitation
+      .mockRejectedValueOnce(new Error('PROFILE_REQUIRED'))
+      .mockResolvedValueOnce({
+        result: 'joined', familyId: 'family-1', role: 'parent', destination: '/',
+      });
+    invitationApi.completeAdultInvitationProfile
+      .mockRejectedValueOnce(new Error('network lost after profile commit'))
+      .mockResolvedValueOnce({ success: true });
+    const user = userEvent.setup();
+    renderInvite();
+
+    await user.click(await screen.findByRole('button', { name: 'Join family' }));
+    await user.type(await screen.findByRole('textbox', { name: 'Your name' }), 'Alex Smith');
+    await user.click(screen.getByRole('button', { name: 'Save name and join' }));
+    await user.click(await screen.findByRole('button', { name: 'Save name and join' }));
+
+    await waitFor(() => expect(navigate).toHaveBeenCalledWith('/', { replace: true }));
+    expect(invitationApi.completeAdultInvitationProfile).toHaveBeenCalledTimes(2);
+    expect(invitationApi.completeAdultInvitationProfile.mock.calls[0][0].clientReqId)
+      .toBe(invitationApi.completeAdultInvitationProfile.mock.calls[1][0].clientReqId);
+  });
+
+  it('does not let a token-A acceptance clear or navigate token B', async () => {
+    const acceptance = deferred<any>();
+    invitationApi.acceptAdultInvitation.mockReturnValueOnce(acceptance.promise);
+    const user = userEvent.setup();
+    const view = renderInvite();
+    await user.click(await screen.findByRole('button', { name: 'Join family' }));
+
+    routeState.token = TOKEN_B;
+    view.rerender(<InviteTree />);
+    expect(await screen.findByText('Join The Smiths as a parent?')).toBeInTheDocument();
+    await act(async () => acceptance.resolve({
+      result: 'joined', familyId: 'family-1', role: 'parent', destination: '/',
+    }));
+
+    expect(state.authUser.getIdToken).not.toHaveBeenCalled();
+    expect(state.refreshCurrentUser).not.toHaveBeenCalled();
+    expect(navigate).not.toHaveBeenCalled();
+    expect(readPendingInvite()?.token).toBe(TOKEN_B);
+  });
+
+  it('does not publish token A after its ID-token refresh resolves on token B', async () => {
+    const tokenRefresh = deferred<string>();
+    state.authUser.getIdToken = vi.fn(() => tokenRefresh.promise);
+    const user = userEvent.setup();
+    const view = renderInvite();
+    await user.click(await screen.findByRole('button', { name: 'Join family' }));
+    await waitFor(() => expect(state.authUser.getIdToken).toHaveBeenCalledWith(true));
+
+    routeState.token = TOKEN_B;
+    view.rerender(<InviteTree />);
+    await act(async () => tokenRefresh.resolve('stale-token'));
+
+    expect(state.refreshCurrentUser).not.toHaveBeenCalled();
+    expect(navigate).not.toHaveBeenCalled();
+    expect(readPendingInvite()?.token).toBe(TOKEN_B);
+  });
+
+  it('does not continue acceptance after the invite page unmounts', async () => {
+    const acceptance = deferred<any>();
+    invitationApi.acceptAdultInvitation.mockReturnValueOnce(acceptance.promise);
+    const user = userEvent.setup();
+    const view = renderInvite();
+    await user.click(await screen.findByRole('button', { name: 'Join family' }));
+    view.unmount();
+
+    await act(async () => acceptance.resolve({
+      result: 'joined', familyId: 'family-1', role: 'parent', destination: '/',
+    }));
+    expect(state.authUser.getIdToken).not.toHaveBeenCalled();
+    expect(state.refreshCurrentUser).not.toHaveBeenCalled();
+    expect(navigate).not.toHaveBeenCalled();
+    expect(readPendingInvite()?.token).toBe(TOKEN);
+  });
+
+  it('does not continue a UID-A acceptance after an account switch', async () => {
+    const acceptance = deferred<any>();
+    invitationApi.acceptAdultInvitation.mockReturnValueOnce(acceptance.promise);
+    const user = userEvent.setup();
+    const view = renderInvite();
+    await user.click(await screen.findByRole('button', { name: 'Join family' }));
+
+    state.authUser = {
+      uid: 'uid-2',
+      getIdToken: vi.fn(async () => 'uid-2-token'),
+    };
+    state.currentUser = { id: 'uid-2', displayName: 'Taylor' };
+    view.rerender(<InviteTree />);
+    await act(async () => acceptance.resolve({
+      result: 'joined', familyId: 'family-1', role: 'parent', destination: '/',
+    }));
+
+    expect(state.refreshCurrentUser).not.toHaveBeenCalled();
+    expect(navigate).not.toHaveBeenCalled();
+    expect(readPendingInvite()?.authUid).toBe('uid-1');
+  });
+
+  it('does not retry acceptance when a token-A profile repair resolves on token B', async () => {
+    invitationApi.acceptAdultInvitation.mockRejectedValueOnce(new Error('PROFILE_REQUIRED'));
+    const repair = deferred<{ success: true }>();
+    invitationApi.completeAdultInvitationProfile.mockReturnValueOnce(repair.promise);
+    const user = userEvent.setup();
+    const view = renderInvite();
+    await user.click(await screen.findByRole('button', { name: 'Join family' }));
+    await user.type(await screen.findByRole('textbox', { name: 'Your name' }), 'Alex Smith');
+    await user.click(screen.getByRole('button', { name: 'Save name and join' }));
+
+    routeState.token = TOKEN_B;
+    view.rerender(<InviteTree />);
+    await act(async () => repair.resolve({ success: true }));
+
+    expect(invitationApi.acceptAdultInvitation).toHaveBeenCalledTimes(1);
+    expect(navigate).not.toHaveBeenCalled();
+    expect(readPendingInvite()?.token).toBe(TOKEN_B);
   });
 
   it('renders a different-family conflict without changing or clearing intent', async () => {

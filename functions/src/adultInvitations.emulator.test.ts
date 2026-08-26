@@ -4,6 +4,7 @@ import { getFirestore, Timestamp, type Firestore } from 'firebase-admin/firestor
 
 import {
   acceptAdultInvitationImpl,
+  completeAdultInvitationProfileImpl,
   generateAdultInvitationToken,
   hashAdultInvitationToken,
   INVITATION_TTL_MS,
@@ -102,5 +103,38 @@ describeWithEmulator('adult invitation Firestore transaction integration', () =>
     expect((await db.doc(`families/${familyId}/users/${winner}`).get()).exists).toBe(true);
     expect((await db.doc(`users/${loser}`).get()).data()?.familyId).toBeUndefined();
     expect((await db.doc(`families/${familyId}/users/${loser}`).get()).exists).toBe(false);
+  });
+
+  it('repairs missing and blank-name profiles through the authenticated server path', async () => {
+    const token = generateAdultInvitationToken(() => Buffer.alloc(32, 33));
+    const missingUid = 'adult-invite-missing-profile';
+    const blankUid = 'adult-invite-blank-profile';
+    await seedAcceptance(token, 'profile-repair', []);
+    await db.doc(`users/${blankUid}`).set({
+      uid: blankUid,
+      displayName: '   ',
+      avatarUrl: '/keep.png',
+    });
+
+    for (const [uid, requestId, displayName] of [
+      [missingUid, 'emulator-profile-missing', 'Missing User'],
+      [blankUid, 'emulator-profile-blank', 'Blank User'],
+    ] as const) {
+      await expect(completeAdultInvitationProfileImpl(
+        { token, displayName, clientReqId: requestId },
+        { auth: { uid } } as any,
+        context(`event-${requestId}`),
+      )).resolves.toEqual({ success: true });
+    }
+
+    expect((await db.doc(`users/${missingUid}`).get()).data()).toEqual({
+      uid: missingUid,
+      displayName: 'Missing User',
+    });
+    expect((await db.doc(`users/${blankUid}`).get()).data()).toEqual({
+      uid: blankUid,
+      displayName: 'Blank User',
+      avatarUrl: '/keep.png',
+    });
   });
 });
