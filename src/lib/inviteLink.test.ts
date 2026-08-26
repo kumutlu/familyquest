@@ -89,6 +89,21 @@ describe('postAuthDestination', () => {
   it('falls back to the dashboard when no invite is pending', () => {
     expect(postAuthDestination('/')).toBe('/');
   });
+
+  it.each([
+    'SHORT',
+    'TOO-LONG',
+    'ABC 12',
+    'ABC/12',
+    '🔥🔥🔥🔥🔥🔥',
+  ])('clears malformed legacy state %j before using the fallback', value => {
+    sessionStorage.setItem(PENDING_INVITE_KEY, value);
+    localStorage.setItem(PENDING_INVITE_KEY, value);
+
+    expect(postAuthDestination('/safe-fallback')).toBe('/safe-fallback');
+    expect(sessionStorage.getItem(PENDING_INVITE_KEY)).toBeNull();
+    expect(localStorage.getItem(PENDING_INVITE_KEY)).toBeNull();
+  });
 });
 
 describe('buildInviteMessage', () => {

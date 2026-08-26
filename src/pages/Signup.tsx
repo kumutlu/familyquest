@@ -10,6 +10,7 @@ import { OnboardingVisual } from '../onboarding/components/OnboardingVisual';
 import { FamilyHomeScene } from '../onboarding/visuals/OnboardingScenes';
 import { bindPendingInviteToUid, readPendingInvite } from '../auth/pendingInviteIntent';
 import { safeInternalReturnPath } from '../lib/googleRedirectAuth';
+import { mapAuthErrorKey } from '../auth/authErrorMessage';
 
 export function Signup() {
   const { t } = useTranslation(['auth', 'common']);
@@ -68,7 +69,7 @@ export function Signup() {
       await signUp(email, password, name);
       // Do not navigate here. The route guard redirects once auth is ready.
     } catch (err: any) {
-      setError(err.message);
+      setError(t(mapAuthErrorKey(err, { pendingInvite: pendingInvite !== null })));
       setSigningIn(false);
     }
   };
@@ -80,7 +81,7 @@ export function Signup() {
       await signInWithGoogle();
       // Do not navigate here. The route guard redirects once auth is ready.
     } catch (err: any) {
-      setError(err.message);
+      setError(t(mapAuthErrorKey(err, { pendingInvite: pendingInvite !== null })));
       setSigningIn(false);
     }
   };

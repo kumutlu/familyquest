@@ -81,7 +81,8 @@ describe('Signup — validated authentication return', () => {
     await user.type(passwordInput, 'secret123');
     await user.click(screen.getByRole('button', { name: /^sign up$/i }));
 
-    expect(await screen.findByRole('alert')).toHaveTextContent('signup failed');
+    expect(await screen.findByRole('alert')).toHaveTextContent('We could not complete sign-in. Please try again.');
+    expect(screen.getByRole('alert')).not.toHaveTextContent('signup failed');
     expect(screen.getByRole('link', { name: /already have an account\? sign in/i })).toHaveAttribute(
       'href',
       `/login?next=${encodeURIComponent(next)}`,
@@ -119,6 +120,67 @@ describe('Signup — validated authentication return', () => {
     );
 
     await waitFor(() => expect(navigate).toHaveBeenCalledWith('/', { replace: true }));
+  });
+
+  it('clears malformed legacy state before using the safe fallback', async () => {
+    localStorage.setItem('queki.pendingInviteCode', 'TOO-LONG');
+    const view = renderSignup();
+
+    storeState.authStatus = 'authenticated';
+    storeState.authUser = { uid: 'uid-1' };
+    view.rerender(
+      <MemoryRouter initialEntries={['/signup']}>
+        <Signup />
+      </MemoryRouter>,
+    );
+
+    await waitFor(() => expect(navigate).toHaveBeenCalledWith('/', { replace: true }));
+    expect(localStorage.getItem('queki.pendingInviteCode')).toBeNull();
+  });
+
+  it('renders invite-aware email-already-used guidance without raw Firebase text', async () => {
+    capturePendingInvite(TOKEN);
+    const raw = 'Firebase: Error (auth/email-already-in-use).';
+    apiMocks.signUp.mockRejectedValueOnce({ code: 'auth/email-already-in-use', message: raw });
+    const user = userEvent.setup();
+    const next = `/invite/${TOKEN}`;
+    renderSignup(`/signup?next=${encodeURIComponent(next)}`);
+    const [nameInput, emailInput, passwordInput] = getSignupInputs();
+    await user.type(nameInput, 'Jane Doe');
+    await user.type(emailInput, 'jane@example.com');
+    await user.type(passwordInput, 'secret123');
+    await user.click(screen.getByRole('button', { name: /^sign up$/i }));
+
+    const alert = await screen.findByRole('alert');
+    expect(alert).toHaveTextContent(
+      'This email already has an account. Sign in to continue your invitation.',
+    );
+    expect(alert).not.toHaveTextContent(raw);
+    expect(alert).not.toHaveTextContent('auth/');
+    expect(readPendingInvite()?.token).toBe(TOKEN);
+    expect(screen.getByRole('link', { name: /already have an account\? sign in/i })).toHaveAttribute(
+      'href',
+      `/login?next=${encodeURIComponent(next)}`,
+    );
+  });
+
+  it('renders localized Turkish popup-cancel copy without raw Firebase text', async () => {
+    capturePendingInvite(TOKEN);
+    const raw = 'Firebase raw auth/popup-closed-by-user';
+    apiMocks.signInWithGoogle.mockRejectedValueOnce({
+      code: 'auth/popup-closed-by-user',
+      message: raw,
+    });
+    await act(async () => { await i18n.changeLanguage('tr'); });
+    const user = userEvent.setup();
+    renderSignup(`/signup?next=${encodeURIComponent(`/invite/${TOKEN}`)}`);
+
+    await user.click(screen.getByRole('button', { name: /google ile devam et/i }));
+
+    const alert = await screen.findByRole('alert');
+    expect(alert).toHaveTextContent('Google ile giriş iptal edildi. Davetiniz hâlâ burada.');
+    expect(alert).not.toHaveTextContent(raw);
+    expect(readPendingInvite()?.token).toBe(TOKEN);
   });
 });
 
@@ -176,12 +238,13 @@ describe('Signup — Google authentication', () => {
     resolveGoogle({ user: {} });
   });
 
-  it('shows error message when Google sign-in fails', async () => {
+  it('shows friendly generic feedback when Google sign-in fails', async () => {
     const user = userEvent.setup();
     apiMocks.signInWithGoogle.mockRejectedValue(new Error('Google sign-in failed'));
     renderSignup();
     await user.click(screen.getByRole('button', { name: /continue with google/i }));
-    await waitFor(() => expect(screen.getByRole('alert')).toHaveTextContent('Google sign-in failed'));
+    await waitFor(() => expect(screen.getByRole('alert')).toHaveTextContent('We could not complete sign-in. Please try again.'));
+    expect(screen.getByRole('alert')).not.toHaveTextContent('Google sign-in failed');
   });
 });
 

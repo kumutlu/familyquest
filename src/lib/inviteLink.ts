@@ -12,6 +12,13 @@ export const PENDING_INVITE_KEY = 'queki.pendingInviteCode';
 /** Path of the code-specific join route. */
 export const JOIN_PATH = '/join';
 
+const RESUMABLE_LEGACY_INVITE_CODE = /^[A-Z0-9]{6}$/;
+
+function normaliseResumableLegacyCode(value: string): string {
+  const code = value.trim().toUpperCase();
+  return RESUMABLE_LEGACY_INVITE_CODE.test(code) ? code : '';
+}
+
 /**
  * Builds the shareable, code-specific join URL.
  *
@@ -51,8 +58,11 @@ function storages(): Storage[] {
  * survives the full-page reloads some auth providers perform.
  */
 export function rememberPendingInvite(code: string): void {
-  const value = code.trim().toUpperCase();
-  if (!value) return;
+  const value = normaliseResumableLegacyCode(code);
+  if (!value) {
+    if (code.trim()) clearPendingInvite();
+    return;
+  }
   for (const storage of storages()) {
     try { storage.setItem(PENDING_INVITE_KEY, value); } catch { /* quota / privacy mode */ }
   }
@@ -60,13 +70,20 @@ export function rememberPendingInvite(code: string): void {
 
 /** Returns the invite code preserved across authentication, if any. */
 export function readPendingInvite(): string {
+  let selected = '';
   for (const storage of storages()) {
     try {
-      const value = storage.getItem(PENDING_INVITE_KEY);
-      if (value) return value.trim().toUpperCase();
+      const raw = storage.getItem(PENDING_INVITE_KEY);
+      if (raw === null) continue;
+      const value = normaliseResumableLegacyCode(raw);
+      if (!value) {
+        clearPendingInvite();
+        return '';
+      }
+      if (!selected) selected = value;
     } catch { /* storage blocked */ }
   }
-  return '';
+  return selected;
 }
 
 /** Clears the preserved invite code once the flow has been resumed. */

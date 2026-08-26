@@ -152,6 +152,58 @@ describe('Login — validated authentication return', () => {
     await waitFor(() => expect(navigate).toHaveBeenCalledWith('/', { replace: true }));
     expect(navigate).not.toHaveBeenCalledWith('https://evil.example/steal', expect.anything());
   });
+
+  it('clears malformed legacy state instead of overriding the safe fallback', async () => {
+    sessionStorage.setItem('queki.pendingInviteCode', 'not-a-code');
+    localStorage.setItem('queki.pendingInviteCode', 'not-a-code');
+    const view = renderLogin();
+
+    storeState.authStatus = 'authenticated';
+    storeState.authUser = { uid: 'uid-1' };
+    view.rerender(
+      <MemoryRouter initialEntries={['/login']}>
+        <Login />
+      </MemoryRouter>,
+    );
+
+    await waitFor(() => expect(navigate).toHaveBeenCalledWith('/', { replace: true }));
+    expect(localStorage.getItem('queki.pendingInviteCode')).toBeNull();
+  });
+
+  it.each([
+    ['auth/invalid-credential', 'We could not sign you in with those details.'],
+    ['auth/popup-closed-by-user', 'Google sign-in was cancelled. Your invitation is still here.'],
+    ['auth/account-exists-with-different-credential', 'This email uses a different sign-in method. Try that method to continue.'],
+    ['auth/unclassified', 'We could not complete sign-in. Please try again.'],
+  ])('renders friendly invitation auth copy for %s without raw Firebase text', async (code, copy) => {
+    capturePendingInvite(TOKEN);
+    const raw = `Firebase raw ${code}`;
+    if (code === 'auth/invalid-credential') {
+      apiMocks.signIn.mockRejectedValueOnce({ code, message: raw });
+    } else {
+      apiMocks.signInWithGoogle.mockRejectedValueOnce({ code, message: raw });
+    }
+    const user = userEvent.setup();
+    renderLogin(`/login?next=${encodeURIComponent(`/invite/${TOKEN}`)}`);
+
+    if (code === 'auth/invalid-credential') {
+      await user.type(screen.getByLabelText(/email address/i), 'parent@example.com');
+      await user.type(screen.getByLabelText(/^password$/i), 'secret123');
+      await user.click(screen.getByRole('button', { name: /^sign in$/i }));
+    } else {
+      await user.click(screen.getByRole('button', { name: /sign in with google/i }));
+    }
+
+    const alert = await screen.findByRole('alert');
+    expect(alert).toHaveTextContent(copy);
+    expect(alert).not.toHaveTextContent(raw);
+    expect(alert).not.toHaveTextContent('auth/');
+    expect(readPendingInvite()?.token).toBe(TOKEN);
+    expect(screen.getByRole('link', { name: /don't have an account\? sign up/i })).toHaveAttribute(
+      'href',
+      `/signup?next=${encodeURIComponent(`/invite/${TOKEN}`)}`,
+    );
+  });
 });
 
 // Ensure the `auth` namespace is loaded and the language is English before each

@@ -52,6 +52,7 @@ import {
 import type { SupportedCurrencyCode } from '../i18n/format';
 import { isSupportedLanguage, type SupportedLanguage } from '../i18n';
 import { isPetBoxEnabled } from './familyFeatures';
+import { mapAuthErrorKey, type AuthErrorKey } from '../auth/authErrorMessage';
 import { buildInitialGamificationMigration } from '../domain/gamification/migrationState';
 import { defaultFeatureFlags, resolveWriterRoute, type GamificationWriter } from '../domain/gamification/v4/featureFlags';
 import {
@@ -211,28 +212,21 @@ export const sendPasswordReset = async (email: string): Promise<void> => {
  * Never surfaces raw error codes or server messages to the user.
  */
 export function mapAuthErrorMessage(error: unknown): string {
-  const code = (error as { code?: string })?.code ?? '';
-  switch (code) {
-    case 'auth/invalid-email':
-      return 'That email address does not look valid. Please check and try again.';
-    case 'auth/user-not-found':
-    case 'auth/wrong-password':
-    case 'auth/invalid-credential':
-      return 'We could not find an account with those details.';
-    case 'auth/too-many-requests':
-      return 'Too many attempts. Please wait a moment and try again.';
-    case 'auth/network-request-failed':
-      return 'A network error occurred. Please check your connection and try again.';
-    case 'auth/requires-recent-login':
-      return 'For security, please sign out and sign back in before doing this.';
-    case 'auth/operation-not-allowed':
-      return 'This sign-in method is not enabled. Please contact support.';
-    case 'auth/missing-continue-uri':
-    case 'auth/invalid-continue-uri':
-      return 'We could not complete that request. Please try again.';
-    default:
-      return 'Something went wrong. Please try again.';
-  }
+  const key = mapAuthErrorKey(error, { pendingInvite: false });
+  const messages: Record<AuthErrorKey, string> = {
+    'auth:errors.emailAlreadyUsedInvite': 'That email already belongs to an account. Sign in instead.',
+    'auth:errors.emailAlreadyUsed': 'That email already belongs to an account. Sign in instead.',
+    'auth:errors.invalidEmail': 'That email address does not look valid. Please check and try again.',
+    'auth:errors.invalidCredential': 'We could not find an account with those details.',
+    'auth:errors.popupClosed': 'Google sign-in was cancelled. Please try again.',
+    'auth:errors.differentCredential': 'This email uses a different sign-in method. Try that method to continue.',
+    'auth:errors.network': 'A network error occurred. Please check your connection and try again.',
+    'auth:errors.tooManyAttempts': 'Too many attempts. Please wait a moment and try again.',
+    'auth:errors.recentLogin': 'For security, please sign out and sign back in before doing this.',
+    'auth:errors.methodDisabled': 'This sign-in method is not enabled. Please contact support.',
+    'auth:errors.generic': 'Something went wrong. Please try again.',
+  };
+  return messages[key];
 }
 
 // ---------------------------

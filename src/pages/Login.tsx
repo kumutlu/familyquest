@@ -12,6 +12,7 @@ import { useStore } from '../store/useStore';
 import { postAuthDestination } from '../lib/inviteLink';
 import { bindPendingInviteToUid, readPendingInvite } from '../auth/pendingInviteIntent';
 import { safeInternalReturnPath } from '../lib/googleRedirectAuth';
+import { mapAuthErrorKey } from '../auth/authErrorMessage';
 
 type LoginTab = 'parent' | 'child';
 
@@ -99,7 +100,7 @@ export function Login() {
       await signIn(email, password);
       // Do not navigate here. The route guard redirects once auth is ready.
     } catch (err: any) {
-      setError(err.message);
+      setError(t(mapAuthErrorKey(err, { pendingInvite: pendingInvite !== null })));
       setSigningIn(false);
     }
   };
@@ -111,7 +112,7 @@ export function Login() {
       await signInWithGoogle();
       // Do not navigate here. The route guard redirects once auth is ready.
     } catch (err: any) {
-      setError(err.message);
+      setError(t(mapAuthErrorKey(err, { pendingInvite: pendingInvite !== null })));
       setSigningIn(false);
     }
   };

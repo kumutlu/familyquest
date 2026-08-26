@@ -140,15 +140,19 @@ describe('JoinInvite', () => {
   });
 
   it('reports an invalid code', async () => {
+    localStorage.setItem(PENDING_INVITE_KEY, '7ZXWRZ');
     invitationApi.previewInvitation.mockRejectedValue(new Error('INVALID_INVITATION'));
     renderJoin();
     expect(await screen.findByRole('alert')).toHaveTextContent('This invitation link is not valid.');
+    expect(readPendingInvite()).toBe('');
   });
 
   it('reports an expired or regenerated code', async () => {
+    localStorage.setItem(PENDING_INVITE_KEY, '7ZXWRZ');
     invitationApi.previewInvitation.mockRejectedValue(new Error('INVITATION_EXPIRED'));
     renderJoin();
     expect(await screen.findByRole('alert')).toHaveTextContent('This invitation has expired.');
+    expect(readPendingInvite()).toBe('');
   });
 
   it('reports that the user already belongs to that family', async () => {

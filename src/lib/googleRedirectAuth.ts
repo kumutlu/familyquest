@@ -14,8 +14,19 @@ export type RedirectBootstrapResult =
   | { credential: null; error: 'redirect-state-missing' }
   | { credential: UserCredential; error: 'invite-account-mismatch' };
 
-const UNSAFE_RETURN_CHARACTERS = /[\\\u0000-\u001f\u007f-\u009f]/;
+const UNSAFE_RETURN_CHARACTERS = /[\\\s\p{Z}\u0000-\u001f\u007f-\u009f]/u;
 const UNSAFE_ENCODED_RETURN_CHARACTERS = /%(?:25|2f|5c|0[0-9a-f]|1[0-9a-f]|7f)/i;
+
+function decodedReturnPathIsUnsafe(value: string): boolean {
+  try {
+    const decoded = decodeURIComponent(value);
+    return decoded[0] !== '/'
+      || decoded[1] === '/'
+      || UNSAFE_RETURN_CHARACTERS.test(decoded);
+  } catch {
+    return true;
+  }
+}
 
 /**
  * Validates an untrusted auth return value without normalising it. Only a
@@ -25,6 +36,7 @@ export function safeInternalReturnPath(value: string | null): string | null {
   if (!value || value[0] !== '/' || value[1] === '/') return null;
   if (UNSAFE_RETURN_CHARACTERS.test(value)) return null;
   if (UNSAFE_ENCODED_RETURN_CHARACTERS.test(value)) return null;
+  if (decodedReturnPathIsUnsafe(value)) return null;
   return value;
 }
 
