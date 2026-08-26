@@ -64,10 +64,16 @@ describe('Google redirect authentication', () => {
   it('accepts only a single-slash internal absolute return path', async () => {
     const { safeInternalReturnPath } = await import('./googleRedirectAuth');
 
-    expect(safeInternalReturnPath(`/invite/${TOKEN}?source=email#join`)).toBe(
+    for (const path of [
       `/invite/${TOKEN}?source=email#join`,
-    );
-    expect(safeInternalReturnPath('/onboarding')).toBe('/onboarding');
+      '/onboarding',
+      '/onboarding?continue=%2Fhelp',
+      '/search?q=100%25',
+      '/search?q=100%25abc',
+      '/page#return=%2Finvite%2Fabc',
+    ]) {
+      expect(safeInternalReturnPath(path)).toBe(path);
+    }
   });
 
   it.each([
