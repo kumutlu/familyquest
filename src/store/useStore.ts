@@ -1,12 +1,15 @@
 import { create } from 'zustand';
 import {
   collection,
+  collectionGroup,
   doc,
   getDocFromServer,
   getDocsFromServer,
+  limit,
   onSnapshot,
   orderBy,
   query,
+  where,
 } from 'firebase/firestore';
 import { onAuthStateChanged } from 'firebase/auth';
 import { auth, db } from '../lib/firebase';
@@ -128,6 +131,7 @@ interface AppState {
   featureErrors: Record<string, string | null>;
   bootstrapStatus: Record<BootstrapResource, BootstrapStatus>;
   activeFamilyId: string | null;
+  pendingMembershipStatus: 'idle' | 'loading' | 'none' | 'pending' | 'recovery';
 
   authUser: any | null | undefined;
   currentUser: any | null;
@@ -175,6 +179,7 @@ interface AppState {
 
 let authUnsubscribe: (() => void) | null = null;
 let profileUnsubscribe: (() => void) | null = null;
+let pendingMembershipUnsubscribe: (() => void) | null = null;
 type ListenerRegistration = {
   critical: boolean;
   unsubscribe: () => void;
@@ -187,6 +192,11 @@ let familyGeneration = 0;
 const stopProfileListener = () => {
   profileUnsubscribe?.();
   profileUnsubscribe = null;
+};
+
+const stopPendingMembershipListener = () => {
+  pendingMembershipUnsubscribe?.();
+  pendingMembershipUnsubscribe = null;
 };
 
 const stopFamilyListeners = () => {
@@ -254,6 +264,7 @@ export const useStore = create<AppState>((set, get) => ({
   featureErrors: {},
   bootstrapStatus: createBootstrapStatus('idle'),
   activeFamilyId: null,
+  pendingMembershipStatus: 'idle',
 
   authUser: undefined,
   currentUser: null,
@@ -268,6 +279,7 @@ export const useStore = create<AppState>((set, get) => ({
     authUnsubscribe = onAuthStateChanged(auth, async user => {
       const generation = ++authGeneration;
       stopProfileListener();
+      stopPendingMembershipListener();
       stopFamilyListeners();
       logAuthTrace('auth-listener-fired', { signedIn: Boolean(user), generation });
       recordE2ETimeline('auth-listener-fired', { signedIn: Boolean(user), generation });
@@ -289,6 +301,7 @@ export const useStore = create<AppState>((set, get) => ({
           featureErrors: {},
           error: null,
           activeFamilyId: null,
+          pendingMembershipStatus: 'idle',
           appReady: true,
           loading: false,
         });
@@ -311,6 +324,7 @@ export const useStore = create<AppState>((set, get) => ({
         featureErrors: {},
         error: null,
         activeFamilyId: null,
+        pendingMembershipStatus: 'idle',
         appReady: false,
         loading: true,
       });
@@ -334,6 +348,76 @@ export const useStore = create<AppState>((set, get) => ({
         let profileResolved = false;
         let profileServerConfirmed = false;
         let profileSnapshotRevision = 0;
+
+        let pendingMembershipLookupStarted = false;
+        const resolvePendingMembership = (resolvedProfileId: string) => {
+          if (pendingMembershipLookupStarted) return;
+          pendingMembershipLookupStarted = true;
+          set({ pendingMembershipStatus: 'loading', appReady: false, loading: true });
+
+          let pendingRequestQuery;
+          try {
+            pendingRequestQuery = query(
+              collectionGroup(db, 'join_requests'),
+              where('uid', '==', resolvedProfileId),
+              where('status', '==', 'pending'),
+              limit(1),
+            );
+          } catch (error: any) {
+            pendingMembershipLookupStarted = false;
+            set({
+              pendingMembershipStatus: 'idle',
+              bootstrapError: errorText('PendingMembership', error),
+              appReady: false,
+              loading: false,
+            });
+            return;
+          }
+
+          let serverConfirmed = false;
+          const acceptPendingSnapshot = (snapshot: any) => {
+            if (
+              generation !== authGeneration ||
+              get().authUser?.uid !== user.uid ||
+              get().currentUser?.id !== resolvedProfileId ||
+              get().currentUser?.familyId
+            ) return;
+            serverConfirmed = true;
+            set({
+              pendingMembershipStatus: snapshot.docs.length > 0 ? 'pending' : 'none',
+              bootstrapError: null,
+              appReady: true,
+              loading: false,
+            });
+          };
+          const handlePendingMembershipError = (error: any) => {
+            if (generation !== authGeneration || get().authUser?.uid !== user.uid) return;
+            pendingMembershipLookupStarted = false;
+            set({
+              pendingMembershipStatus: 'idle',
+              bootstrapError: errorText('PendingMembership', error),
+              appReady: false,
+              loading: false,
+            });
+          };
+
+          stopPendingMembershipListener();
+          pendingMembershipUnsubscribe = onSnapshot(
+            pendingRequestQuery,
+            { includeMetadataChanges: true },
+            snapshot => {
+              if (!snapshot.metadata?.fromCache) acceptPendingSnapshot(snapshot);
+            },
+            handlePendingMembershipError,
+          );
+          void getDocsFromServer(pendingRequestQuery)
+            .then(snapshot => {
+              if (!serverConfirmed) acceptPendingSnapshot(snapshot);
+            })
+            .catch(error => {
+              if (!serverConfirmed) handlePendingMembershipError(error);
+            });
+        };
 
         const handleProfileSnapshot = (profileSnapshot: any) => {
           recordE2ETimeline('profile-listener-result', { exists: profileSnapshot.exists(), fromCache: Boolean(profileSnapshot.metadata?.fromCache) });
@@ -412,6 +496,7 @@ export const useStore = create<AppState>((set, get) => ({
               set({
                 ...emptyFamilyState(),
                 bootstrapStatus: createBootstrapStatus('ready'),
+                pendingMembershipStatus: 'none',
                 familyLoading: false,
                 activeFamilyId: familyId,
                 appReady: true,
@@ -422,18 +507,42 @@ export const useStore = create<AppState>((set, get) => ({
 
             if (!familyId) {
               stopFamilyListeners();
+              if (!profileServerConfirmed) {
+                set({
+                  ...emptyFamilyState(),
+                  bootstrapStatus: createBootstrapStatus('idle'),
+                  pendingMembershipStatus: 'idle',
+                  familyLoading: false,
+                  activeFamilyId: null,
+                  appReady: false,
+                  loading: true,
+                });
+                return;
+              }
               set({
                 ...emptyFamilyState(),
                 bootstrapStatus: createBootstrapStatus('idle'),
                 familyLoading: false,
                 bootstrapError: null,
                 activeFamilyId: null,
-                appReady: true,
-                loading: false,
+                appReady: false,
+                loading: true,
               });
+              resolvePendingMembership(validatedProfile.id);
               return;
             }
 
+            if (!profileServerConfirmed) {
+              set({
+                pendingMembershipStatus: 'none',
+                familyLoading: false,
+                appReady: false,
+                loading: true,
+              });
+              return;
+            }
+            stopPendingMembershipListener();
+            set({ pendingMembershipStatus: 'none' });
             get().loadFamilyData(validatedProfile.id, familyId);
           };
 
@@ -582,6 +691,7 @@ export const useStore = create<AppState>((set, get) => ({
       featureErrors: {},
       error: null,
       activeFamilyId: familyId,
+      pendingMembershipStatus: 'none',
       familyLoading: true,
       appReady: false,
       loading: true,
@@ -649,6 +759,7 @@ export const useStore = create<AppState>((set, get) => ({
         bootstrapStatus: { ...current.bootstrapStatus, [resource]: 'error' },
         bootstrapError: errorText(context, error),
         activeFamilyId: null,
+        pendingMembershipStatus: resource === 'family' ? 'recovery' : current.pendingMembershipStatus,
         familyLoading: false,
         appReady: false,
         loading: false,
@@ -1096,6 +1207,7 @@ export const useStore = create<AppState>((set, get) => ({
 
     authGeneration += 1;
     stopProfileListener();
+    stopPendingMembershipListener();
     stopFamilyListeners();
     authUnsubscribe?.();
     authUnsubscribe = null;
@@ -1106,6 +1218,7 @@ export const useStore = create<AppState>((set, get) => ({
       profileLoading: false,
       authUser: undefined,
       currentUser: null,
+      pendingMembershipStatus: 'idle',
       bootstrapError: null,
       featureErrors: {},
       appReady: false,
@@ -1118,6 +1231,7 @@ export const useStore = create<AppState>((set, get) => ({
   cleanup: () => {
     authGeneration += 1;
     stopProfileListener();
+    stopPendingMembershipListener();
     stopFamilyListeners();
     authUnsubscribe?.();
     authUnsubscribe = null;
@@ -1136,6 +1250,7 @@ export const useStore = create<AppState>((set, get) => ({
       featureErrors: {},
       error: null,
       activeFamilyId: null,
+      pendingMembershipStatus: 'idle',
       appReady: false,
       loading: true,
     });

@@ -35,6 +35,7 @@ import { Suspense, useEffect } from 'react';
 import { consumeGoogleRedirectResult } from './lib/googleRedirectAuth';
 import { markStartupStage } from './startupDiagnostics';
 import { E2EBootstrapDiagnostics } from './components/E2EBootstrapDiagnostics';
+import { AuthRoutingGate } from './auth/AuthRoutingGate';
 
 function App() {
   const initAuth = useStore(state => state.initAuth);
@@ -68,6 +69,7 @@ function App() {
       <Router>
         <RequestDetailProvider>
           <E2EBootstrapDiagnostics />
+          <AuthRoutingGate>
           <Routes>
           <Route path="/login" element={<Login />} />
           <Route path="/signup" element={<Signup />} />
@@ -116,6 +118,7 @@ function App() {
             <Route path="help/:articleId" element={<HelpArticlePage />} />
           </Route>
           </Routes>
+          </AuthRoutingGate>
         </RequestDetailProvider>
       </Router>
     </Suspense>
