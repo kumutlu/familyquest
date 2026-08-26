@@ -47,7 +47,7 @@ vi.mock('react-router-dom', async importOriginal => {
   };
 });
 
-import { readPendingInvite } from '../auth/pendingInviteIntent';
+import { capturePendingInvite, readPendingInvite } from '../auth/pendingInviteIntent';
 import { AdultInvite } from './AdultInvite';
 
 function InviteTree({ strict = false }: { strict?: boolean }) {
@@ -269,6 +269,69 @@ describe('AdultInvite', () => {
     expect(invitationApi.acceptAdultInvitation).toHaveBeenCalledTimes(2);
   });
 
+  it('routes a different-family profile-repair failure to conflict without continuing', async () => {
+    invitationApi.acceptAdultInvitation.mockRejectedValueOnce(new Error('PROFILE_REQUIRED'));
+    invitationApi.completeAdultInvitationProfile.mockRejectedValueOnce(
+      new Error('ALREADY_IN_ANOTHER_FAMILY'),
+    );
+    const user = userEvent.setup();
+    renderInvite();
+
+    await user.click(await screen.findByRole('button', { name: 'Join family' }));
+    await user.type(await screen.findByRole('textbox', { name: 'Your name' }), 'Alex Smith');
+    await user.click(screen.getByRole('button', { name: 'Save name and join' }));
+
+    expect(await screen.findByText(
+      'You already belong to another family. Your current family has not been changed.',
+    )).toBeInTheDocument();
+    expect(invitationApi.acceptAdultInvitation).toHaveBeenCalledTimes(1);
+    expect(navigate).not.toHaveBeenCalled();
+    expect(readPendingInvite()?.token).toBe(TOKEN);
+  });
+
+  it.each([
+    ['INVITATION_EXPIRED', 'This invitation has expired. Ask for a new invitation.'],
+    ['INVITATION_REVOKED', 'This invitation is no longer active. Ask for a new invitation.'],
+    ['INVITATION_ALREADY_USED', 'This invitation has already been used. Ask for a new invitation.'],
+    ['FAMILY_UNAVAILABLE', 'This family invitation is no longer available.'],
+  ])('routes profile-repair %s to terminal UX without continuing', async (code, copy) => {
+    invitationApi.acceptAdultInvitation.mockRejectedValueOnce(new Error('PROFILE_REQUIRED'));
+    invitationApi.completeAdultInvitationProfile.mockRejectedValueOnce(new Error(code));
+    const user = userEvent.setup();
+    renderInvite();
+
+    await user.click(await screen.findByRole('button', { name: 'Join family' }));
+    await user.type(await screen.findByRole('textbox', { name: 'Your name' }), 'Alex Smith');
+    await user.click(screen.getByRole('button', { name: 'Save name and join' }));
+
+    expect(await screen.findByText(copy)).toBeInTheDocument();
+    expect(screen.queryByText(code)).not.toBeInTheDocument();
+    expect(invitationApi.acceptAdultInvitation).toHaveBeenCalledTimes(1);
+    expect(navigate).not.toHaveBeenCalled();
+    expect(readPendingInvite()?.token).toBe(TOKEN);
+  });
+
+  it.each([
+    ['TOO_MANY_ATTEMPTS', 'Too many invitation checks. Please wait and try again.'],
+    ['unclassified raw backend failure', "We couldn't continue with this invitation. Please try again."],
+  ])('keeps profile repair retryable for %s without exposing raw errors', async (code, copy) => {
+    invitationApi.acceptAdultInvitation.mockRejectedValueOnce(new Error('PROFILE_REQUIRED'));
+    invitationApi.completeAdultInvitationProfile.mockRejectedValueOnce(new Error(code));
+    const user = userEvent.setup();
+    renderInvite();
+
+    await user.click(await screen.findByRole('button', { name: 'Join family' }));
+    await user.type(await screen.findByRole('textbox', { name: 'Your name' }), 'Alex Smith');
+    await user.click(screen.getByRole('button', { name: 'Save name and join' }));
+
+    expect(await screen.findByText(copy)).toBeInTheDocument();
+    expect(screen.queryByText(code)).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Save name and join' })).toBeInTheDocument();
+    expect(invitationApi.acceptAdultInvitation).toHaveBeenCalledTimes(1);
+    expect(navigate).not.toHaveBeenCalled();
+    expect(readPendingInvite()?.token).toBe(TOKEN);
+  });
+
   it.each([
     ['INVITATION_EXPIRED', 'This invitation has expired. Ask for a new invitation.'],
     ['INVITATION_REVOKED', 'This invitation is no longer active. Ask for a new invitation.'],
@@ -286,6 +349,22 @@ describe('AdultInvite', () => {
     await user.click(screen.getByRole('button', { name: 'Leave invitation' }));
     expect(readPendingInvite()).toBeNull();
     expect(navigate).toHaveBeenCalledWith('/', { replace: true });
+  });
+
+  it.each([
+    ['Leave invitation', '/'],
+    ['Use a family code instead', '/join-family'],
+  ])('allows malformed-token exit %s without clearing another intent', async (label, destination) => {
+    capturePendingInvite(TOKEN_B);
+    const user = userEvent.setup();
+    renderInvite('/invite/not-a-token');
+
+    expect(await screen.findByRole('alert')).toHaveTextContent('This invitation link is not valid.');
+    await user.click(screen.getByRole('button', { name: label }));
+
+    expect(navigate).toHaveBeenCalledWith(destination, { replace: true });
+    expect(readPendingInvite()?.token).toBe(TOKEN_B);
+    expect(invitationApi.previewAdultInvitation).not.toHaveBeenCalled();
   });
 
   it('treats same-family already_member as success', async () => {

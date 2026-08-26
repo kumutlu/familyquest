@@ -215,12 +215,8 @@ export function clearPendingInviteIfMatches(
   reason: PendingInviteClearReason,
 ): boolean {
   void reason;
-  if (!isCanonicalInvitationToken(expected.token)) {
-    throw new Error('INVALID_INVITATION_TOKEN');
-  }
-  if (expected.authUid !== undefined && !isValidAuthUid(expected.authUid)) {
-    throw new Error('INVALID_AUTH_UID');
-  }
+  if (!isCanonicalInvitationToken(expected.token)) return false;
+  if (expected.authUid !== undefined && !isValidAuthUid(expected.authUid)) return false;
 
   let cleared = false;
   for (const storage of stores()) {

@@ -507,6 +507,59 @@ describe('adult invitation v2 callables', () => {
     expect(first.result).toBe('joined');
   });
 
+  it('replays already_member with the current canonical active same-family profile role', async () => {
+    seedV2(fixture.documents);
+    fixture.documents.set('users/joiner-1', {
+      uid: 'joiner-1', displayName: 'Joiner', familyId: 'family-1', role: 'adult', lifecycle: 'active',
+    });
+    fixture.documents.set('families/family-1/users/joiner-1', {
+      uid: 'joiner-1', role: 'adult', lifecycle: 'active',
+    });
+    await expect(accept(TOKEN)).resolves.toEqual({
+      result: 'already_member', familyId: 'family-1', role: 'adult', destination: '/',
+    });
+
+    fixture.documents.set('users/joiner-1', {
+      uid: 'joiner-1', displayName: 'Joiner', familyId: 'family-1', role: 'owner', lifecycle: 'active',
+    });
+    fixture.documents.set('families/family-1/users/joiner-1', {
+      uid: 'joiner-1', role: 'owner', lifecycle: 'active',
+    });
+    await expect(accept(TOKEN)).resolves.toEqual({
+      result: 'already_member', familyId: 'family-1', role: 'owner', destination: '/',
+    });
+    expect(fixture.documents.get(
+      'adultInvitationAcceptanceIdempotency/joiner-1_req-accept-001',
+    )?.role).toBe('adult');
+    expect(fixture.documents.get('families/family-1/adultInvitationEvents/event-0001')?.role)
+      .toBe('adult');
+  });
+
+  it('rejects an already_member replay after the canonical membership becomes invalid', async () => {
+    seedV2(fixture.documents);
+    fixture.documents.set('users/joiner-1', {
+      uid: 'joiner-1', displayName: 'Joiner', familyId: 'family-1', role: 'adult', lifecycle: 'active',
+    });
+    fixture.documents.set('families/family-1/users/joiner-1', {
+      uid: 'joiner-1', role: 'adult', lifecycle: 'active',
+    });
+    await accept(TOKEN);
+
+    fixture.documents.set('users/joiner-1', {
+      uid: 'joiner-1', displayName: 'Joiner', familyId: 'family-2', role: 'adult', lifecycle: 'active',
+    });
+    await expect(accept(TOKEN)).rejects.toMatchObject({
+      message: 'ALREADY_IN_ANOTHER_FAMILY',
+    });
+
+    fixture.documents.set('users/joiner-1', {
+      uid: 'joiner-1', displayName: 'Joiner', familyId: 'family-1', role: 'adult', lifecycle: 'archived',
+    });
+    await expect(accept(TOKEN)).rejects.toMatchObject({
+      message: 'INVITATION_ALREADY_USED',
+    });
+  });
+
   it('revokes only an active invitation owned by the caller family owner', async () => {
     const invitationId = seedV2(fixture.documents);
     await expect(revoke(invitationId)).resolves.toEqual({ success: true });

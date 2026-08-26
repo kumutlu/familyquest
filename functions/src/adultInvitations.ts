@@ -475,22 +475,6 @@ export async function acceptAdultInvitationImpl(
     ) {
       throw httpsError('failed-precondition', 'PROFILE_REQUIRED');
     }
-    if (operationSnapshot.exists) {
-      const operation = operationSnapshot.data() as DocumentData;
-      if (
-        operation.operation !== 'accept-adult-invitation' ||
-        operation.invitationId !== invitationId
-      ) {
-        throw httpsError('already-exists', 'REQUEST_ID_REUSED');
-      }
-      return {
-        result: operation.result as 'joined' | 'already_member',
-        familyId: String(operation.familyId),
-        role: operation.role as FamilyMembershipRole,
-        destination: '/',
-      };
-    }
-
     const profileFamilyId = typeof profile.familyId === 'string' && profile.familyId
       ? profile.familyId
       : undefined;
@@ -498,9 +482,45 @@ export async function acceptAdultInvitationImpl(
       throw httpsError('failed-precondition', 'ALREADY_IN_ANOTHER_FAMILY');
     }
     assertInvitationActive(invitation, now, uid);
+    const membership = membershipSnapshot.data() as DocumentData | undefined;
+    const hasActiveSameFamilyMembership = profileFamilyId === invitation.familyId &&
+      isActiveMember(profile) &&
+      (!membershipSnapshot.exists || isActiveMember(membership));
+
+    if (operationSnapshot.exists) {
+      const operation = operationSnapshot.data() as DocumentData;
+      if (
+        operation.operation !== 'accept-adult-invitation' ||
+        operation.invitationId !== invitationId ||
+        operation.familyId !== invitation.familyId ||
+        (operation.result !== 'joined' && operation.result !== 'already_member')
+      ) {
+        throw httpsError('already-exists', 'REQUEST_ID_REUSED');
+      }
+      if (!hasActiveSameFamilyMembership) {
+        throw httpsError('failed-precondition', 'INVITATION_ALREADY_USED');
+      }
+      if (operation.result === 'already_member') {
+        return {
+          result: 'already_member',
+          familyId: invitation.familyId,
+          role: canonicalMembershipRole(profile.role),
+          destination: '/',
+        };
+      }
+      if (operation.role !== 'parent' && operation.role !== 'adult') {
+        throw httpsError('already-exists', 'REQUEST_ID_REUSED');
+      }
+      return {
+        result: 'joined',
+        familyId: invitation.familyId,
+        role: operation.role,
+        destination: '/',
+      };
+    }
 
     if (invitation.status === 'accepted' && invitation.acceptedBy === uid) {
-      if (profileFamilyId === invitation.familyId) {
+      if (hasActiveSameFamilyMembership) {
         return {
           result: 'already_member',
           familyId: invitation.familyId,
@@ -511,9 +531,7 @@ export async function acceptAdultInvitationImpl(
       throw httpsError('failed-precondition', 'INVITATION_ALREADY_USED');
     }
 
-    const membership = membershipSnapshot.data() as DocumentData | undefined;
-    const alreadyMember = profileFamilyId === invitation.familyId && isActiveMember(profile) &&
-      (!membershipSnapshot.exists || isActiveMember(membership));
+    const alreadyMember = hasActiveSameFamilyMembership;
     const result: 'joined' | 'already_member' = alreadyMember ? 'already_member' : 'joined';
     const resultRole = alreadyMember
       ? canonicalMembershipRole(profile.role)
