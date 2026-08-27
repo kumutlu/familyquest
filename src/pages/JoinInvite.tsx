@@ -29,6 +29,7 @@ const TERMINAL_INVITATION_ERRORS = new Set<InvitationErrorKey>([
   'family:join.expired',
   'family:join.revoked',
   'family:join.used',
+  'family:join.alreadyInThisFamily',
 ]);
 
 /**

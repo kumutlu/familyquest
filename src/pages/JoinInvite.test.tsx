@@ -161,6 +161,7 @@ describe('JoinInvite', () => {
   });
 
   it('reports that the user already belongs to that family', async () => {
+    localStorage.setItem(PENDING_INVITE_KEY, '7ZXWRZ');
     invitationApi.previewInvitation.mockResolvedValue({ familyName: 'Smith', intendedRole: 'child' });
     invitationApi.acceptInvitation.mockRejectedValue(new Error('ALREADY_IN_THIS_FAMILY'));
     const user = userEvent.setup();
@@ -168,6 +169,7 @@ describe('JoinInvite', () => {
 
     await user.click(await screen.findByRole('button', { name: 'Accept invitation' }));
     expect(await screen.findByRole('alert')).toHaveTextContent('already a member of this family');
+    expect(readPendingInvite()).toBe('');
   });
 
   it('reports that the user already belongs to another family', async () => {

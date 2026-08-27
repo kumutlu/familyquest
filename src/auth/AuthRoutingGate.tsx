@@ -67,6 +67,12 @@ const currentLegacyCode = (pathname: string, search: string) => {
   return LEGACY_INVITE_CODE.test(code) ? code : null;
 };
 
+/** A supplied invite-shaped URL owns the journey, even before validation. */
+const suppliedInviteJourney = (pathname: string, search: string): boolean =>
+  (pathname === '/join' && new URLSearchParams(search).has('code'))
+  || pathname === '/invite'
+  || pathname.startsWith('/invite/');
+
 const hasActiveMembershipLifecycle = (input: AuthRouteDecisionInput) => {
   const member = input.currentUser;
   if (!member?.familyId) return false;
@@ -83,6 +89,7 @@ export function deriveAuthRouteDecision(input: AuthRouteDecisionInput): AuthRout
   // Recipient routes own preview and terminal error UX even before Firebase Auth
   // resolves. URL and stored invitation intent outrank generic auth routing.
   if (
+    suppliedInviteJourney(input.pathname, input.search) ||
     validCurrentV2Invite ||
     validCurrentLegacyInvite ||
     input.pendingInviteToken ||
@@ -239,6 +246,7 @@ export function AuthRoutingGate({
   }
 
   if (decision === 'invite') {
+    if (suppliedInviteJourney(location.pathname, location.search)) return children;
     if (currentV2Token(location.pathname)) return children;
     if (currentLegacyCode(location.pathname, location.search)) return children;
     if (pendingInvite && location.pathname !== `/invite/${pendingInvite.token}`) {

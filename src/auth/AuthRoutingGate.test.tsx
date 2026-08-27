@@ -286,6 +286,20 @@ describe('AuthRoutingGate navigation', () => {
     expect(screen.getByTestId('current-path')).not.toHaveTextContent('/join');
   });
 
+  it('keeps a supplied malformed legacy URL ahead of stored v2 intent', () => {
+    capturePendingInvite(TOKEN_B);
+    renderGate('/join?code=not-six');
+    expect(screen.getByTestId('current-path')).toHaveTextContent('/join?code=not-six');
+    expect(screen.getByTestId('current-path')).not.toHaveTextContent(`/invite/${TOKEN_B}`);
+  });
+
+  it('keeps a supplied malformed v2 URL ahead of stored legacy intent', () => {
+    rememberLegacyInvite('ABC123');
+    renderGate('/invite/not-a-token');
+    expect(screen.getByTestId('current-path')).toHaveTextContent('/invite/not-a-token');
+    expect(screen.getByTestId('current-path')).not.toHaveTextContent('/join?code=ABC123');
+  });
+
   it('routes an authenticated no-family user without invite to /no-family', () => {
     renderGate('/');
     expect(screen.getByTestId('current-path')).toHaveTextContent('/no-family');
