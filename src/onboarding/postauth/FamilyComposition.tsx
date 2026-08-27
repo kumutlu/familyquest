@@ -1,10 +1,10 @@
 import { useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Button } from '../../components/ui/Button';
+import { AdultInviteCard } from '../../components/family/AdultInviteCard';
 import { OnboardingCard } from '../components/OnboardingCard';
 import { OnboardingError } from '../components/OnboardingError';
 import { useStore } from '../../store/useStore';
-import { buildJoinUrl } from '../../lib/inviteLink';
 import { ensureFamily, ensureFirstChild, type SetupDeps } from '../lib/onboardingSetup';
 import {
   classifyOnboardingError,
@@ -40,7 +40,6 @@ export function FamilyComposition({ draft, patch, goNext, deps }: FamilyComposit
   recordE2ETimeline('p1-render');
   const { t } = useTranslation('onboarding');
   const currentUser = useStore(state => state.currentUser);
-  const familyData = useStore(state => state.familyData);
   // Authoritative prerequisite: the user profile document is confirmed present
   // on the server. Setup must wait for this before calling createFamilyAndParent.
   const profileServerConfirmed = useStore(state => state.profileServerConfirmed);
@@ -53,7 +52,7 @@ export function FamilyComposition({ draft, patch, goNext, deps }: FamilyComposit
   const [extraChildren, setExtraChildren] = useState<string[]>([]);
   const [showAddChild, setShowAddChild] = useState(false);
   const [newChildName, setNewChildName] = useState('');
-  const [inviteCopied, setInviteCopied] = useState(false);
+  const [showAdultInvite, setShowAdultInvite] = useState(false);
   const [retryNonce, setRetryNonce] = useState(0);
 
   // Lifecycle-safe idempotency refs (StrictMode-safe).
@@ -178,17 +177,7 @@ export function FamilyComposition({ draft, patch, goNext, deps }: FamilyComposit
     }
   };
 
-  const handleInvite = async () => {
-    const code = familyData?.inviteCode;
-    if (!code) return;
-    const url = buildJoinUrl(code);
-    try {
-      await navigator.clipboard?.writeText(url);
-      setInviteCopied(true);
-    } catch {
-      setInviteCopied(false);
-    }
-  };
+  const handleInvite = () => setShowAdultInvite(true);
 
   const showError = phase === 'error' && Boolean(error);
   const showLoading =
@@ -262,10 +251,16 @@ export function FamilyComposition({ draft, patch, goNext, deps }: FamilyComposit
             {t('p1.addChild')}
           </Button>
         )}
-        <Button variant="secondary" onClick={handleInvite} disabled={!familyData?.inviteCode}>
-          {inviteCopied ? t('p1.inviteCopied') : t('p1.inviteParent')}
+        <Button variant="secondary" onClick={handleInvite}>
+          {t('p1.inviteParent')}
         </Button>
       </div>
+
+      {showAdultInvite && (
+        <div className="mt-4">
+          <AdultInviteCard defaultRole="parent" onClose={() => setShowAdultInvite(false)} />
+        </div>
+      )}
 
       <div className="mt-6 flex flex-col gap-3 min-[400px]:flex-row min-[400px]:items-center">
         <Button variant="secondary" onClick={goNext} disabled={creating}>

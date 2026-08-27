@@ -16,8 +16,13 @@ const api = vi.hoisted(() => ({
   createManagedMember: vi.fn().mockResolvedValue('child-1'),
   createTask: vi.fn().mockResolvedValue({ id: 'task-1' }),
 }));
+const adultInvitationApi = vi.hoisted(() => ({
+  createAdultInvitation: vi.fn(),
+  revokeAdultInvitation: vi.fn(),
+}));
 
 vi.mock('../lib/api', () => api);
+vi.mock('../lib/adultInvitationApi', () => adultInvitationApi);
 
 vi.mock('../lib/firebase', () => ({ app: {}, auth: {}, db: {}, googleProvider: {} }));
 vi.mock('firebase/auth', () => ({
@@ -72,6 +77,12 @@ beforeEach(async () => {
     familyId: 'family-1',
     inviteCode: 'ABC123',
     user: { id: 'auth-uid-1', familyId: 'family-1', role: 'owner' },
+  });
+  adultInvitationApi.createAdultInvitation.mockResolvedValue({
+    invitationId: 'a'.repeat(64),
+    token: 'adult-token',
+    intendedRole: 'parent',
+    expiresAt: '2026-09-02T12:00:00.000Z',
   });
   await setStore({
     authStatus: 'unauthenticated',
@@ -239,6 +250,38 @@ describe('OnboardingFlow — post-auth idempotent setup', () => {
     // P1 mounts; ensureFamily must skip because familyId is already present.
     await waitFor(() => expect(screen.getByRole('button', { name: /continue/i })).toBeInTheDocument());
     expect(api.createFamilyAndParent).not.toHaveBeenCalled();
+  });
+
+  it('uses the private adult invitation primitive from family composition', async () => {
+    saveDraft({
+      version: 1,
+      step: 'p1',
+      parentFirstName: 'Kemal',
+      parentRoleDisplay: 'parent',
+      childFirstName: 'Osman',
+      familyName: 'Kemal Family',
+      familyId: 'family-1',
+      childId: 'child-1',
+      updatedAt: Date.now(),
+    });
+    startCreateFamilyIntent('auth-uid-1');
+    await setStore({
+      authStatus: 'authenticated',
+      authUser: { uid: 'auth-uid-1' },
+      currentUser: { id: 'auth-uid-1', role: 'owner' },
+      familyData: { id: 'family-1', inviteCode: 'ABC123' },
+      profileServerConfirmed: true,
+    });
+
+    const user = userEvent.setup();
+    renderFlow('/onboarding?mode=create');
+    await user.click(await screen.findByRole('button', { name: /invite another parent/i }));
+    await user.click(screen.getByRole('button', { name: 'Create private invitation' }));
+    expect(adultInvitationApi.createAdultInvitation).toHaveBeenCalledWith({
+      intendedRole: 'parent',
+      clientReqId: expect.any(String),
+    });
+    expect(screen.queryByText('ABC123')).not.toBeInTheDocument();
   });
 });
 

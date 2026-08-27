@@ -218,6 +218,26 @@
       "generic": "We couldn't continue with this invitation. Please try again."
     }
   },
+  "adultInviteCard": {
+    "title": "Invite a parent or adult",
+    "subtitle": "Create a private link that grants the selected family role immediately after confirmation.",
+    "roleLabel": "Invitation role",
+    "parent": "Parent",
+    "adult": "Adult",
+    "create": "Create private invitation",
+    "creating": "Creating private invitation…",
+    "ready": "Private invitation ready.",
+    "linkLabel": "Open private invitation link",
+    "copy": "Copy private link",
+    "share": "Share private invitation",
+    "copied": "Copied!",
+    "revoke": "Revoke invitation",
+    "revoking": "Revoking invitation…",
+    "revoked": "Invitation revoked.",
+    "shareIntro": "You've been invited to join a family on Queki.",
+    "unavailable": "Invitation unavailable. Please try again.",
+    "copyUnavailable": "Copy unavailable. Please copy the link manually."
+  },
   "detail": {
     "sendMoney": "Send Money",
     "viewQuests": "View Quests",
