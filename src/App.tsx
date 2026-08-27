@@ -16,6 +16,7 @@ import { JoinFamily } from './pages/JoinFamily';
 import { JoinInvite } from './pages/JoinInvite';
 import { AdultInvite } from './pages/AdultInvite';
 import { PendingMembership } from './pages/PendingMembership';
+import { NoFamilyChoice } from './pages/NoFamilyChoice';
 import { OnboardingFlow } from './onboarding/OnboardingFlow';
 import { PrivacyPolicy } from './pages/legal/PrivacyPolicy';
 import { TermsOfService } from './pages/legal/TermsOfService';
@@ -37,14 +38,16 @@ import { consumeGoogleRedirectResult } from './lib/googleRedirectAuth';
 import { markStartupStage } from './startupDiagnostics';
 import { E2EBootstrapDiagnostics } from './components/E2EBootstrapDiagnostics';
 import { AuthRoutingGate } from './auth/AuthRoutingGate';
+import { clearCreateFamilyIntent, readCreateFamilyIntent } from './auth/createFamilyIntent';
 
-export interface AppProps {
-  /** Temporary injection point until Task 8 supplies a UID-bound create intent. */
-  explicitCreateAuthorized?: boolean;
-}
-
-function App({ explicitCreateAuthorized = false }: AppProps) {
+function App() {
   const initAuth = useStore(state => state.initAuth);
+  const authStatus = useStore(state => state.authStatus);
+  const authUser = useStore(state => state.authUser);
+  const currentFamilyId = useStore(state => state.currentUser?.familyId);
+  const hasExplicitCreateIntent = Boolean(
+    authUser?.uid && readCreateFamilyIntent(authUser.uid),
+  );
 
   useEffect(() => {
     markStartupStage('REACT_MOUNTED');
@@ -64,6 +67,12 @@ function App({ explicitCreateAuthorized = false }: AppProps) {
   }, [initAuth]);
 
   useEffect(() => {
+    if (authStatus === 'unauthenticated' || currentFamilyId) {
+      clearCreateFamilyIntent();
+    }
+  }, [authStatus, currentFamilyId]);
+
+  useEffect(() => {
     // Best-effort: wire foreground push handling. The handler is intentionally a
     // no-op so we do NOT show a duplicate browser notification — the realtime
     // Notification Center (Firestore listener) is the primary UI.
@@ -75,7 +84,7 @@ function App({ explicitCreateAuthorized = false }: AppProps) {
       <Router>
         <RequestDetailProvider>
           <E2EBootstrapDiagnostics />
-          <AuthRoutingGate hasExplicitCreateIntent={explicitCreateAuthorized}>
+          <AuthRoutingGate hasExplicitCreateIntent={hasExplicitCreateIntent}>
           <Routes>
           <Route path="/login" element={<Login />} />
           <Route path="/signup" element={<Signup />} />
@@ -87,6 +96,7 @@ function App({ explicitCreateAuthorized = false }: AppProps) {
               must run before the authenticated AppLayout onboarding guard. */}
           <Route path="/invite/:token" element={<AdultInvite />} />
           <Route path="/join/pending" element={<PendingMembership />} />
+          <Route path="/no-family" element={<NoFamilyChoice />} />
 
           {/* Public pre-auth onboarding. Rendered OUTSIDE <AppLayout> so it is
               reachable by unauthenticated visitors; it carries its own internal

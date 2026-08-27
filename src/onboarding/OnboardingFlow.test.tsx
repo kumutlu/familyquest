@@ -4,8 +4,9 @@ import userEvent from '@testing-library/user-event';
 import { MemoryRouter } from 'react-router-dom';
 import { createElement } from 'react';
 import i18n from '../i18n/config';
+import { clearCreateFamilyIntent, readCreateFamilyIntent, startCreateFamilyIntent } from '../auth/createFamilyIntent';
 import { useStore } from '../store/useStore';
-import { clearDraft } from './lib/onboardingDraft';
+import { clearDraft, saveDraft } from './lib/onboardingDraft';
 
 const navigate = vi.fn();
 const api = vi.hoisted(() => ({
@@ -51,9 +52,9 @@ vi.mock('react-router-dom', async (importOriginal) => {
 
 import { OnboardingFlow } from './OnboardingFlow';
 
-function renderFlow() {
+function renderFlow(initialEntry = '/onboarding') {
   return render(
-    createElement(MemoryRouter, { initialEntries: ['/onboarding'] }, createElement(OnboardingFlow)),
+    createElement(MemoryRouter, { initialEntries: [initialEntry] }, createElement(OnboardingFlow)),
   );
 }
 
@@ -66,6 +67,7 @@ async function setStore(partial: Record<string, unknown>) {
 beforeEach(async () => {
   vi.clearAllMocks();
   clearDraft();
+  clearCreateFamilyIntent();
   api.createFamilyAndParent.mockResolvedValue({
     familyId: 'family-1',
     inviteCode: 'ABC123',
@@ -134,9 +136,33 @@ describe('OnboardingFlow — public route & guards', () => {
 });
 
 describe('OnboardingFlow — post-auth idempotent setup', () => {
+  it('routes Google auth with a stale p1 draft to /no-family and performs zero writes without an intent', async () => {
+    saveDraft({
+      version: 1,
+      step: 'p1',
+      parentFirstName: 'Kemal',
+      parentRoleDisplay: 'parent',
+      childFirstName: 'Osman',
+      familyName: 'Accidental',
+      updatedAt: Date.now(),
+    });
+    await setStore({
+      authStatus: 'authenticated',
+      authUser: { uid: 'auth-uid-1' },
+      currentUser: { id: 'auth-uid-1', role: 'parent' },
+      profileServerConfirmed: true,
+    });
+
+    renderFlow('/onboarding?mode=create');
+
+    expect(screen.getByTestId('navigate')).toHaveAttribute('data-to', '/no-family');
+    expect(api.createFamilyAndParent).not.toHaveBeenCalled();
+    expect(api.createManagedMember).not.toHaveBeenCalled();
+  });
+
   it('creates the family, first child and first task exactly once, then finishes', async () => {
     const user = userEvent.setup();
-    renderFlow();
+    renderFlow('/onboarding?mode=create');
 
     // Pre-auth walk to S7.
     await user.click(screen.getByRole('button', { name: /set up your family/i }));
@@ -154,6 +180,7 @@ describe('OnboardingFlow — post-auth idempotent setup', () => {
     await user.click(screen.getByRole('button', { name: /continue with google/i }));
     expect(api.signInWithGoogle).toHaveBeenCalledTimes(1);
 
+    startCreateFamilyIntent('auth-uid-1');
     await setStore({
       authStatus: 'authenticated',
       authUser: { uid: 'auth-uid-1' },
@@ -165,6 +192,7 @@ describe('OnboardingFlow — post-auth idempotent setup', () => {
     await waitFor(() => expect(api.createFamilyAndParent).toHaveBeenCalledTimes(1));
     expect(api.createFamilyAndParent).toHaveBeenCalledWith('auth-uid-1', 'Kemal', 'Kemal Family');
     await waitFor(() => expect(api.createManagedMember).toHaveBeenCalledTimes(1));
+    expect(readCreateFamilyIntent('auth-uid-1')).toBeNull();
 
     // Continue to P2.
     await user.click(screen.getByRole('button', { name: /continue/i }));
@@ -187,7 +215,6 @@ describe('OnboardingFlow — post-auth idempotent setup', () => {
 
   it('does not recreate the family when the draft already holds a familyId (refresh/resume)', async () => {
     // Simulate a draft left over from a previous session that already created the family.
-    const { saveDraft } = await import('./lib/onboardingDraft');
     saveDraft({
       version: 1,
       step: 'p1',
@@ -207,7 +234,8 @@ describe('OnboardingFlow — post-auth idempotent setup', () => {
       profileServerConfirmed: true,
     });
 
-    renderFlow();
+    startCreateFamilyIntent('auth-uid-1');
+    renderFlow('/onboarding?mode=create');
     // P1 mounts; ensureFamily must skip because familyId is already present.
     await waitFor(() => expect(screen.getByRole('button', { name: /continue/i })).toBeInTheDocument());
     expect(api.createFamilyAndParent).not.toHaveBeenCalled();
@@ -269,5 +297,17 @@ describe('OnboardingFlow — Sign out (S2 control)', () => {
 
     await waitFor(() => expect(api.signOut).toHaveBeenCalledTimes(1));
     await waitFor(() => expect(navigate).toHaveBeenCalledWith('/login', { replace: true }));
+  });
+
+  it('clears a create-family intent before signing out', async () => {
+    const user = userEvent.setup();
+    startCreateFamilyIntent('auth-uid-1');
+    renderFlow();
+
+    await user.click(screen.getByRole('button', { name: /set up your family/i }));
+    await user.click(await screen.findByRole('button', { name: /sign out/i }));
+
+    await waitFor(() => expect(api.signOut).toHaveBeenCalledTimes(1));
+    expect(readCreateFamilyIntent('auth-uid-1')).toBeNull();
   });
 });

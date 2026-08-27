@@ -4,6 +4,20 @@
     "stepLabel": "{{total}} adımdan {{current}}. adım",
     "continuationLabel": "Aileniz kuruluyor · {{total}} adımdan {{current}}. adım"
   },
+  "noFamily": {
+    "title": "Ne yapmak istersiniz?",
+    "body": "Yeni bir aile oluşturun veya mevcut bir aileye katılma isteği gönderin.",
+    "create": "Aile oluştur",
+    "join": "Mevcut bir aileye katıl",
+    "familyCode": "Aile kodu",
+    "joinBody": "İsteğiniz, aile sahibi onaylayana kadar beklemede kalır. Rolünüzü kendiniz seçemezsiniz.",
+    "send": "Katılma isteği gönder",
+    "sending": "İstek gönderiliyor…",
+    "back": "Geri",
+    "invalidCode": "Altı karakterli aile kodunu girin.",
+    "joinError": "Katılma isteğiniz gönderilemedi. Lütfen tekrar deneyin.",
+    "storageError": "Aile kurulumu bu tarayıcıda başlatılamadı. Gizlilik ayarlarınızı kontrol edip tekrar deneyin."
+  },
   "s1": {
     "eyebrow": "Queki",
     "title": "Küçük başarılar. Büyük alışkanlıklar.",

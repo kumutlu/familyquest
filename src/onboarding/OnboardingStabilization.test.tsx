@@ -3,6 +3,7 @@ import { render, screen, waitFor, act } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { createElement, StrictMode, useCallback, useState } from 'react';
 import i18n from '../i18n/config';
+import { clearCreateFamilyIntent, readCreateFamilyIntent, startCreateFamilyIntent } from '../auth/createFamilyIntent';
 import { useStore } from '../store/useStore';
 import { FamilyComposition } from './postauth/FamilyComposition';
 import { createEmptyDraft, saveDraft, clearDraft, type OnboardingDraft } from './lib/onboardingDraft';
@@ -100,6 +101,8 @@ function renderP1(initialDraft: OnboardingDraft, deps: SetupDeps, goNext: () => 
 beforeEach(async () => {
   vi.clearAllMocks();
   clearDraft();
+  clearCreateFamilyIntent();
+  startCreateFamilyIntent('u1');
   api.createFamilyAndParent.mockResolvedValue(FAMILY_RESULT);
   api.createManagedMember.mockResolvedValue('child-1');
   api.createTask.mockResolvedValue({ id: 'task-1' });
@@ -120,6 +123,40 @@ beforeEach(async () => {
 });
 
 describe('PRIORITY 0 — post-auth "User not found" race', () => {
+  it('performs zero setup writes when the explicit intent is missing', async () => {
+    clearCreateFamilyIntent();
+    const deps = makeDeps();
+    await setStore({
+      currentUser: { id: 'u1', role: 'parent' },
+      familyData: null,
+      profileServerConfirmed: true,
+      profileLoading: false,
+    });
+
+    renderP1(p1Draft(), deps, vi.fn());
+    await act(async () => undefined);
+
+    expect(api.createFamilyAndParent).not.toHaveBeenCalled();
+    expect(api.createManagedMember).not.toHaveBeenCalled();
+  });
+
+  it('performs zero setup writes for stale and other-account intents', async () => {
+    startCreateFamilyIntent('other-uid', Date.now() - 31 * 60 * 1000);
+    const deps = makeDeps();
+    await setStore({
+      currentUser: { id: 'u1', role: 'parent' },
+      familyData: null,
+      profileServerConfirmed: true,
+      profileLoading: false,
+    });
+
+    renderP1(p1Draft(), deps, vi.fn());
+    await act(async () => undefined);
+
+    expect(api.createFamilyAndParent).not.toHaveBeenCalled();
+    expect(api.createManagedMember).not.toHaveBeenCalled();
+  });
+
   it('waits for the authoritative profile, then creates family + child exactly once', async () => {
     const goNext = vi.fn();
     const deps = makeDeps();
@@ -236,7 +273,7 @@ describe('PRIORITY 1 — post-auth progress continuity', () => {
     const { OnboardingFlow } = await import('./OnboardingFlow');
     const { MemoryRouter } = await import('react-router-dom');
     render(
-      createElement(MemoryRouter, { initialEntries: ['/onboarding'] }, createElement(OnboardingFlow)),
+      createElement(MemoryRouter, { initialEntries: ['/onboarding?mode=create'] }, createElement(OnboardingFlow)),
     );
 
     const navBefore = screen.getByRole('navigation', { name: /setting up your family/i });
@@ -307,5 +344,27 @@ describe('PRIORITY 2 — offline / network feedback', () => {
     await user.click(screen.getByRole('button', { name: /retry/i }));
     await waitFor(() => expect(screen.getByText('Kemal')).toBeInTheDocument());
     expect(screen.getByText('Osman')).toBeInTheDocument();
+  });
+
+  it('keeps the intent after an ambiguous create error and clears it only after idempotent recovery', async () => {
+    const user = userEvent.setup();
+    api.createFamilyAndParent
+      .mockRejectedValueOnce(new Error('unavailable'))
+      .mockResolvedValueOnce(FAMILY_RESULT);
+    await setStore({
+      currentUser: { id: 'u1', role: 'parent' },
+      familyData: null,
+      profileServerConfirmed: true,
+      profileLoading: false,
+    });
+
+    renderP1(p1Draft(), makeDeps(), vi.fn());
+
+    await waitFor(() => expect(screen.getByRole('alert')).toBeVisible());
+    expect(readCreateFamilyIntent('u1')).not.toBeNull();
+
+    await user.click(screen.getByRole('button', { name: /retry/i }));
+    await waitFor(() => expect(api.createFamilyAndParent).toHaveBeenCalledTimes(2));
+    await waitFor(() => expect(readCreateFamilyIntent('u1')).toBeNull());
   });
 });
