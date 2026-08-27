@@ -29,6 +29,7 @@ import {
   transferOwnership,
 } from '../../lib/memberLifecycleApi';
 import { ConfirmLifecycleDialog } from './ConfirmLifecycleDialog';
+import { AdultInviteCard } from './AdultInviteCard';
 
 interface FamilySettingsProps {
   onSectionChange?: (section: string) => void;
@@ -698,32 +699,10 @@ export function FamilySettings({ onSectionChange }: FamilySettingsProps) {
                         {t('familySettings.addParentOrAdult')}
                       </Button>
                       {showAdultInvite && (
-                        <div className="rounded-xl border border-primary-100 bg-primary-50 p-4 space-y-3">
-                          <p className="text-sm text-primary-900">
-                            Share this family code. The adult signs up normally and requests to join this family.
-                          </p>
-                          <p className="font-mono text-xl font-bold tracking-widest text-primary-700">
-                            {inviteCode || '—'}
-                          </p>
-                          <Button
-                            variant="secondary"
-                            size="sm"
-                            onClick={handleCopyInviteCode}
-                            disabled={!inviteCode || copyingInviteCode}
-                          >
-                            {t('common:copy')}
-                          </Button>
-                        </div>
-                      )}
-                      {copyStatus === 'success' && (
-                        <p className="text-sm text-green-600" role="status">
-                          {t('familySettings.inviteCodeCopied')}
-                        </p>
-                      )}
-                      {copyStatus === 'error' && (
-                        <p className="text-sm text-red-600" role="alert">
-                          {t('familySettings.inviteCodeCopyFailed')}
-                        </p>
+                        <AdultInviteCard
+                          defaultRole="parent"
+                          onClose={() => setShowAdultInvite(false)}
+                        />
                       )}
                     </div>
                   )}

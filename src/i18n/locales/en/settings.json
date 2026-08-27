@@ -161,7 +161,7 @@
     "managed": "Managed",
     "loginEnabled": "Login enabled",
     "addParent": "Add parent",
-    "addParentInviteExplanation": "Invite another adult with the existing family code. The owner can approve their pending request as a parent or adult.",
+  "addParentInviteExplanation": "Create a private invitation link for another adult. The owner chooses whether they join as a parent or adult.",
     "addParentOrAdult": "Add parent or adult",
     "copyInviteForAdult": "Copy invite code for another adult",
     "addChild": "Add child",

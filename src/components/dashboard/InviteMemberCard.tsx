@@ -6,6 +6,8 @@ import { Button } from '../ui/Button';
 import { useStore } from '../../store/useStore';
 import { createFamilyInvitation, type IntendedRole } from '../../lib/familyInvitationApi';
 import { buildInviteMessage, buildJoinUrl } from '../../lib/inviteLink';
+import { isOwnerRole } from '../../lib/roles';
+import { AdultInviteCard } from '../family/AdultInviteCard';
 
 // ---------------------------------------------------------------------------
 // INVITE MEMBER
@@ -39,7 +41,7 @@ export function InviteMemberCard({
   onManagedChild?: () => void;
 }) {
   const { t } = useTranslation(['family', 'common']);
-  const { familyData } = useStore();
+  const { familyData, currentUser } = useStore();
   const navigate = useNavigate();
 
   const [step, setStep] = useState<Step>('choose');
@@ -48,6 +50,7 @@ export function InviteMemberCard({
   const [failed, setFailed] = useState(false);
   const [feedback, setFeedback] = useState<Feedback>('idle');
   const [showManual, setShowManual] = useState(false);
+  const [showAdultInvite, setShowAdultInvite] = useState(false);
   // One invitation per role is created and then reused for the session, so
   // going back and forth never floods the family with dangling invitations.
   const [codes, setCodes] = useState<Partial<Record<IntendedRole, string>>>({});
@@ -143,6 +146,15 @@ export function InviteMemberCard({
     setShowManual(false);
   };
 
+  if (showAdultInvite) {
+    return (
+      <AdultInviteCard
+        defaultRole="parent"
+        onClose={() => setShowAdultInvite(false)}
+      />
+    );
+  }
+
   // -------------------------------------------------------------------------
   // Step 1 — who are you inviting?
   // -------------------------------------------------------------------------
@@ -155,14 +167,16 @@ export function InviteMemberCard({
         <p className="mt-1 text-base text-gray-500">{t('family:invite.subtitle')}</p>
 
         <div data-testid="invite-choices" className="mt-5 flex flex-col gap-3">
-          <Choice
-            emoji="👨‍👩‍👧"
-            title={t('family:invite.typeParent')}
-            hint={t('family:invite.typeParentHint')}
-            body={t('family:invite.typeParentBody')}
-            cta={t('family:invite.continue')}
-            onClick={() => startInvite('parent')}
-          />
+          {isOwnerRole(currentUser?.role) && (
+            <Choice
+              emoji="👨‍👩‍👧"
+              title={t('family:invite.typeParent')}
+              hint={t('family:invite.typeParentHint')}
+              body={t('family:invite.typeParentBody')}
+              cta={t('family:invite.continue')}
+              onClick={() => setShowAdultInvite(true)}
+            />
+          )}
           <Choice
             emoji="📱"
             title={t('family:invite.typeChild')}

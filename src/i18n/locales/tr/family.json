@@ -218,6 +218,26 @@
       "generic": "Bu davetle devam edemedik. Lütfen tekrar dene."
     }
   },
+  "adultInviteCard": {
+    "title": "Ebeveyn veya yetişkin davet et",
+    "subtitle": "Seçilen aile rolünü onaydan sonra hemen veren özel bir bağlantı oluştur.",
+    "roleLabel": "Davet rolü",
+    "parent": "Ebeveyn",
+    "adult": "Yetişkin",
+    "create": "Özel davet oluştur",
+    "creating": "Özel davet oluşturuluyor…",
+    "ready": "Özel davet hazır.",
+    "linkLabel": "Özel davet bağlantısını aç",
+    "copy": "Özel bağlantıyı kopyala",
+    "share": "Özel daveti paylaş",
+    "copied": "Kopyalandı!",
+    "revoke": "Daveti iptal et",
+    "revoking": "Davet iptal ediliyor…",
+    "revoked": "Davet iptal edildi.",
+    "shareIntro": "Queki'de bir aileye katılman için davet edildin.",
+    "unavailable": "Davet kullanılamıyor. Lütfen tekrar dene.",
+    "copyUnavailable": "Kopyalama kullanılamıyor. Bağlantıyı manuel olarak kopyala."
+  },
   "detail": {
     "sendMoney": "Para Gönder",
     "viewQuests": "Görevleri Gör",

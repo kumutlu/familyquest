@@ -161,7 +161,7 @@
     "managed": "Yönetilen",
     "loginEnabled": "Giriş etkin",
     "addParent": "Ebeveyn ekle",
-    "addParentInviteExplanation": "Mevcut aile koduyla başka bir yetişkini davet edin. Aile sahibi bekleyen isteği ebeveyn veya yetişkin olarak onaylayabilir.",
+  "addParentInviteExplanation": "Başka bir yetişkin için özel davet bağlantısı oluşturun. Aile sahibi, ebeveyn veya yetişkin rolünü seçer.",
     "addParentOrAdult": "Ebeveyn veya yetişkin ekle",
     "copyInviteForAdult": "Başka bir yetişkin için davet kodunu kopyala",
     "addChild": "Çocuk ekle",
