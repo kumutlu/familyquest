@@ -38,7 +38,12 @@ import { markStartupStage } from './startupDiagnostics';
 import { E2EBootstrapDiagnostics } from './components/E2EBootstrapDiagnostics';
 import { AuthRoutingGate } from './auth/AuthRoutingGate';
 
-function App() {
+export interface AppProps {
+  /** Temporary injection point until Task 8 supplies a UID-bound create intent. */
+  explicitCreateAuthorized?: boolean;
+}
+
+function App({ explicitCreateAuthorized = false }: AppProps) {
   const initAuth = useStore(state => state.initAuth);
 
   useEffect(() => {
@@ -70,7 +75,7 @@ function App() {
       <Router>
         <RequestDetailProvider>
           <E2EBootstrapDiagnostics />
-          <AuthRoutingGate>
+          <AuthRoutingGate hasExplicitCreateIntent={explicitCreateAuthorized}>
           <Routes>
           <Route path="/login" element={<Login />} />
           <Route path="/signup" element={<Signup />} />
