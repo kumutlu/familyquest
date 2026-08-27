@@ -32,6 +32,7 @@ const firestoreState = vi.hoisted(() => ({
   pendingMembershipDocs: [] as any[],
   pendingMembershipError: null as any,
   pendingMembershipListener: null as ((snapshot: any) => void) | null,
+  pendingMembershipErrorListener: null as ((error: any) => void) | null,
   profileListener: null as ((snapshot: any) => void) | null,
 }));
 
@@ -62,6 +63,7 @@ vi.mock('firebase/firestore', () => ({
   onSnapshot: vi.fn((ref: any, _opts: any, next?: any, error?: any) => {
     if (ref?.type === 'pendingMembershipQuery') {
       firestoreState.pendingMembershipListener = next;
+      firestoreState.pendingMembershipErrorListener = error;
       if (error && firestoreState.pendingMembershipError) {
         queueMicrotask(() => error(firestoreState.pendingMembershipError));
       } else if (next) {
@@ -222,6 +224,7 @@ beforeEach(() => {
   firestoreState.pendingMembershipDocs = [];
   firestoreState.pendingMembershipError = null;
   firestoreState.pendingMembershipListener = null;
+  firestoreState.pendingMembershipErrorListener = null;
   firestoreState.profileListener = null;
   firestoreWrites.setDoc.mockClear();
   familyCreation.createFamilyAndParent.mockClear();
@@ -337,6 +340,49 @@ describe('auth bootstrap regression', () => {
     await waitFor(() => expect(useStore.getState().pendingMembershipStatus).toBe('none'));
     expect(useStore.getState().bootstrapError).toBeNull();
     expect(useStore.getState().appReady).toBe(true);
+  });
+
+  it('preserves settlement recovery when the live pending-membership listener later fails repeatedly', async () => {
+    firestoreState.profileSnapshot = makeProfileSnapshot(null);
+    firestoreState.pendingMembershipDocs = [{ id: 'user-1' }];
+    fireSignedIn();
+    await waitFor(() => expect(useStore.getState().pendingMembershipStatus).toBe('pending'));
+
+    firestoreState.profileError = {
+      code: 'permission-denied',
+      message: 'Settlement profile confirmation was denied.',
+    };
+    act(() => {
+      firestoreState.pendingMembershipListener?.({
+        docs: [],
+        metadata: { fromCache: false },
+      });
+    });
+    await waitFor(() => expect(useStore.getState().pendingMembershipStatus).toBe('recovery'));
+
+    act(() => {
+      firestoreState.pendingMembershipErrorListener?.({
+        code: 'unavailable',
+        message: 'Pending listener disconnected.',
+      });
+      firestoreState.pendingMembershipListener?.({
+        docs: [],
+        metadata: { fromCache: false },
+      });
+      firestoreState.pendingMembershipErrorListener?.({
+        code: 'permission-denied',
+        message: 'Pending listener was denied.',
+      });
+      const cachedFamilyProfile = makeProfileSnapshot('family-from-cache');
+      firestoreState.profileListener?.({
+        ...cachedFamilyProfile,
+        metadata: { fromCache: true },
+      });
+    });
+
+    expect(useStore.getState().pendingMembershipStatus).toBe('recovery');
+    expect(useStore.getState().bootstrapError).toContain('permission-denied');
+    expect(useStore.getState().appReady).toBe(false);
   });
 
   it('keeps approved membership stable when the profile callback arrives before pending removal', async () => {

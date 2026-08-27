@@ -1,6 +1,5 @@
 import { act, render, waitFor } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { MemoryRouter } from 'react-router-dom';
 
 import { clearDraft, saveDraft } from './onboarding/lib/onboardingDraft';
 
@@ -117,7 +116,6 @@ vi.mock('./help/pages/HelpCategoryPage', () => ({ HelpCategoryPage: () => null }
 vi.mock('./help/pages/HelpSearchResults', () => ({ HelpSearchResults: () => null }));
 
 import App from './App';
-import { OnboardingFlow } from './onboarding/OnboardingFlow';
 
 function savePostAuthCreateDraft() {
   saveDraft({
@@ -180,18 +178,17 @@ describe('App auth routing and onboarding composition', () => {
     }
   });
 
-  it('keeps the real onboarding creation boundary sensitive after an intentional post-auth create flow', async () => {
+  it('reaches the real onboarding creation boundary through App when explicit creation is authorized', async () => {
     savePostAuthCreateDraft();
     appStoreState.authStatus = 'authenticated';
     appStoreState.authUser = { uid: 'owner-1' };
     appStoreState.currentUser = { id: 'owner-1', role: 'parent' };
     appStoreState.profileServerConfirmed = true;
+    appStoreState.appReady = true;
+    appStoreState.pendingMembershipStatus = 'none';
+    window.history.pushState({}, '', '/onboarding?mode=create');
 
-    render(
-      <MemoryRouter initialEntries={['/onboarding?mode=create']}>
-        <OnboardingFlow />
-      </MemoryRouter>,
-    );
+    render(<App explicitCreateAuthorized />);
 
     await waitFor(() => expect(firestoreBoundary.transactions).toBe(1));
     expect(firestoreBoundary.familyWrites).toHaveLength(1);

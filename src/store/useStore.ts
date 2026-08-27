@@ -363,6 +363,7 @@ export const useStore = create<AppState>((set, get) => ({
         let handleProfileSnapshot: (profileSnapshot: any, authoritative?: boolean) => void;
 
         let pendingMembershipLookupStarted = false;
+        let settlementRecoveryLatched = false;
         const resolvePendingMembership = (resolvedProfileId: string) => {
           if (pendingMembershipLookupStarted) return;
           pendingMembershipLookupStarted = true;
@@ -427,9 +428,10 @@ export const useStore = create<AppState>((set, get) => ({
           };
           const handlePendingMembershipError = (error: any, recovery = false) => {
             if (generation !== authGeneration || get().authUser?.uid !== user.uid) return;
+            if (recovery) settlementRecoveryLatched = true;
             pendingMembershipLookupStarted = false;
             set({
-              pendingMembershipStatus: recovery ? 'recovery' : 'idle',
+              pendingMembershipStatus: recovery || settlementRecoveryLatched ? 'recovery' : 'idle',
               bootstrapError: errorText('PendingMembership', error),
               appReady: false,
               loading: false,
@@ -455,9 +457,13 @@ export const useStore = create<AppState>((set, get) => ({
         };
 
         handleProfileSnapshot = (profileSnapshot: any, authoritative = !profileSnapshot.metadata?.fromCache) => {
+          if (generation !== authGeneration || get().authUser?.uid !== user.uid) return;
+          // Once a settlement read has failed, only a new server profile
+          // confirmation can release recovery. A cached listener update may be
+          // stale relative to the approval and must not replace that authority.
+          if (settlementRecoveryLatched && !authoritative) return;
           recordE2ETimeline('profile-listener-result', { exists: profileSnapshot.exists(), fromCache: Boolean(profileSnapshot.metadata?.fromCache) });
           const snapshotRevision = ++profileSnapshotRevision;
-          if (generation !== authGeneration || get().authUser?.uid !== user.uid) return;
 
           if (!profileSnapshot.exists()) {
             set({
@@ -580,6 +586,7 @@ export const useStore = create<AppState>((set, get) => ({
               }
               if (get().pendingMembershipStatus === 'recovery') {
                 if (!authoritative) return;
+                settlementRecoveryLatched = false;
                 set({
                   pendingMembershipStatus: 'none',
                   bootstrapError: null,
@@ -601,6 +608,7 @@ export const useStore = create<AppState>((set, get) => ({
               });
               return;
             }
+            settlementRecoveryLatched = false;
             stopPendingMembershipListener();
             set({ pendingMembershipStatus: 'none' });
             get().loadFamilyData(validatedProfile.id, familyId);
