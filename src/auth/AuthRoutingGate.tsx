@@ -38,6 +38,7 @@ export interface AuthRouteDecisionInput {
   legacyInviteCode: string | null;
   pendingMembershipStatus: PendingMembershipStatus;
   hasExplicitCreateIntent: boolean;
+  creationContinuation?: { authUid: string; familyId: string } | null;
   pathname: string;
   search: string;
 }
@@ -120,7 +121,16 @@ export function deriveAuthRouteDecision(input: AuthRouteDecisionInput): AuthRout
   if (!input.appReady) return 'startup';
 
   if (input.currentUser.familyId) {
-    return hasActiveMembershipLifecycle(input) ? 'app' : 'pendingMembership';
+    if (!hasActiveMembershipLifecycle(input)) return 'pendingMembership';
+    const continuation = input.creationContinuation;
+    if (
+      isCurrentCreateRoute(input.pathname, input.search) &&
+      continuation?.authUid === input.authUser.uid &&
+      continuation.familyId === input.currentUser.familyId
+    ) {
+      return 'createOnboarding';
+    }
+    return 'app';
   }
 
   if (
@@ -158,12 +168,15 @@ export interface AuthRoutingGateProps {
   children: ReactNode;
   /** Task 8 supplies true only for a fresh create-family intent bound to authUser.uid. */
   hasExplicitCreateIntent?: boolean;
+  /** In-memory continuation created only after this mounted flow receives a successful family response. */
+  creationContinuation?: { authUid: string; familyId: string } | null;
 }
 
 /** Thin navigation wrapper around deriveAuthRouteDecision. */
 export function AuthRoutingGate({
   children,
   hasExplicitCreateIntent = false,
+  creationContinuation = null,
 }: AuthRoutingGateProps) {
   const location = useLocation();
   const navigate = useNavigate();
@@ -192,6 +205,7 @@ export function AuthRoutingGate({
     legacyInviteCode,
     pendingMembershipStatus: pendingMembershipStatus ?? 'none',
     hasExplicitCreateIntent,
+    creationContinuation,
     pathname: location.pathname,
     search: location.search,
   };

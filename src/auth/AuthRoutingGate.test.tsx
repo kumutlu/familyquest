@@ -133,6 +133,29 @@ describe('deriveAuthRouteDecision', () => {
     })).toBe('app');
   });
 
+  it('allows only the matching authoritative in-session creation continuation to finish onboarding', () => {
+    const activeCreation = {
+      ...readyInput,
+      currentUser: { id: 'u1', familyId: 'family-1' },
+      hasExplicitCreateIntent: false,
+      pathname: '/onboarding',
+      search: '?mode=create',
+    };
+
+    expect(deriveAuthRouteDecision({
+      ...activeCreation,
+      creationContinuation: { authUid: 'u1', familyId: 'family-1' },
+    })).toBe('createOnboarding');
+    expect(deriveAuthRouteDecision({
+      ...activeCreation,
+      creationContinuation: { authUid: 'u1', familyId: 'forged-family' },
+    })).toBe('app');
+    expect(deriveAuthRouteDecision({
+      ...activeCreation,
+      creationContinuation: { authUid: 'other-account', familyId: 'family-1' },
+    })).toBe('app');
+  });
+
   it('requires canonical active member and family lifecycle before routing to the app', () => {
     for (const lifecycle of [undefined, 'active']) {
       expect(deriveAuthRouteDecision({

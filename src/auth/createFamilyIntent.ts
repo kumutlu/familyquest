@@ -1,6 +1,7 @@
 export const CREATE_FAMILY_INTENT_KEY = 'queki.createFamilyIntent.v1';
 
 const CREATE_FAMILY_INTENT_TTL_MS = 30 * 60 * 1000;
+const listeners = new Set<() => void>();
 
 export type CreateFamilyIntent = {
   version: 1;
@@ -45,6 +46,10 @@ function removeStoredIntent(): void {
   }
 }
 
+function notifySubscribers(): void {
+  for (const listener of [...listeners]) listener();
+}
+
 /** Starts a tab-scoped family-creation journey for exactly one authenticated UID. */
 export function startCreateFamilyIntent(uid: string, now = Date.now()): CreateFamilyIntent {
   if (!validUid(uid)) throw new Error('INVALID_CREATE_FAMILY_UID');
@@ -64,6 +69,7 @@ export function startCreateFamilyIntent(uid: string, now = Date.now()): CreateFa
       // No in-memory fallback: if persistence is blocked, later reads fail closed.
     }
   }
+  notifySubscribers();
   return intent;
 }
 
@@ -108,4 +114,16 @@ export function readCreateFamilyIntent(uid: string, now = Date.now()): CreateFam
 
 export function clearCreateFamilyIntent(): void {
   removeStoredIntent();
+  notifySubscribers();
+}
+
+/** Stable boolean snapshot for React's external-store contract. */
+export function hasCreateFamilyIntent(uid: string, now = Date.now()): boolean {
+  return readCreateFamilyIntent(uid, now) !== null;
+}
+
+/** Same-tab notifications only; session storage intentionally has no cross-tab lifecycle. */
+export function subscribeCreateFamilyIntent(listener: () => void): () => void {
+  listeners.add(listener);
+  return () => listeners.delete(listener);
 }
