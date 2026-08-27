@@ -88,6 +88,8 @@ describe('requestFamilyJoinImpl', () => {
       status: 'pending',
       createdAt: 'SERVER_TIMESTAMP',
     });
+    expect(fixture.documents.get('users/joiner-1')).not.toHaveProperty('familyId');
+    expect(fixture.documents.get('families/family-1/join_requests/joiner-1')).not.toHaveProperty('intendedRole');
   });
 
   it('rejects an invalid code without exposing family data', async () => {

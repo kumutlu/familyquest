@@ -23,6 +23,11 @@ const CODE_ALPHABET = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
 const REQUEST_ID = /^[A-Za-z0-9_-]{8,128}$/;
 const INVITE_CODE = /^[A-Z0-9]{6}$/;
 
+/** Legacy role invitations are the only records addressed by `/join?code=`. */
+export function isLegacyInvitationCode(value: unknown): value is string {
+  return typeof value === 'string' && INVITE_CODE.test(value.trim().toUpperCase());
+}
+
 /** Roles an invitation is allowed to grant. `owner` is deliberately absent. */
 export type IntendedRole = 'parent' | 'child';
 
@@ -71,7 +76,7 @@ function validateRequestId(value: unknown): string {
 
 function normaliseCode(value: unknown): string {
   const code = typeof value === 'string' ? value.trim().toUpperCase() : '';
-  if (!INVITE_CODE.test(code)) throw new HttpsError('invalid-argument', 'INVALID_INVITATION');
+  if (!isLegacyInvitationCode(code)) throw new HttpsError('invalid-argument', 'INVALID_INVITATION');
   return code;
 }
 
