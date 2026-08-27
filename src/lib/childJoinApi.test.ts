@@ -1,10 +1,12 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 
+const callable = vi.hoisted(() => vi.fn());
 vi.mock('./firebase', () => ({ functions: {} }));
-vi.mock('firebase/functions', () => ({ httpsCallable: () => async () => ({ data: {} }) }));
+vi.mock('firebase/functions', () => ({ httpsCallable: callable }));
 
 import {
   mapChildJoinErrorKey,
+  submitChildJoinRequest,
   storeJoinRequestHandle,
   readJoinRequestHandle,
   clearJoinRequestHandle,
@@ -12,6 +14,33 @@ import {
 
 beforeEach(() => {
   sessionStorage.clear();
+  callable.mockReset();
+});
+
+describe('submitChildJoinRequest callable contract', () => {
+  it('sends only the existing child join fields, never adult invitation fields', async () => {
+    const invoke = vi.fn().mockResolvedValue({
+      data: {
+        requestId: 'joinreq-1',
+        requestSecret: 'request-secret-1',
+        username: 'alex',
+        status: 'pending',
+        expiresAt: 123,
+      },
+    });
+    callable.mockReturnValue(invoke);
+
+    await submitChildJoinRequest({ familyCode: 'ABC123', username: 'alex', password: 'Password1!' });
+
+    expect(callable).toHaveBeenCalledWith(expect.anything(), 'submitChildJoinRequest');
+    expect(invoke).toHaveBeenCalledWith({
+      familyCode: 'ABC123',
+      username: 'alex',
+      password: 'Password1!',
+    });
+    expect(invoke.mock.calls[0][0]).not.toHaveProperty('token');
+    expect(invoke.mock.calls[0][0]).not.toHaveProperty('invitationToken');
+  });
 });
 
 describe('mapChildJoinErrorKey', () => {

@@ -1,9 +1,14 @@
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import i18n from '../i18n/config';
 import enErrors from '../i18n/locales/en/errors.json';
-import { mapChildLoginError } from './childLoginApi';
+import { mapChildLoginError, signInChild } from './childLoginApi';
+
+const callable = vi.hoisted(() => vi.fn());
+vi.mock('./firebase', () => ({ functions: {} }));
+vi.mock('firebase/functions', () => ({ httpsCallable: callable }));
 
 beforeEach(async () => {
+  callable.mockReset();
   await i18n.changeLanguage('en');
   await i18n.loadNamespaces('errors');
 });
@@ -58,5 +63,28 @@ describe('mapChildLoginError', () => {
         message: 'AUTH_CREATE_FAILED',
       }),
     ).toBe('We could not create the login. Please try again.');
+  });
+});
+
+describe('signInChild callable contract', () => {
+  it('normalizes the family code and username while returning only the custom token', async () => {
+    const invoke = vi.fn().mockResolvedValue({ data: { customToken: 'custom-token-1' } });
+    callable.mockReturnValue(invoke);
+
+    const result = await signInChild({
+      familyCode: ' ABC123 ',
+      username: '  Alex   Star ',
+      password: 'Password1!',
+    });
+
+    expect(result).toEqual({ customToken: 'custom-token-1' });
+    expect(callable).toHaveBeenCalledWith(expect.anything(), 'signInChild');
+    expect(invoke).toHaveBeenCalledWith({
+      familyCode: 'ABC123',
+      username: 'alex star',
+      password: 'Password1!',
+    });
+    expect(invoke.mock.calls[0][0]).not.toHaveProperty('token');
+    expect(invoke.mock.calls[0][0]).not.toHaveProperty('invitationToken');
   });
 });
