@@ -60,7 +60,15 @@ function BoundedLoading() {
  * and an unresolved bootstrap shows bounded loading rather than accidental
  * onboarding.
  */
-export function OnboardingFlow() {
+export interface OnboardingFlowProps {
+  onFamilyCreationConfirmed?: (continuation: { authUid: string; familyId: string }) => void;
+  onCreationJourneyEnded?: () => void;
+}
+
+export function OnboardingFlow({
+  onFamilyCreationConfirmed,
+  onCreationJourneyEnded,
+}: OnboardingFlowProps = {}) {
   const { t } = useTranslation('onboarding');
   const navigate = useNavigate();
   const location = useLocation();
@@ -97,16 +105,21 @@ export function OnboardingFlow() {
   const deps = useMemo<SetupDeps>(
     () => ({
       uid: authUser?.uid ?? currentUser?.id ?? '',
-      createFamilyAndParent: (...args: Parameters<typeof createFamilyAndParent>) => {
+      createFamilyAndParent: async (...args: Parameters<typeof createFamilyAndParent>) => {
         familyCreationAttemptedRef.current = true;
-        return createFamilyAndParent(...args);
+        const result = await createFamilyAndParent(...args);
+        onFamilyCreationConfirmed?.({
+          authUid: args[0],
+          familyId: result.user.familyId ?? result.familyId,
+        });
+        return result;
       },
       createManagedMember,
       createTask,
       refreshCurrentUser,
       getFamilyMembers: () => useStore.getState().familyMembers ?? [],
     }),
-    [authUser?.uid, currentUser?.id, refreshCurrentUser],
+    [authUser?.uid, currentUser?.id, onFamilyCreationConfirmed, refreshCurrentUser],
   );
 
   // Funnel: started (once, pre-auth).
@@ -251,6 +264,7 @@ export function OnboardingFlow() {
   // prevents browser Back from silently restoring an authenticated session.
   const handleSignOut = async () => {
     clearCreateFamilyIntent();
+    onCreationJourneyEnded?.();
     try {
       await signOut();
     } catch {
@@ -265,6 +279,7 @@ export function OnboardingFlow() {
   const handleFinish = () => {
     recordOnboardingEvent('onboarding_completed');
     clearCreateFamilyIntent();
+    onCreationJourneyEnded?.();
     reset();
     navigate('/', { replace: true });
   };

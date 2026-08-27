@@ -140,8 +140,8 @@ describe('PRIORITY 0 — post-auth "User not found" race', () => {
     expect(api.createManagedMember).not.toHaveBeenCalled();
   });
 
-  it('performs zero setup writes for stale and other-account intents', async () => {
-    startCreateFamilyIntent('other-uid', Date.now() - 31 * 60 * 1000);
+  it('performs zero setup writes for a stale same-account intent', async () => {
+    startCreateFamilyIntent('u1', Date.now() - 31 * 60 * 1000);
     const deps = makeDeps();
     await setStore({
       currentUser: { id: 'u1', role: 'parent' },
@@ -155,6 +155,24 @@ describe('PRIORITY 0 — post-auth "User not found" race', () => {
 
     expect(api.createFamilyAndParent).not.toHaveBeenCalled();
     expect(api.createManagedMember).not.toHaveBeenCalled();
+  });
+
+  it('performs zero setup writes and clears a fresh other-account intent', async () => {
+    startCreateFamilyIntent('other-uid');
+    const deps = makeDeps();
+    await setStore({
+      currentUser: { id: 'u1', role: 'parent' },
+      familyData: null,
+      profileServerConfirmed: true,
+      profileLoading: false,
+    });
+
+    renderP1(p1Draft(), deps, vi.fn());
+    await act(async () => undefined);
+
+    expect(api.createFamilyAndParent).not.toHaveBeenCalled();
+    expect(api.createManagedMember).not.toHaveBeenCalled();
+    expect(readCreateFamilyIntent('other-uid')).toBeNull();
   });
 
   it('waits for the authoritative profile, then creates family + child exactly once', async () => {

@@ -3,8 +3,10 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   clearCreateFamilyIntent,
   CREATE_FAMILY_INTENT_KEY,
+  hasCreateFamilyIntent,
   readCreateFamilyIntent,
   startCreateFamilyIntent,
+  subscribeCreateFamilyIntent,
 } from './createFamilyIntent';
 
 const MINUTE_MS = 60 * 1000;
@@ -75,5 +77,23 @@ describe('create-family intent', () => {
     expect(() => startCreateFamilyIntent('uid-a', 1_000)).not.toThrow();
     expect(readCreateFamilyIntent('uid-a', 2_000)).toBeNull();
     expect(() => clearCreateFamilyIntent()).not.toThrow();
+  });
+
+  it('notifies same-tab subscribers when start and clear change the valid snapshot', () => {
+    const listener = vi.fn();
+    const unsubscribe = subscribeCreateFamilyIntent(listener);
+
+    expect(hasCreateFamilyIntent('uid-a')).toBe(false);
+    startCreateFamilyIntent('uid-a', 1_000);
+    expect(listener).toHaveBeenCalledTimes(1);
+    expect(hasCreateFamilyIntent('uid-a', 2_000)).toBe(true);
+
+    clearCreateFamilyIntent();
+    expect(listener).toHaveBeenCalledTimes(2);
+    expect(hasCreateFamilyIntent('uid-a', 2_000)).toBe(false);
+
+    unsubscribe();
+    startCreateFamilyIntent('uid-a', 3_000);
+    expect(listener).toHaveBeenCalledTimes(2);
   });
 });

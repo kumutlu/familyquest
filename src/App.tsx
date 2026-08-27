@@ -34,21 +34,32 @@ import { useStore, logAuthTrace } from './store/useStore';
 import { initForegroundMessaging } from './lib/pushNotifications';
 import { RequestDetailProvider } from './components/requests/RequestDetailContext';
 import { MoneyPrivacyProvider } from './components/privacy/MoneyPrivacyContext';
-import { Suspense, useEffect } from 'react';
+import { Suspense, useCallback, useEffect, useState, useSyncExternalStore } from 'react';
 import { consumeGoogleRedirectResult } from './lib/googleRedirectAuth';
 import { markStartupStage } from './startupDiagnostics';
 import { E2EBootstrapDiagnostics } from './components/E2EBootstrapDiagnostics';
 import { AuthRoutingGate } from './auth/AuthRoutingGate';
-import { clearCreateFamilyIntent, readCreateFamilyIntent } from './auth/createFamilyIntent';
+import {
+  clearCreateFamilyIntent,
+  hasCreateFamilyIntent,
+  subscribeCreateFamilyIntent,
+} from './auth/createFamilyIntent';
+
+type CreationContinuation = { authUid: string; familyId: string };
 
 function App() {
   const initAuth = useStore(state => state.initAuth);
   const authStatus = useStore(state => state.authStatus);
   const authUser = useStore(state => state.authUser);
   const currentFamilyId = useStore(state => state.currentUser?.familyId);
-  const hasExplicitCreateIntent = Boolean(
-    authUser?.uid && readCreateFamilyIntent(authUser.uid),
+  const authUid = authUser?.uid ?? null;
+  const hasExplicitCreateIntent = useSyncExternalStore(
+    subscribeCreateFamilyIntent,
+    () => authUid ? hasCreateFamilyIntent(authUid) : false,
+    () => false,
   );
+  const [creationContinuation, setCreationContinuation] = useState<CreationContinuation | null>(null);
+  const endCreationJourney = useCallback(() => setCreationContinuation(null), []);
 
   useEffect(() => {
     markStartupStage('REACT_MOUNTED');
@@ -74,6 +85,16 @@ function App() {
   }, [authStatus, currentFamilyId]);
 
   useEffect(() => {
+    if (
+      authStatus === 'unauthenticated' ||
+      (creationContinuation && creationContinuation.authUid !== authUid) ||
+      (creationContinuation && currentFamilyId && creationContinuation.familyId !== currentFamilyId)
+    ) {
+      setCreationContinuation(null);
+    }
+  }, [authStatus, authUid, creationContinuation, currentFamilyId]);
+
+  useEffect(() => {
     // Best-effort: wire foreground push handling. The handler is intentionally a
     // no-op so we do NOT show a duplicate browser notification — the realtime
     // Notification Center (Firestore listener) is the primary UI.
@@ -85,7 +106,10 @@ function App() {
       <Router>
         <RequestDetailProvider>
           <E2EBootstrapDiagnostics />
-          <AuthRoutingGate hasExplicitCreateIntent={hasExplicitCreateIntent}>
+          <AuthRoutingGate
+            hasExplicitCreateIntent={hasExplicitCreateIntent}
+            creationContinuation={creationContinuation}
+          >
           <Routes>
           <Route path="/login" element={<Login />} />
           <Route path="/signup" element={<Signup />} />
@@ -102,7 +126,15 @@ function App() {
           {/* Public pre-auth onboarding. Rendered OUTSIDE <AppLayout> so it is
               reachable by unauthenticated visitors; it carries its own internal
               guards (established-family owner / managed child → redirected). */}
-          <Route path="/onboarding" element={<OnboardingFlow />} />
+          <Route
+            path="/onboarding"
+            element={(
+              <OnboardingFlow
+                onFamilyCreationConfirmed={setCreationContinuation}
+                onCreationJourneyEnded={endCreationJourney}
+              />
+            )}
+          />
 
           {/* Public legal surfaces — intentionally outside <AppLayout> so they
               render without authentication and without app navigation. */}

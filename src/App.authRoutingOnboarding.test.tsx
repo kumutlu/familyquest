@@ -1,8 +1,13 @@
-import { act, render, waitFor } from '@testing-library/react';
+import { act, render, screen, waitFor } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { clearDraft, saveDraft } from './onboarding/lib/onboardingDraft';
-import { clearCreateFamilyIntent, startCreateFamilyIntent } from './auth/createFamilyIntent';
+import {
+  clearCreateFamilyIntent,
+  readCreateFamilyIntent,
+  startCreateFamilyIntent,
+} from './auth/createFamilyIntent';
 
 const appStoreState = vi.hoisted(() => ({
   authStatus: 'initializing' as 'initializing' | 'authenticated' | 'unauthenticated',
@@ -20,16 +25,30 @@ const appStoreState = vi.hoisted(() => ({
   retryBootstrap: vi.fn(),
   refreshCurrentUser: vi.fn(),
 }));
+const appStoreListeners = vi.hoisted(() => new Set<() => void>());
 
 const firestoreBoundary = vi.hoisted(() => ({
   transactions: 0,
   familyWrites: [] as Array<{ path: string; data: unknown }>,
 }));
 
-vi.mock('./store/useStore', () => ({
-  useStore: (selector: any) => selector(appStoreState),
-  logAuthTrace: vi.fn(),
-}));
+vi.mock('./store/useStore', async () => {
+  const { useSyncExternalStore } = await import('react');
+  const useStore = ((selector: any) => useSyncExternalStore(
+    (listener) => {
+      appStoreListeners.add(listener);
+      return () => appStoreListeners.delete(listener);
+    },
+    () => selector(appStoreState),
+    () => selector(appStoreState),
+  )) as any;
+  useStore.getState = () => appStoreState;
+  useStore.setState = (partial: Record<string, unknown>) => {
+    Object.assign(appStoreState, partial);
+    appStoreListeners.forEach(listener => listener());
+  };
+  return { useStore, logAuthTrace: vi.fn() };
+});
 
 vi.mock('./lib/firebase', () => ({
   app: {},
@@ -72,10 +91,17 @@ vi.mock('firebase/firestore', () => ({
   where: vi.fn(),
   orderBy: vi.fn(),
   getDocs: vi.fn(),
-  getDoc: vi.fn(),
+  getDoc: vi.fn(async (reference: any) => ({
+    exists: () => reference.path === 'users' && reference.id === 'owner-1',
+    id: reference.id,
+    data: () => ({ uid: 'owner-1', familyId: 'family-created', role: 'owner' }),
+  })),
   serverTimestamp: vi.fn(() => 'server-timestamp'),
   deleteDoc: vi.fn(),
-  writeBatch: vi.fn(),
+  writeBatch: vi.fn(() => ({
+    set: vi.fn(),
+    commit: vi.fn(async () => undefined),
+  })),
 }));
 
 vi.mock('./lib/googleRedirectAuth', () => ({
@@ -85,7 +111,9 @@ vi.mock('./lib/googleRedirectAuth', () => ({
 vi.mock('./lib/pushNotifications', () => ({ initForegroundMessaging: vi.fn(async () => undefined) }));
 vi.mock('./components/E2EBootstrapDiagnostics', () => ({ E2EBootstrapDiagnostics: () => null }));
 vi.mock('./components/requests/RequestDetailContext', () => ({ RequestDetailProvider: ({ children }: any) => children }));
-vi.mock('./components/layout/AppLayout', () => ({ AppLayout: () => null }));
+vi.mock('./components/layout/AppLayout', () => ({
+  AppLayout: () => <div data-testid="app-layout" />,
+}));
 
 vi.mock('./pages/Dashboard', () => ({ Dashboard: () => null }));
 vi.mock('./pages/Family', () => ({ Family: () => null }));
@@ -118,16 +146,21 @@ vi.mock('./help/pages/HelpSearchResults', () => ({ HelpSearchResults: () => null
 
 import App from './App';
 
-function savePostAuthCreateDraft() {
+function savePostAuthCreateDraft(childFirstName = '') {
   saveDraft({
     version: 1,
     step: 'p1',
     parentFirstName: 'Kemal',
     parentRoleDisplay: 'parent',
-    childFirstName: '',
+    childFirstName,
     familyName: 'Kemal Family',
     updatedAt: Date.now(),
   });
+}
+
+function publishStore(partial: Record<string, unknown>) {
+  Object.assign(appStoreState, partial);
+  appStoreListeners.forEach(listener => listener());
 }
 
 beforeEach(() => {
@@ -146,9 +179,14 @@ beforeEach(() => {
   appStoreState.appReady = false;
   appStoreState.bootstrapError = null;
   appStoreState.pendingMembershipStatus = 'idle';
+  appStoreListeners.clear();
   appStoreState.initAuth.mockClear();
   appStoreState.retryBootstrap.mockClear();
   appStoreState.refreshCurrentUser.mockClear();
+  appStoreState.refreshCurrentUser.mockImplementation((uid: string, updated: Record<string, unknown>) => {
+    if (appStoreState.currentUser?.id !== uid) return;
+    publishStore({ currentUser: { ...appStoreState.currentUser, ...updated } });
+  });
   window.history.pushState({}, '', '/');
 });
 
@@ -196,5 +234,187 @@ describe('App auth routing and onboarding composition', () => {
     await waitFor(() => expect(firestoreBoundary.transactions).toBe(1));
     expect(firestoreBoundary.familyWrites).toHaveLength(1);
     expect(firestoreBoundary.familyWrites[0]?.path).toBe('families');
+  });
+
+  it('reacts to Create inside the real App and stays on exact creation onboarding without a reload', async () => {
+    const user = userEvent.setup();
+    savePostAuthCreateDraft();
+    publishStore({
+      authStatus: 'authenticated',
+      authUser: { uid: 'owner-1' },
+      currentUser: { id: 'owner-1', role: 'parent' },
+      profileServerConfirmed: true,
+      appReady: true,
+      pendingMembershipStatus: 'none',
+    });
+    window.history.pushState({}, '', '/no-family');
+
+    render(<App />);
+    await user.click(await screen.findByRole('button', { name: 'Create a family' }));
+
+    await waitFor(() => expect(window.location.pathname).toBe('/onboarding'));
+    expect(window.location.search).toBe('?mode=create');
+    await waitFor(() => expect(firestoreBoundary.transactions).toBe(1));
+  });
+
+  it('keeps the authoritative creation journey through P2/P3, then completion restores app priority', async () => {
+    const user = userEvent.setup();
+    savePostAuthCreateDraft('Osman');
+    publishStore({
+      authStatus: 'authenticated',
+      authUser: { uid: 'owner-1' },
+      currentUser: { id: 'owner-1', role: 'parent' },
+      profileServerConfirmed: true,
+      appReady: true,
+      pendingMembershipStatus: 'none',
+    });
+    window.history.pushState({}, '', '/no-family');
+
+    render(<App />);
+    await user.click(await screen.findByRole('button', { name: 'Create a family' }));
+
+    await waitFor(() => expect(appStoreState.refreshCurrentUser).toHaveBeenCalledWith('owner-1', {
+      familyId: 'family-created',
+      role: 'owner',
+    }));
+    await waitFor(() => expect(appStoreState.currentUser?.familyId).toBe('family-created'));
+    expect(window.location.pathname).toBe('/onboarding');
+    expect(window.location.search).toBe('?mode=create');
+    await user.click(await screen.findByRole('button', { name: 'Continue' }));
+    expect(await screen.findByRole('heading', { name: /first win/i })).toBeVisible();
+    await user.click(screen.getByRole('button', { name: 'Skip' }));
+    expect(await screen.findByRole('button', { name: 'Go to my dashboard' })).toBeVisible();
+    await user.click(screen.getByRole('button', { name: 'Go to my dashboard' }));
+
+    await waitFor(() => expect(window.location.pathname).toBe('/'));
+  });
+
+  it('lets an existing active family beat a forged fresh intent on initial mount', async () => {
+    savePostAuthCreateDraft();
+    startCreateFamilyIntent('owner-1');
+    publishStore({
+      authStatus: 'authenticated',
+      authUser: { uid: 'owner-1' },
+      currentUser: { id: 'owner-1', role: 'owner', familyId: 'existing-family' },
+      profileServerConfirmed: true,
+      appReady: true,
+      pendingMembershipStatus: 'none',
+    });
+    window.history.pushState({}, '', '/onboarding?mode=create');
+
+    render(<App />);
+
+    await waitFor(() => expect(window.location.pathname).toBe('/'));
+    expect(firestoreBoundary.transactions).toBe(0);
+  });
+
+  it('clears reactive intent and creation continuation across sign-out and account replacement', async () => {
+    const user = userEvent.setup();
+    savePostAuthCreateDraft('Osman');
+    publishStore({
+      authStatus: 'authenticated',
+      authUser: { uid: 'owner-1' },
+      currentUser: { id: 'owner-1', role: 'parent' },
+      profileServerConfirmed: true,
+      appReady: true,
+      pendingMembershipStatus: 'none',
+    });
+    window.history.pushState({}, '', '/no-family');
+    render(<App />);
+    await user.click(await screen.findByRole('button', { name: 'Create a family' }));
+    await waitFor(() => expect(appStoreState.refreshCurrentUser).toHaveBeenCalledWith('owner-1', {
+      familyId: 'family-created',
+      role: 'owner',
+    }));
+    await waitFor(() => expect(appStoreState.currentUser?.familyId).toBe('family-created'));
+
+    await act(async () => publishStore({
+      authStatus: 'unauthenticated',
+      authUser: null,
+      currentUser: null,
+      profileServerConfirmed: false,
+      appReady: true,
+    }));
+    await waitFor(() => expect(window.location.pathname).toBe('/onboarding'));
+    expect(readCreateFamilyIntent('owner-1')).toBeNull();
+
+    await act(async () => {
+      window.history.pushState({}, '', '/onboarding?mode=create');
+      window.dispatchEvent(new PopStateEvent('popstate'));
+      publishStore({
+        authStatus: 'authenticated',
+        authUser: { uid: 'owner-1' },
+        currentUser: { id: 'owner-1', role: 'owner', familyId: 'family-created' },
+        profileServerConfirmed: true,
+        appReady: true,
+        pendingMembershipStatus: 'none',
+      });
+    });
+
+    await waitFor(() => expect(window.location.pathname).toBe('/'));
+  });
+
+  it('cannot reuse an authoritative continuation after a direct account switch', async () => {
+    const user = userEvent.setup();
+    savePostAuthCreateDraft('Osman');
+    publishStore({
+      authStatus: 'authenticated',
+      authUser: { uid: 'owner-1' },
+      currentUser: { id: 'owner-1', role: 'parent' },
+      profileServerConfirmed: true,
+      appReady: true,
+      pendingMembershipStatus: 'none',
+    });
+    window.history.pushState({}, '', '/no-family');
+    render(<App />);
+    await user.click(await screen.findByRole('button', { name: 'Create a family' }));
+    await waitFor(() => expect(appStoreState.currentUser?.familyId).toBe('family-created'));
+
+    await act(async () => publishStore({
+      authUser: { uid: 'owner-2' },
+      currentUser: { id: 'owner-2', role: 'owner', familyId: 'other-family' },
+    }));
+    await waitFor(() => expect(window.location.pathname).toBe('/'));
+
+    await act(async () => {
+      window.history.pushState({}, '', '/onboarding?mode=create');
+      window.dispatchEvent(new PopStateEvent('popstate'));
+      publishStore({
+        authUser: { uid: 'owner-1' },
+        currentUser: { id: 'owner-1', role: 'owner', familyId: 'family-created' },
+      });
+    });
+
+    await waitFor(() => expect(window.location.pathname).toBe('/'));
+  });
+
+  it('cannot reuse an authoritative continuation after the creation route unmounts', async () => {
+    const user = userEvent.setup();
+    savePostAuthCreateDraft('Osman');
+    publishStore({
+      authStatus: 'authenticated',
+      authUser: { uid: 'owner-1' },
+      currentUser: { id: 'owner-1', role: 'parent' },
+      profileServerConfirmed: true,
+      appReady: true,
+      pendingMembershipStatus: 'none',
+    });
+    window.history.pushState({}, '', '/no-family');
+    render(<App />);
+    await user.click(await screen.findByRole('button', { name: 'Create a family' }));
+    await waitFor(() => expect(appStoreState.currentUser?.familyId).toBe('family-created'));
+
+    await act(async () => {
+      window.history.pushState({}, '', '/');
+      window.dispatchEvent(new PopStateEvent('popstate'));
+    });
+    expect(await screen.findByTestId('app-layout')).toBeVisible();
+
+    await act(async () => {
+      window.history.pushState({}, '', '/onboarding?mode=create');
+      window.dispatchEvent(new PopStateEvent('popstate'));
+    });
+    expect(await screen.findByTestId('app-layout')).toBeVisible();
+    await waitFor(() => expect(window.location.pathname).toBe('/'));
   });
 });
