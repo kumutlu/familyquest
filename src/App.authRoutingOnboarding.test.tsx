@@ -2,6 +2,7 @@ import { act, render, waitFor } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { clearDraft, saveDraft } from './onboarding/lib/onboardingDraft';
+import { clearCreateFamilyIntent, startCreateFamilyIntent } from './auth/createFamilyIntent';
 
 const appStoreState = vi.hoisted(() => ({
   authStatus: 'initializing' as 'initializing' | 'authenticated' | 'unauthenticated',
@@ -132,6 +133,7 @@ function savePostAuthCreateDraft() {
 beforeEach(() => {
   vi.clearAllMocks();
   clearDraft();
+  clearCreateFamilyIntent();
   firestoreBoundary.transactions = 0;
   firestoreBoundary.familyWrites = [];
   appStoreState.authStatus = 'initializing';
@@ -187,8 +189,9 @@ describe('App auth routing and onboarding composition', () => {
     appStoreState.appReady = true;
     appStoreState.pendingMembershipStatus = 'none';
     window.history.pushState({}, '', '/onboarding?mode=create');
+    startCreateFamilyIntent('owner-1');
 
-    render(<App explicitCreateAuthorized />);
+    render(<App />);
 
     await waitFor(() => expect(firestoreBoundary.transactions).toBe(1));
     expect(firestoreBoundary.familyWrites).toHaveLength(1);

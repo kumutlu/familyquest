@@ -14,6 +14,7 @@ import {
 } from '../lib/onboardingErrors';
 import type { OnboardingDraft } from '../lib/onboardingDraft';
 import { recordE2ETimeline } from '../../lib/e2eDiagnostics';
+import { clearCreateFamilyIntent, readCreateFamilyIntent } from '../../auth/createFamilyIntent';
 
 interface FamilyCompositionProps {
   draft: OnboardingDraft;
@@ -58,6 +59,14 @@ export function FamilyComposition({ draft, patch, goNext, deps }: FamilyComposit
   // Lifecycle-safe idempotency refs (StrictMode-safe).
   const startedRef = useRef(false);
   const completedRef = useRef(false);
+  // Capture the fresh authorization for this mount. Keeping the UID (rather
+  // than a bare boolean) makes an in-place account switch fail closed, while
+  // allowing the same async attempt to finish after successful creation clears
+  // its persisted intent.
+  const authorizedUidRef = useRef(
+    deps.uid && readCreateFamilyIntent(deps.uid) ? deps.uid : null,
+  );
+  const creationAuthorized = authorizedUidRef.current === deps.uid;
 
   // Wait for the authoritative user document before running setup.
   useEffect(() => {
@@ -87,6 +96,7 @@ export function FamilyComposition({ draft, patch, goNext, deps }: FamilyComposit
 
   // Setup effect — runs only once the authoritative prerequisite is ready.
   useEffect(() => {
+    if (!creationAuthorized) return;
     if (phase !== 'ready') return;
     if (completedRef.current) return;
     if (draft.familyId && draft.childId) {
@@ -105,6 +115,10 @@ export function FamilyComposition({ draft, patch, goNext, deps }: FamilyComposit
           recordE2ETimeline('ensure-family-start');
           next = await withBoundedTimeout(ensureFamily(next, deps), SETUP_WAIT_MS, t('errors.offline'));
           recordE2ETimeline('ensure-family-end', { familyId: next.familyId });
+          // Clear only after an authoritative response. A timeout/network error
+          // may have committed server-side, so retaining the intent is required
+          // for the idempotent retry to recover that family.
+          clearCreateFamilyIntent();
         }
         if (!next.childId) {
           recordE2ETimeline('ensure-first-child-start');
@@ -129,7 +143,7 @@ export function FamilyComposition({ draft, patch, goNext, deps }: FamilyComposit
     return () => {
       cancelled = true;
     };
-  }, [phase, draft, deps, patch, t, retryNonce]);
+  }, [creationAuthorized, phase, draft, deps, patch, t, retryNonce]);
 
   const handleRetry = () => {
     startedRef.current = false;
