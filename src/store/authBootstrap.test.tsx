@@ -291,6 +291,54 @@ describe('auth bootstrap regression', () => {
     expect(useStore.getState().appReady).toBe(true);
   });
 
+  it('keeps a failed pending-membership settlement in recovery until an explicit retry confirms the profile', async () => {
+    firestoreState.profileSnapshot = makeProfileSnapshot(null);
+    firestoreState.pendingMembershipDocs = [{ id: 'user-1' }];
+    fireSignedIn();
+    await waitFor(() => expect(useStore.getState().pendingMembershipStatus).toBe('pending'));
+
+    // Approval removes the request, so bootstrap must re-read the profile from
+    // the server before declaring this account has no family. That profile read
+    // fails, while the live query subsequently emits another authoritative empty
+    // snapshot. The latter must not erase the recovery state.
+    firestoreState.profileError = {
+      code: 'permission-denied',
+      message: 'Profile confirmation was denied.',
+    };
+    act(() => {
+      firestoreState.pendingMembershipListener?.({
+        docs: [],
+        metadata: { fromCache: false },
+      });
+    });
+    await waitFor(() => expect(useStore.getState().bootstrapError).toContain('permission-denied'));
+
+    act(() => {
+      firestoreState.pendingMembershipListener?.({
+        docs: [],
+        metadata: { fromCache: false },
+      });
+    });
+
+    expect(useStore.getState().pendingMembershipStatus).toBe('recovery');
+    expect(useStore.getState().bootstrapError).toContain('permission-denied');
+    expect(useStore.getState().appReady).toBe(false);
+
+    // A user-requested retry creates a new authenticated bootstrap generation.
+    // With a successful server profile confirmation it may release recovery.
+    firestoreState.profileError = null;
+    firestoreState.profileSnapshot = makeProfileSnapshot(null);
+    firestoreState.pendingMembershipDocs = [];
+    act(() => {
+      useStore.getState().retryBootstrap();
+      authState.listener?.(makeAuthUser());
+    });
+
+    await waitFor(() => expect(useStore.getState().pendingMembershipStatus).toBe('none'));
+    expect(useStore.getState().bootstrapError).toBeNull();
+    expect(useStore.getState().appReady).toBe(true);
+  });
+
   it('keeps approved membership stable when the profile callback arrives before pending removal', async () => {
     firestoreState.profileSnapshot = makeProfileSnapshot(null);
     firestoreState.pendingMembershipDocs = [{ id: 'user-1' }];
