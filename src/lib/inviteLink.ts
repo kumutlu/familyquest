@@ -9,14 +9,37 @@
 /** Storage key holding the invite code across an authentication round trip. */
 export const PENDING_INVITE_KEY = 'queki.pendingInviteCode';
 
+/**
+ * Legacy role invitations are six-character codes. This classifier is kept
+ * separate from opaque v2 invitation tokens so the two routes cannot cross.
+ */
+export const LEGACY_INVITE_CODE_PATTERN = /^[A-Z0-9]{6}$/;
+
+export const LEGACY_INVITE_ROLLOUT_AT_MS = Date.parse('2026-08-25T00:00:00.000Z');
+export const LEGACY_INVITATION_TTL_MS = 7 * 24 * 60 * 60 * 1000;
+export const LEGACY_INVITE_COMPATIBILITY_SAFETY_MARGIN_MS = 7 * 24 * 60 * 60 * 1000;
+
+/**
+ * Operational end of the local legacy-resume window: the 2026-08-25 rollout
+ * plus a 14-day safety margin. This only gates locally stored intent; a code
+ * present in a URL is still checked by the server's `expiresAtMs`.
+ */
+export const LEGACY_INVITE_COMPATIBILITY_CUTOFF_MS =
+  LEGACY_INVITE_ROLLOUT_AT_MS + LEGACY_INVITATION_TTL_MS + LEGACY_INVITE_COMPATIBILITY_SAFETY_MARGIN_MS;
+
 /** Path of the code-specific join route. */
 export const JOIN_PATH = '/join';
 
-const RESUMABLE_LEGACY_INVITE_CODE = /^[A-Z0-9]{6}$/;
+const RESUMABLE_LEGACY_INVITE_CODE = LEGACY_INVITE_CODE_PATTERN;
 
 function normaliseResumableLegacyCode(value: string): string {
   const code = value.trim().toUpperCase();
   return RESUMABLE_LEGACY_INVITE_CODE.test(code) ? code : '';
+}
+
+/** Returns true only for a normalized, strict six-character legacy code. */
+export function isLegacyInviteCode(value: unknown): value is string {
+  return typeof value === 'string' && RESUMABLE_LEGACY_INVITE_CODE.test(value.trim().toUpperCase());
 }
 
 /**
@@ -93,6 +116,26 @@ export function clearPendingInvite(): void {
   }
 }
 
+/**
+ * Reads legacy intent for compatibility only. A stale local copy is cleared,
+ * while the cutoff is deliberately not applied to server validation.
+ */
+export function readLegacyInviteCode(now = Date.now()): string {
+  const code = readPendingInvite();
+  if (!code) return '';
+  if (now >= LEGACY_INVITE_COMPATIBILITY_CUTOFF_MS) {
+    clearPendingInvite();
+    return '';
+  }
+  return code;
+}
+
+/** Computes the route used to resume an already-issued legacy invitation. */
+export function legacyInviteDestination(fallback = '/', now = Date.now()): string {
+  const code = readLegacyInviteCode(now);
+  return code ? `${JOIN_PATH}?code=${encodeURIComponent(code)}` : fallback;
+}
+
 /** Translation keys the join route can surface. */
 export type InvitationErrorKey =
   | 'family:join.expired'
@@ -121,8 +164,7 @@ export function mapInvitationErrorKey(error: unknown): InvitationErrorKey {
  * preserved before sign-in or sign-up, the join flow resumes automatically.
  */
 export function postAuthDestination(fallback = '/'): string {
-  const code = readPendingInvite();
-  return code ? `${JOIN_PATH}?code=${encodeURIComponent(code)}` : fallback;
+  return legacyInviteDestination(fallback);
 }
 
 /** Builds the invitation message used for the clipboard fallback. */

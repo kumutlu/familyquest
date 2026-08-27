@@ -2,7 +2,7 @@ import { type ReactNode, useEffect } from 'react';
 import { Navigate, useLocation, useNavigate } from 'react-router-dom';
 
 import { signOut } from '../lib/api';
-import { readCodeFromSearch, readPendingInvite as readLegacyInvite } from '../lib/inviteLink';
+import { readCodeFromSearch, readLegacyInviteCode } from '../lib/inviteLink';
 import { markStartupStage } from '../startupDiagnostics';
 import { StartupScreen } from '../components/layout/StartupScreen';
 import { useStore } from '../store/useStore';
@@ -192,7 +192,7 @@ export function AuthRoutingGate({
   const retryBootstrap = useStore(state => state.retryBootstrap);
 
   const pendingInvite = readPendingInvite();
-  const legacyInviteCode = readLegacyInvite() || null;
+  const legacyInviteCode = readLegacyInviteCode() || null;
   const input: AuthRouteDecisionInput = {
     authStatus: authStatus ?? 'authenticated',
     authUser,

@@ -279,6 +279,13 @@ describe('AuthRoutingGate navigation', () => {
     expect(screen.getByTestId('current-path')).toHaveTextContent('/join?code=ABC123');
   });
 
+  it('does not redirect an opaque token stored under the legacy key', () => {
+    localStorage.setItem('queki.pendingInviteCode', TOKEN);
+    renderGate('/');
+    expect(screen.getByTestId('current-path')).toHaveTextContent('/no-family');
+    expect(screen.getByTestId('current-path')).not.toHaveTextContent('/join');
+  });
+
   it('routes an authenticated no-family user without invite to /no-family', () => {
     renderGate('/');
     expect(screen.getByTestId('current-path')).toHaveTextContent('/no-family');

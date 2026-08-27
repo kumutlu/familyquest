@@ -24,7 +24,12 @@ vi.mock('react-router-dom', async importOriginal => {
 });
 
 import { JoinInvite } from './JoinInvite';
-import { PENDING_INVITE_KEY, mapInvitationErrorKey, readPendingInvite } from '../lib/inviteLink';
+import {
+  LEGACY_INVITE_COMPATIBILITY_CUTOFF_MS,
+  PENDING_INVITE_KEY,
+  mapInvitationErrorKey,
+  readPendingInvite,
+} from '../lib/inviteLink';
 
 function renderJoin(entry = '/join?code=7ZXWRZ') {
   return render(
@@ -182,6 +187,20 @@ describe('JoinInvite', () => {
       '/join-family',
     );
     expect(invitationApi.previewInvitation).not.toHaveBeenCalled();
+  });
+
+  it('does not send an opaque v2 token to the legacy invitation callable', async () => {
+    renderJoin('/join?code=CwsLCwsLCwsLCwsLCwsLCwsLCwsLCwsLCwsLCwsLCws');
+    expect(await screen.findByRole('alert')).toHaveTextContent('This invitation link is not valid.');
+    expect(invitationApi.previewInvitation).not.toHaveBeenCalled();
+  });
+
+  it('keeps URL validation server-authoritative at the local compatibility cutoff', async () => {
+    vi.setSystemTime(LEGACY_INVITE_COMPATIBILITY_CUTOFF_MS);
+    renderJoin('/join?code=7ZXWRZ');
+    expect(await screen.findByText("You've been invited to join the Smith family.")).toBeInTheDocument();
+    expect(invitationApi.previewInvitation).toHaveBeenCalledWith('7ZXWRZ');
+    vi.useRealTimers();
   });
 });
 

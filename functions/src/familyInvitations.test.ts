@@ -14,6 +14,7 @@ vi.mock('firebase-functions/v2/https', () => ({
 import {
   acceptInvitationImpl,
   createFamilyInvitationImpl,
+  isLegacyInvitationCode,
   previewInvitationImpl,
   INVITATION_TTL_MS,
   type FamilyInvitationContext,
@@ -157,6 +158,15 @@ describe('createFamilyInvitationImpl', () => {
     const first = await call({ intendedRole: 'parent', clientReqId: 'req-12345678' });
     const second = await call({ intendedRole: 'parent', clientReqId: 'req-12345678' });
     expect(second).toEqual(first);
+  });
+});
+
+describe('legacy invitation compatibility boundary', () => {
+  it('classifies only strict six-character role invitation codes', () => {
+    expect(isLegacyInvitationCode('7zxwrz')).toBe(true);
+    expect(isLegacyInvitationCode('opaque-token-with-more-than-six')).toBe(false);
+    expect(isLegacyInvitationCode('ABC123')).toBe(true);
+    expect(isLegacyInvitationCode('ABC1234')).toBe(false);
   });
 });
 

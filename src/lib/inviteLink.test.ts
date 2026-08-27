@@ -4,6 +4,9 @@ import {
   buildInviteMessage,
   buildJoinUrl,
   clearPendingInvite,
+  isLegacyInviteCode,
+  legacyInviteDestination,
+  LEGACY_INVITE_COMPATIBILITY_CUTOFF_MS,
   PENDING_INVITE_KEY,
   postAuthDestination,
   readCodeFromSearch,
@@ -77,6 +80,30 @@ describe('pending invite persistence', () => {
   it('ignores an empty code', () => {
     rememberPendingInvite('  ');
     expect(readPendingInvite()).toBe('');
+  });
+
+  it('classifies only strict six-character legacy codes', () => {
+    expect(isLegacyInviteCode('7zxwrz')).toBe(true);
+    expect(isLegacyInviteCode('ABC1234')).toBe(false);
+    expect(isLegacyInviteCode('opaque-token-with-more-than-six')).toBe(false);
+    expect(isLegacyInviteCode('')).toBe(false);
+  });
+
+  it('resumes an already-issued six-character invitation through the legacy route', () => {
+    localStorage.setItem(PENDING_INVITE_KEY, '7ZXWRZ');
+    expect(legacyInviteDestination('/', LEGACY_INVITE_COMPATIBILITY_CUTOFF_MS - 1)).toBe('/join?code=7ZXWRZ');
+  });
+
+  it('clears stale local legacy intent at the compatibility cutoff without changing server TTL', () => {
+    localStorage.setItem(PENDING_INVITE_KEY, '7ZXWRZ');
+    expect(legacyInviteDestination('/', LEGACY_INVITE_COMPATIBILITY_CUTOFF_MS)).toBe('/');
+    expect(localStorage.getItem(PENDING_INVITE_KEY)).toBeNull();
+  });
+
+  it('does not route an opaque v2 token through the legacy destination', () => {
+    localStorage.setItem(PENDING_INVITE_KEY, 'CwsLCwsLCwsLCwsLCwsLCwsLCwsLCwsLCwsLCwsLCws');
+    expect(legacyInviteDestination('/')).toBe('/');
+    expect(localStorage.getItem(PENDING_INVITE_KEY)).toBeNull();
   });
 });
 
