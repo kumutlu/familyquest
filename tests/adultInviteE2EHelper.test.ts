@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 
 import {
   adultInviteCallableEndpoint,
+  adultInviteFixtureRunnerArgs,
   readCallableResult,
 } from './e2e/utils/adultInvite';
 
@@ -17,5 +18,13 @@ describe('adult invitation E2E callable boundary', () => {
       invitationId: 'a'.repeat(64),
     });
     expect(() => readCallableResult({ data: { invitationId: 'a'.repeat(64) } })).toThrow('CALLABLE_RESPONSE_INVALID');
+  });
+
+  it('builds the isolated Admin fixture command for family counts', () => {
+    expect(adultInviteFixtureRunnerArgs('count-families')).toEqual([
+      'tsx',
+      expect.stringMatching(/adultInviteFixture\.ts$/),
+      'count-families',
+    ]);
   });
 });
