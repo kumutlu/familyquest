@@ -71,6 +71,7 @@ describe('AdultInviteCard', () => {
     const user = setupUser();
     renderCard();
     expect(screen.getByRole('radio', { name: 'Parent' })).toBeChecked();
+    expect(invitationApi.createAdultInvitation).not.toHaveBeenCalled();
     await user.click(screen.getByRole('button', { name: 'Create private invitation' }));
     await screen.findByRole('button', { name: 'Copy private link' });
     expect(invitationApi.createAdultInvitation).toHaveBeenCalledWith({
