@@ -31,15 +31,15 @@ export function NoFamilyChoice() {
   const [familyCode, setFamilyCode] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const uid = authUser?.uid;
 
   const renderedRef = useRef(false);
   useEffect(() => {
-    if (renderedRef.current) return;
+    if (!uid || renderedRef.current) return;
     renderedRef.current = true;
     recordInviteEvent('no_family_choice_rendered', { source: 'no_family_choice' });
-  }, []);
+  }, [uid]);
 
-  const uid = authUser?.uid;
   if (!uid) return <Navigate to="/login" replace />;
 
   const handleCreate = () => {
