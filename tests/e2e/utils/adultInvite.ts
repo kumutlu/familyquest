@@ -1,14 +1,15 @@
 import { execFileSync } from 'node:child_process';
 import { createHash, randomBytes } from 'node:crypto';
+import { resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const PROJECT_ID = 'familyquest-beta-402cb';
 const FUNCTIONS_REGION = 'europe-west1';
 const AUTH_EMULATOR_HOST = process.env.FIREBASE_AUTH_EMULATOR_HOST || '127.0.0.1:9099';
 const FUNCTIONS_EMULATOR_HOST = process.env.FIREBASE_FUNCTIONS_EMULATOR_HOST || '127.0.0.1:5001';
-const FIRESTORE_EMULATOR_HOST = process.env.FIRESTORE_EMULATOR_HOST || '127.0.0.1:8080';
 const OWNER_EMAIL = 'owner@test.com';
 const OWNER_PASSWORD = 'password123';
+const FIXTURE_RUNNER_PATH = resolve(process.cwd(), 'tests/e2e/utils/adultInviteFixture.ts');
 
 export type AdultInviteRole = 'parent' | 'adult';
 
@@ -110,24 +111,21 @@ async function createEmulatorUser(email: string, password: string): Promise<Emul
   return { email, password, uid: body.localId, idToken: body.idToken };
 }
 
-function firestoreString(value: string) {
-  return { stringValue: value };
+/**
+ * Runs a separate emulator-only Admin SDK process.  Keeping firebase-admin out
+ * of Playwright's module graph is deliberate; see readOutcome.ts and seed.ts.
+ */
+export function adultInviteFixtureRunnerArgs(command: string, payload?: unknown): string[] {
+  return ['tsx', FIXTURE_RUNNER_PATH, command, ...(payload === undefined ? [] : [JSON.stringify(payload)])];
 }
 
-function firestoreTimestamp(value: string) {
-  return { timestampValue: value };
-}
-
-async function writeFirestoreDocument(path: string, fields: Record<string, unknown>): Promise<void> {
-  const response = await fetch(
-    `http://${FIRESTORE_EMULATOR_HOST}/v1/projects/${PROJECT_ID}/databases/(default)/documents/${path}`,
-    {
-      method: 'PATCH',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ fields }),
-    },
+function runFixture<T>(command: string, payload?: unknown): T {
+  const output = execFileSync(
+    'npx',
+    adultInviteFixtureRunnerArgs(command, payload),
+    { encoding: 'utf8', stdio: 'pipe' },
   );
-  await readJson(response);
+  return JSON.parse(output) as T;
 }
 
 function fixtureToken(): string {
@@ -145,15 +143,13 @@ async function createAdminInvitationFixture(overrides: {
   const token = fixtureToken();
   const invitationId = invitationIdForToken(token);
   const expiresAt = overrides.expiresAt || new Date(Date.now() + 86_400_000).toISOString();
-  await writeFirestoreDocument(`familyInvitations/${invitationId}`, {
-    version: { integerValue: '2' },
-    familyId: firestoreString('test-fam'),
-    intendedRole: firestoreString('parent'),
-    status: firestoreString(overrides.status || 'active'),
-    createdBy: firestoreString('owner1'),
-    createdAt: firestoreTimestamp(new Date().toISOString()),
-    expiresAt: firestoreTimestamp(expiresAt),
-    clientReqId: firestoreString(`e2e-admin-${crypto.randomUUID()}`),
+  runFixture('create-invitation', {
+    token,
+    familyId: 'test-fam',
+    intendedRole: 'parent',
+    status: overrides.status || 'active',
+    expiresAt,
+    clientReqId: `e2e-admin-${crypto.randomUUID()}`,
   });
   return { invitationId, token, intendedRole: 'parent', expiresAt };
 }
@@ -165,13 +161,9 @@ export function seedAdultInviteE2E(): void {
   });
 }
 
-/** Count family documents through the emulator REST boundary, without Admin SDK imports. */
+/** Count family documents through the isolated emulator Admin fixture boundary. */
 export async function countFamiliesForE2E(): Promise<number> {
-  const response = await fetch(
-    `http://${FIRESTORE_EMULATOR_HOST}/v1/projects/${PROJECT_ID}/databases/(default)/documents/families?pageSize=300`,
-  );
-  const body = await readJson(response) as { documents?: unknown };
-  return Array.isArray(body.documents) ? body.documents.length : 0;
+  return runFixture<number>('count-families');
 }
 
 /** Create an invitation through the callable HTTP boundary used by production. */
@@ -211,10 +203,9 @@ export async function createUsedAdultInvitationForE2E(): Promise<AdultInviteFixt
   const invitation = await createAdultInvitationForE2E();
   const email = `adult-used-${Date.now()}-${Math.floor(Math.random() * 10000)}@example.com`;
   const recipient = await createEmulatorUser(email, 'password123');
-  await writeFirestoreDocument(`users/${recipient.uid}`, {
-    uid: firestoreString(recipient.uid),
-    role: firestoreString('parent'),
-    displayName: firestoreString('Used Invite Recipient'),
+  runFixture('create-profile', {
+    uid: recipient.uid,
+    displayName: 'Used Invite Recipient',
   });
   await invokeCallable(recipient.idToken, 'acceptAdultInvitation', {
     token: invitation.token,
@@ -227,21 +218,19 @@ export async function createUsedAdultInvitationForE2E(): Promise<AdultInviteFixt
 export async function createNoFamilyUserForE2E(): Promise<EmulatorUserFixture> {
   const email = `adult-no-family-${Date.now()}-${Math.floor(Math.random() * 10000)}@example.com`;
   const user = await createEmulatorUser(email, 'password123');
-  await writeFirestoreDocument(`users/${user.uid}`, {
-    uid: firestoreString(user.uid),
-    role: firestoreString('parent'),
-    displayName: firestoreString('No Family User'),
+  runFixture('create-profile', {
+    uid: user.uid,
+    displayName: 'No Family User',
   });
   return user;
 }
 
 /** Seed a same-family member and return an invitation for idempotence coverage. */
 export async function createSameFamilyAdultInvitationForE2E(): Promise<AdultInviteFixture> {
-  await writeFirestoreDocument('families/test-fam/users/parent1', {
-    uid: firestoreString('parent1'),
-    displayName: firestoreString('Parent Dad'),
-    role: firestoreString('parent'),
-    lifecycle: firestoreString('active'),
+  runFixture('create-membership', {
+    familyId: 'test-fam',
+    uid: 'parent1',
+    displayName: 'Parent Dad',
   });
   return createAdultInvitationForE2E();
 }

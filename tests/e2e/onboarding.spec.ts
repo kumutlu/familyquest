@@ -204,7 +204,7 @@ test.describe('Refined Queki onboarding', () => {
     await expect(page).not.toHaveURL(/\/onboarding/);
     await expect(page.getByRole('heading', { name: /small wins\. big habits\./i })).toHaveCount(0);
     // The child reaches their own authenticated experience.
-    await expect(page.locator('[data-testid="mobile-bottom-nav"]')).toBeAttached();
+    await expect(page.locator('[data-testid="queki-bottom-nav"], [data-testid="mobile-bottom-nav"]')).toBeAttached();
   });
 
   test('Owner signs out and back in without re-onboarding', async ({ page }) => {
