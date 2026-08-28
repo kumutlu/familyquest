@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Navigate, useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 
@@ -8,6 +8,7 @@ import { requestFamilyJoin } from '../lib/familyMembershipApi';
 import { OnboardingShell } from '../onboarding/components/OnboardingShell';
 import { loadDraft, saveDraft } from '../onboarding/lib/onboardingDraft';
 import { useStore } from '../store/useStore';
+import { recordInviteEvent } from '../auth/inviteAnalytics';
 
 /** Removes server-reconciliation ids while preserving the user's non-authoritative setup copy. */
 function prepareCreationDraft(): void {
@@ -31,11 +32,19 @@ export function NoFamilyChoice() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  const renderedRef = useRef(false);
+  useEffect(() => {
+    if (renderedRef.current) return;
+    renderedRef.current = true;
+    recordInviteEvent('no_family_choice_rendered', { source: 'no_family_choice' });
+  }, []);
+
   const uid = authUser?.uid;
   if (!uid) return <Navigate to="/login" replace />;
 
   const handleCreate = () => {
     if (busy) return;
+    recordInviteEvent('family_creation_explicitly_started', { source: 'no_family_choice' });
     setBusy(true);
     setError(null);
     prepareCreationDraft();
