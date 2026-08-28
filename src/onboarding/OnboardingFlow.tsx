@@ -13,6 +13,7 @@ import { useOnboardingMachine } from './useOnboardingMachine';
 import { PRE_AUTH_STEPS, POST_AUTH_STEPS } from './lib/onboardingDraft';
 import { recordOnboardingEvent } from './lib/onboardingAnalytics';
 import { clearCreateFamilyIntent, readCreateFamilyIntent } from '../auth/createFamilyIntent';
+import { recordInviteEvent } from '../auth/inviteAnalytics';
 import type { SetupDeps } from './lib/onboardingSetup';
 import { OnboardingShell } from './components/OnboardingShell';
 import { OnboardingProgress } from './components/OnboardingProgress';
@@ -144,6 +145,11 @@ export function OnboardingFlow({
       !currentUser?.familyId
     ) {
       recordOnboardingEvent('onboarding_auth_completed', { authProvider: draft.authProvider });
+      recordInviteEvent('invite_auth_resumed', {
+        authProvider: draft.authProvider === 'google' || draft.authProvider === 'email'
+          ? draft.authProvider : 'unknown',
+        source: 'onboarding',
+      });
       setStep('p1');
     }
   }, [postAuth, exactCreateRoute, hasCreateIntent, draft.step, draft.authProvider, setStep, currentUser?.familyId]);

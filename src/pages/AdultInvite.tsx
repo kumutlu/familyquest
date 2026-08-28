@@ -20,6 +20,7 @@ import {
 } from '../auth/pendingInviteIntent';
 import { useStore } from '../store/useStore';
 import { mapAuthErrorKey, type AuthErrorKey } from '../auth/authErrorMessage';
+import { recordInviteEvent } from '../auth/inviteAnalytics';
 
 type InviteOperationScope = {
   generation: number;
@@ -172,6 +173,7 @@ export function AdultInvite() {
   const [profileSaving, setProfileSaving] = useState(false);
   const [profileSaveError, setProfileSaveError] = useState(false);
   const [profileCompletionRequired, setProfileCompletionRequired] = useState(false);
+  const authResumedRef = useRef<string | null>(null);
 
   useEffect(() => {
     const generation = ++lifecycleGeneration.current;
@@ -221,7 +223,17 @@ export function AdultInvite() {
       })
       .catch(error => {
         if (cancelled) return;
-        setFailure(invitationFailureCode(error));
+        const code = invitationFailureCode(error);
+        const outcome = code === 'INVITATION_EXPIRED' ? 'expired'
+          : code === 'INVITATION_REVOKED' ? 'revoked'
+            : code === 'INVITATION_ALREADY_USED' ? 'already_used'
+              : code === 'FAMILY_UNAVAILABLE' ? 'family_unavailable'
+                : code === 'TOO_MANY_ATTEMPTS' ? 'rate_limited' : 'invalid_invitation';
+        recordInviteEvent('invitation_preview_failed', { outcome, source: 'adult_invite' });
+        if (code === 'INVITATION_EXPIRED') {
+          recordInviteEvent('invitation_expired', { source: 'adult_invite' });
+        }
+        setFailure(code);
         setPhase('terminal');
       });
 
@@ -242,9 +254,18 @@ export function AdultInvite() {
     try {
       bindPendingInviteToUid(authUser.uid);
     } catch (error) {
+      recordInviteEvent('invitation_conflict', { outcome: 'conflict', source: 'adult_invite' });
       setFailure(invitationFailureCode(error));
       setPhase('conflict');
       return;
+    }
+
+    const authScope = `${token}:${authUser.uid}`;
+    if (authResumedRef.current !== authScope) {
+      authResumedRef.current = authScope;
+      recordInviteEvent('invite_auth_resumed', {
+        authProvider: 'unknown', role: preview.intendedRole, source: 'adult_invite',
+      });
     }
 
     setPhase('confirming');
@@ -300,6 +321,7 @@ export function AdultInvite() {
     const code = invitationFailureCode(error);
     setFailure(code);
     if (code === 'ALREADY_IN_ANOTHER_FAMILY' || code === 'INVITE_ACCOUNT_MISMATCH') {
+      recordInviteEvent('invitation_conflict', { outcome: 'conflict', source: 'adult_invite' });
       setProfileCompletionRequired(false);
       setPhase('conflict');
     } else if (CONFIRMED_TERMINAL_CODES.has(code)) {
@@ -320,6 +342,11 @@ export function AdultInvite() {
         clientReqId: scopedRequestId(acceptRequestId, scope),
       });
       if (!isOperationScopeCurrent(scope)) return;
+
+      recordInviteEvent('invitation_accepted', {
+        role: result.role === 'parent' || result.role === 'adult' ? result.role : undefined,
+        outcome: 'success', source: 'adult_invite',
+      });
 
       // Publish authoritative membership locally before entering AppLayout. This
       // prevents a successful recipient with a not-yet-updated listener snapshot

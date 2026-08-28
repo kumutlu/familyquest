@@ -1,4 +1,4 @@
-import { createHash, randomBytes as cryptoRandomBytes } from 'node:crypto';
+import { createHash, randomBytes as cryptoRandomBytes, randomUUID } from 'node:crypto';
 import {
   getFirestore,
   Timestamp,
@@ -6,6 +6,10 @@ import {
   type Transaction,
 } from 'firebase-admin/firestore';
 import { HttpsError, onCall, type CallableRequest } from 'firebase-functions/v2/https';
+import {
+  recordAdultInvitationEvent,
+  type AdultInvitationEventFields,
+} from './adultInvitationEvents';
 
 export type AdultRole = 'parent' | 'adult';
 export type FamilyMembershipRole = 'owner' | 'parent' | 'adult' | 'child';
@@ -72,6 +76,7 @@ export interface AdultInvitationContext {
   randomBytes?: () => Buffer;
   timestamp?: (date: Date) => Timestamp;
   eventId?: () => string;
+  eventLogger?: { info: (...args: unknown[]) => void };
   previewIdentity?: (request: CallableRequest<unknown>) => string;
 }
 
@@ -122,6 +127,33 @@ export interface AdultInvitationAcceptance {
 }
 
 type DocumentData = Record<string, unknown>;
+
+function eventLatencyBucket(startedAt: number): AdultInvitationEventFields['latencyBucket'] {
+  const elapsed = Date.now() - startedAt;
+  if (elapsed < 100) return 'lt_100ms';
+  if (elapsed < 500) return '100_500ms';
+  if (elapsed < 1000) return '500_1000ms';
+  return 'gte_1000ms';
+}
+
+function eventCorrelationId(context: AdultInvitationContext): string {
+  return context.eventId?.() ?? randomUUID();
+}
+
+function emitAdultInvitationEvent(
+  context: AdultInvitationContext,
+  eventName: Parameters<typeof recordAdultInvitationEvent>[0],
+  fields: AdultInvitationEventFields = {},
+): void {
+  recordAdultInvitationEvent(eventName, {
+    version: 2,
+    correlationId: eventCorrelationId(context),
+    intendedRole: fields.intendedRole,
+    outcome: fields.outcome,
+    latencyBucket: fields.latencyBucket,
+    buildSha: fields.buildSha,
+  }, context.eventLogger);
+}
 
 function httpsError(
   code: ConstructorParameters<typeof HttpsError>[0],
@@ -321,6 +353,7 @@ export async function createAdultInvitationImpl(
   request: CallableRequest<CreateAdultInvitationInput>,
   context: AdultInvitationContext,
 ): Promise<CreatedAdultInvitation> {
+  const startedAt = Date.now();
   assertInputShape(input, ['intendedRole', 'clientReqId']);
   const uid = requireUid(request);
   const intendedRole = validateRole(input.intendedRole);
@@ -396,6 +429,12 @@ export async function createAdultInvitationImpl(
     });
   });
 
+  emitAdultInvitationEvent(context, 'invitation_created', {
+    intendedRole,
+    outcome: 'success',
+    latencyBucket: eventLatencyBucket(startedAt),
+  });
+
   return {
     invitationId,
     token,
@@ -409,29 +448,50 @@ export async function previewAdultInvitationImpl(
   request: CallableRequest<PreviewAdultInvitationInput>,
   context: AdultInvitationContext,
 ): Promise<AdultInvitationPreview> {
-  assertInputShape(input, ['token']);
-  await enforcePreviewRateLimit(request, context);
-  const invitationId = invitationIdFor(input.token);
-  const invitationSnapshot = await context.db.doc(`familyInvitations/${invitationId}`).get();
-  if (!invitationSnapshot.exists) {
-    throw httpsError('not-found', 'INVALID_INVITATION');
+  const startedAt = Date.now();
+  try {
+    assertInputShape(input, ['token']);
+    await enforcePreviewRateLimit(request, context);
+    const invitationId = invitationIdFor(input.token);
+    const invitationSnapshot = await context.db.doc(`familyInvitations/${invitationId}`).get();
+    if (!invitationSnapshot.exists) {
+      throw httpsError('not-found', 'INVALID_INVITATION');
+    }
+    const invitation = invitationRecord(invitationSnapshot.data() as DocumentData | undefined);
+    assertInvitationActive(invitation, dateNow(context));
+    const familySnapshot = await context.db.doc(`families/${invitation.familyId}`).get();
+    const family = familySnapshot.data() as DocumentData | undefined;
+    if (!familySnapshot.exists || !isActiveFamily(family)) {
+      throw httpsError('failed-precondition', 'FAMILY_UNAVAILABLE');
+    }
+    const displayName = typeof family?.displayName === 'string' && family.displayName.trim()
+      ? family.displayName.trim()
+      : String(family?.name ?? '');
+    return {
+      familyDisplayName: displayName,
+      intendedRole: invitation.intendedRole,
+      expiresAt: invitationExpiryIso(invitation),
+      status: 'active',
+    };
+  } catch (error) {
+    const message = error instanceof Error ? error.message : '';
+    const outcome = message.includes('INVITATION_EXPIRED') ? 'expired'
+      : message.includes('INVITATION_REVOKED') ? 'revoked'
+        : message.includes('INVITATION_ALREADY_USED') ? 'already_used'
+          : message.includes('FAMILY_UNAVAILABLE') ? 'family_unavailable'
+            : message.includes('TOO_MANY_ATTEMPTS') ? 'rate_limited' : 'invalid_invitation';
+    emitAdultInvitationEvent(context, 'invitation_preview_failed', {
+      outcome,
+      latencyBucket: eventLatencyBucket(startedAt),
+    });
+    if (outcome === 'expired') {
+      emitAdultInvitationEvent(context, 'invitation_expired', {
+        outcome: 'expired',
+        latencyBucket: eventLatencyBucket(startedAt),
+      });
+    }
+    throw error;
   }
-  const invitation = invitationRecord(invitationSnapshot.data() as DocumentData | undefined);
-  assertInvitationActive(invitation, dateNow(context));
-  const familySnapshot = await context.db.doc(`families/${invitation.familyId}`).get();
-  const family = familySnapshot.data() as DocumentData | undefined;
-  if (!familySnapshot.exists || !isActiveFamily(family)) {
-    throw httpsError('failed-precondition', 'FAMILY_UNAVAILABLE');
-  }
-  const displayName = typeof family?.displayName === 'string' && family.displayName.trim()
-    ? family.displayName.trim()
-    : String(family?.name ?? '');
-  return {
-    familyDisplayName: displayName,
-    intendedRole: invitation.intendedRole,
-    expiresAt: invitationExpiryIso(invitation),
-    status: 'active',
-  };
 }
 
 export async function acceptAdultInvitationImpl(
@@ -439,6 +499,7 @@ export async function acceptAdultInvitationImpl(
   request: CallableRequest<AcceptAdultInvitationInput>,
   context: AdultInvitationContext,
 ): Promise<AdultInvitationAcceptance> {
+  const startedAt = Date.now();
   // `role` and `familyId` are accepted only as inert compatibility fields. They
   // are never read, persisted, or used to choose an authority path.
   assertInputShape(input, ['token', 'clientReqId', 'role', 'familyId']);
@@ -450,7 +511,8 @@ export async function acceptAdultInvitationImpl(
   const operationRef = context.db.doc(`adultInvitationAcceptanceIdempotency/${uid}_${clientReqId}`);
   const now = dateNow(context);
 
-  return context.db.runTransaction(async (transaction: Transaction) => {
+  try {
+    const result = await context.db.runTransaction(async (transaction: Transaction) => {
     const invitationSnapshot = await transaction.get(invitationRef);
     if (!invitationSnapshot.exists) throw httpsError('not-found', 'INVALID_INVITATION');
     const invitation = invitationRecord(invitationSnapshot.data() as DocumentData | undefined);
@@ -595,7 +657,31 @@ export async function acceptAdultInvitationImpl(
       role: resultRole,
       destination: '/',
     };
-  });
+    }) as AdultInvitationAcceptance;
+    emitAdultInvitationEvent(context, 'invitation_accepted', {
+      intendedRole: result.role === 'parent' || result.role === 'adult' ? result.role : undefined,
+      outcome: 'success',
+      latencyBucket: eventLatencyBucket(startedAt),
+    });
+    return result;
+  } catch (error) {
+    const message = error instanceof Error ? error.message : '';
+    const outcome = message.includes('INVITATION_EXPIRED') ? 'expired'
+      : message.includes('ALREADY_IN_') ? 'conflict'
+        : message.includes('INVITATION_ALREADY_USED') ? 'already_used'
+          : message.includes('FAMILY_UNAVAILABLE') ? 'family_unavailable'
+            : message.includes('PROFILE_REQUIRED') ? 'profile_required' : 'error';
+    if (outcome === 'conflict') {
+      emitAdultInvitationEvent(context, 'invitation_conflict', {
+        outcome: 'conflict', latencyBucket: eventLatencyBucket(startedAt),
+      });
+    } else if (outcome === 'expired') {
+      emitAdultInvitationEvent(context, 'invitation_expired', {
+        outcome: 'expired', latencyBucket: eventLatencyBucket(startedAt),
+      });
+    }
+    throw error;
+  }
 }
 
 /**

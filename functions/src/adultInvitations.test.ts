@@ -148,6 +148,7 @@ function fakeContext() {
     randomBytes: () => Buffer.alloc(32, 11),
     timestamp: (date: Date) => fakeTimestamp(date),
     eventId: () => 'event-0001',
+    eventLogger: { info: vi.fn() },
     previewIdentity: () => 'ip:192.0.2.10',
   };
   return { context, documents };
@@ -250,6 +251,21 @@ describe('adult invitation v2 callables', () => {
     });
     expect(JSON.stringify(stored)).not.toContain(result.token);
     expect(result.expiresAt).toBe('2026-09-01T12:00:00.000Z');
+  });
+
+  it('emits a sanitized categorical event after invitation creation', async () => {
+    await create(VALID_CREATE_INPUT);
+
+    expect(fixture.context.eventLogger.info).toHaveBeenCalledWith('adult_invitation_event', {
+      eventName: 'invitation_created',
+      version: 2,
+      intendedRole: 'parent',
+      outcome: 'success',
+      latencyBucket: expect.any(String),
+    });
+    expect(JSON.stringify(fixture.context.eventLogger.info.mock.calls)).not.toMatch(
+      /owner-1|family-1|rawToken|tokenHash|invitationId|The Smiths/,
+    );
   });
 
   it.each(['parent-1', 'adult-1', 'child-1'])('denies non-owner creator %s', async uid => {
