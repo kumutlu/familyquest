@@ -56,14 +56,10 @@ test.describe('Family Hub → Invite Member', () => {
 
     await dialog.getByRole('button', { name: /Another Parent/ }).click();
 
-    await expect(dialog.getByText('Parent invitation ready')).toBeVisible();
-    await expect(dialog.getByRole('button', { name: 'Share invitation' })).toBeEnabled();
-    await expect(dialog.getByRole('button', { name: 'Copy link' })).toBeEnabled();
-    // The manual family code stays a collapsed, secondary fallback.
-    const fallback = dialog.getByRole('button', { name: 'Need another way to join?' });
-    await expect(fallback).toHaveAttribute('aria-expanded', 'false');
-    await fallback.click();
-    await expect(dialog.getByText('Manual family code')).toBeVisible();
+    await expect(dialog.getByRole('status')).toHaveText('Private invitation ready.');
+    await expect(dialog.getByTestId('adult-invite-link')).toHaveAttribute('href', /\/invite\//);
+    await expect(dialog.getByRole('button', { name: 'Share private invitation' })).toBeEnabled();
+    await expect(dialog.getByRole('button', { name: 'Copy private link' })).toBeEnabled();
   });
 
   test('a non-owner parent can open the invite dialog (regression for missing entry point)', async ({ page }) => {

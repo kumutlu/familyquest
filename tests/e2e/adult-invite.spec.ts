@@ -54,8 +54,10 @@ test.describe('adult invitation authentication journey', () => {
     await page.getByRole('button', { name: /invite member/i }).click();
     const familyHub = page.getByRole('dialog', { name: /invite someone/i });
     await familyHub.getByRole('button', { name: /another parent/i }).click();
-    await expect(familyHub.getByText(/parent invitation ready/i)).toBeVisible();
-    await expect(familyHub.getByRole('button', { name: /share invitation/i })).toBeEnabled();
+    await expect(familyHub.getByRole('status')).toHaveText('Private invitation ready.');
+    await expect(familyHub.getByTestId('adult-invite-link')).toHaveAttribute('href', /\/invite\//);
+    await expect(familyHub.getByRole('button', { name: 'Share private invitation' })).toBeEnabled();
+    await expect(familyHub.getByRole('button', { name: 'Copy private link' })).toBeEnabled();
   });
 
   test('email signup retains the invitation and joins without creation onboarding', async ({ page }) => {
