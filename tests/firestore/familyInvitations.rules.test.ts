@@ -8,7 +8,20 @@
 // ---------------------------------------------------------------------------
 
 import { initializeTestEnvironment, assertFails, assertSucceeds } from '@firebase/rules-unit-testing';
-import { doc, getDoc, setDoc, updateDoc, deleteDoc, serverTimestamp, writeBatch } from 'firebase/firestore';
+import {
+  collectionGroup,
+  deleteDoc,
+  doc,
+  getDoc,
+  getDocs,
+  limit,
+  query,
+  serverTimestamp,
+  setDoc,
+  updateDoc,
+  where,
+  writeBatch,
+} from 'firebase/firestore';
 import { readFileSync } from 'fs';
 import { describe, it, beforeAll, afterAll, beforeEach } from 'vitest';
 
@@ -17,6 +30,7 @@ const projectId = 'familyquest-invitations-rules';
 const familyId = 'familyINV';
 const ownerId = 'ownerINV';
 const joinerId = 'joinerINV';
+const otherJoinerId = 'other-joinerINV';
 const code = '7ZXWRZ';
 
 const invitationPath = `families/${familyId}/invitations/${code}`;
@@ -47,6 +61,10 @@ beforeEach(async () => {
     // Server-written, invitation-derived join request.
     await setDoc(doc(db, requestPath), {
       uid: joinerId, displayName: 'Joiner', status: 'pending',
+      intendedRole: 'child', invitationCode: code,
+    });
+    await setDoc(doc(db, `families/${familyId}/join_requests/${otherJoinerId}`), {
+      uid: otherJoinerId, displayName: 'Another Joiner', status: 'pending',
       intendedRole: 'child', invitationCode: code,
     });
   });
@@ -82,6 +100,25 @@ describe('invitation records', () => {
 });
 
 describe('invitation-derived join requests', () => {
+  it('allows a no-family user to query only their own pending request', async () => {
+    const db = testEnv.authenticatedContext(joinerId).firestore();
+    const ownPending = query(
+      collectionGroup(db, 'join_requests'),
+      where('uid', '==', joinerId),
+      where('status', '==', 'pending'),
+      limit(1),
+    );
+    const otherPending = query(
+      collectionGroup(db, 'join_requests'),
+      where('uid', '==', otherJoinerId),
+      where('status', '==', 'pending'),
+      limit(1),
+    );
+
+    await assertSucceeds(getDocs(ownPending));
+    await assertFails(getDocs(otherPending));
+  });
+
   it('preserves atomic approval of a pending legacy invitation request', async () => {
     const db = testEnv.authenticatedContext(ownerId).firestore();
     const batch = writeBatch(db);

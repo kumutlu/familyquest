@@ -1798,6 +1798,16 @@ service cloud.firestore {
         && (!('technicalContext' in request.resource.data) || validTechnicalContext(request.resource.data.technicalContext));
     }
 
+    // Collection-group queries require a recursive rules-v2 match. Keep this
+    // narrowly scoped to the legacy request collection and to the requesting
+    // profile; direct family-member reads remain governed by the family match
+    // below. `{joinRequestPath=**}` also matches the direct child collection.
+    match /{joinRequestPath=**}/join_requests/{requestId} {
+      allow read: if isAuthenticated()
+        && !isManagedChildCaller()
+        && resource.data.uid == request.auth.uid;
+    }
+
     // FAMILIES
     match /families/{familyId} {
       allow read: if isFamilyMember(familyId);
