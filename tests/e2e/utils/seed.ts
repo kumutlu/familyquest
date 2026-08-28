@@ -1,4 +1,4 @@
-import { initializeApp, getApps, cert } from 'firebase-admin/app';
+import { initializeApp, getApps } from 'firebase-admin/app';
 import { getFirestore, Timestamp } from 'firebase-admin/firestore';
 import { getAuth } from 'firebase-admin/auth';
 
@@ -178,6 +178,13 @@ export async function seedTestFamily() {
   });
 
   await batch.commit();
+}
+
+// Adult invitation browser scenarios intentionally start from the same
+// disposable owner/family fixture. Keeping the entry point explicit makes the
+// test boundary discoverable without allowing browser code to write v2 records.
+export async function seedAdultInviteE2E() {
+  await seedTestFamily();
 }
 
 // Run if called directly

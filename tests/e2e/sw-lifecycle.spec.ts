@@ -181,4 +181,13 @@ test.describe('one-time legacy service-worker migration', () => {
       ` | migrationReloads=1 | normalReloads=1 | controller=${migrated.controller?.state}`,
     );
   });
+
+  test('controlled reload preserves an opaque invitation URL', async ({ page }) => {
+    server.setBuild('normal');
+    const token = 'A'.repeat(43);
+    await page.goto(`/invite/${token}`, { waitUntil: 'domcontentloaded' });
+    await waitForSha(page, shaInfo.normal);
+    await page.reload({ waitUntil: 'domcontentloaded' });
+    expect(new URL(page.url()).pathname).toBe(`/invite/${token}`);
+  });
 });
