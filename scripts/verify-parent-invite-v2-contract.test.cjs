@@ -21,8 +21,8 @@ function fixture(overrides = {}) {
     },
     frontend: {
       canonicalRoute: '/invite/:token',
-      adultInvitationAuthority: 'familyInvitations/{sha256(rawToken)}',
-      adultInvitationFallbackAuthority: null,
+      adultMembershipAuthority: 'v2-callable-only',
+      familyCodeAdultAuthorityFallback: false,
     },
     rules: {
       serverOnlyCollections: [
@@ -104,8 +104,8 @@ test('fails when frontend parent invite configuration falls back to family invit
   const { manifestPath, manifest } = fixture({
     frontend: {
       canonicalRoute: '/invite/:token',
-      adultInvitationAuthority: 'familyInvitations/{sha256(rawToken)}',
-      adultInvitationFallbackAuthority: 'families/{familyId}.inviteCode',
+      adultMembershipAuthority: 'v2-callable-only',
+      familyCodeAdultAuthorityFallback: true,
     },
   });
   fs.writeFileSync(manifestPath, JSON.stringify(manifest));
