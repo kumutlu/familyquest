@@ -1,4 +1,5 @@
 import { act, render, screen, waitFor } from '@testing-library/react';
+import { StrictMode } from 'react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
@@ -11,6 +12,8 @@ import { NoFamilyChoice } from './NoFamilyChoice';
 
 const membershipApi = vi.hoisted(() => ({ requestFamilyJoin: vi.fn() }));
 vi.mock('../lib/familyMembershipApi', () => membershipApi);
+const inviteAnalytics = vi.hoisted(() => ({ recordInviteEvent: vi.fn() }));
+vi.mock('../auth/inviteAnalytics', () => inviteAnalytics);
 vi.mock('../lib/firebase', () => ({ app: {}, auth: {}, db: {}, functions: {}, googleProvider: {} }));
 vi.mock('firebase/auth', () => ({ onAuthStateChanged: vi.fn(() => () => {}) }));
 vi.mock('firebase/firestore', () => ({
@@ -53,6 +56,35 @@ beforeEach(async () => {
 });
 
 describe('NoFamilyChoice', () => {
+  it('does not record a render for unauthenticated redirects', () => {
+    useStore.setState({ authStatus: 'unauthenticated', authUser: null, currentUser: null });
+
+    renderChoice();
+
+    expect(inviteAnalytics.recordInviteEvent).not.toHaveBeenCalledWith(
+      'no_family_choice_rendered',
+      expect.anything(),
+    );
+  });
+
+  it('records one render for an authenticated choice mount under StrictMode', () => {
+    render(
+      <StrictMode>
+        <MemoryRouter initialEntries={['/no-family']}>
+          <Routes>
+            <Route path="/no-family" element={<NoFamilyChoice />} />
+          </Routes>
+        </MemoryRouter>
+      </StrictMode>,
+    );
+
+    expect(inviteAnalytics.recordInviteEvent).toHaveBeenCalledTimes(1);
+    expect(inviteAnalytics.recordInviteEvent).toHaveBeenCalledWith(
+      'no_family_choice_rendered',
+      { source: 'no_family_choice' },
+    );
+  });
+
   it('renders explicit Create and Join choices without starting creation or membership writes', () => {
     renderChoice();
 
