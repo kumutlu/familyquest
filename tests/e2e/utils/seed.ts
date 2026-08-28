@@ -185,11 +185,34 @@ export async function seedTestFamily() {
 // test boundary discoverable without allowing browser code to write v2 records.
 export async function seedAdultInviteE2E() {
   await seedTestFamily();
+  await adminAuth.createUser({ uid: 'other1', email: 'other@test.com', password: 'password123', displayName: 'Other Family Adult' });
+  const batch = db.batch();
+  batch.set(db.doc('families/other-fam'), {
+    name: 'Other Family',
+    inviteCode: 'OTHER1',
+    currency: '£',
+    debtLimit: 0,
+    createdAt: Timestamp.now(),
+  });
+  batch.set(db.doc('users/other1'), {
+    familyId: 'other-fam',
+    role: 'parent',
+    lifecycle: 'active',
+    displayName: 'Other Family Adult',
+  });
+  batch.set(db.doc('families/other-fam/users/other1'), {
+    uid: 'other1',
+    role: 'parent',
+    lifecycle: 'active',
+    displayName: 'Other Family Adult',
+  });
+  await batch.commit();
 }
 
 // Run if called directly
 if (import.meta.url === `file://${process.argv[1]}`) {
-  seedTestFamily().then(() => {
+  const seed = process.argv.includes('--adult-invite') ? seedAdultInviteE2E : seedTestFamily;
+  seed().then(() => {
     console.log('Seeded successfully');
     process.exit(0);
   }).catch(e => {

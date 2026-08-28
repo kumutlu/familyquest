@@ -1,4 +1,5 @@
 import { execFileSync } from 'node:child_process';
+import { createHash, randomBytes } from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 
 const PROJECT_ID = 'familyquest-beta-402cb';
@@ -16,6 +17,13 @@ export interface AdultInviteFixture {
   token: string;
   intendedRole: AdultInviteRole;
   expiresAt: string;
+}
+
+export interface EmulatorUserFixture {
+  email: string;
+  password: string;
+  uid: string;
+  idToken: string;
 }
 
 /** Return the emulator's callable URL; no token or invitation data is embedded. */
@@ -40,8 +48,9 @@ export function readCallableResult<T>(body: unknown): T {
   return (body as { result: T }).result;
 }
 
-interface EmulatorSignInResponse {
+interface EmulatorAuthResponse {
   idToken: string;
+  localId: string;
 }
 
 async function readJson(response: Response): Promise<unknown> {
@@ -64,15 +73,14 @@ async function ownerIdToken(): Promise<string> {
       body: JSON.stringify({ email: OWNER_EMAIL, password: OWNER_PASSWORD, returnSecureToken: true }),
     },
   );
-  const body = await readJson(response) as EmulatorSignInResponse;
+  const body = await readJson(response) as EmulatorAuthResponse;
   if (typeof body.idToken !== 'string' || body.idToken.length < 20) {
     throw new Error('EMULATOR_ID_TOKEN_INVALID');
   }
   return body.idToken;
 }
 
-async function invokeOwnerCallable<T>(name: string, data: unknown): Promise<T> {
-  const idToken = await ownerIdToken();
+async function invokeCallable<T>(idToken: string, name: string, data: unknown): Promise<T> {
   const response = await fetch(adultInviteCallableEndpoint(name), {
     method: 'POST',
     headers: {
@@ -84,9 +92,75 @@ async function invokeOwnerCallable<T>(name: string, data: unknown): Promise<T> {
   return readCallableResult<T>(await readJson(response));
 }
 
+async function invokeOwnerCallable<T>(name: string, data: unknown): Promise<T> {
+  return invokeCallable<T>(await ownerIdToken(), name, data);
+}
+
+async function createEmulatorUser(email: string, password: string): Promise<EmulatorUserFixture> {
+  const response = await fetch(
+    `http://${AUTH_EMULATOR_HOST}/identitytoolkit.googleapis.com/v1/accounts:signUp?key=demo`,
+    {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ email, password, returnSecureToken: true }),
+    },
+  );
+  const body = await readJson(response) as EmulatorAuthResponse;
+  if (!body.idToken || !body.localId) throw new Error('EMULATOR_USER_INVALID');
+  return { email, password, uid: body.localId, idToken: body.idToken };
+}
+
+function firestoreString(value: string) {
+  return { stringValue: value };
+}
+
+function firestoreTimestamp(value: string) {
+  return { timestampValue: value };
+}
+
+async function writeFirestoreDocument(path: string, fields: Record<string, unknown>): Promise<void> {
+  const response = await fetch(
+    `http://${FIRESTORE_EMULATOR_HOST}/v1/projects/${PROJECT_ID}/databases/(default)/documents/${path}`,
+    {
+      method: 'PATCH',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ fields }),
+    },
+  );
+  await readJson(response);
+}
+
+function fixtureToken(): string {
+  return randomBytes(32).toString('base64url');
+}
+
+function invitationIdForToken(token: string): string {
+  return createHash('sha256').update(token, 'utf8').digest('hex');
+}
+
+async function createAdminInvitationFixture(overrides: {
+  status?: 'active' | 'accepted' | 'revoked';
+  expiresAt?: string;
+} = {}): Promise<AdultInviteFixture> {
+  const token = fixtureToken();
+  const invitationId = invitationIdForToken(token);
+  const expiresAt = overrides.expiresAt || new Date(Date.now() + 86_400_000).toISOString();
+  await writeFirestoreDocument(`familyInvitations/${invitationId}`, {
+    version: { integerValue: '2' },
+    familyId: firestoreString('test-fam'),
+    intendedRole: firestoreString('parent'),
+    status: firestoreString(overrides.status || 'active'),
+    createdBy: firestoreString('owner1'),
+    createdAt: firestoreTimestamp(new Date().toISOString()),
+    expiresAt: firestoreTimestamp(expiresAt),
+    clientReqId: firestoreString(`e2e-admin-${crypto.randomUUID()}`),
+  });
+  return { invitationId, token, intendedRole: 'parent', expiresAt };
+}
+
 /** Reset the disposable family through the existing standalone seed process. */
 export function seedAdultInviteE2E(): void {
-  execFileSync('npx', ['tsx', fileURLToPath(new URL('./seed.ts', import.meta.url))], {
+  execFileSync('npx', ['tsx', fileURLToPath(new URL('./seed.ts', import.meta.url)), '--adult-invite'], {
     stdio: 'ignore',
   });
 }
@@ -118,4 +192,56 @@ export async function revokeAdultInvitationForE2E(
     invitationId,
     clientReqId: `e2e-revoke-${crypto.randomUUID()}`,
   });
+}
+
+/** Create an expired terminal fixture in Firestore (admin test-process boundary only). */
+export async function createExpiredAdultInvitationForE2E(): Promise<AdultInviteFixture> {
+  return createAdminInvitationFixture({ expiresAt: new Date(Date.now() - 86_400_000).toISOString() });
+}
+
+/** Create a revoked terminal fixture through the owner callable. */
+export async function createRevokedAdultInvitationForE2E(): Promise<AdultInviteFixture> {
+  const invitation = await createAdultInvitationForE2E();
+  await revokeAdultInvitationForE2E(invitation.invitationId);
+  return invitation;
+}
+
+/** Accept an invitation as a disposable recipient, then return its used token. */
+export async function createUsedAdultInvitationForE2E(): Promise<AdultInviteFixture> {
+  const invitation = await createAdultInvitationForE2E();
+  const email = `adult-used-${Date.now()}-${Math.floor(Math.random() * 10000)}@example.com`;
+  const recipient = await createEmulatorUser(email, 'password123');
+  await writeFirestoreDocument(`users/${recipient.uid}`, {
+    uid: firestoreString(recipient.uid),
+    role: firestoreString('parent'),
+    displayName: firestoreString('Used Invite Recipient'),
+  });
+  await invokeCallable(recipient.idToken, 'acceptAdultInvitation', {
+    token: invitation.token,
+    clientReqId: `e2e-used-${crypto.randomUUID()}`,
+  });
+  return invitation;
+}
+
+/** Create a disposable authenticated profile without a family for routing tests. */
+export async function createNoFamilyUserForE2E(): Promise<EmulatorUserFixture> {
+  const email = `adult-no-family-${Date.now()}-${Math.floor(Math.random() * 10000)}@example.com`;
+  const user = await createEmulatorUser(email, 'password123');
+  await writeFirestoreDocument(`users/${user.uid}`, {
+    uid: firestoreString(user.uid),
+    role: firestoreString('parent'),
+    displayName: firestoreString('No Family User'),
+  });
+  return user;
+}
+
+/** Seed a same-family member and return an invitation for idempotence coverage. */
+export async function createSameFamilyAdultInvitationForE2E(): Promise<AdultInviteFixture> {
+  await writeFirestoreDocument('families/test-fam/users/parent1', {
+    uid: firestoreString('parent1'),
+    displayName: firestoreString('Parent Dad'),
+    role: firestoreString('parent'),
+    lifecycle: firestoreString('active'),
+  });
+  return createAdultInvitationForE2E();
 }
