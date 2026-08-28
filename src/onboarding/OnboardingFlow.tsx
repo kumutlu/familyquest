@@ -62,11 +62,13 @@ function BoundedLoading() {
  * onboarding.
  */
 export interface OnboardingFlowProps {
+  onFamilyCreationStarted?: (continuation: { authUid: string }) => void;
   onFamilyCreationConfirmed?: (continuation: { authUid: string; familyId: string }) => void;
   onCreationJourneyEnded?: () => void;
 }
 
 export function OnboardingFlow({
+  onFamilyCreationStarted,
   onFamilyCreationConfirmed,
   onCreationJourneyEnded,
 }: OnboardingFlowProps = {}) {
@@ -108,19 +110,25 @@ export function OnboardingFlow({
       uid: authUser?.uid ?? currentUser?.id ?? '',
       createFamilyAndParent: async (...args: Parameters<typeof createFamilyAndParent>) => {
         familyCreationAttemptedRef.current = true;
-        const result = await createFamilyAndParent(...args);
-        onFamilyCreationConfirmed?.({
-          authUid: args[0],
-          familyId: result.user.familyId ?? result.familyId,
-        });
-        return result;
+        onFamilyCreationStarted?.({ authUid: args[0] });
+        try {
+          const result = await createFamilyAndParent(...args);
+          onFamilyCreationConfirmed?.({
+            authUid: args[0],
+            familyId: result.user.familyId ?? result.familyId,
+          });
+          return result;
+        } catch (error) {
+          onCreationJourneyEnded?.();
+          throw error;
+        }
       },
       createManagedMember,
       createTask,
       refreshCurrentUser,
       getFamilyMembers: () => useStore.getState().familyMembers ?? [],
     }),
-    [authUser?.uid, currentUser?.id, onFamilyCreationConfirmed, refreshCurrentUser],
+    [authUser?.uid, currentUser?.id, onCreationJourneyEnded, onFamilyCreationConfirmed, onFamilyCreationStarted, refreshCurrentUser],
   );
 
   // Funnel: started (once, pre-auth).

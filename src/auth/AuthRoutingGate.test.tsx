@@ -123,14 +123,14 @@ describe('deriveAuthRouteDecision', () => {
     })).toBe('startup');
   });
 
-  it('lets active membership outrank a stale create draft', () => {
+  it('lets a UID-bound explicit creation journey reach the flow for draft reconciliation', () => {
     expect(deriveAuthRouteDecision({
       ...readyInput,
       currentUser: { id: 'u1', familyId: 'family-1' },
       hasExplicitCreateIntent: true,
       pathname: '/onboarding',
       search: '?mode=create',
-    })).toBe('app');
+    })).toBe('createOnboarding');
   });
 
   it('allows only the matching authoritative in-session creation continuation to finish onboarding', () => {
@@ -144,6 +144,12 @@ describe('deriveAuthRouteDecision', () => {
 
     expect(deriveAuthRouteDecision({
       ...activeCreation,
+      creationContinuation: { authUid: 'u1', familyId: 'family-1' },
+    })).toBe('createOnboarding');
+    expect(deriveAuthRouteDecision({
+      ...activeCreation,
+      appReady: false,
+      pendingMembershipStatus: 'settling',
       creationContinuation: { authUid: 'u1', familyId: 'family-1' },
     })).toBe('createOnboarding');
     expect(deriveAuthRouteDecision({

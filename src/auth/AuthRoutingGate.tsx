@@ -7,6 +7,7 @@ import { markStartupStage } from '../startupDiagnostics';
 import { StartupScreen } from '../components/layout/StartupScreen';
 import { useStore } from '../store/useStore';
 import { readPendingInvite } from './pendingInviteIntent';
+import { clearCreateFamilyIntent } from './createFamilyIntent';
 
 export type AuthRouteDecision =
   | 'startup'
@@ -38,7 +39,7 @@ export interface AuthRouteDecisionInput {
   legacyInviteCode: string | null;
   pendingMembershipStatus: PendingMembershipStatus;
   hasExplicitCreateIntent: boolean;
-  creationContinuation?: { authUid: string; familyId: string } | null;
+  creationContinuation?: { authUid: string; familyId?: string } | null;
   pathname: string;
   search: string;
 }
@@ -128,20 +129,27 @@ export function deriveAuthRouteDecision(input: AuthRouteDecisionInput): AuthRout
   if (!input.authUser?.uid || !input.currentUser || !input.profileServerConfirmed) return 'startup';
 
   if (input.pendingMembershipStatus === 'recovery') return 'pendingMembership';
-  if (!input.appReady) return 'startup';
 
   if (input.currentUser.familyId) {
-    if (!hasActiveMembershipLifecycle(input)) return 'pendingMembership';
     const continuation = input.creationContinuation;
     if (
       isCurrentCreateRoute(input.pathname, input.search) &&
-      continuation?.authUid === input.authUser.uid &&
-      continuation.familyId === input.currentUser.familyId
+      (
+        input.hasExplicitCreateIntent ||
+        (
+          continuation?.authUid === input.authUser.uid &&
+          (continuation.familyId === undefined || continuation.familyId === input.currentUser.familyId)
+        )
+      )
     ) {
       return 'createOnboarding';
     }
+    if (!input.appReady) return 'startup';
+    if (!hasActiveMembershipLifecycle(input)) return 'pendingMembership';
     return 'app';
   }
+
+  if (!input.appReady) return 'startup';
 
   if (
     input.pendingMembershipStatus === 'idle' ||
@@ -179,7 +187,8 @@ export interface AuthRoutingGateProps {
   /** Task 8 supplies true only for a fresh create-family intent bound to authUser.uid. */
   hasExplicitCreateIntent?: boolean;
   /** In-memory continuation created only after this mounted flow receives a successful family response. */
-  creationContinuation?: { authUid: string; familyId: string } | null;
+  creationContinuation?: { authUid: string; familyId?: string } | null;
+  onCreationJourneyEnded?: () => void;
 }
 
 /** Thin navigation wrapper around deriveAuthRouteDecision. */
@@ -187,6 +196,7 @@ export function AuthRoutingGate({
   children,
   hasExplicitCreateIntent = false,
   creationContinuation = null,
+  onCreationJourneyEnded,
 }: AuthRoutingGateProps) {
   const location = useLocation();
   const navigate = useNavigate();
@@ -225,6 +235,17 @@ export function AuthRoutingGate({
   useEffect(() => {
     if (decision !== 'startup') markStartupStage('ROUTE_RENDERED');
   }, [decision]);
+
+  useEffect(() => {
+    if (
+      currentUser?.familyId &&
+      !isCurrentCreateRoute(location.pathname, location.search) &&
+      (hasExplicitCreateIntent || creationContinuation)
+    ) {
+      clearCreateFamilyIntent();
+      onCreationJourneyEnded?.();
+    }
+  }, [creationContinuation, currentUser?.familyId, hasExplicitCreateIntent, location.pathname, location.search, onCreationJourneyEnded]);
 
   // Actual store state always supplies authStatus. This passthrough keeps older
   // isolated route harnesses that intentionally mock only initAuth usable.

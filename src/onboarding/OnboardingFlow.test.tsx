@@ -203,7 +203,7 @@ describe('OnboardingFlow — post-auth idempotent setup', () => {
     await waitFor(() => expect(api.createFamilyAndParent).toHaveBeenCalledTimes(1));
     expect(api.createFamilyAndParent).toHaveBeenCalledWith('auth-uid-1', 'Kemal', 'Kemal Family');
     await waitFor(() => expect(api.createManagedMember).toHaveBeenCalledTimes(1));
-    expect(readCreateFamilyIntent('auth-uid-1')).toBeNull();
+    expect(readCreateFamilyIntent('auth-uid-1')).not.toBeNull();
 
     // Continue to P2.
     await user.click(screen.getByRole('button', { name: /continue/i }));
@@ -220,6 +220,7 @@ describe('OnboardingFlow — post-auth idempotent setup', () => {
     await waitFor(() => expect(screen.getByRole('button', { name: /go to my dashboard/i })).toBeInTheDocument());
     await user.click(screen.getByRole('button', { name: /go to my dashboard/i }));
     await waitFor(() => expect(navigate).toHaveBeenCalledWith('/', { replace: true }));
+    expect(readCreateFamilyIntent('auth-uid-1')).toBeNull();
     // Draft cleared on completion.
     expect(useStore.getState().currentUser?.familyId).toBe('family-1');
   });
