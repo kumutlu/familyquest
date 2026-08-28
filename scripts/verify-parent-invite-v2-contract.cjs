@@ -8,12 +8,14 @@ const REQUIRED_CALLABLES = [
   'previewAdultInvitation',
   'acceptAdultInvitation',
   'revokeAdultInvitation',
+  'completeAdultInvitationProfile',
 ];
 
 const REQUIRED_SERVER_ONLY_COLLECTIONS = [
   'familyInvitations',
   'adultInvitationCreationIdempotency',
   'adultInvitationAcceptanceIdempotency',
+  'adultInvitationProfileCompletionIdempotency',
   'adultInvitationRevocationIdempotency',
   'adultInvitationPreviewRateLimits',
 ];
@@ -101,6 +103,9 @@ function rulesAreServerOnly(source, collection) {
 }
 
 function collectDefaultContract() {
+  const contractPath = path.join(REPO_ROOT, 'scripts', 'parent-invite-v2-contract.json');
+  const sourceContract = readJson(contractPath);
+  if (!sourceContract) throw new Error(`missing source contract artifact: ${contractPath}`);
   const functionsEntry = path.join(REPO_ROOT, 'functions', 'lib', 'functions', 'src', 'index.js');
   const functionsSource = fs.existsSync(functionsEntry)
     ? fs.readFileSync(functionsEntry, 'utf8')
@@ -115,9 +120,8 @@ function collectDefaultContract() {
       ),
     },
     frontend: {
+      ...(sourceContract.frontend || {}),
       buildRoutes: buildSource.includes(CANONICAL_ROUTE) ? [CANONICAL_ROUTE] : [],
-      adultInvitationAuthority: 'familyInvitations/{sha256(rawToken)}',
-      adultInvitationFallbackAuthority: null,
     },
     rules: {
       serverOnlyCollections: REQUIRED_SERVER_ONLY_COLLECTIONS.filter((name) => rulesAreServerOnly(rulesSource, name)),
