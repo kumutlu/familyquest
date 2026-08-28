@@ -364,7 +364,7 @@ describe('PRIORITY 2 — offline / network feedback', () => {
     expect(screen.getByText('Osman')).toBeInTheDocument();
   });
 
-  it('keeps the intent after an ambiguous create error and clears it only after idempotent recovery', async () => {
+  it('keeps the intent after an ambiguous create error and through idempotent recovery', async () => {
     const user = userEvent.setup();
     api.createFamilyAndParent
       .mockRejectedValueOnce(new Error('unavailable'))
@@ -383,6 +383,6 @@ describe('PRIORITY 2 — offline / network feedback', () => {
 
     await user.click(screen.getByRole('button', { name: /retry/i }));
     await waitFor(() => expect(api.createFamilyAndParent).toHaveBeenCalledTimes(2));
-    await waitFor(() => expect(readCreateFamilyIntent('u1')).toBeNull());
+    expect(readCreateFamilyIntent('u1')).not.toBeNull();
   });
 });

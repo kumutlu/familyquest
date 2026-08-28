@@ -19,7 +19,7 @@ test.describe('Family Hub → Invite Member', () => {
     execSync('npx tsx tests/e2e/utils/seed.ts', { stdio: 'ignore' });
   });
 
-  const openInviteDialog = async (page: import('@playwright/test').Page) => {
+  const openInviteDialog = async (page: import('@playwright/test').Page, isOwner: boolean) => {
     const consoleErrors: string[] = [];
     page.on('console', message => {
       if (message.type() === 'error') consoleErrors.push(message.text());
@@ -35,11 +35,16 @@ test.describe('Family Hub → Invite Member', () => {
     const dialog = page.getByRole('dialog', { name: /invite someone/i });
     await expect(dialog).toBeVisible();
 
-    // Step 1 offers exactly three choices and nothing else.
+    // Parents retain the child/manual entry points; only owners may create an
+    // adult invitation.
     await expect(dialog.getByRole('heading', { name: 'Invite someone' })).toBeVisible();
-    await expect(dialog.getByRole('button', { name: /Another Parent/ })).toBeEnabled();
     await expect(dialog.getByRole('button', { name: /Child with their own device/ })).toBeEnabled();
     await expect(dialog.getByRole('button', { name: /Create managed child/ })).toBeEnabled();
+    if (isOwner) {
+      await expect(dialog.getByRole('button', { name: /Another Parent/ })).toBeEnabled();
+    } else {
+      await expect(dialog.getByRole('button', { name: /Another Parent/ })).toHaveCount(0);
+    }
     // No code, URL, share or copy affordance before a choice is made.
     await expect(dialog.locator('code')).toHaveCount(0);
     await expect(dialog.getByRole('button', { name: 'Copy link' })).toHaveCount(0);
@@ -52,7 +57,7 @@ test.describe('Family Hub → Invite Member', () => {
   test('owner can open the invite dialog and reach a shareable parent invitation', async ({ page }) => {
     await loginAs(page, 'owner@test.com');
     await page.goto('/family');
-    const dialog = await openInviteDialog(page);
+    const dialog = await openInviteDialog(page, true);
 
     await dialog.getByRole('button', { name: /Another Parent/ }).click();
 
@@ -66,6 +71,6 @@ test.describe('Family Hub → Invite Member', () => {
     await loginAs(page, 'parent@test.com');
     await page.goto('/family');
     // The root cause: previously this button did not exist for a parent.
-    await openInviteDialog(page);
+    await openInviteDialog(page, false);
   });
 });

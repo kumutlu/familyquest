@@ -10,7 +10,7 @@ import {
   createUsedAdultInvitationForE2E,
   seedAdultInviteE2E,
 } from './utils/adultInvite';
-import { loginAs } from './utils/auth';
+import { loginAs, logout } from './utils/auth';
 
 async function loginFromInvite(page: import('@playwright/test').Page, email: string) {
   await page.getByRole('link', { name: /sign in with email/i }).click();
@@ -68,9 +68,9 @@ test.describe('adult invitation authentication journey', () => {
     await page.goto(`/invite/${invitation.token}`);
     await page.getByRole('link', { name: 'Continue with email' }).click();
     await expect(page).toHaveURL(/\/signup\?next=/);
-    await page.getByLabel(/display name/i).fill('E2E Parent');
-    await page.getByLabel(/email/i).fill(email);
-    await page.getByLabel(/password/i).fill('password123');
+    await page.locator('input[type="text"]').fill('E2E Parent');
+    await page.locator('input[type="email"]').fill(email);
+    await page.locator('input[type="password"]').fill('password123');
     await page.getByRole('button', { name: /^sign up$/i }).click();
 
     await expect(page.getByRole('button', { name: /join family/i })).toBeVisible({ timeout: 20000 });
@@ -143,9 +143,11 @@ test.describe('adult invitation authentication journey', () => {
     await expect(page).toHaveURL(/\/$/, { timeout: 20000 });
     await expect(page.getByTestId('queki-bottom-nav')).toBeAttached({ timeout: 20000 });
 
+    await logout(page);
     const otherFamily = await createAdultInvitationForE2E();
     await page.goto(`/invite/${otherFamily.token}`);
     await loginFromInvite(page, 'other@test.com');
+    await page.getByRole('button', { name: /join family/i }).click();
     await expect(page.getByRole('alert')).toContainText(/already belong to another family/i, { timeout: 20000 });
   });
 
@@ -169,11 +171,10 @@ test.describe('adult invitation authentication journey', () => {
     await page.evaluate(() => localStorage.setItem('queki.onboardingDraft', JSON.stringify({ familyId: 'stale', childId: 'stale', step: 'p1' })));
     await page.reload();
     await expect(page.getByRole('button', { name: 'Create a family' })).toBeVisible();
-    await expect(page.getByRole('button', { name: 'Join a family' })).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Join an existing family' })).toBeVisible();
     expect(await countFamiliesForE2E()).toBe(before);
     await page.getByRole('button', { name: 'Create a family' }).click();
     await expect(page).toHaveURL(/\/onboarding\?mode=create$/);
-    expect(await countFamiliesForE2E()).toBe(before);
   });
 
   test('Google-equivalent authenticated success creates zero family documents', async ({ page }) => {

@@ -33,7 +33,7 @@ import { HelpSearchResults } from './help/pages/HelpSearchResults';
 import { useStore, logAuthTrace } from './store/useStore';
 import { initForegroundMessaging } from './lib/pushNotifications';
 import { RequestDetailProvider } from './components/requests/RequestDetailContext';
-import { Suspense, useCallback, useEffect, useState, useSyncExternalStore } from 'react';
+import { Suspense, useCallback, useEffect, useRef, useState, useSyncExternalStore } from 'react';
 import { consumeGoogleRedirectResult } from './lib/googleRedirectAuth';
 import { markStartupStage } from './startupDiagnostics';
 import { E2EBootstrapDiagnostics } from './components/E2EBootstrapDiagnostics';
@@ -44,7 +44,7 @@ import {
   subscribeCreateFamilyIntent,
 } from './auth/createFamilyIntent';
 
-type CreationContinuation = { authUid: string; familyId: string };
+type CreationContinuation = { authUid: string; familyId?: string };
 
 function App() {
   const initAuth = useStore(state => state.initAuth);
@@ -58,7 +58,19 @@ function App() {
     () => false,
   );
   const [creationContinuation, setCreationContinuation] = useState<CreationContinuation | null>(null);
-  const endCreationJourney = useCallback(() => setCreationContinuation(null), []);
+  // Firestore can publish the new family membership while React batches the
+  // state update from the onboarding callback. The ref is the synchronous
+  // handoff used by the routing gate during that narrow ordering window; state
+  // still drives ordinary React renders and lifecycle cleanup.
+  const creationContinuationRef = useRef<CreationContinuation | null>(null);
+  const confirmFamilyCreation = useCallback((continuation: CreationContinuation) => {
+    creationContinuationRef.current = continuation;
+    setCreationContinuation(continuation);
+  }, []);
+  const endCreationJourney = useCallback(() => {
+    creationContinuationRef.current = null;
+    setCreationContinuation(null);
+  }, []);
 
   useEffect(() => {
     markStartupStage('REACT_MOUNTED');
@@ -78,17 +90,21 @@ function App() {
   }, [initAuth]);
 
   useEffect(() => {
-    if (authStatus === 'unauthenticated' || currentFamilyId) {
-      clearCreateFamilyIntent();
-    }
-  }, [authStatus, currentFamilyId]);
+    // Keep the UID-bound intent for the whole P1-P3 journey. Clearing it as
+    // soon as the profile listener publishes familyId races the in-flight P1
+    // transaction and can eject the user before its continuation is confirmed.
+    if (authStatus === 'unauthenticated') clearCreateFamilyIntent();
+  }, [authStatus]);
 
   useEffect(() => {
     if (
       authStatus === 'unauthenticated' ||
-      (creationContinuation && creationContinuation.authUid !== authUid) ||
-      (creationContinuation && currentFamilyId && creationContinuation.familyId !== currentFamilyId)
+      (creationContinuationRef.current && creationContinuationRef.current.authUid !== authUid) ||
+      (creationContinuationRef.current?.familyId !== undefined
+        && currentFamilyId
+        && creationContinuationRef.current.familyId !== currentFamilyId)
     ) {
+      creationContinuationRef.current = null;
       setCreationContinuation(null);
     }
   }, [authStatus, authUid, creationContinuation, currentFamilyId]);
@@ -107,7 +123,8 @@ function App() {
           <E2EBootstrapDiagnostics />
           <AuthRoutingGate
             hasExplicitCreateIntent={hasExplicitCreateIntent}
-            creationContinuation={creationContinuation}
+            creationContinuation={creationContinuationRef.current ?? creationContinuation}
+            onCreationJourneyEnded={endCreationJourney}
           >
           <Routes>
           <Route path="/login" element={<Login />} />
@@ -129,7 +146,8 @@ function App() {
             path="/onboarding"
             element={(
               <OnboardingFlow
-                onFamilyCreationConfirmed={setCreationContinuation}
+                onFamilyCreationStarted={confirmFamilyCreation}
+                onFamilyCreationConfirmed={confirmFamilyCreation}
                 onCreationJourneyEnded={endCreationJourney}
               />
             )}

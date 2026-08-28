@@ -30,6 +30,7 @@ const appStoreListeners = vi.hoisted(() => new Set<() => void>());
 const firestoreBoundary = vi.hoisted(() => ({
   transactions: 0,
   familyWrites: [] as Array<{ path: string; data: unknown }>,
+  publishMembershipDuringTransaction: false,
 }));
 
 vi.mock('./store/useStore', async () => {
@@ -81,7 +82,16 @@ vi.mock('firebase/firestore', () => ({
       set: vi.fn((reference: any, data: unknown) => {
         firestoreBoundary.familyWrites.push({ path: reference.path, data });
       }),
-      update: vi.fn(),
+      update: vi.fn((reference: any) => {
+        if (firestoreBoundary.publishMembershipDuringTransaction && reference.path === 'users') {
+          appStoreState.currentUser = {
+            ...appStoreState.currentUser,
+            familyId: 'family-created',
+            role: 'owner',
+          };
+          appStoreListeners.forEach(listener => listener());
+        }
+      }),
     });
   }),
   setDoc: vi.fn(),
@@ -169,6 +179,7 @@ beforeEach(() => {
   clearCreateFamilyIntent();
   firestoreBoundary.transactions = 0;
   firestoreBoundary.familyWrites = [];
+  firestoreBoundary.publishMembershipDuringTransaction = false;
   appStoreState.authStatus = 'initializing';
   appStoreState.authUser = undefined;
   appStoreState.currentUser = null;
@@ -287,6 +298,29 @@ describe('App auth routing and onboarding composition', () => {
     await user.click(screen.getByRole('button', { name: 'Go to my dashboard' }));
 
     await waitFor(() => expect(window.location.pathname).toBe('/'));
+  });
+
+  it('keeps P1 mounted when the profile listener publishes family membership before the create promise resolves', async () => {
+    const user = userEvent.setup();
+    savePostAuthCreateDraft('Osman');
+    firestoreBoundary.publishMembershipDuringTransaction = true;
+    publishStore({
+      authStatus: 'authenticated',
+      authUser: { uid: 'owner-1' },
+      currentUser: { id: 'owner-1', role: 'parent' },
+      profileServerConfirmed: true,
+      appReady: true,
+      pendingMembershipStatus: 'none',
+    });
+    window.history.pushState({}, '', '/no-family');
+
+    render(<App />);
+    await user.click(await screen.findByRole('button', { name: 'Create a family' }));
+
+    await waitFor(() => expect(appStoreState.currentUser?.familyId).toBe('family-created'));
+    expect(window.location.pathname).toBe('/onboarding');
+    expect(window.location.search).toBe('?mode=create');
+    expect(await screen.findByRole('button', { name: 'Continue' })).toBeVisible();
   });
 
   it('lets an existing active family beat a forged fresh intent on initial mount', async () => {

@@ -14,7 +14,7 @@ import {
 } from '../lib/onboardingErrors';
 import type { OnboardingDraft } from '../lib/onboardingDraft';
 import { recordE2ETimeline } from '../../lib/e2eDiagnostics';
-import { clearCreateFamilyIntent, readCreateFamilyIntent } from '../../auth/createFamilyIntent';
+import { readCreateFamilyIntent } from '../../auth/createFamilyIntent';
 
 interface FamilyCompositionProps {
   draft: OnboardingDraft;
@@ -114,10 +114,9 @@ export function FamilyComposition({ draft, patch, goNext, deps }: FamilyComposit
           recordE2ETimeline('ensure-family-start');
           next = await withBoundedTimeout(ensureFamily(next, deps), SETUP_WAIT_MS, t('errors.offline'));
           recordE2ETimeline('ensure-family-end', { familyId: next.familyId });
-          // Clear only after an authoritative response. A timeout/network error
-          // may have committed server-side, so retaining the intent is required
-          // for the idempotent retry to recover that family.
-          clearCreateFamilyIntent();
+          // Keep the UID-bound intent through P3. It is the durable authorization
+          // that lets a reload resume this idempotent creation journey; completion
+          // or sign-out clears it at the container boundary.
         }
         if (!next.childId) {
           recordE2ETimeline('ensure-first-child-start');
