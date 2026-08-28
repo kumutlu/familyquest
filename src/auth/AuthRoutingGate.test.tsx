@@ -261,6 +261,21 @@ describe('AuthRoutingGate navigation', () => {
     expect(screen.getByTestId('current-path')).not.toHaveTextContent('/onboarding');
   });
 
+  it.each(['/login?next=%2Finvite%2F' + TOKEN, '/signup?next=%2Finvite%2F' + TOKEN])(
+    'keeps a pending invite recipient on the auth-entry route %s',
+    path => {
+      storeState.authStatus = 'unauthenticated';
+      storeState.authUser = null;
+      storeState.currentUser = null;
+      storeState.profileServerConfirmed = false;
+      capturePendingInvite(TOKEN);
+
+      renderGate(path);
+
+      expect(screen.getByTestId('current-path')).toHaveTextContent(path);
+    },
+  );
+
   it('keeps the canonical URL token ahead of an older stored v2 token', () => {
     capturePendingInvite(TOKEN_B);
     renderGate(`/invite/${TOKEN}`);

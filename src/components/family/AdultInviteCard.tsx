@@ -1,4 +1,4 @@
-import { useCallback, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Check, Copy, Link2, Loader2, Share2, ShieldCheck, X } from 'lucide-react';
 import { useStore } from '../../store/useStore';
@@ -13,6 +13,8 @@ import { Button } from '../ui/Button';
 
 export interface AdultInviteCardProps {
   defaultRole?: AdultRole;
+  /** Family Hub role selection creates its already-confirmed parent invite immediately. */
+  autoCreate?: boolean;
   onClose?: () => void;
 }
 
@@ -36,7 +38,7 @@ function liveInviteUrl(token: string): string {
  * bearer token exists only in React state for the lifetime of this card. The
  * server-returned invitation id is the only value used for revocation.
  */
-export function AdultInviteCard({ defaultRole = 'parent', onClose }: AdultInviteCardProps) {
+export function AdultInviteCard({ defaultRole = 'parent', autoCreate = false, onClose }: AdultInviteCardProps) {
   const { t } = useTranslation(['family', 'common']);
   const currentUser = useStore(state => state.currentUser);
   const [role, setRole] = useState<AdultRole>(defaultRole === 'adult' ? 'adult' : 'parent');
@@ -82,6 +84,10 @@ export function AdultInviteCard({ defaultRole = 'parent', onClose }: AdultInvite
       setCreating(false);
     }
   }, [invitation, role]);
+
+  useEffect(() => {
+    if (autoCreate) void create();
+  }, [autoCreate, create]);
 
   const share = useCallback(async () => {
     if (!invitation) return;

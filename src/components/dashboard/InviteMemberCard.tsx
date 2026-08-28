@@ -150,6 +150,7 @@ export function InviteMemberCard({
     return (
       <AdultInviteCard
         defaultRole="parent"
+        autoCreate
         onClose={() => setShowAdultInvite(false)}
       />
     );

@@ -44,12 +44,12 @@ describe('InviteMemberCard', () => {
     expect(legacyApi.createFamilyInvitation).not.toHaveBeenCalled();
   });
 
-  it('uses the shared AdultInviteCard for owner parent invitations', async () => {
+  it('creates a parent invitation immediately after the owner selects that choice', async () => {
     const user = userEvent.setup();
     renderCard();
     await user.click(screen.getByRole('button', { name: /Another Parent/ }));
     expect(screen.getByTestId('adult-invite-card')).toBeVisible();
-    await user.click(screen.getByRole('button', { name: 'Create private invitation' }));
+    await screen.findByRole('button', { name: 'Copy private link' });
     expect(adultApi.createAdultInvitation).toHaveBeenCalledWith({ intendedRole: 'parent', clientReqId: expect.any(String) });
   });
 

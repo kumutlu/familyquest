@@ -56,6 +56,9 @@ const PUBLIC_PASSTHROUGH_PATHS = new Set([
 const isCurrentCreateRoute = (pathname: string, search: string) =>
   pathname === '/onboarding' && new URLSearchParams(search).get('mode') === 'create';
 
+const isInviteAuthEntryRoute = (pathname: string) =>
+  pathname === '/login' || pathname === '/signup';
+
 const currentV2Token = (pathname: string) => {
   const token = CURRENT_V2_INVITE.exec(pathname)?.[1] ?? '';
   return CANONICAL_V2_TOKEN.test(token) ? token : null;
@@ -249,7 +252,13 @@ export function AuthRoutingGate({
     if (suppliedInviteJourney(location.pathname, location.search)) return children;
     if (currentV2Token(location.pathname)) return children;
     if (currentLegacyCode(location.pathname, location.search)) return children;
-    if (pendingInvite && location.pathname !== `/invite/${pendingInvite.token}`) {
+    // A pending invitation owns the post-auth destination, but the user must
+    // still be able to enter the public email auth routes that carry it there.
+    if (
+      pendingInvite
+      && !isInviteAuthEntryRoute(location.pathname)
+      && location.pathname !== `/invite/${pendingInvite.token}`
+    ) {
       return <Navigate to={`/invite/${encodeURIComponent(pendingInvite.token)}`} replace />;
     }
     if (legacyInviteCode) {
