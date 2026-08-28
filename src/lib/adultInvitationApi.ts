@@ -1,5 +1,17 @@
 import { httpsCallable } from 'firebase/functions';
 import { functions } from './firebase';
+import contractJson from '../../scripts/parent-invite-v2-contract.json';
+
+export const ADULT_INVITATION_CONTRACT = contractJson.frontend;
+
+function assertAdultInvitationContract(): void {
+  if (
+    ADULT_INVITATION_CONTRACT.adultMembershipAuthority !== 'v2-callable-only'
+    || ADULT_INVITATION_CONTRACT.familyCodeAdultAuthorityFallback !== false
+  ) {
+    throw new Error('adult invitation authority contract is not safe');
+  }
+}
 
 export type AdultRole = 'parent' | 'adult';
 export type FamilyMembershipRole = 'owner' | 'parent' | 'adult' | 'child';
@@ -53,6 +65,7 @@ export interface AdultInvitationAcceptance {
 export async function createAdultInvitation(
   input: CreateAdultInvitationInput,
 ): Promise<CreatedAdultInvitation> {
+  assertAdultInvitationContract();
   const callable = httpsCallable<CreateAdultInvitationInput, CreatedAdultInvitation>(
     functions,
     'createAdultInvitation',
@@ -63,6 +76,7 @@ export async function createAdultInvitation(
 export async function previewAdultInvitation(
   input: PreviewAdultInvitationInput,
 ): Promise<AdultInvitationPreview> {
+  assertAdultInvitationContract();
   const callable = httpsCallable<PreviewAdultInvitationInput, AdultInvitationPreview>(
     functions,
     'previewAdultInvitation',
@@ -73,6 +87,7 @@ export async function previewAdultInvitation(
 export async function acceptAdultInvitation(
   input: AcceptAdultInvitationInput,
 ): Promise<AdultInvitationAcceptance> {
+  assertAdultInvitationContract();
   const callable = httpsCallable<AcceptAdultInvitationInput, AdultInvitationAcceptance>(
     functions,
     'acceptAdultInvitation',
@@ -83,6 +98,7 @@ export async function acceptAdultInvitation(
 export async function completeAdultInvitationProfile(
   input: CompleteAdultInvitationProfileInput,
 ): Promise<{ success: true }> {
+  assertAdultInvitationContract();
   const callable = httpsCallable<CompleteAdultInvitationProfileInput, { success: true }>(
     functions,
     'completeAdultInvitationProfile',
@@ -93,6 +109,7 @@ export async function completeAdultInvitationProfile(
 export async function revokeAdultInvitation(
   input: RevokeAdultInvitationInput,
 ): Promise<{ success: true }> {
+  assertAdultInvitationContract();
   const callable = httpsCallable<RevokeAdultInvitationInput, { success: true }>(
     functions,
     'revokeAdultInvitation',

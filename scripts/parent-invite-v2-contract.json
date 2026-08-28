@@ -1,7 +1,7 @@
 {
   "frontend": {
     "canonicalRoute": "/invite/:token",
-    "adultInvitationAuthority": "familyInvitations/{sha256(rawToken)}",
-    "adultInvitationFallbackAuthority": null
+    "adultMembershipAuthority": "v2-callable-only",
+    "familyCodeAdultAuthorityFallback": false
   }
 }

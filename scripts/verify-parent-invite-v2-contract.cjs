@@ -157,11 +157,10 @@ function verify(contract, buildManifest, functionsManifest) {
     errors.push(`canonical frontend route artifact missing: ${expectedRoute}`);
   }
 
-  if (!frontend.adultInvitationAuthority || frontend.adultInvitationAuthority.includes('inviteCode')) {
-    errors.push('adult invitation authority must be the hashed v2 invitation record');
+  if (frontend.adultMembershipAuthority !== 'v2-callable-only') {
+    errors.push('adult invitation authority must be v2-callable-only');
   }
-  const fallback = frontend.adultInvitationFallbackAuthority;
-  if (fallback && /inviteCode|family.?code/i.test(String(fallback))) {
+  if (frontend.familyCodeAdultAuthorityFallback !== false) {
     errors.push('family code cannot authorize adult membership');
   }
 

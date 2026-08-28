@@ -9,6 +9,7 @@ vi.mock('firebase/functions', () => ({
 vi.mock('./firebase', () => ({ functions: { region: 'europe-west1' } }));
 
 import {
+  ADULT_INVITATION_CONTRACT,
   acceptAdultInvitation,
   completeAdultInvitationProfile,
   createAdultInvitation,
@@ -22,6 +23,24 @@ beforeEach(() => {
 });
 
 describe('adultInvitationApi', () => {
+  it('fails closed when the shared authority contract is mutated to allow family-code fallback', async () => {
+    const contract = ADULT_INVITATION_CONTRACT as {
+      adultMembershipAuthority: string;
+      familyCodeAdultAuthorityFallback: boolean;
+    };
+    const original = { ...contract };
+    contract.adultMembershipAuthority = 'family-code';
+    contract.familyCodeAdultAuthorityFallback = true;
+
+    await expect(createAdultInvitation({
+      intendedRole: 'parent',
+      clientReqId: 'request-contract-mutation',
+    })).rejects.toThrow(/adult invitation authority contract is not safe/);
+    expect(httpsCallable).not.toHaveBeenCalled();
+
+    Object.assign(contract, original);
+  });
+
   it('mirrors the creation callable contract exactly', async () => {
     const result = {
       invitationId: 'a'.repeat(64),
