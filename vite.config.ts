@@ -72,7 +72,7 @@ export default defineConfig(({ mode }) => {
     // The `functions/` directory is a separate deployable package with its own
     // test runner; exclude it (and its nested node_modules) from the web app's
     // test run. Root-level `tests/functions/**` is still included.
-    exclude: ['node_modules', 'dist', 'tests/e2e/**', 'functions/**', 'tests/firestore/bootstrapQueries.rules.test.ts', 'tests/firestore/goalReturn.integration.test.ts'],
+    exclude: ['node_modules', 'dist', '.worktrees/**', 'tests/e2e/**', 'functions/**', 'tests/firestore/bootstrapQueries.rules.test.ts', 'tests/firestore/goalReturn.integration.test.ts'],
   },
   plugins: [
     tailwindcss(),
