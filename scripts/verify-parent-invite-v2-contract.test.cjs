@@ -16,6 +16,7 @@ function fixture(overrides = {}) {
         'previewAdultInvitation',
         'acceptAdultInvitation',
         'revokeAdultInvitation',
+        'completeAdultInvitationProfile',
       ],
     },
     frontend: {
@@ -28,6 +29,7 @@ function fixture(overrides = {}) {
         'familyInvitations',
         'adultInvitationCreationIdempotency',
         'adultInvitationAcceptanceIdempotency',
+        'adultInvitationProfileCompletionIdempotency',
         'adultInvitationRevocationIdempotency',
         'adultInvitationPreviewRateLimits',
       ],
@@ -70,6 +72,7 @@ test('fails when the backend lacks any v2 callable export', () => {
         'createAdultInvitation',
         'previewAdultInvitation',
         'revokeAdultInvitation',
+        'completeAdultInvitationProfile',
       ],
     },
   });
@@ -77,6 +80,24 @@ test('fails when the backend lacks any v2 callable export', () => {
   const result = runVerifier(['--manifest', manifestPath]);
   assert.equal(result.status, 1);
   assert.match(result.stderr, /missing callable: acceptAdultInvitation/);
+});
+
+test('fails when profile-completion idempotency is not server-only', () => {
+  const { manifestPath, manifest } = fixture({
+    rules: {
+      serverOnlyCollections: [
+        'familyInvitations',
+        'adultInvitationCreationIdempotency',
+        'adultInvitationAcceptanceIdempotency',
+        'adultInvitationRevocationIdempotency',
+        'adultInvitationPreviewRateLimits',
+      ],
+    },
+  });
+  fs.writeFileSync(manifestPath, JSON.stringify(manifest));
+  const result = runVerifier(['--manifest', manifestPath]);
+  assert.equal(result.status, 1);
+  assert.match(result.stderr, /missing server-only collection marker: adultInvitationProfileCompletionIdempotency/);
 });
 
 test('fails when frontend parent invite configuration falls back to family inviteCode', () => {
@@ -120,6 +141,7 @@ test('accepts build and functions manifests through explicit CLI inputs', () => 
       previewAdultInvitation: {},
       acceptAdultInvitation: {},
       revokeAdultInvitation: {},
+      completeAdultInvitationProfile: {},
     },
   }));
   const result = runVerifier([
