@@ -3,6 +3,7 @@ import { act, render, screen } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import '@testing-library/jest-dom/vitest';
 import { AppLayout } from './AppLayout';
+import { AuthRoutingGate } from '../../auth/AuthRoutingGate';
 import { STARTUP_TIMEOUT_MS } from './StartupScreen';
 import { useStore } from '../../store/useStore';
 
@@ -14,9 +15,10 @@ import { useStore } from '../../store/useStore';
 // longer than expected", and the dashboard only appeared after waiting or a
 // manual refresh.
 //
-// These tests drive the REAL <AppLayout> gate (store mocked) so they cover the
-// integration between deriveStartupPhase, StartupScreen's timeout and the late
-// arrival of a successful auth/profile/family bootstrap.
+// These tests drive the REAL <AuthRoutingGate> around <AppLayout> (store
+// mocked) so they cover the integration between startup routing,
+// StartupScreen's timeout and the late arrival of a successful
+// auth/profile/family bootstrap.
 // ---------------------------------------------------------------------------
 
 let state: any;
@@ -42,6 +44,8 @@ const readyState = {
   familyData: { id: 'f1', setup: { welcomePromptCompleted: true } },
   familyLoading: false,
   bootstrapStatus: { family: 'ready', members: 'ready' },
+  profileServerConfirmed: true,
+  pendingMembershipStatus: 'none',
   bootstrapError: null,
   bootstrapAttempt: 0,
   retryBootstrap: vi.fn(),
@@ -56,9 +60,19 @@ const advance = async (ms: number) => {
 const renderLayout = () =>
   render(
     <MemoryRouter initialEntries={['/']}>
-      <AppLayout />
+      <AuthRoutingGate>
+        <AppLayout />
+      </AuthRoutingGate>
     </MemoryRouter>,
   );
+
+const renderLayoutTree = () => (
+  <MemoryRouter initialEntries={['/']}>
+    <AuthRoutingGate>
+      <AppLayout />
+    </AuthRoutingGate>
+  </MemoryRouter>
+);
 
 /** Push a new store snapshot and let React re-render, as Zustand would. */
 const update = async (patch: any, rerender: () => void) => {
@@ -71,6 +85,8 @@ const update = async (patch: any, rerender: () => void) => {
 describe('startup recovery — delayed but healthy bootstrap', () => {
   beforeEach(() => {
     vi.useFakeTimers();
+    sessionStorage.clear();
+    localStorage.clear();
     state = { ...readyState };
   });
 
@@ -94,7 +110,7 @@ describe('startup recovery — delayed but healthy bootstrap', () => {
     await advance(STARTUP_TIMEOUT_MS);
     expect(screen.getByRole('alert')).toBeInTheDocument();
 
-    await update({ ...readyState }, () => rerender(<MemoryRouter initialEntries={['/']}><AppLayout /></MemoryRouter>));
+    await update({ ...readyState }, () => rerender(renderLayoutTree()));
     expect(screen.queryByRole('alert')).not.toBeInTheDocument();
     expect(screen.getByRole('banner')).toBeInTheDocument();
   });
@@ -105,7 +121,7 @@ describe('startup recovery — delayed but healthy bootstrap', () => {
     await advance(STARTUP_TIMEOUT_MS);
     expect(screen.getByRole('alert')).toBeInTheDocument();
 
-    await update({ ...readyState }, () => rerender(<MemoryRouter initialEntries={['/']}><AppLayout /></MemoryRouter>));
+    await update({ ...readyState }, () => rerender(renderLayoutTree()));
     expect(screen.queryByRole('alert')).not.toBeInTheDocument();
     expect(screen.getByRole('banner')).toBeInTheDocument();
   });
@@ -116,7 +132,7 @@ describe('startup recovery — delayed but healthy bootstrap', () => {
     await advance(STARTUP_TIMEOUT_MS);
     expect(screen.getByRole('alert')).toBeInTheDocument();
 
-    await update({ appReady: true }, () => rerender(<MemoryRouter initialEntries={['/']}><AppLayout /></MemoryRouter>));
+    await update({ appReady: true }, () => rerender(renderLayoutTree()));
     expect(screen.queryByRole('alert')).not.toBeInTheDocument();
     expect(screen.getByRole('banner')).toBeInTheDocument();
   });
@@ -130,7 +146,7 @@ describe('startup recovery — delayed but healthy bootstrap', () => {
     // Auth resolved late -> profile phase. The new phase must get a clean budget.
     await update(
       { authStatus: 'authenticated', authUser: { uid: 'u1' }, currentUser: null, appReady: false },
-      () => rerender(<MemoryRouter initialEntries={['/']}><AppLayout /></MemoryRouter>),
+      () => rerender(renderLayoutTree()),
     );
     expect(screen.queryByRole('alert')).not.toBeInTheDocument();
     expect(screen.getByRole('status')).toBeInTheDocument();
@@ -165,7 +181,7 @@ describe('startup recovery — delayed but healthy bootstrap', () => {
     });
     // The real store bumps bootstrapAttempt; the phase stays "family".
     await update({ bootstrapAttempt: 1 }, () =>
-      rerender(<MemoryRouter initialEntries={['/']}><AppLayout /></MemoryRouter>));
+      rerender(renderLayoutTree()));
     expect(screen.queryByRole('alert')).not.toBeInTheDocument();
     expect(screen.getByRole('status')).toBeInTheDocument();
   });
@@ -188,7 +204,7 @@ describe('startup recovery — delayed but healthy bootstrap', () => {
   it('10. no startup timer survives a successful bootstrap', async () => {
     state = { ...readyState, appReady: false };
     const { rerender } = renderLayout();
-    await update({ appReady: true }, () => rerender(<MemoryRouter initialEntries={['/']}><AppLayout /></MemoryRouter>));
+    await update({ appReady: true }, () => rerender(renderLayoutTree()));
     expect(vi.getTimerCount()).toBe(0);
   });
 });
