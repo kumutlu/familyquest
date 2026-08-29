@@ -2,7 +2,7 @@
 
 import { execFileSync } from 'node:child_process'
 import { existsSync, readFileSync, writeFileSync } from 'node:fs'
-import { validateProductionDeploy } from './deploy-production-hosting.mjs'
+import { validateLocalProvenance } from './deploy-production-hosting.mjs'
 
 const APPROVED_BRANCH = 'todo-theme'
 const PRODUCTION_PROJECT = 'familyquest-beta-402cb'
@@ -20,7 +20,7 @@ export function productionFunctionsDeployCommand(nodeExecutable = process.execPa
 }
 
 export function validateFunctionsProductionDeploy(context) {
-  const result = validateProductionDeploy(context)
+  const result = validateLocalProvenance(context)
   if (context.headReachable !== true) {
     throw new Error(`Refusing production deploy: HEAD is not reachable from origin/${APPROVED_BRANCH}`)
   }
