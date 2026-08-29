@@ -93,6 +93,57 @@ describe('HoldToCompleteButton', () => {
     expect(onComplete).not.toHaveBeenCalled();
   });
 
+  it('cancels a touch hold as soon as the gesture becomes a scroll', () => {
+    const onComplete = vi.fn();
+    render(<HoldToCompleteButton label="Complete: Feed cat" onComplete={onComplete} />);
+
+    const button = screen.getByTestId('hold-to-complete');
+    fireEvent.pointerDown(button, {
+      button: 0,
+      pointerId: 7,
+      pointerType: 'touch',
+      clientX: 20,
+      clientY: 100,
+    });
+    expect(button.getAttribute('data-holding')).toBe('true');
+
+    fireEvent.pointerMove(button, {
+      pointerId: 7,
+      pointerType: 'touch',
+      clientX: 21,
+      clientY: 120,
+    });
+
+    expect(onComplete).not.toHaveBeenCalled();
+    expect(button.getAttribute('data-holding')).toBeNull();
+    expect(globalThis.cancelAnimationFrame).toHaveBeenCalled();
+  });
+
+  it('still requires the deliberate hold when reduced motion is preferred', () => {
+    vi.stubGlobal(
+      'matchMedia',
+      vi.fn().mockImplementation((query: string) => ({
+        matches: query === '(prefers-reduced-motion: reduce)',
+        media: query,
+        onchange: null,
+        addEventListener: vi.fn(),
+        removeEventListener: vi.fn(),
+        addListener: vi.fn(),
+        removeListener: vi.fn(),
+        dispatchEvent: vi.fn(),
+      })),
+    );
+
+    const onComplete = vi.fn();
+    render(<HoldToCompleteButton label="Complete: Feed cat" onComplete={onComplete} />);
+    const button = screen.getByTestId('hold-to-complete');
+
+    fireEvent.pointerDown(button, { button: 0, pointerId: 3, pointerType: 'touch' });
+
+    expect(onComplete).not.toHaveBeenCalled();
+    expect(button.getAttribute('data-holding')).toBe('true');
+  });
+
   it('keyboard activation completes immediately (accessible alternative)', () => {
     const onComplete = vi.fn();
     render(<HoldToCompleteButton label="Complete: Feed cat" onComplete={onComplete} />);

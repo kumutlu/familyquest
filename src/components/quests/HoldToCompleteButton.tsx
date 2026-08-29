@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { cn } from '../../lib/utils';
 import { triggerHaptic } from '../../lib/interaction/haptics';
 import { playCue } from '../../lib/interaction/sound';
-import { QUEKI_MOTION, useReducedMotion } from '../../design/motion';
+import { QUEKI_MOTION } from '../../design/motion';
 
 export interface HoldToCompleteButtonProps {
   /** Fires EXACTLY once per successful hold / keyboard activation. */
@@ -15,21 +15,23 @@ export interface HoldToCompleteButtonProps {
   tone?: 'brand' | 'xp';
 }
 
+const MOVE_CANCEL_THRESHOLD_PX = 10;
+
 /**
  * HoldToCompleteButton — the deliberate quest-completion control.
  *
  * Pointer/touch: press → button depresses → progress ring fills over
  * QUEKI_MOTION.duration.hold ms → threshold fires `onComplete` exactly once.
- * Release early → clean cancel (progress resets).
+ * Release early, pointer cancellation, or a scroll-sized pointer movement →
+ * clean cancel (progress resets).
  *
- * Accessibility: the control is a real <button>. Keyboard users (Enter/Space)
- * activate it directly — no hold required — which routes through the exact
- * same single-shot guard. Reduced-motion users get instant activation on
- * press instead of the fill animation.
+ * The 900ms hold is an interaction-safety requirement, not decorative motion,
+ * so `prefers-reduced-motion` never bypasses the threshold. Keyboard users can
+ * still activate with Enter/Space without a timed hold.
  *
- * Idempotency: an internal `firedRef` guarantees one call per interaction
- * cycle even under repeated pointer events or re-renders; the parent is
- * expected to disable the control while submitting/pending.
+ * Idempotency: internal refs guarantee one call per interaction cycle and make
+ * stale/cancelled animation frames harmless. The parent disables the control
+ * while submitting/pending.
  */
 export function HoldToCompleteButton({
   onComplete,
@@ -38,13 +40,15 @@ export function HoldToCompleteButton({
   className,
   tone = 'brand',
 }: HoldToCompleteButtonProps) {
-  const reducedMotion = useReducedMotion();
   const [holding, setHolding] = useState(false);
   const [progress, setProgress] = useState(0);
 
   const rafRef = useRef<number | null>(null);
   const startRef = useRef<number>(0);
   const firedRef = useRef(false);
+  const holdActiveRef = useRef(false);
+  const activePointerIdRef = useRef<number | null>(null);
+  const pointerStartRef = useRef<{ x: number; y: number } | null>(null);
 
   const stopLoop = useCallback(() => {
     if (rafRef.current !== null) {
@@ -54,22 +58,29 @@ export function HoldToCompleteButton({
   }, []);
 
   const reset = useCallback(() => {
+    holdActiveRef.current = false;
+    activePointerIdRef.current = null;
+    pointerStartRef.current = null;
     stopLoop();
     setHolding(false);
     setProgress(0);
     firedRef.current = false;
   }, [stopLoop]);
 
-  useEffect(() => () => stopLoop(), [stopLoop]);
+  useEffect(() => () => {
+    holdActiveRef.current = false;
+    stopLoop();
+  }, [stopLoop]);
 
   // Disabled state must never leave a stuck hold behind.
   useEffect(() => {
-    if (disabled && holding) reset();
-  }, [disabled, holding, reset]);
+    if (disabled && holdActiveRef.current) reset();
+  }, [disabled, reset]);
 
   const fire = useCallback(() => {
-    if (firedRef.current) return;
+    if (firedRef.current || !holdActiveRef.current) return;
     firedRef.current = true;
+    holdActiveRef.current = false;
     stopLoop();
     setProgress(1);
     triggerHaptic('hold');
@@ -79,7 +90,10 @@ export function HoldToCompleteButton({
 
   const tick = useCallback(
     (nowMs: number) => {
-      if (firedRef.current) return;
+      // A cancelled rAF can race with pointer cancellation on some WebViews.
+      // Treat the interaction ref as the authority so a stale frame can never
+      // complete a task after the child has started scrolling.
+      if (!holdActiveRef.current || firedRef.current) return;
       const elapsed = nowMs - startRef.current;
       const fraction = Math.min(1, elapsed / QUEKI_MOTION.duration.hold);
       setProgress(fraction);
@@ -93,27 +107,28 @@ export function HoldToCompleteButton({
   );
 
   const beginHold = useCallback(() => {
-    if (disabled || firedRef.current) return;
-    // Reduced motion: skip the anticipation entirely — press means complete.
-    if (reducedMotion) {
-      fire();
-      return;
-    }
+    if (disabled || firedRef.current || holdActiveRef.current) return;
+    holdActiveRef.current = true;
     setHolding(true);
     setProgress(0);
     startRef.current = performance.now();
     rafRef.current = requestAnimationFrame(tick);
-  }, [disabled, fire, reducedMotion, tick]);
+  }, [disabled, tick]);
 
   const cancelHold = useCallback(() => {
-    if (!holding || firedRef.current) return;
+    if (!holdActiveRef.current || firedRef.current) return;
     reset();
-  }, [holding, reset]);
+  }, [reset]);
 
   const handleKeyDown = (event: React.KeyboardEvent<HTMLButtonElement>) => {
     if (event.key !== 'Enter' && event.key !== ' ') return;
     event.preventDefault();
     if (disabled || firedRef.current) return;
+
+    // Keyboard activation is the accessible alternative to a timed pointer
+    // hold. Mark a synthetic interaction active so it shares the single-shot
+    // fire guard without weakening pointer/touch safety.
+    holdActiveRef.current = true;
     fire();
   };
 
@@ -132,7 +147,7 @@ export function HoldToCompleteButton({
       data-holding={holding || undefined}
       disabled={disabled}
       className={cn(
-        'relative flex min-h-14 w-full select-none items-center justify-center gap-2 rounded-2xl px-6',
+        'relative flex min-h-14 w-full touch-pan-y select-none items-center justify-center gap-2 rounded-2xl px-6',
         'font-button transition-[transform,box-shadow,opacity] duration-[var(--animate-duration-tap)] ease-tap',
         'focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-500 focus-visible:ring-offset-2',
         'disabled:pointer-events-none disabled:opacity-50',
@@ -141,8 +156,27 @@ export function HoldToCompleteButton({
       )}
       onPointerDown={(event) => {
         if (event.button !== 0) return;
-        event.currentTarget.setPointerCapture?.(event.pointerId);
+        // Do NOT capture touch pointers here. Native vertical scrolling must be
+        // free to take ownership and emit pointercancel when the gesture pans.
+        activePointerIdRef.current = event.pointerId;
+        pointerStartRef.current = { x: event.clientX, y: event.clientY };
         beginHold();
+      }}
+      onPointerMove={(event) => {
+        if (!holdActiveRef.current || firedRef.current) return;
+        if (
+          activePointerIdRef.current !== null &&
+          event.pointerId !== activePointerIdRef.current
+        ) {
+          return;
+        }
+        const start = pointerStartRef.current;
+        if (!start) return;
+        const dx = event.clientX - start.x;
+        const dy = event.clientY - start.y;
+        if (Math.hypot(dx, dy) >= MOVE_CANCEL_THRESHOLD_PX) {
+          cancelHold();
+        }
       }}
       onPointerUp={() => {
         if (firedRef.current) {
@@ -153,8 +187,6 @@ export function HoldToCompleteButton({
       }}
       onPointerCancel={cancelHold}
       onPointerLeave={() => {
-        // Only cancel when the pointer was captured-free (mouse leaves while
-        // pressing). Touch capture keeps this from firing during a scroll-hold.
         if (!firedRef.current) cancelHold();
       }}
       onKeyDown={handleKeyDown}
