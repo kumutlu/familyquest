@@ -13,6 +13,22 @@ A family gamification platform for chores, habits, rewards, behaviour tracking a
 1. `npm install`
 2. `npm run dev`
 
+## Production deployment safety
+
+Deploy production Hosting only from a clean `todo-theme` checkout at the exact
+fetched remote commit:
+
+```bash
+node scripts/deploy-production-hosting.mjs --expected-sha <FULL_SHA>
+```
+
+The deployment guard reads the currently live embedded build SHA and blocks an
+old-build deployment automatically. It also fails closed when the live version
+cannot be determined and verifies the live embedded SHA again after deployment.
+
+A genuine rollback must use a separate, reviewed recovery procedure. The normal
+production Hosting deployment command has no rollback or force override.
+
 ## Family data maintenance
 
 The only supported production-data utilities are the reviewed Admin SDK tools in `scripts/export-family-data.ts` and `scripts/reset-family-data.ts`. They require explicit project and family identifiers and Application Default Credentials. Generated exports are written with restricted permissions under the gitignored `family-data-exports/` directory.
