@@ -1667,6 +1667,13 @@ service cloud.firestore {
         && hasValidOptionalAvatarConfig(request.resource.data);
     }
 
+    function isValidChildLastActiveUpdate(uid) {
+      return authProfileId() == uid
+        && resource.data.get('role', '') == 'child'
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['lastActiveDate'])
+        && request.resource.data.lastActiveDate == request.time;
+    }
+
     function isValidGamificationConfig(data) {
       return data.keys().hasOnly(['schemaVersion', 'dailyGoalPercentage'])
         && data.schemaVersion == 1
@@ -1692,6 +1699,7 @@ service cloud.firestore {
 
       allow update: if isAuthenticated() && (!isManagedChildCaller() || isTrustedManagedChild()) && (
         isValidChildSelfCosmeticUpdate(uid) ||
+        isValidChildLastActiveUpdate(uid) ||
         isValidReversalPointsUpdate(uid) ||
         (authProfileId() == uid
           && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['language'])

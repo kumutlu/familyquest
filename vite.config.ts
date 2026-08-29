@@ -43,7 +43,22 @@ const envPrefix = 'VITE_'
 export default defineConfig(({ mode }) => {
   // For builds, force-load `.env.production` regardless of the passed mode.
   const resolvedMode = isBuild ? 'production' : mode
-  const env = loadEnv(resolvedMode, process.cwd(), envPrefix)
+  const loadedEnv = loadEnv(resolvedMode, process.cwd(), envPrefix)
+  // Vitest integration suites connect these Web SDK instances exclusively to
+  // the local Auth/Firestore emulators. Firebase still requires a syntactically
+  // complete public client config before those connections can be established.
+  const emulatorTestEnv = resolvedMode === 'test' ? {
+    VITE_FIREBASE_API_KEY: 'emulator-test-key',
+    VITE_FIREBASE_AUTH_DOMAIN: 'localhost',
+    VITE_FIREBASE_PROJECT_ID: 'familyquest-beta-402cb',
+    VITE_FIREBASE_STORAGE_BUCKET: 'familyquest-beta-402cb.appspot.com',
+    VITE_FIREBASE_MESSAGING_SENDER_ID: '000000000000',
+    VITE_FIREBASE_APP_ID: '1:000000000000:web:emulator-test',
+    VITE_USE_FIREBASE_EMULATOR: 'true',
+  } : {}
+  // Test isolation is non-overridable: a developer or CI `.env.test` must not
+  // be able to point integration tests at live Firebase services.
+  const env = { ...loadedEnv, ...emulatorTestEnv }
 
   // Explicitly define every VITE_ var so the production bundle always contains
   // the Firebase config, independent of any local `.env` on the build machine.
