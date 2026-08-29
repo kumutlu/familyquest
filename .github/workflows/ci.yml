@@ -18,3 +18,15 @@ jobs:
           node-version: 20
       - name: Reject new legacy gamification writers
         run: node scripts/gamification-freeze-guard.cjs --check
+
+  hold-to-complete-regression:
+    name: Hold-to-complete regression
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - run: npm ci
+      - run: npx vitest run src/components/quests/HoldToCompleteButton.test.tsx
