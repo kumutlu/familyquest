@@ -120,14 +120,15 @@ function App() {
   return (
     <Suspense fallback={<div data-testid="route-translations-loading" aria-busy="true" className="min-h-screen bg-gray-50" />}>
       <Router>
-        <RequestDetailProvider>
-          <E2EBootstrapDiagnostics />
-          <AuthRoutingGate
-            hasExplicitCreateIntent={hasExplicitCreateIntent}
-            creationContinuation={creationContinuationRef.current ?? creationContinuation}
-            onCreationJourneyEnded={endCreationJourney}
-          >
-          <Routes>
+        <MoneyPrivacyProvider>
+          <RequestDetailProvider>
+            <E2EBootstrapDiagnostics />
+            <AuthRoutingGate
+              hasExplicitCreateIntent={hasExplicitCreateIntent}
+              creationContinuation={creationContinuationRef.current ?? creationContinuation}
+              onCreationJourneyEnded={endCreationJourney}
+            >
+            <Routes>
           <Route path="/login" element={<Login />} />
           <Route path="/signup" element={<Signup />} />
           <Route path="/join-family" element={<JoinFamily />} />
@@ -160,11 +161,7 @@ function App() {
           <Route path="/terms" element={<TermsOfService />} />
           <Route path="/account-deletion" element={<AccountDeletion />} />
 
-          <Route path="/" element={
-            <MoneyPrivacyProvider>
-              <AppLayout />
-            </MoneyPrivacyProvider>
-          }>
+          <Route path="/" element={<AppLayout />}>
             <Route index element={<Dashboard />} />
             <Route path="family" element={<Family />} />
             <Route path="family/:id" element={<MemberProfile />} />
@@ -189,9 +186,10 @@ function App() {
             <Route path="help/category/:categoryId" element={<HelpCategoryPage />} />
             <Route path="help/:articleId" element={<HelpArticlePage />} />
           </Route>
-          </Routes>
-          </AuthRoutingGate>
-        </RequestDetailProvider>
+            </Routes>
+            </AuthRoutingGate>
+          </RequestDetailProvider>
+        </MoneyPrivacyProvider>
       </Router>
     </Suspense>
   );
