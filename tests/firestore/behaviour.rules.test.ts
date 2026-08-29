@@ -23,6 +23,7 @@ const OTHER_FAMILY_ID = 'family-two';
 const OWNER_ID = 'owner-one';
 const PARENT_ID = 'parent-one';
 const CHILD_ID = 'child-one';
+const SIBLING_ID = 'child-two';
 const PARENT_NAME = 'Pat Parent';
 
 let testEnv: RulesTestEnvironment;
@@ -83,6 +84,7 @@ beforeEach(async () => {
       setDoc(doc(db, 'users', OWNER_ID), { uid: OWNER_ID, familyId: FAMILY_ID, role: 'owner', displayName: 'Olivia Owner' }),
       setDoc(doc(db, 'users', PARENT_ID), { uid: PARENT_ID, familyId: FAMILY_ID, role: 'parent', displayName: PARENT_NAME }),
       setDoc(doc(db, 'users', CHILD_ID), { uid: CHILD_ID, familyId: FAMILY_ID, role: 'child', displayName: 'Casey Child', rewardPoints: 20, lifetimeXP: 50, walletBalance: 100 }),
+      setDoc(doc(db, 'users', SIBLING_ID), { uid: SIBLING_ID, familyId: FAMILY_ID, role: 'child', displayName: 'Sam Sibling', rewardPoints: 10, lifetimeXP: 25, walletBalance: 50 }),
       setDoc(doc(db, 'users', 'parent-two'), { uid: 'parent-two', familyId: OTHER_FAMILY_ID, role: 'parent', displayName: 'Other Parent' }),
       setDoc(doc(db, 'users', 'adult-target'), { uid: 'adult-target', familyId: FAMILY_ID, role: 'parent', displayName: 'Adult Target' }),
     ]);
@@ -471,11 +473,26 @@ describe('wallet ledger and direct balance writes', () => {
     await assertFails(updateDoc(doc(user(CHILD_ID), 'users', CHILD_ID), { [field]: 999 }));
   });
 
-  test.each(['displayName', 'avatarUrl', 'avatarId'])('child cannot directly change profile field %s (must use approval)', async (field) => {
+  test('child can directly change their own valid display name without approval', async () => {
+    await assertSucceeds(updateDoc(doc(user(CHILD_ID), 'users', CHILD_ID), { displayName: 'Casey Updated' }));
+  });
+
+  test.each(['avatarUrl', 'avatarId'])('child cannot write unapproved cosmetic value through %s', async (field) => {
     await assertFails(updateDoc(doc(user(CHILD_ID), 'users', CHILD_ID), { [field]: 'x' }));
   });
 
-  test('child can still update an unrelated self-service field (e.g. lastActiveDate)', async () => {
+  test('child can update their own lastActiveDate', async () => {
     await assertSucceeds(updateDoc(doc(user(CHILD_ID), 'users', CHILD_ID), { lastActiveDate: serverTimestamp() }));
+  });
+
+  test('child cannot update a sibling lastActiveDate', async () => {
+    await assertFails(updateDoc(doc(user(CHILD_ID), 'users', SIBLING_ID), { lastActiveDate: serverTimestamp() }));
+  });
+
+  test('child cannot combine lastActiveDate with a protected-field change', async () => {
+    await assertFails(updateDoc(doc(user(CHILD_ID), 'users', CHILD_ID), {
+      lastActiveDate: serverTimestamp(),
+      rewardPoints: 999,
+    }));
   });
 });
