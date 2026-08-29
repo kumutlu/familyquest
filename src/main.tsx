@@ -64,7 +64,9 @@ useAppearanceStore.getState().initAppearance()
 // PART 1 — Runtime build identifier. Proves which bundle is actually running
 // in the browser so stale-deployment regressions can be diagnosed from the
 // console / device logs.
-console.info('[FamilyQuest Build]', {
+// Stable full-SHA marker consumed by the production Hosting deployment guard.
+// Keep the marker format independent of minifier property ordering.
+console.info(`[FamilyQuest Build SHA:${__FAMILYQUEST_BUILD_SHA__}]`, {
   commit: FAMILYQUEST_BUILD.sha,
   builtAt: FAMILYQUEST_BUILD.builtAt,
   createTaskAtomic: true,
