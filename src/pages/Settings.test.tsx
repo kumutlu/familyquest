@@ -434,16 +434,13 @@ describe('Settings — profile editor entry point', () => {
     expect((call[1] as Record<string, unknown>)).toMatchObject({ displayName: 'New Name' });
   });
 
-  it('5b. Child profile editor submits changes for parent approval', async () => {
+  it('5b. Child profile editor saves changes directly', async () => {
     const user = userEvent.setup();
     renderSettings('child');
     await user.click(screen.getByRole('button', { name: 'Edit Profile' }));
     const dialog = screen.getByRole('dialog');
-    expect(within(dialog).getByText(/parent for approval/i)).toBeInTheDocument();
-    // Children have no immediate "Save" button; they submit for approval instead.
-    expect(within(dialog).queryByRole('button', { name: 'Save' })).not.toBeInTheDocument();
-    expect(within(dialog).getByRole('button', { name: 'Submit for approval' })).toBeInTheDocument();
-    // The child can edit the fields before submitting for approval.
+    expect(within(dialog).queryByText(/parent for approval/i)).not.toBeInTheDocument();
+    expect(within(dialog).getByRole('button', { name: 'Save changes' })).toBeInTheDocument();
     expect(within(dialog).getByLabelText('Display Name')).not.toBeDisabled();
   });
 });

@@ -10,10 +10,16 @@ vi.mock('firebase/firestore', async importOriginal => {
 })
 
 const submitMock = vi.hoisted(() => vi.fn(async () => {}))
+const updateOwnCosmeticProfileMock = vi.hoisted(() => vi.fn(async () => {}))
 const unlockMock = vi.hoisted(() => vi.fn(async () => {}))
 vi.mock('../../lib/api', async importOriginal => {
   const actual = await importOriginal<typeof import('../../lib/api')>()
-  return { ...actual, submitProfileUpdateRequest: submitMock, unlockAvatar: unlockMock }
+  return {
+    ...actual,
+    submitProfileUpdateRequest: submitMock,
+    updateOwnCosmeticProfile: updateOwnCosmeticProfileMock,
+    unlockAvatar: unlockMock,
+  }
 })
 
 const mapTransactionErrorMock = vi.hoisted(() =>
@@ -48,6 +54,7 @@ describe('ProfileEditorModal', () => {
     storeState.profileUpdateRequests = []
     storeState.avatarUnlocks = []
     updateDocMock.mockResolvedValue(undefined)
+    updateOwnCosmeticProfileMock.mockResolvedValue(undefined)
     globalThis.innerWidth = 1024
     document.body.style.overflow = ''
     document.body.style.paddingRight = ''
@@ -70,27 +77,29 @@ describe('ProfileEditorModal', () => {
     expect(submitMock).not.toHaveBeenCalled()
   })
 
-  it('child submits for approval and does NOT call updateDoc', async () => {
+  it('child saves their own profile immediately without creating an approval request', async () => {
     const user = userEvent.setup()
     renderModal({ id: 'c1', role: 'child', displayName: 'Muhammed Osman', avatarUrl: 'https://old', avatarId: 'starter-cat', familyId: 'f1' })
     const nameInput = screen.getByLabelText('Display Name')
     await user.clear(nameInput)
     await user.type(nameInput, 'Muhammed')
-    await user.click(screen.getByRole('button', { name: 'Submit for approval' }))
-    await waitFor(() => expect(submitMock).toHaveBeenCalledWith('f1', 'Muhammed', 'starter-cat', expect.anything()))
+    await user.click(screen.getByRole('button', { name: 'Save changes' }))
+    await waitFor(() => expect(updateOwnCosmeticProfileMock).toHaveBeenCalledWith('c1', 'Muhammed', 'starter-cat', expect.anything()))
+    expect(submitMock).not.toHaveBeenCalled()
     expect(updateDocMock).not.toHaveBeenCalled()
-    expect(screen.getAllByText(/Changes submitted for parent approval/i).length).toBeGreaterThan(0)
+    expect(screen.getAllByText('Profile updated').length).toBeGreaterThan(0)
+    expect(screen.queryByText(/parent approval/i)).toBeNull()
   })
 
-  it('child creator change is submitted through approval as avatarConfig only', async () => {
+  it('child creator change is saved immediately as avatarConfig', async () => {
     const user = userEvent.setup()
     renderModal({ id: 'c1', role: 'child', displayName: 'Muhammed Osman', avatarUrl: 'https://old', avatarId: 'starter-cat', familyId: 'f1' })
     await user.click(screen.getByRole('tab', { name: 'Hair' }))
     await user.click(screen.getByRole('button', { name: 'Curls' }))
-    await user.click(screen.getByRole('button', { name: 'Submit for approval' }))
+    await user.click(screen.getByRole('button', { name: 'Save changes' }))
 
-    await waitFor(() => expect(submitMock).toHaveBeenCalledWith(
-      'f1',
+    await waitFor(() => expect(updateOwnCosmeticProfileMock).toHaveBeenCalledWith(
+      'c1',
       'Muhammed Osman',
       'starter-cat',
       expect.objectContaining({ avatarConfig: expect.objectContaining({ version: 1, hairStyle: 'curls' }) }),
@@ -110,15 +119,16 @@ describe('ProfileEditorModal', () => {
     expect(updateDocMock).not.toHaveBeenCalled()
   })
 
-  it('child cannot directly update profile even when editing fields', async () => {
+  it('shows the required failure copy without referring to parent approval', async () => {
     const user = userEvent.setup()
+    updateOwnCosmeticProfileMock.mockRejectedValueOnce(new Error('permission denied'))
     renderModal({ id: 'c1', role: 'child', displayName: 'Muhammed Osman', avatarUrl: '', avatarId: 'starter-cat', familyId: 'f1' })
     const nameInput = screen.getByLabelText('Display Name')
     await user.clear(nameInput)
     await user.type(nameInput, 'Hacked')
-    await user.click(screen.getByRole('button', { name: 'Submit for approval' }))
-    await waitFor(() => expect(submitMock).toHaveBeenCalled())
-    expect(updateDocMock).not.toHaveBeenCalled()
+    await user.click(screen.getByRole('button', { name: 'Save changes' }))
+    await waitFor(() => expect(screen.getAllByText('Your profile could not be updated. Please try again.').length).toBeGreaterThan(0))
+    expect(screen.queryByText(/parent/i)).toBeNull()
   })
 
   it('shows a friendly error for an empty name and does not submit', async () => {
@@ -127,19 +137,19 @@ describe('ProfileEditorModal', () => {
     const nameInput = screen.getByLabelText('Display Name')
     await user.clear(nameInput)
     await user.type(nameInput, '   ')
-    await user.click(screen.getByRole('button', { name: 'Submit for approval' }))
+    await user.click(screen.getByRole('button', { name: 'Save changes' }))
     await waitFor(() =>
       expect(screen.getAllByText(/cannot be empty/i).length).toBeGreaterThan(0),
     )
     expect(submitMock).not.toHaveBeenCalled()
   })
 
-  it('locks the editor while a profile update is pending', async () => {
+  it('does not lock direct profile editing because of a historical pending request', async () => {
     storeState.profileUpdateRequests = [{ childId: 'c1', status: 'pending' }]
     renderModal({ id: 'c1', role: 'child', displayName: 'Muhammed Osman', avatarUrl: '', avatarId: 'starter-cat', familyId: 'f1' })
-    expect(screen.getByLabelText('Display Name')).toBeDisabled()
-    expect(screen.getByRole('button', { name: 'Submit for approval' })).toBeDisabled()
-    expect(screen.getByText(/awaiting parent approval\. You cannot submit/i)).toBeInTheDocument()
+    expect(screen.getByLabelText('Display Name')).not.toBeDisabled()
+    expect(screen.getByRole('button', { name: 'Save changes' })).toBeEnabled()
+    expect(screen.queryByText(/awaiting parent approval/i)).toBeNull()
   })
 
   it('removes the raw Avatar URL input (uses curated picker)', async () => {
@@ -168,40 +178,41 @@ describe('ProfileEditorModal', () => {
     )
   })
 
-  it('child with no avatar: display-name-only submit sends null avatarId (root-cause payload)', async () => {
+  it('child with no avatar: display-name-only save sends null avatarId', async () => {
     const user = userEvent.setup()
     renderModal({ id: 'c1', role: 'child', displayName: 'Muhammed Osman', avatarUrl: '', avatarId: null, familyId: 'f1' })
     const nameInput = screen.getByLabelText('Display Name')
     await user.clear(nameInput)
     await user.type(nameInput, 'Muhammed')
-    await user.click(screen.getByRole('button', { name: 'Submit for approval' }))
-    await waitFor(() => expect(submitMock).toHaveBeenCalled())
-    const callArgs = submitMock.mock.calls[0] as any[]
+    await user.click(screen.getByRole('button', { name: 'Save changes' }))
+    await waitFor(() => expect(updateOwnCosmeticProfileMock).toHaveBeenCalled())
+    const callArgs = updateOwnCosmeticProfileMock.mock.calls[0] as any[]
     expect(callArgs[1]).toBe('Muhammed')
     expect(callArgs[2]).toBeNull()
   })
 
-  it('preserves entered changes after a failed submit (no data loss)', async () => {
+  it('preserves entered changes after a failed save (no data loss)', async () => {
     const user = userEvent.setup()
-    submitMock.mockRejectedValueOnce(new Error('Network error'))
+    updateOwnCosmeticProfileMock.mockRejectedValueOnce(new Error('Network error'))
     renderModal({ id: 'c1', role: 'child', displayName: 'Muhammed Osman', avatarUrl: '', avatarId: 'starter-cat', familyId: 'f1' })
     const nameInput = screen.getByLabelText('Display Name')
     await user.clear(nameInput)
     await user.type(nameInput, 'Muhammed Jr')
-    await user.click(screen.getByRole('button', { name: 'Submit for approval' }))
-    await waitFor(() => expect(screen.getAllByText(/Network error/i).length).toBeGreaterThan(0))
+    await user.click(screen.getByRole('button', { name: 'Save changes' }))
+    await waitFor(() => expect(screen.getAllByText('Your profile could not be updated. Please try again.').length).toBeGreaterThan(0))
     expect((screen.getByLabelText('Display Name') as HTMLInputElement).value).toBe('Muhammed Jr')
   })
 
-  it('maps a permission-denied error to a child-safe message (no raw internals)', async () => {
+  it('maps a permission-denied error to the required child-safe message', async () => {
     const user = userEvent.setup()
-    submitMock.mockRejectedValueOnce({ code: 'permission-denied', message: 'Missing or insufficient permissions.' })
+    updateOwnCosmeticProfileMock.mockRejectedValueOnce({ code: 'permission-denied', message: 'Missing or insufficient permissions.' })
     renderModal({ id: 'c1', role: 'child', displayName: 'Muhammed Osman', avatarUrl: '', avatarId: 'starter-cat', familyId: 'f1' })
     const nameInput = screen.getByLabelText('Display Name')
     await user.clear(nameInput)
     await user.type(nameInput, 'Muhammed Jr')
-    await user.click(screen.getByRole('button', { name: 'Submit for approval' }))
-    await waitFor(() => expect(screen.getAllByText(/parent/i).length).toBeGreaterThan(0))
+    await user.click(screen.getByRole('button', { name: 'Save changes' }))
+    await waitFor(() => expect(screen.getAllByText('Your profile could not be updated. Please try again.').length).toBeGreaterThan(0))
+    expect(screen.queryByText(/parent/i)).toBeNull()
     expect(screen.queryByText(/permission/i)).toBeNull()
   })
 })

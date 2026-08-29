@@ -1652,6 +1652,21 @@ service cloud.firestore {
       return !('avatarConfig' in data) || isValidAvatarConfig(data.avatarConfig);
     }
 
+    function isValidChildSelfCosmeticUpdate(uid) {
+      let avatarId = request.resource.data.get('avatarId', '');
+      let familyId = resource.data.get('familyId', '');
+      return authProfileId() == uid
+        && resource.data.get('role', '') == 'child'
+        && familyId != ''
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['displayName', 'avatarId', 'avatarConfig'])
+        && request.resource.data.displayName is string
+        && request.resource.data.displayName.trim().size() > 0
+        && request.resource.data.displayName.size() <= 40
+        && (avatarId == null || avatarId == '' || isStarterAvatar(avatarId)
+          || exists(/databases/$(database)/documents/families/$(familyId)/users/$(uid)/avatar_unlocks/$(avatarId)))
+        && hasValidOptionalAvatarConfig(request.resource.data);
+    }
+
     function isValidGamificationConfig(data) {
       return data.keys().hasOnly(['schemaVersion', 'dailyGoalPercentage'])
         && data.schemaVersion == 1
@@ -1676,11 +1691,15 @@ service cloud.firestore {
       );
 
       allow update: if isAuthenticated() && (!isManagedChildCaller() || isTrustedManagedChild()) && (
+        isValidChildSelfCosmeticUpdate(uid) ||
         isValidReversalPointsUpdate(uid) ||
         (authProfileId() == uid
           && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['language'])
           && isValidLanguage(request.resource.data.language)) ||
-        (authProfileId() == uid && !request.resource.data.diff(resource.data).affectedKeys().hasAny([
+        // Generic self-service fields are adult-only. Child writes must match a
+        // dedicated, tightly scoped rule such as the cosmetic clause above.
+        (authProfileId() == uid && resource.data.get('role', '') != 'child'
+          && !request.resource.data.diff(resource.data).affectedKeys().hasAny([
           'role', 'familyId', 'lifecycle', 'rewardPoints', 'lifetimeXP', 'walletBalance', 'balance', 'lastFundTxId',
           'displayName', 'avatarUrl', 'avatarId', 'avatarConfig', 'language',
           // Phase 1 child-login linking fields: server-only (Admin SDK). A client
@@ -1688,7 +1707,6 @@ service cloud.firestore {
           'hasLogin', 'username', 'loginEnabled', 'requiresPasswordChange', 'authUid'
         ])) ||
         // Owner/parent may self-edit only their own benign profile fields.
-        // Children are not isParent, so they remain routed through the approval flow.
         (isParent(resource.data.familyId) && authProfileId() == uid
           && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['displayName', 'avatarUrl', 'avatarId', 'avatarConfig'])
           && hasValidOptionalAvatarConfig(request.resource.data)) ||
