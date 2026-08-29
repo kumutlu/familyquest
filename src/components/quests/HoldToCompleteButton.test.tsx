@@ -31,25 +31,20 @@ describe('HoldToCompleteButton', () => {
     render(<HoldToCompleteButton label="Complete: Feed cat" onComplete={onComplete} />);
 
     const button = screen.getByTestId('hold-to-complete');
-    fireEvent.pointerDown(button, { button: 0 });
+    fireEvent.pointerDown(button, { button: 0, pointerId: 1, clientX: 20, clientY: 20 });
 
-    // Drive the rAF loop manually to the threshold.
-    const rafSpy = globalThis.requestAnimationFrame as unknown as ReturnType<typeof vi.fn>;
-    // First frame: 400ms elapsed
     nowMs = 400;
     act(() => {
       rafSpy.mock.calls[0][0](nowMs);
     });
     expect(onComplete).not.toHaveBeenCalled();
 
-    // Second frame: past the 900ms threshold
     nowMs = 950;
     act(() => {
       rafSpy.mock.calls[1][0](nowMs);
     });
     expect(onComplete).toHaveBeenCalledTimes(1);
 
-    // Repeated frames / pointer events must NOT fire again.
     nowMs = 2000;
     act(() => {
       try {
@@ -58,7 +53,7 @@ describe('HoldToCompleteButton', () => {
         /* loop may have stopped */
       }
     });
-    fireEvent.pointerDown(button, { button: 0 });
+    fireEvent.pointerDown(button, { button: 0, pointerId: 2, clientX: 20, clientY: 20 });
     expect(onComplete).toHaveBeenCalledTimes(1);
   });
 
@@ -67,15 +62,14 @@ describe('HoldToCompleteButton', () => {
     render(<HoldToCompleteButton label="Complete: Feed cat" onComplete={onComplete} />);
 
     const button = screen.getByTestId('hold-to-complete');
-    fireEvent.pointerDown(button, { button: 0 });
+    fireEvent.pointerDown(button, { button: 0, pointerId: 1, clientX: 20, clientY: 20 });
     expect(button.getAttribute('data-holding')).toBe('true');
 
-    fireEvent.pointerUp(button);
+    fireEvent.pointerUp(button, { pointerId: 1 });
     expect(onComplete).not.toHaveBeenCalled();
     expect(button.getAttribute('data-holding')).toBeNull();
 
-    // A fresh hold can still complete.
-    fireEvent.pointerDown(button, { button: 0 });
+    fireEvent.pointerDown(button, { button: 0, pointerId: 2, clientX: 20, clientY: 20 });
     nowMs = 1000;
     act(() => {
       const last = rafSpy.mock.calls.at(-1);
@@ -88,8 +82,51 @@ describe('HoldToCompleteButton', () => {
     const onComplete = vi.fn();
     render(<HoldToCompleteButton label="x" onComplete={onComplete} />);
     const button = screen.getByTestId('hold-to-complete');
-    fireEvent.pointerDown(button, { button: 0 });
-    fireEvent.pointerCancel(button);
+    fireEvent.pointerDown(button, { button: 0, pointerId: 1, clientX: 20, clientY: 20 });
+    fireEvent.pointerCancel(button, { pointerId: 1 });
+    expect(onComplete).not.toHaveBeenCalled();
+  });
+
+  it('does not bypass the hold threshold when reduced motion is enabled', () => {
+    vi.stubGlobal('matchMedia', vi.fn().mockImplementation(() => ({
+      matches: true,
+      media: '(prefers-reduced-motion: reduce)',
+      addEventListener: vi.fn(),
+      removeEventListener: vi.fn(),
+    })));
+
+    const onComplete = vi.fn();
+    render(<HoldToCompleteButton label="Complete: Feed cat" onComplete={onComplete} />);
+
+    const button = screen.getByTestId('hold-to-complete');
+    fireEvent.pointerDown(button, { button: 0, pointerId: 1, clientX: 20, clientY: 20 });
+
+    expect(onComplete).not.toHaveBeenCalled();
+
+    nowMs = 950;
+    act(() => {
+      const last = rafSpy.mock.calls.at(-1);
+      if (last) last[0](nowMs);
+    });
+    expect(onComplete).toHaveBeenCalledTimes(1);
+  });
+
+  it('cancels the hold when the pointer moves far enough to indicate scrolling', () => {
+    const onComplete = vi.fn();
+    render(<HoldToCompleteButton label="Complete: Feed cat" onComplete={onComplete} />);
+
+    const button = screen.getByTestId('hold-to-complete');
+    fireEvent.pointerDown(button, { button: 0, pointerId: 1, clientX: 20, clientY: 20 });
+    expect(button.getAttribute('data-holding')).toBe('true');
+
+    fireEvent.pointerMove(button, { pointerId: 1, clientX: 20, clientY: 48 });
+    expect(button.getAttribute('data-holding')).toBeNull();
+
+    nowMs = 1200;
+    act(() => {
+      const last = rafSpy.mock.calls.at(-1);
+      if (last) last[0](nowMs);
+    });
     expect(onComplete).not.toHaveBeenCalled();
   });
 
@@ -100,14 +137,14 @@ describe('HoldToCompleteButton', () => {
     fireEvent.keyDown(button, { key: 'Enter' });
     expect(onComplete).toHaveBeenCalledTimes(1);
     fireEvent.keyDown(button, { key: ' ' });
-    expect(onComplete).toHaveBeenCalledTimes(1); // still once
+    expect(onComplete).toHaveBeenCalledTimes(1);
   });
 
   it('does nothing while disabled', () => {
     const onComplete = vi.fn();
     render(<HoldToCompleteButton label="x" onComplete={onComplete} disabled />);
     const button = screen.getByTestId('hold-to-complete');
-    fireEvent.pointerDown(button, { button: 0 });
+    fireEvent.pointerDown(button, { button: 0, pointerId: 1, clientX: 20, clientY: 20 });
     fireEvent.keyDown(button, { key: 'Enter' });
     expect(onComplete).not.toHaveBeenCalled();
   });

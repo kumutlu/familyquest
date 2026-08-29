@@ -4,33 +4,16 @@ import { triggerHaptic } from '../../lib/interaction/haptics';
 import { playCue } from '../../lib/interaction/sound';
 import { QUEKI_MOTION, useReducedMotion } from '../../design/motion';
 
+const SCROLL_CANCEL_DISTANCE_PX = 12;
+
 export interface HoldToCompleteButtonProps {
-  /** Fires EXACTLY once per successful hold / keyboard activation. */
   onComplete: () => void;
   disabled?: boolean;
-  /** Accessible name (e.g. "Complete: Feed the cat"). */
   label: string;
   className?: string;
-  /** Visual variant of the big completion control. */
   tone?: 'brand' | 'xp';
 }
 
-/**
- * HoldToCompleteButton — the deliberate quest-completion control.
- *
- * Pointer/touch: press → button depresses → progress ring fills over
- * QUEKI_MOTION.duration.hold ms → threshold fires `onComplete` exactly once.
- * Release early → clean cancel (progress resets).
- *
- * Accessibility: the control is a real <button>. Keyboard users (Enter/Space)
- * activate it directly — no hold required — which routes through the exact
- * same single-shot guard. Reduced-motion users get instant activation on
- * press instead of the fill animation.
- *
- * Idempotency: an internal `firedRef` guarantees one call per interaction
- * cycle even under repeated pointer events or re-renders; the parent is
- * expected to disable the control while submitting/pending.
- */
 export function HoldToCompleteButton({
   onComplete,
   disabled = false,
@@ -44,6 +27,8 @@ export function HoldToCompleteButton({
 
   const rafRef = useRef<number | null>(null);
   const startRef = useRef<number>(0);
+  const startPointRef = useRef<{ x: number; y: number } | null>(null);
+  const activeHoldRef = useRef(false);
   const firedRef = useRef(false);
 
   const stopLoop = useCallback(() => {
@@ -54,7 +39,9 @@ export function HoldToCompleteButton({
   }, []);
 
   const reset = useCallback(() => {
+    activeHoldRef.current = false;
     stopLoop();
+    startPointRef.current = null;
     setHolding(false);
     setProgress(0);
     firedRef.current = false;
@@ -62,13 +49,12 @@ export function HoldToCompleteButton({
 
   useEffect(() => () => stopLoop(), [stopLoop]);
 
-  // Disabled state must never leave a stuck hold behind.
   useEffect(() => {
     if (disabled && holding) reset();
   }, [disabled, holding, reset]);
 
   const fire = useCallback(() => {
-    if (firedRef.current) return;
+    if (!activeHoldRef.current || firedRef.current) return;
     firedRef.current = true;
     stopLoop();
     setProgress(1);
@@ -79,7 +65,7 @@ export function HoldToCompleteButton({
 
   const tick = useCallback(
     (nowMs: number) => {
-      if (firedRef.current) return;
+      if (!activeHoldRef.current || firedRef.current) return;
       const elapsed = nowMs - startRef.current;
       const fraction = Math.min(1, elapsed / QUEKI_MOTION.duration.hold);
       setProgress(fraction);
@@ -92,28 +78,29 @@ export function HoldToCompleteButton({
     [fire],
   );
 
-  const beginHold = useCallback(() => {
-    if (disabled || firedRef.current) return;
-    // Reduced motion: skip the anticipation entirely — press means complete.
-    if (reducedMotion) {
-      fire();
-      return;
-    }
-    setHolding(true);
-    setProgress(0);
-    startRef.current = performance.now();
-    rafRef.current = requestAnimationFrame(tick);
-  }, [disabled, fire, reducedMotion, tick]);
+  const beginHold = useCallback(
+    (clientX: number, clientY: number) => {
+      if (disabled || firedRef.current || activeHoldRef.current) return;
+      activeHoldRef.current = true;
+      startPointRef.current = { x: clientX, y: clientY };
+      setHolding(true);
+      setProgress(0);
+      startRef.current = performance.now();
+      rafRef.current = requestAnimationFrame(tick);
+    },
+    [disabled, tick],
+  );
 
   const cancelHold = useCallback(() => {
-    if (!holding || firedRef.current) return;
+    if (firedRef.current) return;
     reset();
-  }, [holding, reset]);
+  }, [reset]);
 
   const handleKeyDown = (event: React.KeyboardEvent<HTMLButtonElement>) => {
     if (event.key !== 'Enter' && event.key !== ' ') return;
     event.preventDefault();
     if (disabled || firedRef.current) return;
+    activeHoldRef.current = true;
     fire();
   };
 
@@ -142,7 +129,17 @@ export function HoldToCompleteButton({
       onPointerDown={(event) => {
         if (event.button !== 0) return;
         event.currentTarget.setPointerCapture?.(event.pointerId);
-        beginHold();
+        beginHold(event.clientX, event.clientY);
+      }}
+      onPointerMove={(event) => {
+        const startPoint = startPointRef.current;
+        if (!startPoint || firedRef.current) return;
+        const distance = Math.hypot(event.clientX - startPoint.x, event.clientY - startPoint.y);
+        if (distance <= SCROLL_CANCEL_DISTANCE_PX) return;
+        cancelHold();
+        if (event.currentTarget.hasPointerCapture?.(event.pointerId)) {
+          event.currentTarget.releasePointerCapture?.(event.pointerId);
+        }
       }}
       onPointerUp={() => {
         if (firedRef.current) {
@@ -153,15 +150,12 @@ export function HoldToCompleteButton({
       }}
       onPointerCancel={cancelHold}
       onPointerLeave={() => {
-        // Only cancel when the pointer was captured-free (mouse leaves while
-        // pressing). Touch capture keeps this from firing during a scroll-hold.
         if (!firedRef.current) cancelHold();
       }}
       onKeyDown={handleKeyDown}
       onContextMenu={(event) => event.preventDefault()}
     >
-      {/* Progress sweep — conic gradient driven by hold progress. */}
-      {holding && progress > 0 && (
+      {!reducedMotion && holding && progress > 0 && (
         <span
           aria-hidden="true"
           className="pointer-events-none absolute inset-0 rounded-2xl opacity-40"
@@ -171,17 +165,10 @@ export function HoldToCompleteButton({
         />
       )}
       <span className="relative z-10 inline-flex items-center gap-2">
-        {progress >= 1 || firedRef.current ? (
-          <>✓</>
-        ) : (
-          <span aria-hidden="true">⏱</span>
-        )}
+        {progress >= 1 || firedRef.current ? <>✓</> : <span aria-hidden="true">⏱</span>}
         <span>{firedRef.current || progress >= 1 ? '' : label}</span>
       </span>
-      {/* Screen-reader announcement channel for state changes. */}
-      <span role="status" className="sr-only">
-        {progress >= 1 ? label : ''}
-      </span>
+      <span role="status" className="sr-only">{progress >= 1 ? label : ''}</span>
     </button>
   );
 }
