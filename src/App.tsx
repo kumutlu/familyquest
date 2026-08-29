@@ -14,6 +14,9 @@ import { Login } from './pages/Login';
 import { Signup } from './pages/Signup';
 import { JoinFamily } from './pages/JoinFamily';
 import { JoinInvite } from './pages/JoinInvite';
+import { AdultInvite } from './pages/AdultInvite';
+import { PendingMembership } from './pages/PendingMembership';
+import { NoFamilyChoice } from './pages/NoFamilyChoice';
 import { OnboardingFlow } from './onboarding/OnboardingFlow';
 import { PrivacyPolicy } from './pages/legal/PrivacyPolicy';
 import { TermsOfService } from './pages/legal/TermsOfService';
@@ -31,13 +34,44 @@ import { useStore, logAuthTrace } from './store/useStore';
 import { initForegroundMessaging } from './lib/pushNotifications';
 import { RequestDetailProvider } from './components/requests/RequestDetailContext';
 import { MoneyPrivacyProvider } from './components/privacy/MoneyPrivacyContext';
-import { Suspense, useEffect } from 'react';
+import { Suspense, useCallback, useEffect, useRef, useState, useSyncExternalStore } from 'react';
 import { consumeGoogleRedirectResult } from './lib/googleRedirectAuth';
 import { markStartupStage } from './startupDiagnostics';
 import { E2EBootstrapDiagnostics } from './components/E2EBootstrapDiagnostics';
+import { AuthRoutingGate } from './auth/AuthRoutingGate';
+import {
+  clearCreateFamilyIntent,
+  hasCreateFamilyIntent,
+  subscribeCreateFamilyIntent,
+} from './auth/createFamilyIntent';
+
+type CreationContinuation = { authUid: string; familyId?: string };
 
 function App() {
   const initAuth = useStore(state => state.initAuth);
+  const authStatus = useStore(state => state.authStatus);
+  const authUser = useStore(state => state.authUser);
+  const currentFamilyId = useStore(state => state.currentUser?.familyId);
+  const authUid = authUser?.uid ?? null;
+  const hasExplicitCreateIntent = useSyncExternalStore(
+    subscribeCreateFamilyIntent,
+    () => authUid ? hasCreateFamilyIntent(authUid) : false,
+    () => false,
+  );
+  const [creationContinuation, setCreationContinuation] = useState<CreationContinuation | null>(null);
+  // Firestore can publish the new family membership while React batches the
+  // state update from the onboarding callback. The ref is the synchronous
+  // handoff used by the routing gate during that narrow ordering window; state
+  // still drives ordinary React renders and lifecycle cleanup.
+  const creationContinuationRef = useRef<CreationContinuation | null>(null);
+  const confirmFamilyCreation = useCallback((continuation: CreationContinuation) => {
+    creationContinuationRef.current = continuation;
+    setCreationContinuation(continuation);
+  }, []);
+  const endCreationJourney = useCallback(() => {
+    creationContinuationRef.current = null;
+    setCreationContinuation(null);
+  }, []);
 
   useEffect(() => {
     markStartupStage('REACT_MOUNTED');
@@ -57,6 +91,26 @@ function App() {
   }, [initAuth]);
 
   useEffect(() => {
+    // Keep the UID-bound intent for the whole P1-P3 journey. Clearing it as
+    // soon as the profile listener publishes familyId races the in-flight P1
+    // transaction and can eject the user before its continuation is confirmed.
+    if (authStatus === 'unauthenticated') clearCreateFamilyIntent();
+  }, [authStatus]);
+
+  useEffect(() => {
+    if (
+      authStatus === 'unauthenticated' ||
+      (creationContinuationRef.current && creationContinuationRef.current.authUid !== authUid) ||
+      (creationContinuationRef.current?.familyId !== undefined
+        && currentFamilyId
+        && creationContinuationRef.current.familyId !== currentFamilyId)
+    ) {
+      creationContinuationRef.current = null;
+      setCreationContinuation(null);
+    }
+  }, [authStatus, authUid, creationContinuation, currentFamilyId]);
+
+  useEffect(() => {
     // Best-effort: wire foreground push handling. The handler is intentionally a
     // no-op so we do NOT show a duplicate browser notification — the realtime
     // Notification Center (Firestore listener) is the primary UI.
@@ -66,19 +120,40 @@ function App() {
   return (
     <Suspense fallback={<div data-testid="route-translations-loading" aria-busy="true" className="min-h-screen bg-gray-50" />}>
       <Router>
-        <E2EBootstrapDiagnostics />
-        <Routes>
+        <MoneyPrivacyProvider>
+          <RequestDetailProvider>
+            <E2EBootstrapDiagnostics />
+            <AuthRoutingGate
+              hasExplicitCreateIntent={hasExplicitCreateIntent}
+              creationContinuation={creationContinuationRef.current ?? creationContinuation}
+              onCreationJourneyEnded={endCreationJourney}
+            >
+            <Routes>
           <Route path="/login" element={<Login />} />
           <Route path="/signup" element={<Signup />} />
           <Route path="/join-family" element={<JoinFamily />} />
           {/* Code-specific invitation link. Public: the invitation is
               validated server-side before any family detail is rendered. */}
           <Route path="/join" element={<JoinInvite />} />
+          {/* Opaque adult invitations own their auth/confirmation journey and
+              must run before the authenticated AppLayout onboarding guard. */}
+          <Route path="/invite/:token" element={<AdultInvite />} />
+          <Route path="/join/pending" element={<PendingMembership />} />
+          <Route path="/no-family" element={<NoFamilyChoice />} />
 
           {/* Public pre-auth onboarding. Rendered OUTSIDE <AppLayout> so it is
               reachable by unauthenticated visitors; it carries its own internal
               guards (established-family owner / managed child → redirected). */}
-          <Route path="/onboarding" element={<OnboardingFlow />} />
+          <Route
+            path="/onboarding"
+            element={(
+              <OnboardingFlow
+                onFamilyCreationStarted={confirmFamilyCreation}
+                onFamilyCreationConfirmed={confirmFamilyCreation}
+                onCreationJourneyEnded={endCreationJourney}
+              />
+            )}
+          />
 
           {/* Public legal surfaces — intentionally outside <AppLayout> so they
               render without authentication and without app navigation. */}
@@ -86,13 +161,7 @@ function App() {
           <Route path="/terms" element={<TermsOfService />} />
           <Route path="/account-deletion" element={<AccountDeletion />} />
 
-          <Route path="/" element={
-            <MoneyPrivacyProvider>
-              <RequestDetailProvider>
-                <AppLayout />
-              </RequestDetailProvider>
-            </MoneyPrivacyProvider>
-          }>
+          <Route path="/" element={<AppLayout />}>
             <Route index element={<Dashboard />} />
             <Route path="family" element={<Family />} />
             <Route path="family/:id" element={<MemberProfile />} />
@@ -117,7 +186,10 @@ function App() {
             <Route path="help/category/:categoryId" element={<HelpCategoryPage />} />
             <Route path="help/:articleId" element={<HelpArticlePage />} />
           </Route>
-        </Routes>
+            </Routes>
+            </AuthRoutingGate>
+          </RequestDetailProvider>
+        </MoneyPrivacyProvider>
       </Router>
     </Suspense>
   );

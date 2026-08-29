@@ -1,9 +1,12 @@
 import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest';
-import { installServiceWorkerControllerListener } from './serviceWorkerUpdate';
+import {
+  installServiceWorkerControllerListener,
+  LEGACY_SW_MIGRATION_ID,
+} from './serviceWorkerUpdate';
 import { reportStartupPhase, getStartupPhase } from './startupDiagnostics';
 
 // ---------------------------------------------------------------------------
-// POST-FIX lifecycle suite.
+// ONE-RELEASE migration lifecycle suite.
 //
 // Hypothesis (STARTUP_SW_INVESTIGATION.md §B): `autoUpdate` + `skipWaiting:
 // true` + `clientsClaim: true` made a newly deployed SW take control of an
@@ -11,55 +14,70 @@ import { reportStartupPhase, getStartupPhase } from './startupDiagnostics';
 // resulting `controllerchange`, racing the takeover and masking a chunk-load
 // failure as a generic "Connection problem".
 //
-// The fix changes the PWA strategy to `prompt` + `skipWaiting:false` +
-// `clientsClaim:false` and replaces the reload handler with an observer that
-// only logs. These tests prove the new behaviour end-to-end using the REAL
-// `startupDiagnostics` module (no mock), so the phase-tracking wiring is
-// exercised for real.
+// The later 82422c8 rescue release temporarily enables claim/activation and
+// installs a migration-id-gated listener with an at-most-once fallback reload.
+// These tests exercise that current production contract using the REAL
+// `startupDiagnostics` module (no mock).
 //
-// What is proven here: the controllerchange/bootstrap interaction no longer
-// reloads and is correctly classified. What remains an inference (browser
-// only): the actual SW `skipWaiting`/`clientsClaim` absence in the generated
-// `dist/sw.js` — verified separately by inspecting the production build.
+// Browser activation and the subsequent normal-release reload are covered by
+// tests/e2e/sw-lifecycle.spec.ts. This file proves the listener's diagnostic,
+// migration reload count, and persisted no-loop marker.
 // ---------------------------------------------------------------------------
 
-describe('service worker lifecycle — post-fix (no reload, classified diagnostic)', () => {
+describe('service worker lifecycle — one-time legacy migration', () => {
   beforeEach(() => {
+    vi.useFakeTimers();
     vi.spyOn(console, 'error').mockImplementation(() => {});
   });
 
   afterEach(() => {
+    vi.useRealTimers();
     vi.restoreAllMocks();
     // Reset to a valid phase so the next test starts from a known state.
     reportStartupPhase('ready');
   });
 
-  it('1. a controllerchange during an active bootstrap is classified, NOT reloaded', () => {
+  it('1. classifies a bootstrap takeover and performs exactly one migration fallback reload', () => {
     // Open tab mid-bootstrap (auth phase) when the SW takes over.
     reportStartupPhase('auth');
     expect(getStartupPhase()).toBe('auth');
 
     let controllerChange: (() => void) | undefined;
+    const controller = { state: 'activated' };
     const serviceWorker = {
-      controller: {},
-      addEventListener: vi.fn((_name: string, listener: () => void) => {
-        controllerChange = listener;
+      controller,
+      addEventListener: vi.fn((name: string, listener: () => void) => {
+        if (name === 'controllerchange') controllerChange = listener;
       }),
     };
+    const storage = new Map<string, string>();
+    const reload = vi.fn();
 
-    installServiceWorkerControllerListener(serviceWorker);
+    installServiceWorkerControllerListener(serviceWorker, {
+      migrationId: LEGACY_SW_MIGRATION_ID,
+      reload,
+      reloadDelayMs: 25,
+      storage: {
+        getItem: key => storage.get(key) ?? null,
+        setItem: (key, value) => storage.set(key, value),
+      },
+    });
     controllerChange?.();
+    controllerChange?.();
+    vi.advanceTimersByTime(25);
 
-    // The corrected handler must NOT reload (that reload was the mechanism that
-    // masked the chunk-load failure). It only classifies the event.
     expect(console.error).toHaveBeenCalledWith(
       '[StartupDiagnostic]',
       'SERVICE_WORKER_CONTROLLER_CHANGE_DURING_BOOTSTRAP',
       { phase: 'auth' },
     );
+    expect(reload).toHaveBeenCalledTimes(1);
+    expect(storage.get(`queki:sw-migration:${LEGACY_SW_MIGRATION_ID}`)).toBe('reloading');
+    expect(serviceWorker.controller).toBe(controller);
+    expect(serviceWorker.controller.state).toBe('activated');
   });
 
-  it('2. a controllerchange after bootstrap is ready is silent (legitimate update)', () => {
+  it('2. a normal release without a migration id attaches no reload listener', () => {
     reportStartupPhase('ready');
     let controllerChange: (() => void) | undefined;
     const serviceWorker = {
@@ -68,10 +86,13 @@ describe('service worker lifecycle — post-fix (no reload, classified diagnosti
         controllerChange = listener;
       }),
     };
-    installServiceWorkerControllerListener(serviceWorker);
+    const reload = vi.fn();
+    installServiceWorkerControllerListener(serviceWorker, { reload });
     controllerChange?.();
 
     expect(console.error).not.toHaveBeenCalled();
+    expect(serviceWorker.addEventListener).not.toHaveBeenCalled();
+    expect(reload).toHaveBeenCalledTimes(0);
   });
 
   it('3. no listener is attached on the first service worker installation', () => {
@@ -80,23 +101,38 @@ describe('service worker lifecycle — post-fix (no reload, classified diagnosti
     expect(serviceWorker.addEventListener).not.toHaveBeenCalled();
   });
 
-  it('4. the phase reported by StartupScreen drives the classification', () => {
-    // Simulate the StartupScreen effect reporting each phase.
+  it('4. a persisted migration marker prevents a reload loop after navigation', () => {
     reportStartupPhase('profile');
     let controllerChange: (() => void) | undefined;
+    const controller = { state: 'activated' };
     const serviceWorker = {
-      controller: {},
-      addEventListener: vi.fn((_name: string, listener: () => void) => {
-        controllerChange = listener;
+      controller,
+      addEventListener: vi.fn((name: string, listener: () => void) => {
+        if (name === 'controllerchange') controllerChange = listener;
       }),
     };
-    installServiceWorkerControllerListener(serviceWorker);
+    const storageKey = `queki:sw-migration:${LEGACY_SW_MIGRATION_ID}`;
+    const storage = new Map([[storageKey, 'reloading']]);
+    const reload = vi.fn();
+    installServiceWorkerControllerListener(serviceWorker, {
+      migrationId: LEGACY_SW_MIGRATION_ID,
+      reload,
+      reloadDelayMs: 25,
+      storage: {
+        getItem: key => storage.get(key) ?? null,
+        setItem: (key, value) => storage.set(key, value),
+      },
+    });
     controllerChange?.();
+    vi.advanceTimersByTime(25);
 
     expect(console.error).toHaveBeenCalledWith(
       '[StartupDiagnostic]',
       'SERVICE_WORKER_CONTROLLER_CHANGE_DURING_BOOTSTRAP',
       { phase: 'profile' },
     );
+    expect(reload).toHaveBeenCalledTimes(0);
+    expect(storage.get(storageKey)).toBe('reloading');
+    expect(serviceWorker.controller.state).toBe('activated');
   });
 });

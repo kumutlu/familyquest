@@ -91,7 +91,7 @@ export async function driveToStep(page: Page, data: OnboardingPersona, stopAt: P
   await expect(page.getByRole('heading', { name: S7_HEADING })).toBeVisible();
 }
 
-/** Complete the email signup and return to the post-auth onboarding (P1). */
+/** Complete S7 email signup, prove creation stays inert, then explicitly enter P1. */
 export async function signUpFromS7(page: Page, data: OnboardingPersona) {
   await expect(page.getByRole('heading', { name: S7_HEADING })).toBeVisible();
   await page.getByRole('button', { name: /continue with email/i }).click();
@@ -103,7 +103,20 @@ export async function signUpFromS7(page: Page, data: OnboardingPersona) {
   await page.locator('input[type="password"]').fill(data.password);
   await page.getByRole('button', { name: /sign up/i }).click();
 
-  // Returns to /onboarding and advances S7 -> P1 once auth resolves.
+  // Authentication alone may not authorize family creation. The no-family
+  // choice must render first, with both explicit affordances available.
+  await expect(page).toHaveURL(/\/no-family$/, { timeout: 20_000 });
+  await expect(page.getByRole('button', { name: 'Create a family' })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Join an existing family' })).toBeVisible();
+  const before = await getOnboardingOutcome(data.email, { familyCount: 0, childCount: 0, taskCount: 0 });
+  expect(before.familyCount, 'signup must not create a family').toBe(0);
+  expect(before.childCount, 'signup must not create a child').toBe(0);
+  expect(before.taskCount, 'signup must not create a task').toBe(0);
+
+  await page.getByRole('button', { name: 'Create a family' }).click();
+  await expect(page).toHaveURL(/\/onboarding\?mode=create$/, { timeout: 20_000 });
+
+  // The explicit create intent authorizes the preserved S7 draft to advance.
   await expectOnboardingP1TerminalState(page);
 }
 

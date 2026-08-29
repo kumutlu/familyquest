@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { Navigate, useNavigate } from 'react-router-dom';
+import { Navigate, useLocation, useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { useStore } from '../store/useStore';
 import {
@@ -12,6 +12,8 @@ import {
 import { useOnboardingMachine } from './useOnboardingMachine';
 import { PRE_AUTH_STEPS, POST_AUTH_STEPS } from './lib/onboardingDraft';
 import { recordOnboardingEvent } from './lib/onboardingAnalytics';
+import { clearCreateFamilyIntent, readCreateFamilyIntent } from '../auth/createFamilyIntent';
+import { recordInviteEvent } from '../auth/inviteAnalytics';
 import type { SetupDeps } from './lib/onboardingSetup';
 import { OnboardingShell } from './components/OnboardingShell';
 import { OnboardingProgress } from './components/OnboardingProgress';
@@ -59,9 +61,20 @@ function BoundedLoading() {
  * and an unresolved bootstrap shows bounded loading rather than accidental
  * onboarding.
  */
-export function OnboardingFlow() {
+export interface OnboardingFlowProps {
+  onFamilyCreationStarted?: (continuation: { authUid: string }) => void;
+  onFamilyCreationConfirmed?: (continuation: { authUid: string; familyId: string }) => void;
+  onCreationJourneyEnded?: () => void;
+}
+
+export function OnboardingFlow({
+  onFamilyCreationStarted,
+  onFamilyCreationConfirmed,
+  onCreationJourneyEnded,
+}: OnboardingFlowProps = {}) {
   const { t } = useTranslation('onboarding');
   const navigate = useNavigate();
+  const location = useLocation();
 
   const authStatus = useStore(state => state.authStatus);
   const authUser = useStore(state => state.authUser);
@@ -71,6 +84,11 @@ export function OnboardingFlow() {
   // Authoritative signal: the profile document is confirmed present on the
   // server (not merely a cached snapshot).
   const profileServerConfirmed = useStore(state => state.profileServerConfirmed);
+  const exactCreateRoute =
+    location.pathname === '/onboarding' && new URLSearchParams(location.search).get('mode') === 'create';
+  const hasCreateIntent = Boolean(
+    authUser?.uid && readCreateFamilyIntent(authUser.uid),
+  );
 
   const currentFamilyId = currentUser?.familyId ?? null;
   const { draft, goNext, goBack, setStep, patch, reset } = useOnboardingMachine(currentFamilyId);
@@ -90,16 +108,27 @@ export function OnboardingFlow() {
   const deps = useMemo<SetupDeps>(
     () => ({
       uid: authUser?.uid ?? currentUser?.id ?? '',
-      createFamilyAndParent: (...args: Parameters<typeof createFamilyAndParent>) => {
+      createFamilyAndParent: async (...args: Parameters<typeof createFamilyAndParent>) => {
         familyCreationAttemptedRef.current = true;
-        return createFamilyAndParent(...args);
+        onFamilyCreationStarted?.({ authUid: args[0] });
+        try {
+          const result = await createFamilyAndParent(...args);
+          onFamilyCreationConfirmed?.({
+            authUid: args[0],
+            familyId: result.user.familyId ?? result.familyId,
+          });
+          return result;
+        } catch (error) {
+          onCreationJourneyEnded?.();
+          throw error;
+        }
       },
       createManagedMember,
       createTask,
       refreshCurrentUser,
       getFamilyMembers: () => useStore.getState().familyMembers ?? [],
     }),
-    [authUser?.uid, currentUser?.id, refreshCurrentUser],
+    [authUser?.uid, currentUser?.id, onCreationJourneyEnded, onFamilyCreationConfirmed, onFamilyCreationStarted, refreshCurrentUser],
   );
 
   // Funnel: started (once, pre-auth).
@@ -116,11 +145,22 @@ export function OnboardingFlow() {
   // carries a familyId — such a draft would trap an established-family owner
   // in post-auth setup.
   useEffect(() => {
-    if (postAuth && PRE_AUTH_STEPS.includes(draft.step) && !currentUser?.familyId) {
+    if (
+      postAuth &&
+      exactCreateRoute &&
+      hasCreateIntent &&
+      PRE_AUTH_STEPS.includes(draft.step) &&
+      !currentUser?.familyId
+    ) {
       recordOnboardingEvent('onboarding_auth_completed', { authProvider: draft.authProvider });
+      recordInviteEvent('invite_auth_resumed', {
+        authProvider: draft.authProvider === 'google' || draft.authProvider === 'email'
+          ? draft.authProvider : 'unknown',
+        source: 'onboarding',
+      });
       setStep('p1');
     }
-  }, [postAuth, draft.step, draft.authProvider, setStep, currentUser?.familyId]);
+  }, [postAuth, exactCreateRoute, hasCreateIntent, draft.step, draft.authProvider, setStep, currentUser?.familyId]);
 
   // Funnel: family created / first task created (idempotent, fires once).
   const prevFamilyId = useRef(draft.familyId);
@@ -190,6 +230,22 @@ export function OnboardingFlow() {
     }
     return <BoundedLoading />;
   }
+  // A cached family-less profile is not authoritative enough to choose either
+  // creation or no-family routing. The global gate normally owns this wait;
+  // keep the public onboarding container equally fail-closed when mounted in
+  // isolation or during an in-flight bootstrap update.
+  if (authStatus === 'authenticated' && !profileServerConfirmed) {
+    return <BoundedLoading />;
+  }
+  // Authenticated family creation is a narrow route entered only by the
+  // explicit no-family choice. Direct/stale onboarding drafts are inert.
+  if (
+    authStatus === 'authenticated' &&
+    !currentUser?.familyId &&
+    (!exactCreateRoute || !hasCreateIntent)
+  ) {
+    return <Navigate to="/no-family" replace />;
+  }
 
   const authError =
     bootstrapError === GOOGLE_CANCELLED_MESSAGE ? t('errors.authCancelled') : localAuthError;
@@ -221,6 +277,8 @@ export function OnboardingFlow() {
   // to /login (replace) returns the user to the signed-out entry experience and
   // prevents browser Back from silently restoring an authenticated session.
   const handleSignOut = async () => {
+    clearCreateFamilyIntent();
+    onCreationJourneyEnded?.();
     try {
       await signOut();
     } catch {
@@ -234,6 +292,8 @@ export function OnboardingFlow() {
 
   const handleFinish = () => {
     recordOnboardingEvent('onboarding_completed');
+    clearCreateFamilyIntent();
+    onCreationJourneyEnded?.();
     reset();
     navigate('/', { replace: true });
   };

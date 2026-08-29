@@ -18,6 +18,8 @@ const mockSignOut = vi.fn(async (..._args: any[]) => {});
 const mockLeaveFamily = vi.fn(async (..._args: any[]) => ({ left: true }));
 const mockRequestFamilyDeletion = vi.fn();
 const mockFetchFamilyDeletionStatus = vi.fn();
+const mockCreateAdultInvitation = vi.fn();
+const mockRevokeAdultInvitation = vi.fn();
 
 vi.mock('../../lib/api', () => ({
   updateFamilySettings: (...args: any[]) => mockUpdateFamilySettings(...args),
@@ -33,6 +35,10 @@ vi.mock('../../lib/familyDeletionApi', () => ({
   requestFamilyDeletion: (...args: any[]) => mockRequestFamilyDeletion(...args),
   fetchFamilyDeletionStatus: (...args: any[]) => mockFetchFamilyDeletionStatus(...args),
   generateClientReqId: () => 'test-client-req-00000001',
+}));
+vi.mock('../../lib/adultInvitationApi', () => ({
+  createAdultInvitation: (...args: any[]) => mockCreateAdultInvitation(...args),
+  revokeAdultInvitation: (...args: any[]) => mockRevokeAdultInvitation(...args),
 }));
 
 // Mock the clipboard API
@@ -53,6 +59,12 @@ beforeEach(async () => {
   mockRegenerateInviteCode.mockReset();
   mockApproveJoinRequest.mockReset();
   mockRejectJoinRequest.mockReset();
+  mockCreateAdultInvitation.mockReset();
+  mockCreateAdultInvitation.mockResolvedValue({
+    invitationId: 'a'.repeat(64), token: 'adult-token', intendedRole: 'parent', expiresAt: '2026-09-02T12:00:00.000Z',
+  });
+  mockRevokeAdultInvitation.mockReset();
+  mockRevokeAdultInvitation.mockResolvedValue({ success: true });
   // Set default implementations
   mockUpdateFamilySettings.mockImplementation(async (familyId: string, updates: any) => {
     act(() => {
@@ -485,7 +497,7 @@ describe('FamilySettings — section navigation', () => {
 });
 
 describe('FamilySettings — role-based visibility', () => {
-  it('15. Owner sees the existing invite-code action and active add child control', async () => {
+  it('15. Owner sees the private adult invitation action and active add child control', async () => {
     const user = userEvent.setup();
     renderFamilySettings('owner');
     // Navigate to Members section to see the buttons
@@ -493,9 +505,9 @@ describe('FamilySettings — role-based visibility', () => {
     const inviteAction = screen.getByRole('button', { name: 'Add parent or adult' });
     expect(inviteAction).toBeEnabled();
     await user.click(inviteAction);
-    expect(screen.getByText('ABC123')).toBeInTheDocument();
-    await user.click(screen.getByRole('button', { name: 'Copy' }));
-    expect(clipboardWriteText).toHaveBeenCalledWith('ABC123');
+    await user.click(screen.getByRole('button', { name: 'Create private invitation' }));
+    expect(mockCreateAdultInvitation).toHaveBeenCalledWith({ intendedRole: 'parent', clientReqId: expect.any(String) });
+    expect(screen.getByRole('button', { name: 'Copy private link' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: '+ Add child' })).toBeInTheDocument();
   });
 
@@ -635,19 +647,18 @@ describe('FamilySettings — regional settings editing', () => {
 });
 
 describe('FamilySettings — add parent flow', () => {
-  it('accurately explains the limitation and reuses the existing invite-code copy path', async () => {
+  it('creates a private parent invitation without exposing the family code', async () => {
     const user = userEvent.setup();
     renderFamilySettings('owner');
     await user.click(screen.getByRole('button', { name: 'Members' }));
 
-    expect(screen.getByText(/invite another adult with the existing family code/i)).toBeInTheDocument();
+    expect(screen.getByText(/Create a private invitation link/i)).toBeInTheDocument();
     const copyInvite = screen.getByRole('button', { name: 'Add parent or adult' });
     expect(copyInvite).toBeEnabled();
     await user.click(copyInvite);
-    await user.click(screen.getByRole('button', { name: 'Copy' }));
-
-    expect(clipboardWriteText).toHaveBeenCalledWith('ABC123');
-    expect(await screen.findByText('Invite code copied to clipboard.')).toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: 'Create private invitation' }));
+    expect(mockCreateAdultInvitation).toHaveBeenCalledWith({ intendedRole: 'parent', clientReqId: expect.any(String) });
+    expect(screen.queryByText('ABC123')).not.toBeInTheDocument();
   });
 });
 
@@ -664,7 +675,7 @@ describe('FamilySettings — localization and accessibility', () => {
     });
 
     await user.click(screen.getByRole('button', { name: 'Üyeler' }));
-    expect(screen.getByText(/Mevcut aile koduyla başka bir yetişkini davet edin/)).toBeInTheDocument();
+    expect(screen.getByText(/özel davet bağlantısı oluşturun/i)).toBeInTheDocument();
     expect(screen.getByText('1 istek onay bekliyor')).toBeInTheDocument();
     expect(screen.getByText('Bir çocuk hesabı için Çocuk seçin; aileyi yönetmesine güvendiğiniz bir yetişkin için Ebeveyn veya yetişkin seçin.')).toBeInTheDocument();
     expect(screen.getByText(/İstek tarihi:/)).toHaveTextContent('02.01.2026');

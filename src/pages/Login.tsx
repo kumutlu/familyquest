@@ -1,5 +1,5 @@
 import { Fragment, useEffect, useRef, useState } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { AppWindow, ListChecks, Wallet, Gift, ArrowRight } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { Button } from '../components/ui/Button';
@@ -10,6 +10,9 @@ import { signInWithCustomToken } from 'firebase/auth';
 import { auth } from '../lib/firebase';
 import { useStore } from '../store/useStore';
 import { postAuthDestination } from '../lib/inviteLink';
+import { bindPendingInviteToUid, readPendingInvite } from '../auth/pendingInviteIntent';
+import { safeInternalReturnPath } from '../lib/googleRedirectAuth';
+import { mapAuthErrorKey } from '../auth/authErrorMessage';
 
 type LoginTab = 'parent' | 'child';
 
@@ -30,8 +33,21 @@ export function Login() {
   const [error, setError] = useState('');
   const [signingIn, setSigningIn] = useState(false);
   const navigate = useNavigate();
+  const location = useLocation();
   const authStatus = useStore(state => state.authStatus);
+  const authUser = useStore(state => state.authUser);
   const bootstrapError = useStore(state => state.bootstrapError);
+  const navigationStarted = useRef(false);
+
+  const validatedNext = safeInternalReturnPath(new URLSearchParams(location.search).get('next'));
+  const pendingInvite = readPendingInvite();
+  const pendingInvitePath = pendingInvite
+    ? `/invite/${encodeURIComponent(pendingInvite.token)}`
+    : null;
+  const authReturnPath = pendingInvitePath ?? validatedNext;
+  const signupPath = authReturnPath
+    ? `/signup?next=${encodeURIComponent(authReturnPath)}`
+    : '/signup';
 
   useEffect(() => {
     if (bootstrapError === 'Google sign-in could not be completed. Please try again.') {
@@ -49,12 +65,21 @@ export function Login() {
   // while rendering a different component" warning and can corrupt the mounted
   // tree). Defer it to an effect.
   useEffect(() => {
-    if (authStatus === 'authenticated') {
-      // Resume a pending invitation instead of the dashboard when the visitor
-      // arrived from a /join link; the code survived the sign-in round trip.
-      navigate(postAuthDestination('/'), { replace: true });
+    if (authStatus !== 'authenticated' || !authUser?.uid || navigationStarted.current) return;
+
+    try {
+      bindPendingInviteToUid(authUser.uid);
+    } catch {
+      // The canonical invite route owns stable account-mismatch UX.
     }
-  }, [authStatus, navigate]);
+
+    const resumedInvite = readPendingInvite();
+    const destination = resumedInvite
+      ? `/invite/${encodeURIComponent(resumedInvite.token)}`
+      : validatedNext ?? postAuthDestination('/');
+    navigationStarted.current = true;
+    navigate(destination, { replace: true });
+  }, [authStatus, authUser?.uid, navigate, validatedNext]);
 
   // Move focus to the first field of the Child form whenever that tab is shown.
   useEffect(() => {
@@ -75,7 +100,7 @@ export function Login() {
       await signIn(email, password);
       // Do not navigate here. The route guard redirects once auth is ready.
     } catch (err: any) {
-      setError(err.message);
+      setError(t(mapAuthErrorKey(err, { pendingInvite: pendingInvite !== null })));
       setSigningIn(false);
     }
   };
@@ -87,7 +112,7 @@ export function Login() {
       await signInWithGoogle();
       // Do not navigate here. The route guard redirects once auth is ready.
     } catch (err: any) {
-      setError(err.message);
+      setError(t(mapAuthErrorKey(err, { pendingInvite: pendingInvite !== null })));
       setSigningIn(false);
     }
   };
@@ -349,7 +374,7 @@ export function Login() {
                 </div>
 
                 <div className="mt-6 text-center">
-                  <Link to="/signup" className="text-sm font-medium text-primary-600 hover:text-primary-500">{t('auth:noAccount')} {t('auth:signUp')}</Link>
+                  <Link to={signupPath} className="text-sm font-medium text-primary-600 hover:text-primary-500">{t('auth:noAccount')} {t('auth:signUp')}</Link>
                 </div>
               </div>
             )}

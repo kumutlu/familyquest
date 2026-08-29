@@ -1696,12 +1696,6 @@ service cloud.firestore {
           || (request.resource.data.diff(resource.data).affectedKeys().hasAny(['lastTaskCompletionId']) && isValidTaskApprovalMutation(uid))
           || (request.resource.data.diff(resource.data).affectedKeys().hasAny(['lastBehaviourEventId']) && isValidBehaviourPointMutation(uid)) ||
         (!('familyId' in resource.data) && 'familyId' in request.resource.data ? isValidOwnerBootstrap(uid) || isValidJoinProfileUpdate(uid) : false) ||
-        // Owner may adjust a member's role via the client ONLY in the legacy
-        // join-approval path; the canonical, audited role change is the
-        // server-authoritative changeMemberRole callable. Clients may NEVER
-        // grant 'owner' (no self-escalation to family owner) and may NEVER
-        // touch 'lifecycle' (archive/remove/restore are server-only).
-        ('familyId' in resource.data && isOwner(resource.data.familyId) && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['role']) && resource.data.get('role', 'null') != 'child' && request.resource.data.role != 'child' && request.resource.data.role != 'owner') ||
         ('familyId' in resource.data && isParent(resource.data.familyId) && resource.data.get('role', 'null') == 'child'
           && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['displayName', 'avatarUrl', 'avatarId', 'avatarConfig'])
           && hasValidOptionalAvatarConfig(request.resource.data))
@@ -1726,6 +1720,33 @@ service cloud.firestore {
       allow read, write: if false;
     }
     match /childJoinRateLimits/{limitKey} {
+      allow read, write: if false;
+    }
+
+    // ADULT INVITATION V2 — SERVER-ONLY ROOT COLLECTIONS
+    // Invitation credentials, idempotency state, and preview abuse counters are
+    // owned exclusively by the trusted backend. Clients receive only validated
+    // callable projections and may never read or forge these records directly.
+    match /familyInvitations/{invitationId} {
+      allow read, write: if false;
+    }
+    match /adultInvitationCreationIdempotency/{operationId} {
+      allow read, write: if false;
+    }
+    match /adultInvitationAcceptanceIdempotency/{operationId} {
+      allow read, write: if false;
+    }
+    match /adultInvitationProfileCompletionIdempotency/{operationId} {
+      allow read, write: if false;
+    }
+    match /adultInvitationRevocationIdempotency/{operationId} {
+      allow read, write: if false;
+    }
+    match /adultInvitationPreviewRateLimits/{limitKey} {
+      allow read, write: if false;
+    }
+    // Reserved compatibility name from the approved Task 3 contract.
+    match /adultInvitationRateLimits/{limitKey} {
       allow read, write: if false;
     }
 
@@ -1777,6 +1798,16 @@ service cloud.firestore {
         && (!('technicalContext' in request.resource.data) || validTechnicalContext(request.resource.data.technicalContext));
     }
 
+    // Collection-group queries require a recursive rules-v2 match. Keep this
+    // narrowly scoped to the legacy request collection and to the requesting
+    // profile; direct family-member reads remain governed by the family match
+    // below. `{joinRequestPath=**}` also matches the direct child collection.
+    match /{joinRequestPath=**}/join_requests/{requestId} {
+      allow read: if isAuthenticated()
+        && !isManagedChildCaller()
+        && resource.data.uid == request.auth.uid;
+    }
+
     // FAMILIES
     match /families/{familyId} {
       allow read: if isFamilyMember(familyId);
@@ -1810,6 +1841,12 @@ service cloud.firestore {
       // previewInvitation callable instead, so no family information leaks
       // before the invitation has been validated.
       match /invitations/{inviteCode} {
+        allow read, write: if false;
+      }
+
+      // Adult invitation acceptance audit records are written exclusively by
+      // the trusted backend transaction and are never client-readable/writable.
+      match /adultInvitationEvents/{eventId} {
         allow read, write: if false;
       }
 

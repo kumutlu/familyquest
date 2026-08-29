@@ -29,7 +29,15 @@ const firestoreState = vi.hoisted(() => ({
   profileError: null as any,
   deferServer: false,
   serverResolve: null as ((snapshot: any) => void) | null,
+  pendingMembershipDocs: [] as any[],
+  pendingMembershipError: null as any,
+  pendingMembershipListener: null as ((snapshot: any) => void) | null,
+  pendingMembershipErrorListener: null as ((error: any) => void) | null,
+  profileListener: null as ((snapshot: any) => void) | null,
 }));
+
+const firestoreWrites = vi.hoisted(() => ({ setDoc: vi.fn() }));
+const familyCreation = vi.hoisted(() => ({ createFamilyAndParent: vi.fn() }));
 
 vi.mock('firebase/auth', () => ({
   onAuthStateChanged: vi.fn((_auth, next, error) => {
@@ -52,7 +60,21 @@ vi.mock('firebase/firestore', () => ({
     }
     return Promise.resolve(firestoreState.profileSnapshot);
   }),
-  onSnapshot: vi.fn((_ref: any, _opts: any, next?: any, error?: any) => {
+  onSnapshot: vi.fn((ref: any, _opts: any, next?: any, error?: any) => {
+    if (ref?.type === 'pendingMembershipQuery') {
+      firestoreState.pendingMembershipListener = next;
+      firestoreState.pendingMembershipErrorListener = error;
+      if (error && firestoreState.pendingMembershipError) {
+        queueMicrotask(() => error(firestoreState.pendingMembershipError));
+      } else if (next) {
+        queueMicrotask(() => next({
+          docs: firestoreState.pendingMembershipDocs,
+          metadata: { fromCache: false },
+        }));
+      }
+      return () => {};
+    }
+    firestoreState.profileListener = next;
     // Immediately deliver the configured snapshot (or error) to mimic a
     // server-resolved event. We do NOT deliver a fromCache event first so the
     // test focuses on the authoritative resolve path.
@@ -68,11 +90,21 @@ vi.mock('firebase/firestore', () => ({
   }),
   getFirestore: vi.fn(() => ({}) as any),
   collection: vi.fn(),
-  query: vi.fn(),
+  collectionGroup: vi.fn((_db, name) => ({ type: 'collectionGroup', name })),
+  query: vi.fn((target: any) => target?.type === 'collectionGroup'
+    ? { type: 'pendingMembershipQuery', collectionGroup: target.name }
+    : { type: 'query' }),
   where: vi.fn(),
   orderBy: vi.fn(),
   limit: vi.fn(),
-  getDocsFromServer: vi.fn(() => Promise.resolve({ docs: [] })),
+  getDocsFromServer: vi.fn((target: any) => {
+    if (target?.type === 'pendingMembershipQuery') {
+      if (firestoreState.pendingMembershipError) return Promise.reject(firestoreState.pendingMembershipError);
+      return Promise.resolve({ docs: firestoreState.pendingMembershipDocs });
+    }
+    return Promise.resolve({ docs: [] });
+  }),
+  setDoc: firestoreWrites.setDoc,
 }));
 
 vi.mock('../lib/firebase', () => ({
@@ -80,6 +112,11 @@ vi.mock('../lib/firebase', () => ({
   auth: {},
   db: {},
   googleProvider: {},
+}));
+
+vi.mock('../lib/api', () => ({
+  signOut: vi.fn(async () => {}),
+  createFamilyAndParent: familyCreation.createFamilyAndParent,
 }));
 
 // AppLayout renders NotificationCenter which subscribes to Firestore. Mock the
@@ -104,6 +141,7 @@ vi.mock('../lib/useNotifications', () => ({
 // Import AFTER mocks are registered.
 import { useStore } from './useStore';
 import { AppLayout } from '../components/layout/AppLayout';
+import { AuthRoutingGate } from '../auth/AuthRoutingGate';
 import i18n from '../i18n';
 
 const resetStore = () => {
@@ -161,11 +199,15 @@ const renderAppLayoutAt = (path: string) =>
       MemoryRouter,
       { initialEntries: [path] },
       createElement(
-        Routes,
+        AuthRoutingGate,
         null,
-        createElement(Route, { path: '/', element: createElement(AppLayout) }),
-        createElement(Route, { path: '/login', element: createElement('div', null, 'Login Page') }),
-        createElement(Route, { path: '/onboarding', element: createElement('div', null, 'Onboarding Page') }),
+        createElement(
+          Routes,
+          null,
+          createElement(Route, { path: '/', element: createElement(AppLayout) }),
+          createElement(Route, { path: '/login', element: createElement('div', null, 'Login Page') }),
+          createElement(Route, { path: '/onboarding', element: createElement('div', null, 'Onboarding Page') }),
+        ),
       ),
     ),
   );
@@ -179,6 +221,13 @@ beforeEach(() => {
   firestoreState.profileError = null;
   firestoreState.deferServer = false;
   firestoreState.serverResolve = null;
+  firestoreState.pendingMembershipDocs = [];
+  firestoreState.pendingMembershipError = null;
+  firestoreState.pendingMembershipListener = null;
+  firestoreState.pendingMembershipErrorListener = null;
+  firestoreState.profileListener = null;
+  firestoreWrites.setDoc.mockClear();
+  familyCreation.createFamilyAndParent.mockClear();
   resetStore();
   // initAuth registers the onAuthStateChanged listener.
   act(() => {
@@ -195,15 +244,199 @@ afterEach(async () => {
 });
 
 describe('auth bootstrap regression', () => {
-  it('uses a matching cached profile while server revalidation is pending', async () => {
+  it('keeps a matching cached profile provisional until server revalidation and membership lookup finish', async () => {
     firestoreState.cachedProfileSnapshot = makeProfileSnapshot('fam-1');
     firestoreState.profileSnapshot = makeProfileSnapshot('fam-1');
     firestoreState.deferServer = true;
     fireSignedIn();
 
     await waitFor(() => expect(useStore.getState().currentUser?.familyId).toBe('fam-1'));
-    expect(useStore.getState().appReady).toBe(true);
+    expect(useStore.getState().profileServerConfirmed).toBe(false);
+    expect(useStore.getState().appReady).toBe(false);
     expect(firestoreState.serverResolve).not.toBeNull();
+
+    firestoreState.serverResolve?.(makeProfileSnapshot('fam-1'));
+    await waitFor(() => expect(useStore.getState().profileServerConfirmed).toBe(true));
+    await waitFor(() => expect(useStore.getState().appReady).toBe(true));
+  });
+
+  it('resolves an existing pending legacy membership before declaring a no-family profile ready', async () => {
+    firestoreState.profileSnapshot = makeProfileSnapshot(null);
+    firestoreState.pendingMembershipDocs = [{ id: 'user-1' }];
+
+    fireSignedIn();
+
+    await waitFor(() => expect(useStore.getState().profileServerConfirmed).toBe(true));
+    await waitFor(() => expect(useStore.getState().pendingMembershipStatus).toBe('pending'));
+    expect(useStore.getState().appReady).toBe(true);
+    expect(useStore.getState().currentUser?.familyId).toBeUndefined();
+    expect(familyCreation.createFamilyAndParent).not.toHaveBeenCalled();
+    expect(firestoreWrites.setDoc).not.toHaveBeenCalled();
+  });
+
+  it('does not expose no-family readiness when approval removes pending before the profile callback', async () => {
+    firestoreState.profileSnapshot = makeProfileSnapshot(null);
+    firestoreState.pendingMembershipDocs = [{ id: 'user-1' }];
+    fireSignedIn();
+    await waitFor(() => expect(useStore.getState().pendingMembershipStatus).toBe('pending'));
+
+    firestoreState.profileSnapshot = makeProfileSnapshot('fam-approved');
+    act(() => {
+      firestoreState.pendingMembershipListener?.({
+        docs: [],
+        metadata: { fromCache: false },
+      });
+    });
+
+    expect(useStore.getState().pendingMembershipStatus).toBe('settling');
+    expect(useStore.getState().appReady).toBe(false);
+    await waitFor(() => expect(useStore.getState().currentUser?.familyId).toBe('fam-approved'));
+    expect(useStore.getState().appReady).toBe(true);
+  });
+
+  it('keeps a failed pending-membership settlement in recovery until an explicit retry confirms the profile', async () => {
+    firestoreState.profileSnapshot = makeProfileSnapshot(null);
+    firestoreState.pendingMembershipDocs = [{ id: 'user-1' }];
+    fireSignedIn();
+    await waitFor(() => expect(useStore.getState().pendingMembershipStatus).toBe('pending'));
+
+    // Approval removes the request, so bootstrap must re-read the profile from
+    // the server before declaring this account has no family. That profile read
+    // fails, while the live query subsequently emits another authoritative empty
+    // snapshot. The latter must not erase the recovery state.
+    firestoreState.profileError = {
+      code: 'permission-denied',
+      message: 'Profile confirmation was denied.',
+    };
+    act(() => {
+      firestoreState.pendingMembershipListener?.({
+        docs: [],
+        metadata: { fromCache: false },
+      });
+    });
+    await waitFor(() => expect(useStore.getState().bootstrapError).toContain('permission-denied'));
+
+    act(() => {
+      firestoreState.pendingMembershipListener?.({
+        docs: [],
+        metadata: { fromCache: false },
+      });
+    });
+
+    expect(useStore.getState().pendingMembershipStatus).toBe('recovery');
+    expect(useStore.getState().bootstrapError).toContain('permission-denied');
+    expect(useStore.getState().appReady).toBe(false);
+
+    // A user-requested retry creates a new authenticated bootstrap generation.
+    // With a successful server profile confirmation it may release recovery.
+    firestoreState.profileError = null;
+    firestoreState.profileSnapshot = makeProfileSnapshot(null);
+    firestoreState.pendingMembershipDocs = [];
+    act(() => {
+      useStore.getState().retryBootstrap();
+      authState.listener?.(makeAuthUser());
+    });
+
+    await waitFor(() => expect(useStore.getState().pendingMembershipStatus).toBe('none'));
+    expect(useStore.getState().bootstrapError).toBeNull();
+    expect(useStore.getState().appReady).toBe(true);
+  });
+
+  it('preserves settlement recovery when the live pending-membership listener later fails repeatedly', async () => {
+    firestoreState.profileSnapshot = makeProfileSnapshot(null);
+    firestoreState.pendingMembershipDocs = [{ id: 'user-1' }];
+    fireSignedIn();
+    await waitFor(() => expect(useStore.getState().pendingMembershipStatus).toBe('pending'));
+
+    firestoreState.profileError = {
+      code: 'permission-denied',
+      message: 'Settlement profile confirmation was denied.',
+    };
+    act(() => {
+      firestoreState.pendingMembershipListener?.({
+        docs: [],
+        metadata: { fromCache: false },
+      });
+    });
+    await waitFor(() => expect(useStore.getState().pendingMembershipStatus).toBe('recovery'));
+
+    act(() => {
+      firestoreState.pendingMembershipErrorListener?.({
+        code: 'unavailable',
+        message: 'Pending listener disconnected.',
+      });
+      firestoreState.pendingMembershipListener?.({
+        docs: [],
+        metadata: { fromCache: false },
+      });
+      firestoreState.pendingMembershipErrorListener?.({
+        code: 'permission-denied',
+        message: 'Pending listener was denied.',
+      });
+      const cachedFamilyProfile = makeProfileSnapshot('family-from-cache');
+      firestoreState.profileListener?.({
+        ...cachedFamilyProfile,
+        metadata: { fromCache: true },
+      });
+    });
+
+    expect(useStore.getState().pendingMembershipStatus).toBe('recovery');
+    expect(useStore.getState().bootstrapError).toContain('permission-denied');
+    expect(useStore.getState().appReady).toBe(false);
+  });
+
+  it('keeps approved membership stable when the profile callback arrives before pending removal', async () => {
+    firestoreState.profileSnapshot = makeProfileSnapshot(null);
+    firestoreState.pendingMembershipDocs = [{ id: 'user-1' }];
+    fireSignedIn();
+    await waitFor(() => expect(useStore.getState().pendingMembershipStatus).toBe('pending'));
+
+    const approvedProfile = makeProfileSnapshot('fam-approved');
+    firestoreState.profileSnapshot = approvedProfile;
+    act(() => {
+      firestoreState.profileListener?.({ ...approvedProfile, metadata: { fromCache: false } });
+    });
+    await waitFor(() => expect(useStore.getState().currentUser?.familyId).toBe('fam-approved'));
+
+    act(() => {
+      firestoreState.pendingMembershipListener?.({
+        docs: [],
+        metadata: { fromCache: false },
+      });
+    });
+
+    expect(useStore.getState().currentUser?.familyId).toBe('fam-approved');
+    expect(useStore.getState().appReady).toBe(true);
+  });
+
+  it('observes a legacy pending request created after no-family bootstrap', async () => {
+    firestoreState.profileSnapshot = makeProfileSnapshot(null);
+    fireSignedIn();
+
+    await waitFor(() => expect(useStore.getState().pendingMembershipStatus).toBe('none'));
+    act(() => {
+      firestoreState.pendingMembershipListener?.({
+        docs: [{ id: 'user-1' }],
+        metadata: { fromCache: false },
+      });
+    });
+
+    expect(useStore.getState().pendingMembershipStatus).toBe('pending');
+  });
+
+  it('keeps pending-membership lookup errors in recoverable startup without creating a family', async () => {
+    firestoreState.profileSnapshot = makeProfileSnapshot(null);
+    firestoreState.pendingMembershipError = {
+      code: 'permission-denied',
+      message: 'Missing or insufficient permissions.',
+    };
+
+    fireSignedIn();
+
+    await waitFor(() => expect(useStore.getState().bootstrapError).toContain('permission-denied'));
+    expect(useStore.getState().appReady).toBe(false);
+    expect(familyCreation.createFamilyAndParent).not.toHaveBeenCalled();
+    expect(firestoreWrites.setDoc).not.toHaveBeenCalled();
   });
 
   it('ignores a late cached profile callback after the authenticated user changes', async () => {
@@ -344,6 +577,8 @@ describe('auth bootstrap regression', () => {
       expect(useStore.getState().appReady).toBe(true);
     });
     expect(container.textContent).not.toContain('Login Page');
+    expect(familyCreation.createFamilyAndParent).not.toHaveBeenCalled();
+    expect(firestoreWrites.setDoc).not.toHaveBeenCalled();
   });
 
   it('3. authenticated user profile loading succeeds: dashboard loading ends', async () => {

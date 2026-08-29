@@ -1,10 +1,10 @@
 import { useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Button } from '../../components/ui/Button';
+import { AdultInviteCard } from '../../components/family/AdultInviteCard';
 import { OnboardingCard } from '../components/OnboardingCard';
 import { OnboardingError } from '../components/OnboardingError';
 import { useStore } from '../../store/useStore';
-import { buildJoinUrl } from '../../lib/inviteLink';
 import { ensureFamily, ensureFirstChild, type SetupDeps } from '../lib/onboardingSetup';
 import {
   classifyOnboardingError,
@@ -14,6 +14,7 @@ import {
 } from '../lib/onboardingErrors';
 import type { OnboardingDraft } from '../lib/onboardingDraft';
 import { recordE2ETimeline } from '../../lib/e2eDiagnostics';
+import { readCreateFamilyIntent } from '../../auth/createFamilyIntent';
 
 interface FamilyCompositionProps {
   draft: OnboardingDraft;
@@ -39,7 +40,6 @@ export function FamilyComposition({ draft, patch, goNext, deps }: FamilyComposit
   recordE2ETimeline('p1-render');
   const { t } = useTranslation('onboarding');
   const currentUser = useStore(state => state.currentUser);
-  const familyData = useStore(state => state.familyData);
   // Authoritative prerequisite: the user profile document is confirmed present
   // on the server. Setup must wait for this before calling createFamilyAndParent.
   const profileServerConfirmed = useStore(state => state.profileServerConfirmed);
@@ -52,12 +52,20 @@ export function FamilyComposition({ draft, patch, goNext, deps }: FamilyComposit
   const [extraChildren, setExtraChildren] = useState<string[]>([]);
   const [showAddChild, setShowAddChild] = useState(false);
   const [newChildName, setNewChildName] = useState('');
-  const [inviteCopied, setInviteCopied] = useState(false);
+  const [showAdultInvite, setShowAdultInvite] = useState(false);
   const [retryNonce, setRetryNonce] = useState(0);
 
   // Lifecycle-safe idempotency refs (StrictMode-safe).
   const startedRef = useRef(false);
   const completedRef = useRef(false);
+  // Capture the fresh authorization for this mount. Keeping the UID (rather
+  // than a bare boolean) makes an in-place account switch fail closed, while
+  // allowing the same async attempt to finish after successful creation clears
+  // its persisted intent.
+  const authorizedUidRef = useRef(
+    deps.uid && readCreateFamilyIntent(deps.uid) ? deps.uid : null,
+  );
+  const creationAuthorized = authorizedUidRef.current === deps.uid;
 
   // Wait for the authoritative user document before running setup.
   useEffect(() => {
@@ -87,6 +95,7 @@ export function FamilyComposition({ draft, patch, goNext, deps }: FamilyComposit
 
   // Setup effect — runs only once the authoritative prerequisite is ready.
   useEffect(() => {
+    if (!creationAuthorized) return;
     if (phase !== 'ready') return;
     if (completedRef.current) return;
     if (draft.familyId && draft.childId) {
@@ -105,6 +114,9 @@ export function FamilyComposition({ draft, patch, goNext, deps }: FamilyComposit
           recordE2ETimeline('ensure-family-start');
           next = await withBoundedTimeout(ensureFamily(next, deps), SETUP_WAIT_MS, t('errors.offline'));
           recordE2ETimeline('ensure-family-end', { familyId: next.familyId });
+          // Keep the UID-bound intent through P3. It is the durable authorization
+          // that lets a reload resume this idempotent creation journey; completion
+          // or sign-out clears it at the container boundary.
         }
         if (!next.childId) {
           recordE2ETimeline('ensure-first-child-start');
@@ -129,7 +141,7 @@ export function FamilyComposition({ draft, patch, goNext, deps }: FamilyComposit
     return () => {
       cancelled = true;
     };
-  }, [phase, draft, deps, patch, t, retryNonce]);
+  }, [creationAuthorized, phase, draft, deps, patch, t, retryNonce]);
 
   const handleRetry = () => {
     startedRef.current = false;
@@ -164,17 +176,7 @@ export function FamilyComposition({ draft, patch, goNext, deps }: FamilyComposit
     }
   };
 
-  const handleInvite = async () => {
-    const code = familyData?.inviteCode;
-    if (!code) return;
-    const url = buildJoinUrl(code);
-    try {
-      await navigator.clipboard?.writeText(url);
-      setInviteCopied(true);
-    } catch {
-      setInviteCopied(false);
-    }
-  };
+  const handleInvite = () => setShowAdultInvite(true);
 
   const showError = phase === 'error' && Boolean(error);
   const showLoading =
@@ -248,10 +250,16 @@ export function FamilyComposition({ draft, patch, goNext, deps }: FamilyComposit
             {t('p1.addChild')}
           </Button>
         )}
-        <Button variant="secondary" onClick={handleInvite} disabled={!familyData?.inviteCode}>
-          {inviteCopied ? t('p1.inviteCopied') : t('p1.inviteParent')}
+        <Button variant="secondary" onClick={handleInvite}>
+          {t('p1.inviteParent')}
         </Button>
       </div>
+
+      {showAdultInvite && (
+        <div className="mt-4">
+          <AdultInviteCard defaultRole="parent" onClose={() => setShowAdultInvite(false)} />
+        </div>
+      )}
 
       <div className="mt-6 flex flex-col gap-3 min-[400px]:flex-row min-[400px]:items-center">
         <Button variant="secondary" onClick={goNext} disabled={creating}>

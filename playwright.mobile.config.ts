@@ -18,7 +18,7 @@ const touch = { hasTouch: true, isMobile: true, deviceScaleFactor: 3 };
 
 export default defineConfig({
   testDir: './tests/e2e',
-  testMatch: /mobile-.*\.spec\.ts/,
+  testMatch: /(?:mobile-.*|adult-invite)\.spec\.ts/,
   timeout: 90 * 1000,
   expect: { timeout: 10000 },
   fullyParallel: false,

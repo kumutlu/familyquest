@@ -1,5 +1,8 @@
 import { defineConfig, devices } from '@playwright/test';
 
+const baseURL = process.env.QUEKI_E2E_BASE_URL || 'http://localhost:5174';
+const usesExternalServer = !!process.env.QUEKI_E2E_BASE_URL;
+
 /**
  * See https://playwright.dev/docs/test-configuration.
  */
@@ -7,6 +10,8 @@ export default defineConfig({
   testDir: './tests/e2e',
   /* The mobile regression suite has its own config (playwright.mobile.config.ts). */
   testIgnore: /mobile-.*\.spec\.ts/,
+  // Adult invitation tests are also selected explicitly by the mobile config;
+  // keep the default project desktop-only for the regular E2E matrix.
   /* Maximum time one test can run for. */
   timeout: 30 * 1000,
   expect: {
@@ -30,7 +35,7 @@ export default defineConfig({
     /* Maximum time each action such as `click()` can take. Defaults to 0 (no limit). */
     actionTimeout: 0,
     /* Base URL to use in actions like `await page.goto('/')`. */
-    baseURL: 'http://localhost:5174',
+    baseURL,
 
     /* Collect trace when retrying the failed test. See https://playwright.dev/docs/trace-viewer */
     trace: 'on-first-retry',
@@ -45,9 +50,13 @@ export default defineConfig({
   ],
 
   /* Run your local dev server before starting the tests */
-  webServer: {
-    command: 'VITE_USE_FIREBASE_EMULATOR=true npm run dev -- --port 5174',
-    port: 5174,
-    reuseExistingServer: !process.env.CI,
-  },
+  ...(usesExternalServer
+    ? {}
+    : {
+        webServer: {
+          command: 'VITE_USE_FIREBASE_EMULATOR=true npm run dev -- --port 5174',
+          port: 5174,
+          reuseExistingServer: !process.env.CI,
+        },
+      }),
 });

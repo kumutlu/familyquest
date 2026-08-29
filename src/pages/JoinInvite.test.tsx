@@ -24,7 +24,12 @@ vi.mock('react-router-dom', async importOriginal => {
 });
 
 import { JoinInvite } from './JoinInvite';
-import { PENDING_INVITE_KEY, mapInvitationErrorKey, readPendingInvite } from '../lib/inviteLink';
+import {
+  LEGACY_INVITE_COMPATIBILITY_CUTOFF_MS,
+  PENDING_INVITE_KEY,
+  mapInvitationErrorKey,
+  readPendingInvite,
+} from '../lib/inviteLink';
 
 function renderJoin(entry = '/join?code=7ZXWRZ') {
   return render(
@@ -140,18 +145,23 @@ describe('JoinInvite', () => {
   });
 
   it('reports an invalid code', async () => {
+    localStorage.setItem(PENDING_INVITE_KEY, '7ZXWRZ');
     invitationApi.previewInvitation.mockRejectedValue(new Error('INVALID_INVITATION'));
     renderJoin();
     expect(await screen.findByRole('alert')).toHaveTextContent('This invitation link is not valid.');
+    expect(readPendingInvite()).toBe('');
   });
 
   it('reports an expired or regenerated code', async () => {
+    localStorage.setItem(PENDING_INVITE_KEY, '7ZXWRZ');
     invitationApi.previewInvitation.mockRejectedValue(new Error('INVITATION_EXPIRED'));
     renderJoin();
     expect(await screen.findByRole('alert')).toHaveTextContent('This invitation has expired.');
+    expect(readPendingInvite()).toBe('');
   });
 
   it('reports that the user already belongs to that family', async () => {
+    localStorage.setItem(PENDING_INVITE_KEY, '7ZXWRZ');
     invitationApi.previewInvitation.mockResolvedValue({ familyName: 'Smith', intendedRole: 'child' });
     invitationApi.acceptInvitation.mockRejectedValue(new Error('ALREADY_IN_THIS_FAMILY'));
     const user = userEvent.setup();
@@ -159,6 +169,7 @@ describe('JoinInvite', () => {
 
     await user.click(await screen.findByRole('button', { name: 'Accept invitation' }));
     expect(await screen.findByRole('alert')).toHaveTextContent('already a member of this family');
+    expect(readPendingInvite()).toBe('');
   });
 
   it('reports that the user already belongs to another family', async () => {
@@ -178,6 +189,20 @@ describe('JoinInvite', () => {
       '/join-family',
     );
     expect(invitationApi.previewInvitation).not.toHaveBeenCalled();
+  });
+
+  it('does not send an opaque v2 token to the legacy invitation callable', async () => {
+    renderJoin('/join?code=CwsLCwsLCwsLCwsLCwsLCwsLCwsLCwsLCwsLCwsLCws');
+    expect(await screen.findByRole('alert')).toHaveTextContent('This invitation link is not valid.');
+    expect(invitationApi.previewInvitation).not.toHaveBeenCalled();
+  });
+
+  it('keeps URL validation server-authoritative at the local compatibility cutoff', async () => {
+    vi.setSystemTime(LEGACY_INVITE_COMPATIBILITY_CUTOFF_MS);
+    renderJoin('/join?code=7ZXWRZ');
+    expect(await screen.findByText("You've been invited to join the Smith family.")).toBeInTheDocument();
+    expect(invitationApi.previewInvitation).toHaveBeenCalledWith('7ZXWRZ');
+    vi.useRealTimers();
   });
 });
 

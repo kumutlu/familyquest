@@ -127,8 +127,14 @@ export function loadDraft(currentFamilyId?: string | null): OnboardingDraft | nu
     return null;
   }
 
-  // An established family owner must never be re-routed through onboarding.
+  // A matching post-auth draft is the durable continuation for a family this
+  // journey already created. Any other draft belongs to an established-family
+  // session and must never drive another creation.
   if (currentFamilyId) {
+    const draft = parsed as OnboardingDraft;
+    if (POST_AUTH_STEPS.includes(draft.step) && draft.familyId === currentFamilyId) {
+      return draft;
+    }
     clearDraft();
     return null;
   }

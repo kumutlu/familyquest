@@ -11,9 +11,10 @@ import {
 import {
   buildJoinUrl,
   clearPendingInvite,
+  isLegacyInviteCode,
   mapInvitationErrorKey,
   readCodeFromSearch,
-  readPendingInvite,
+  readLegacyInviteCode,
   rememberPendingInvite,
   type InvitationErrorKey,
 } from '../lib/inviteLink';
@@ -22,6 +23,14 @@ import { OnboardingVisual } from '../onboarding/components/OnboardingVisual';
 import { CodeInvitationScene } from '../onboarding/visuals/OnboardingScenes';
 
 type Phase = 'validating' | 'invalid' | 'ready' | 'joining' | 'pending';
+
+const TERMINAL_INVITATION_ERRORS = new Set<InvitationErrorKey>([
+  'family:join.invalid',
+  'family:join.expired',
+  'family:join.revoked',
+  'family:join.used',
+  'family:join.alreadyInThisFamily',
+]);
 
 /**
  * Code-specific join route (`/join?code=XXXXXX`).
@@ -37,9 +46,18 @@ export function JoinInvite() {
   const navigate = useNavigate();
   const authStatus = useStore(state => state.authStatus);
   const currentUser = useStore(state => state.currentUser);
+  const hasInvalidUrlCode = new URLSearchParams(location.search).has('code')
+    && !isLegacyInviteCode(readCodeFromSearch(location.search));
 
   // The code survives sign-up, sign-in, provider redirects and refreshes.
-  const [code] = useState(() => readCodeFromSearch(location.search) || readPendingInvite());
+  const [code] = useState(() => {
+    const hasUrlCode = new URLSearchParams(location.search).has('code');
+    const urlCode = readCodeFromSearch(location.search);
+    // A supplied URL owns this route; never replace an opaque/malformed value
+    // with unrelated legacy storage intent.
+    if (hasUrlCode) return isLegacyInviteCode(urlCode) ? urlCode : '';
+    return readLegacyInviteCode();
+  });
   const [phase, setPhase] = useState<Phase>('validating');
   const [preview, setPreview] = useState<InvitationPreview | null>(null);
   const [errorKey, setErrorKey] = useState<InvitationErrorKey | null>(null);
@@ -52,7 +70,8 @@ export function JoinInvite() {
     let cancelled = false;
     if (!code) {
       setPhase('invalid');
-      setErrorKey('family:join.missingCode');
+      setErrorKey(hasInvalidUrlCode ? 'family:join.invalid' : 'family:join.missingCode');
+      if (hasInvalidUrlCode) clearPendingInvite();
       return;
     }
     setPhase('validating');
@@ -64,11 +83,13 @@ export function JoinInvite() {
       })
       .catch(error => {
         if (cancelled) return;
-        setErrorKey(mapInvitationErrorKey(error));
+        const key = mapInvitationErrorKey(error);
+        if (TERMINAL_INVITATION_ERRORS.has(key)) clearPendingInvite();
+        setErrorKey(key);
         setPhase('invalid');
       });
     return () => { cancelled = true; };
-  }, [code]);
+  }, [code, hasInvalidUrlCode]);
 
   const handleAccept = useCallback(async () => {
     if (!code) return;
@@ -80,7 +101,9 @@ export function JoinInvite() {
       clearPendingInvite();
       setPhase('pending');
     } catch (error) {
-      setErrorKey(mapInvitationErrorKey(error));
+      const key = mapInvitationErrorKey(error);
+      if (TERMINAL_INVITATION_ERRORS.has(key)) clearPendingInvite();
+      setErrorKey(key);
       setPhase('invalid');
     }
   }, [code]);

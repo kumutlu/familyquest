@@ -4,6 +4,20 @@
     "stepLabel": "Step {{current}} of {{total}}",
     "continuationLabel": "Setting up your family · step {{current}} of {{total}}"
   },
+  "noFamily": {
+    "title": "What would you like to do?",
+    "body": "Create a new family or ask to join an existing one.",
+    "create": "Create a family",
+    "join": "Join an existing family",
+    "familyCode": "Family code",
+    "joinBody": "Your request stays pending until the family owner approves it. You cannot choose your own role.",
+    "send": "Send join request",
+    "sending": "Sending request…",
+    "back": "Back",
+    "invalidCode": "Enter the six-character family code.",
+    "joinError": "We couldn't send your join request. Please try again.",
+    "storageError": "Family setup could not be started in this browser. Check your privacy settings and try again."
+  },
   "s1": {
     "eyebrow": "Queki",
     "title": "Small wins. Big habits.",

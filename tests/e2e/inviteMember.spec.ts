@@ -19,7 +19,7 @@ test.describe('Family Hub → Invite Member', () => {
     execSync('npx tsx tests/e2e/utils/seed.ts', { stdio: 'ignore' });
   });
 
-  const openInviteDialog = async (page: import('@playwright/test').Page) => {
+  const openInviteDialog = async (page: import('@playwright/test').Page, isOwner: boolean) => {
     const consoleErrors: string[] = [];
     page.on('console', message => {
       if (message.type() === 'error') consoleErrors.push(message.text());
@@ -35,11 +35,16 @@ test.describe('Family Hub → Invite Member', () => {
     const dialog = page.getByRole('dialog', { name: /invite someone/i });
     await expect(dialog).toBeVisible();
 
-    // Step 1 offers exactly three choices and nothing else.
+    // Parents retain the child/manual entry points; only owners may create an
+    // adult invitation.
     await expect(dialog.getByRole('heading', { name: 'Invite someone' })).toBeVisible();
-    await expect(dialog.getByRole('button', { name: /Another Parent/ })).toBeEnabled();
     await expect(dialog.getByRole('button', { name: /Child with their own device/ })).toBeEnabled();
     await expect(dialog.getByRole('button', { name: /Create managed child/ })).toBeEnabled();
+    if (isOwner) {
+      await expect(dialog.getByRole('button', { name: /Another Parent/ })).toBeEnabled();
+    } else {
+      await expect(dialog.getByRole('button', { name: /Another Parent/ })).toHaveCount(0);
+    }
     // No code, URL, share or copy affordance before a choice is made.
     await expect(dialog.locator('code')).toHaveCount(0);
     await expect(dialog.getByRole('button', { name: 'Copy link' })).toHaveCount(0);
@@ -52,24 +57,20 @@ test.describe('Family Hub → Invite Member', () => {
   test('owner can open the invite dialog and reach a shareable parent invitation', async ({ page }) => {
     await loginAs(page, 'owner@test.com');
     await page.goto('/family');
-    const dialog = await openInviteDialog(page);
+    const dialog = await openInviteDialog(page, true);
 
     await dialog.getByRole('button', { name: /Another Parent/ }).click();
 
-    await expect(dialog.getByText('Parent invitation ready')).toBeVisible();
-    await expect(dialog.getByRole('button', { name: 'Share invitation' })).toBeEnabled();
-    await expect(dialog.getByRole('button', { name: 'Copy link' })).toBeEnabled();
-    // The manual family code stays a collapsed, secondary fallback.
-    const fallback = dialog.getByRole('button', { name: 'Need another way to join?' });
-    await expect(fallback).toHaveAttribute('aria-expanded', 'false');
-    await fallback.click();
-    await expect(dialog.getByText('Manual family code')).toBeVisible();
+    await expect(dialog.getByRole('status')).toHaveText('Private invitation ready.');
+    await expect(dialog.getByTestId('adult-invite-link')).toHaveAttribute('href', /\/invite\//);
+    await expect(dialog.getByRole('button', { name: 'Share private invitation' })).toBeEnabled();
+    await expect(dialog.getByRole('button', { name: 'Copy private link' })).toBeEnabled();
   });
 
   test('a non-owner parent can open the invite dialog (regression for missing entry point)', async ({ page }) => {
     await loginAs(page, 'parent@test.com');
     await page.goto('/family');
     // The root cause: previously this button did not exist for a parent.
-    await openInviteDialog(page);
+    await openInviteDialog(page, false);
   });
 });

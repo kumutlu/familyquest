@@ -1,19 +1,31 @@
 import { fireEvent, render, screen } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import i18n from './i18n/config';
+import userEvent from '@testing-library/user-event';
 
-const appStore = vi.hoisted(() => ({
-  initAuth: vi.fn(),
-  currentUser: { id: 'user-a', familyId: 'family-1', role: 'owner', displayName: 'Owner' },
-  familyMembers: [{ id: 'child-1', displayName: 'Dashboard Child', role: 'child' }],
-  familyData: { id: 'family-1', currencyCode: 'GBP' },
+const appStoreState = vi.hoisted(() => ({
+  authStatus: 'authenticated',
+  authUser: { uid: 'u1' } as any,
+  currentUser: { id: 'u1', familyId: 'family-1', role: 'owner', lifecycle: 'active', displayName: 'Owner' } as any,
+  familyData: { id: 'family-1', lifecycleState: 'active', currencyCode: 'GBP' } as any,
+  familyMembers: [{ id: 'child-1', displayName: 'Dashboard Child', role: 'child' }] as any[],
   tasks: [] as any[],
   rewards: [] as any[],
+  profileServerConfirmed: true,
+  appReady: true,
+  bootstrapError: null as string | null,
+  pendingMembershipStatus: 'none',
+  bootstrapAttempt: 0,
+  retryBootstrap: vi.fn(),
+  initAuth: vi.fn(),
 }));
 
 vi.mock('./store/useStore', () => ({
-  useStore: (selector?: any) => typeof selector === 'function' ? selector(appStore) : appStore,
+  useStore: (selector: any) => selector(appStoreState),
   logAuthTrace: vi.fn(),
+}));
+vi.mock('./lib/api', () => ({
+  signOut: vi.fn(async () => {}),
 }));
 vi.mock('./components/layout/AppLayout', async () => {
   const { Outlet } = await vi.importActual<typeof import('react-router-dom')>('react-router-dom');
@@ -32,7 +44,7 @@ vi.mock('./pages/Dashboard', async () => {
             category: 'money_request',
             requesterId: 'child-1',
             requesterName: 'Dashboard Child',
-            requestedFromId: 'user-a',
+            requestedFromId: 'u1',
             requestedFromName: 'Owner',
             requestedFromRole: 'owner',
             amountPence: 556,
@@ -63,6 +75,18 @@ vi.mock('./components/history/TransactionHistoryScreen', () => ({
 
 import App from './App';
 
+beforeEach(() => {
+  appStoreState.authStatus = 'authenticated';
+  appStoreState.authUser = { uid: 'u1' };
+  appStoreState.currentUser = { id: 'u1', familyId: 'family-1', role: 'owner', lifecycle: 'active', displayName: 'Owner' };
+  appStoreState.familyData = { id: 'family-1', lifecycleState: 'active', currencyCode: 'GBP' };
+  appStoreState.profileServerConfirmed = true;
+  appStoreState.appReady = true;
+  appStoreState.bootstrapError = null;
+  appStoreState.pendingMembershipStatus = 'none';
+  appStoreState.retryBootstrap.mockClear();
+});
+
 describe('application routes', () => {
   beforeEach(async () => {
     localStorage.clear();
@@ -89,7 +113,7 @@ describe('application routes', () => {
   });
 
   it('opens the real request detail sheet through the authenticated App provider composition', async () => {
-    localStorage.setItem('queki.moneyPrivacy:user-a', 'true');
+    localStorage.setItem('queki.moneyPrivacy:u1', 'true');
     window.history.pushState({}, '', '/');
     render(<App />);
 
@@ -98,5 +122,33 @@ describe('application routes', () => {
     expect(await screen.findByRole('heading', { name: 'Money Request' })).toBeInTheDocument();
     expect(screen.getByText('£••••')).toBeInTheDocument();
     expect(document.body).not.toHaveTextContent('£5.56');
+  });
+
+  it('resolves /join/pending to an accessible waiting page with a recovery action', async () => {
+    const user = userEvent.setup();
+    appStoreState.currentUser = { id: 'u1', role: 'parent', lifecycle: 'active' };
+    appStoreState.familyData = null;
+    appStoreState.pendingMembershipStatus = 'pending';
+    window.history.pushState({}, '', '/join/pending');
+
+    render(<App />);
+
+    expect(await screen.findByRole('heading', { name: 'Your request is waiting for approval' })).toBeInTheDocument();
+    expect(screen.getByText(/family owner needs to approve/i)).toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: 'Check again' }));
+    expect(appStoreState.retryBootstrap).toHaveBeenCalledTimes(1);
+  });
+
+  it('renders a clear recovery state at /join/pending when membership cannot be verified', async () => {
+    appStoreState.currentUser = { id: 'u1', familyId: 'family-1', role: 'parent', lifecycle: 'archived' };
+    appStoreState.familyData = { id: 'family-1', lifecycleState: 'active' };
+    appStoreState.pendingMembershipStatus = 'none';
+    window.history.pushState({}, '', '/join/pending');
+
+    render(<App />);
+
+    expect(await screen.findByRole('heading', { name: "We couldn't verify your family access" })).toBeInTheDocument();
+    expect(screen.getByText(/membership may have changed/i)).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Try again' })).toBeInTheDocument();
   });
 });

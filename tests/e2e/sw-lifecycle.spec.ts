@@ -181,4 +181,26 @@ test.describe('one-time legacy service-worker migration', () => {
       ` | migrationReloads=1 | normalReloads=1 | controller=${migrated.controller?.state}`,
     );
   });
+
+  test('controlled reload preserves an opaque invitation URL', async ({ page }) => {
+    server.setBuild('normal');
+    const token = 'A'.repeat(43);
+    await page.addInitScript(invitationToken => {
+      sessionStorage.setItem('queki.pendingAdultInvite.v2', JSON.stringify({
+        version: 2,
+        token: invitationToken,
+        capturedAt: Date.now(),
+      }));
+    }, token);
+    await page.goto(`/invite/${token}`, { waitUntil: 'domcontentloaded' });
+    await waitForSha(page, shaInfo.normal);
+    await page.reload({ waitUntil: 'domcontentloaded' });
+    expect(new URL(page.url()).pathname).toBe(`/invite/${token}`);
+    await expect(page.getByRole('heading', { name: 'Join a family' })).toBeVisible();
+    expect(await page.evaluate(() => {
+      const raw = sessionStorage.getItem('queki.pendingAdultInvite.v2');
+      return raw ? JSON.parse(raw).token : null;
+    })).toBe(token);
+    await expect(page.getByRole('button', { name: /create a family|join a family$/i })).toHaveCount(0);
+  });
 });

@@ -282,6 +282,16 @@ export {
   acceptInvitation,
 } from './familyInvitations';
 
+// High-entropy, single-use, owner-created parent/adult invitations. These v2
+// callables derive family and role exclusively from server-owned records.
+export {
+  createAdultInvitation,
+  previewAdultInvitation,
+  acceptAdultInvitation,
+  completeAdultInvitationProfile,
+  revokeAdultInvitation,
+} from './adultInvitations';
+
 // Child join request with mandatory parent approval; see childJoinRequest.ts.
 export {
   submitChildJoinRequest,
