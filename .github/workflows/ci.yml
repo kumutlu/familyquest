@@ -28,5 +28,5 @@ jobs:
         with:
           node-version: 20
           cache: npm
-      - run: npm install --ignore-scripts --no-audit --no-fund
+      - run: npm install --legacy-peer-deps --ignore-scripts --no-audit --no-fund
       - run: npx vitest run src/components/quests/HoldToCompleteButton.test.tsx
