@@ -12,10 +12,10 @@ import { firebaseReservedNavigationDenylist } from './pwaNavigation.js'
 // resolution must never throw and fail the build.
 function resolveBuildSha(): string {
   if (process.env.VITE_SW_E2E_HOOK === '1' && process.env.VITE_SW_E2E_BUILD_SHA) {
-    return process.env.VITE_SW_E2E_BUILD_SHA.slice(0, 7)
+    return process.env.VITE_SW_E2E_BUILD_SHA
   }
   try {
-    const sha = execFileSync('git', ['rev-parse', '--short=7', 'HEAD'], {
+    const sha = execFileSync('git', ['rev-parse', 'HEAD'], {
       encoding: 'utf8',
       stdio: ['ignore', 'pipe', 'ignore'],
     }).trim()

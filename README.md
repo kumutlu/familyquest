@@ -26,8 +26,10 @@ The deployment guard reads the currently live embedded build SHA and blocks an
 old-build deployment automatically. It also fails closed when the live version
 cannot be determined and verifies the live embedded SHA again after deployment.
 
-A genuine rollback must use a separate, reviewed recovery procedure. The normal
-production Hosting deployment command has no rollback or force override.
+A genuine rollback must follow the separate reviewed procedure in
+[`docs/production-hosting-rollback.md`](docs/production-hosting-rollback.md).
+The normal production Hosting deployment command has no rollback or force
+override.
 
 ## Family data maintenance
 

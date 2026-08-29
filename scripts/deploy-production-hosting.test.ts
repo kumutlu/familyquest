@@ -5,6 +5,8 @@ import {
   extractMainBundlePath,
   productionBuildCommands,
   productionHostingDeployCommand,
+  resolveEmbeddedProductionSha,
+  runProductionHostingDeploy,
   verifyPostDeployBuildSha,
   validateProductionDeploy,
 } from './deploy-production-hosting.mjs';
@@ -92,8 +94,14 @@ describe('production Hosting deploy provenance guard', () => {
   it('extracts the main bundle and its embedded build SHA', () => {
     expect(extractMainBundlePath('<script type="module" src="/assets/index-AbC123.js"></script>'))
       .toBe('/assets/index-AbC123.js');
-    expect(extractEmbeddedBuildSha('Object.freeze({version:x(`1.0.0`),sha:x(`5057615`),builtAt:x(`now`)})'))
-      .toBe('5057615');
+    expect(extractEmbeddedBuildSha('[FamilyQuest Build SHA:505761582a3002f5af1322208e16790484163d8a]'))
+      .toBe('505761582a3002f5af1322208e16790484163d8a');
+  });
+
+  it('pins the one legacy short-SHA production build and rejects every other abbreviation', () => {
+    expect(resolveEmbeddedProductionSha('5057615')).toBe(liveSha);
+    expect(() => resolveEmbeddedProductionSha('82422c8'))
+      .toThrow('legacy embedded production SHA is not approved');
   });
 
   it('fails closed for missing or ambiguous embedded build metadata', () => {
@@ -106,6 +114,34 @@ describe('production Hosting deploy provenance guard', () => {
     expect(() => verifyPostDeployBuildSha('5057615', '82422c8'))
       .toThrow('Post-deploy SHA mismatch: expected 5057615, actual 82422c8');
     expect(verifyPostDeployBuildSha('5057615', '5057615')).toBeUndefined();
+  });
+
+  it('fails closed for an unrecognized relationship value', () => {
+    expect(() => validateProductionDeploy({
+      ...approved,
+      relationship: 'TYPO_ALLOWED',
+    })).toThrow('DEPLOY BLOCKED: unrecognized production relationship TYPO_ALLOWED');
+  });
+
+  it('never reaches build or deploy when the candidate is older than production', async () => {
+    const commands: Array<{ command: string; args: string[] }> = [];
+    const gitOutput = (args: string[]) => {
+      if (args.join(' ') === 'branch --show-current') return 'todo-theme';
+      if (args.join(' ') === 'status --porcelain') return '';
+      if (args.join(' ') === 'rev-parse HEAD') return olderSha;
+      if (args.join(' ') === 'rev-parse origin/todo-theme') return olderSha;
+      throw new Error(`unexpected git command: ${args.join(' ')}`);
+    };
+
+    await expect(runProductionHostingDeploy(['--expected-sha', olderSha], {
+      run: (command: string, args: string[]) => commands.push({ command, args }),
+      git: gitOutput,
+      readLiveProductionBuild: async () => ({ bundlePath: '/assets/index-live.js', embeddedSha: liveSha }),
+      resolveEmbeddedProductionSha: (sha: string) => sha,
+      isAncestor: (ancestor: string, descendant: string) => ancestor === olderSha && descendant === liveSha,
+    })).rejects.toThrow('DEPLOY BLOCKED: candidate SHA is older than current production');
+
+    expect(commands).toEqual([{ command: 'git', args: ['fetch', 'origin', 'todo-theme'] }]);
   });
 
   it('invokes the installed Firebase CLI directly with Hosting-only scope', () => {

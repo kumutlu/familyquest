@@ -7,6 +7,9 @@ const APPROVED_BRANCH = 'todo-theme';
 const PRODUCTION_PROJECT = 'familyquest-beta-402cb';
 const FIREBASE_CLI = 'node_modules/firebase-tools/lib/bin/firebase.js';
 const LIVE_PRODUCTION_ORIGIN = `https://${PRODUCTION_PROJECT}.web.app`;
+const LEGACY_PRODUCTION_SHA_MAP = new Map([
+  ['5057615', '505761582a3002f5af1322208e16790484163d8a'],
+]);
 
 export function productionBuildCommands(nodeExecutable = process.execPath) {
   return [
@@ -68,6 +71,9 @@ export function validateProductionDeploy(context) {
   if (relationship === 'UNKNOWN_BLOCKED') {
     throw new Error('DEPLOY BLOCKED: current production SHA is unknown');
   }
+  if (relationship !== 'SAME' && relationship !== 'FORWARD') {
+    throw new Error(`DEPLOY BLOCKED: unrecognized production relationship ${relationship}`);
+  }
   return result;
 }
 
@@ -82,13 +88,29 @@ export function extractMainBundlePath(indexHtml) {
 }
 
 export function extractEmbeddedBuildSha(bundleSource) {
-  const matches = [...bundleSource.matchAll(/\bsha\s*:\s*[$\w]+\(\s*[`'"]([0-9a-f]{7})[`'"]\s*\)\s*,\s*builtAt\s*:/g)]
+  const fullMatches = [...bundleSource.matchAll(/\[FamilyQuest Build SHA:([0-9a-f]{40})\]/g)]
     .map(match => match[1]);
-  const uniqueMatches = [...new Set(matches)];
-  if (uniqueMatches.length !== 1) {
+  const uniqueFullMatches = [...new Set(fullMatches)];
+  if (uniqueFullMatches.length === 1) return uniqueFullMatches[0];
+  if (uniqueFullMatches.length > 1) {
     throw new Error('Could not reliably determine the embedded production build SHA');
   }
-  return uniqueMatches[0];
+
+  // Bootstrap compatibility for the already-approved 5057615 production
+  // release, which predates the stable full-SHA marker. Resolution is pinned
+  // below; arbitrary seven-character Git abbreviations are never trusted.
+  const legacyMatches = [...bundleSource.matchAll(/\bsha\s*:\s*[$\w]+\(\s*[`'"]([0-9a-f]{7})[`'"]\s*\)\s*,\s*builtAt\s*:/g)]
+    .map(match => match[1]);
+  const uniqueLegacyMatches = [...new Set(legacyMatches)];
+  if (uniqueLegacyMatches.length === 1) return uniqueLegacyMatches[0];
+  throw new Error('Could not reliably determine the embedded production build SHA');
+}
+
+export function resolveEmbeddedProductionSha(embeddedSha) {
+  if (/^[0-9a-f]{40}$/.test(embeddedSha)) return embeddedSha;
+  const approvedLegacySha = LEGACY_PRODUCTION_SHA_MAP.get(embeddedSha);
+  if (approvedLegacySha) return approvedLegacySha;
+  throw new Error(`legacy embedded production SHA is not approved: ${embeddedSha}`);
 }
 
 async function fetchUncachedText(url, fetchImpl) {
@@ -113,7 +135,7 @@ export async function readLiveProductionBuild({
   const bundleUrl = new URL(bundlePath, origin);
   bundleUrl.searchParams.set('deploy-guard', String(cacheBuster));
   const bundleSource = await fetchUncachedText(bundleUrl, fetchImpl);
-  return { bundlePath, shortSha: extractEmbeddedBuildSha(bundleSource) };
+  return { bundlePath, embeddedSha: extractEmbeddedBuildSha(bundleSource) };
 }
 
 export function verifyPostDeployBuildSha(expectedShortSha, actualShortSha) {
@@ -138,14 +160,6 @@ function isGitAncestor(ancestor, descendant) {
   }
 }
 
-function resolveFullCommit(shortSha) {
-  const fullSha = git(['rev-parse', '--verify', `${shortSha}^{commit}`]);
-  if (!fullSha.startsWith(shortSha)) {
-    throw new Error(`Resolved production commit ${fullSha} does not match embedded SHA ${shortSha}`);
-  }
-  return fullSha;
-}
-
 function run(command, args) {
   execFileSync(command, args, { stdio: 'inherit' });
 }
@@ -168,14 +182,19 @@ function logDeploymentRelationship({ currentProductionSha, candidateSha, remoteH
   console.log(`RELATIONSHIP=${relationship}`);
 }
 
-export async function runProductionHostingDeploy(argv = process.argv.slice(2)) {
+export async function runProductionHostingDeploy(argv = process.argv.slice(2), dependencies = {}) {
+  const runCommand = dependencies.run ?? run;
+  const gitCommand = dependencies.git ?? git;
+  const readLiveBuild = dependencies.readLiveProductionBuild ?? readLiveProductionBuild;
+  const resolveEmbeddedSha = dependencies.resolveEmbeddedProductionSha ?? resolveEmbeddedProductionSha;
+  const ancestorCheck = dependencies.isAncestor ?? isGitAncestor;
   const expectedSha = expectedShaFromArgs(argv);
-  run('git', ['fetch', 'origin', APPROVED_BRANCH]);
+  runCommand('git', ['fetch', 'origin', APPROVED_BRANCH]);
   const localContext = {
-    branch: git(['branch', '--show-current']),
-    clean: git(['status', '--porcelain']) === '',
-    head: git(['rev-parse', 'HEAD']),
-    remoteHead: git(['rev-parse', `origin/${APPROVED_BRANCH}`]),
+    branch: gitCommand(['branch', '--show-current']),
+    clean: gitCommand(['status', '--porcelain']) === '',
+    head: gitCommand(['rev-parse', 'HEAD']),
+    remoteHead: gitCommand(['rev-parse', `origin/${APPROVED_BRANCH}`]),
     expectedSha,
   };
   validateLocalProvenance(localContext);
@@ -183,8 +202,8 @@ export async function runProductionHostingDeploy(argv = process.argv.slice(2)) {
   let liveBuild;
   let liveSha;
   try {
-    liveBuild = await readLiveProductionBuild();
-    liveSha = resolveFullCommit(liveBuild.shortSha);
+    liveBuild = await readLiveBuild();
+    liveSha = resolveEmbeddedSha(liveBuild.embeddedSha);
   } catch (error) {
     logDeploymentRelationship({
       currentProductionSha: 'UNKNOWN',
@@ -199,7 +218,7 @@ export async function runProductionHostingDeploy(argv = process.argv.slice(2)) {
   const relationship = classifyDeploymentRelationship({
     liveSha,
     candidateSha: localContext.head,
-    isAncestor: isGitAncestor,
+    isAncestor: ancestorCheck,
   });
   logDeploymentRelationship({
     currentProductionSha: liveSha,
@@ -211,18 +230,19 @@ export async function runProductionHostingDeploy(argv = process.argv.slice(2)) {
     ...localContext,
     liveSha,
     relationship,
-    isAncestor: isGitAncestor,
+    isAncestor: ancestorCheck,
   });
 
   console.log(`Building approved production SHA ${result.sha}`);
-  for (const build of productionBuildCommands()) run(build.command, build.args);
+  for (const build of productionBuildCommands()) runCommand(build.command, build.args);
   verifyEmbeddedBuildSha(result.shortSha);
   console.log(`Deploying Hosting only for ${result.sha}`);
   const deploy = productionHostingDeployCommand();
-  run(deploy.command, deploy.args);
-  const postDeployBuild = await readLiveProductionBuild();
-  verifyPostDeployBuildSha(result.shortSha, postDeployBuild.shortSha);
-  console.log(`Post-deploy Hosting SHA verified: ${postDeployBuild.shortSha}`);
+  runCommand(deploy.command, deploy.args);
+  const postDeployBuild = await readLiveBuild();
+  const postDeploySha = resolveEmbeddedSha(postDeployBuild.embeddedSha);
+  verifyPostDeployBuildSha(result.sha, postDeploySha);
+  console.log(`Post-deploy Hosting SHA verified: ${postDeploySha}`);
 }
 
 if (process.argv[1] && import.meta.url === new URL(`file://${process.argv[1]}`).href) {
