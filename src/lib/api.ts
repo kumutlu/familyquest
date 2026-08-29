@@ -3193,6 +3193,30 @@ export function validateProfileUpdateInput(
   return { displayName: name, avatarId: null, legacyAvatarUrl: legacy };
 }
 
+/** Updates only the authenticated user's safe presentation fields. */
+export const updateOwnCosmeticProfile = async (
+  profileId: string,
+  displayNameInput: string,
+  avatarIdInput: string | null,
+  opts?: { ownedAvatarIds?: string[]; legacyAvatarUrl?: string | null; avatarConfig?: AvatarConfigV1 | null },
+): Promise<void> => {
+  if (opts?.avatarConfig !== undefined && opts.avatarConfig !== null && !isValidAvatarConfig(opts.avatarConfig)) {
+    throw new Error('Invalid avatar configuration.');
+  }
+  requireActorId();
+  if (!profileId) throw new Error('Profile identity is required.');
+  const { displayName, avatarId } = validateProfileUpdateInput(
+    displayNameInput,
+    avatarIdInput,
+    { ownedAvatarIds: opts?.ownedAvatarIds, legacyAvatarUrl: opts?.legacyAvatarUrl },
+  );
+  await updateDoc(doc(db, 'users', profileId), {
+    displayName,
+    avatarId,
+    avatarConfig: opts?.avatarConfig ?? deleteField(),
+  });
+};
+
 /** True when the value is a valid http(s) URL. Empty string is allowed (keeps current avatar). */
 export function isValidAvatarUrl(value: string): boolean {
   if (!value) return true;

@@ -104,9 +104,9 @@ describe('PROFILE REQUEST permission bug (Part A.20)', () => {
     }));
   });
 
-  it('still denies direct child avatarConfig updates', async () => {
+  it('allows direct child avatarConfig updates when the config is valid', async () => {
     const db = testEnv.authenticatedContext(childId).firestore();
-    await assertFails(updateDoc(doc(db, 'users', childId), { avatarConfig: validAvatarConfig }));
+    await assertSucceeds(updateDoc(doc(db, 'users', childId), { avatarConfig: validAvatarConfig }));
   });
 
   it('allows the same-family parent to apply a valid config but no unrelated field', async () => {
@@ -125,9 +125,38 @@ describe('PROFILE REQUEST permission bug (Part A.20)', () => {
     await assertSucceeds(setDoc(doc(db, `families/${familyId}/profile_update_requests`, 'req1'), baseRequest(childId, 'starter-robot')));
   });
 
-  it('2. child cannot directly update profile', async () => {
+  it('2. child can directly update only their own valid cosmetic profile fields', async () => {
     const db = testEnv.authenticatedContext(childId).firestore();
-    await assertFails(updateDoc(doc(db, 'users', childId), { displayName: 'Hacked', avatarUrl: 'https://evil' }));
+    await assertSucceeds(updateDoc(doc(db, 'users', childId), {
+      displayName: 'Alin Updated',
+      avatarId: 'starter-robot',
+      avatarConfig: validAvatarConfig,
+    }));
+  });
+
+  it('2a. child cannot update another child profile', async () => {
+    const db = testEnv.authenticatedContext(childId).firestore();
+    await assertFails(updateDoc(doc(db, 'users', siblingId), { displayName: 'Not mine' }));
+  });
+
+  it.each([
+    ['familyId', { familyId: otherFamilyId }],
+    ['role', { role: 'owner' }],
+    ['balance', { balance: 999_999 }],
+    ['wallet balance', { walletBalance: 999_999 }],
+    ['reward points', { rewardPoints: 999_999 }],
+    ['XP', { lifetimeXP: 999_999 }],
+    ['permissions', { permissions: { admin: true } }],
+    ['approval settings', { approvalSettings: { disabled: true } }],
+    ['feature flags', { featureFlags: { everything: true } }],
+    ['account ownership', { ownerId: childId }],
+    ['authentication link', { authUid: 'attacker' }],
+    ['login name', { username: 'attacker' }],
+    ['password-change gate', { requiresPasswordChange: false }],
+    ['arbitrary avatar URL', { avatarUrl: 'https://evil.example/tracker.svg' }],
+  ])('2b. child cannot modify protected %s fields', async (_label, update) => {
+    const db = testEnv.authenticatedContext(childId).firestore();
+    await assertFails(updateDoc(doc(db, 'users', childId), update));
   });
 
   it('3. child cannot create request for sibling', async () => {
@@ -404,9 +433,9 @@ describe('OWNER/PARENT self-edit save (Edit Profile modal) — root-cause fix', 
     await assertFails(updateDoc(doc(db, 'users', ownerId), { rewardPoints: 99999 }));
     await assertFails(updateDoc(doc(db, 'users', ownerId), { balance: 12345 }));
   });
-it('a child cannot self-edit profile (approval flow preserved)', async () => {
+it('a child can self-edit allowlisted profile fields directly', async () => {
   const db = testEnv.authenticatedContext(childId).firestore();
-  await assertFails(updateDoc(doc(db, 'users', childId), { displayName: 'Hacked', avatarUrl: 'https://evil' }));
+  await assertSucceeds(updateDoc(doc(db, 'users', childId), { displayName: 'Alin Direct' }));
 });
 
 it('a child cannot edit ANOTHER member profile', async () => {

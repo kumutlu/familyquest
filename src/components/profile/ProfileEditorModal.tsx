@@ -6,11 +6,9 @@ import { deleteField, doc, updateDoc } from 'firebase/firestore';
 import { db } from '../../lib/firebase';
 import { isChildRole, isOwnerRole, isParentRole } from '../../lib/roles';
 import {
-  submitProfileUpdateRequest,
   unlockAvatar,
-  validateProfileUpdateInput,
+  updateOwnCosmeticProfile,
 } from '../../lib/api';
-import { mapTransactionError } from '../../lib/transactionErrors';
 import { useStore } from '../../store/useStore';
 import { getAvatarById, resolveAvatarImage } from '../../config/avatarCatalog';
 import { AvatarPicker } from './AvatarPicker';
@@ -28,10 +26,7 @@ interface ProfileEditorModalProps {
  *
  * - Owner / Parent: edits apply immediately to `users/{id}`. They may pick any
  *   free (starter) avatar from the curated catalog without spending child points.
- * - Child: edits are NOT written directly. They are submitted as a
- *   `profile_update_requests` document that flows through the existing Approval
- *   Center workflow. While a request is pending the editor is locked so a child
- *   can only ever have one active profile request.
+ * - Child: safe presentation fields apply immediately to their own profile.
  *
  * Avatars are chosen from the curated catalog — children can never paste an
  *   arbitrary URL. Premium avatars are unlocked separately (one-time point cost)
@@ -54,15 +49,9 @@ export function ProfileEditorModal({ user, onClose }: ProfileEditorModalProps) {
   const canEdit = isOwnerRole(user?.role) || isParentRole(user?.role);
   const isChild = isChildRole(user?.role);
 
-  const profileUpdateRequests = useStore(state => state.profileUpdateRequests);
   const avatarUnlocks = useStore(state => state.avatarUnlocks) || [];
   const pointsBalance = user?.rewardPoints || 0;
   const ownedAvatarIds = avatarUnlocks.map((u: any) => u.avatarId);
-
-  const pendingRequest = isChild
-    ? profileUpdateRequests.find(r => r.childId === user?.id && r.status === 'pending')
-    : undefined;
-  const hasPending = Boolean(pendingRequest);
 
   // Clear stale errors whenever the user reopens the modal (mount) or changes
   // inputs, so the friendly "please try again" message never sticks around.
@@ -78,7 +67,7 @@ export function ProfileEditorModal({ user, onClose }: ProfileEditorModalProps) {
   const statusMessage =
     error ||
     success ||
-    (hasPending ? t('pendingUpdate') : null);
+    null;
 
   const handleUnlockConfirm = async () => {
     if (!unlockTarget || !user?.familyId) return;
@@ -132,35 +121,30 @@ export function ProfileEditorModal({ user, onClose }: ProfileEditorModalProps) {
       return;
     }
 
-    // Child: submit for parent approval (never writes to users/{childId} here).
+    // Child: direct, tightly scoped self-profile update.
     if (isChild) {
-      if (hasPending) {
-        setError(t('alreadyPending'));
+      if (!displayName.trim()) {
+        setError(t('emptyName'));
         return;
       }
       setIsSubmitting(true);
       try {
-        validateProfileUpdateInput(displayName, selectedAvatarId, {
-          ownedAvatarIds,
-          legacyAvatarUrl: user?.avatarUrl || null,
-        });
-        await submitProfileUpdateRequest(user.familyId, displayName, selectedAvatarId, {
+        await updateOwnCosmeticProfile(user.id, displayName, selectedAvatarId, {
           ownedAvatarIds,
           legacyAvatarUrl: user?.avatarUrl || null,
           avatarConfig: selectedAvatarConfig,
         });
-        setSuccess(t('submittedForApproval'));
-        window.setTimeout(onClose, 1400);
-      } catch (err: any) {
-        // Map internal Firestore / transaction-order errors to a friendly message.
-        setError(mapTransactionError(err, { operation: 'submitProfileUpdateRequest' }));
+        setSuccess(t('saveSuccess'));
+        window.setTimeout(onClose, 900);
+      } catch {
+        setError(t('saveFailed'));
       } finally {
         setIsSubmitting(false);
       }
     }
   };
 
-  const locked = isChild && hasPending;
+  const locked = false;
   const selectedDef = selectedAvatarId ? getAvatarById(selectedAvatarId) : undefined;
   const selectedIsLockedPremium =
     selectedDef?.unlockType === 'points' && !ownedAvatarIds.includes(selectedAvatarId || '');
@@ -190,7 +174,7 @@ export function ProfileEditorModal({ user, onClose }: ProfileEditorModalProps) {
       )}
       {isChild && (
         <Button type="submit" form="profile-editor-form" fullWidth disabled={isSubmitting || locked || selectedIsLockedPremium}>
-          {isSubmitting ? t('submitting') : t('submitForApproval')}
+          {isSubmitting ? t('saving') : t('saveChanges')}
         </Button>
       )}
     </div>
@@ -202,24 +186,6 @@ export function ProfileEditorModal({ user, onClose }: ProfileEditorModalProps) {
         <div aria-live="polite" aria-atomic="true" className="sr-only">
           {statusMessage}
         </div>
-
-        {isChild && !hasPending && (
-          <div
-            role="status"
-            className="p-3 bg-amber-50 text-amber-800 rounded-xl text-sm font-medium border border-amber-200"
-          >
-            {t('pendingApprovalNote')}
-          </div>
-        )}
-
-        {hasPending && (
-          <div
-            role="status"
-            className="p-3 bg-blue-50 text-blue-800 rounded-xl text-sm font-medium border border-blue-200"
-          >
-            {t('pendingApproval')}
-          </div>
-        )}
 
         {error && (
           <div role="alert" className="p-3 bg-red-50 text-red-600 rounded-xl text-sm font-medium">

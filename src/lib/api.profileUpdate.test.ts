@@ -37,6 +37,7 @@ import {
   validateProfileUpdateInput,
   unlockAvatar,
   updateLanguagePreference,
+  updateOwnCosmeticProfile,
 } from './api'
 import {
   loadNotificationRecipientsInTransaction,
@@ -91,6 +92,18 @@ function expectReadsBeforeWrites(tx: { _ops: string[] }) {
 // Catalog ids used by the tests (must match src/config/avatarCatalog.ts).
 const STARTER = 'starter-robot'
 const PREMIUM = 'rare-neon' // cost 150
+const validAvatarConfig = {
+  version: 1 as const,
+  base: 'round' as const,
+  skinTone: 'warm' as const,
+  hairStyle: 'curls' as const,
+  hairColor: 'brown' as const,
+  face: 'smile' as const,
+  accessory: 'glasses' as const,
+  outfit: 'hoodie' as const,
+  outfitColor: 'purple' as const,
+  background: 'mint' as const,
+}
 
 describe('profile update request API', () => {
   beforeEach(() => {
@@ -111,6 +124,25 @@ describe('profile update request API', () => {
     it('rejects unsupported values before writing', async () => {
       await expect(updateLanguagePreference('de' as any)).rejects.toThrow(/unsupported language/i)
       expect(firestore.updateDoc).not.toHaveBeenCalled()
+    })
+  })
+
+  describe('child cosmetic self-update', () => {
+    it('writes only validated cosmetic fields to the authenticated child profile', async () => {
+      await updateOwnCosmeticProfile('managed-child-profile-1', '  Muhammed  ', STARTER, {
+        ownedAvatarIds: [],
+        avatarConfig: validAvatarConfig,
+      })
+
+      expect(firestore.updateDoc).toHaveBeenCalledWith(
+        { id: 'managed-child-profile-1', path: 'users/managed-child-profile-1' },
+        {
+          displayName: 'Muhammed',
+          avatarId: STARTER,
+          avatarConfig: validAvatarConfig,
+        },
+      )
+      expect(firestore.runTransaction).not.toHaveBeenCalled()
     })
   })
 
