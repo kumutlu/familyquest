@@ -24,6 +24,13 @@ import {
 import { DEFAULT_WEEKLY_CONTEXT } from '../../src/domain/gamification/v3/weeklyWindow'
 import { applyV3Shadow, BaselineMissingErrorV3, readV3ShadowState, type PreparedV3Shadow } from './gamificationV3/integration'
 import { mapTaskApproval } from './gamificationV3/sourceMappers/taskMapper'
+import {
+  evaluateAndAwardSurgeBonus,
+  reverseSurgeBonus,
+  type SurgeTransactionLike,
+} from './surge/evaluator'
+import { buildSurgeCatalog, type ActiveSurge as SurgeActiveSurge } from './surge/catalog'
+import { surgeEventId, surgeReversalEventId } from '../../src/domain/surge/types'
 import { mapDailyGoal, mapPerfectDay } from './gamificationV3/sourceMappers/dailyAwardMapper'
 import {
   finalizationSourceTransitionId,
@@ -72,6 +79,33 @@ import type {
 } from './gamificationScheduler'
 
 type MigrationStatus = GamificationMigrationStatus
+/** Convert a Firestore Surge event document into the pure-domain
+ *  `ActiveSurge` shape the evaluator consumes. Returns null when the
+ *  document is missing, malformed, or carries no Surge payload. */
+function surgeEventDocToActiveSurge(doc: QueryDocumentSnapshot<DocumentData> | { id: string; data(): DocumentData | undefined; exists: boolean }): SurgeActiveSurge | null {
+  if (!doc.exists) return null
+  const data = doc.data() ?? {}
+  if (data.type !== 'surge') return null
+  if (data.status !== 'active') return null
+  const payload = (data.metadata ?? {}).surge
+  if (!payload || payload.kind !== 'task_bonus') return null
+  const eligibleTaskIds = Array.isArray(payload.eligibleTaskIds) ? payload.eligibleTaskIds.filter((x: unknown) => typeof x === 'string') : []
+  if (eligibleTaskIds.length === 0) return null
+  const reward = payload.reward
+  if (!reward || reward.type !== 'bonus_points') return null
+  if (typeof reward.amount !== 'number' || reward.amount <= 0) return null
+  if (typeof data.startsAt !== 'number' || typeof data.endsAt !== 'number') return null
+  return {
+    surgeId: doc.id,
+    surge: {
+      kind: 'task_bonus',
+      eligibleTaskIds,
+      reward: { type: 'bonus_points', amount: reward.amount },
+    },
+    window: { startsAt: data.startsAt, endsAt: data.endsAt },
+  }
+}
+
 
 interface MigrationState {
   readonly status: MigrationStatus
@@ -706,7 +740,67 @@ export class AdminGamificationRepository implements
       const alreadyInvalid = reversalDocument.exists
       const currentPoints = child.rewardPoints ?? 0
       if (!Number.isSafeInteger(currentPoints) || currentPoints < 0) throw new Error('Child rewardPoints is invalid')
-      const nextPoints = alreadyInvalid ? currentPoints : currentPoints + effect.rewardPointsAward
+
+      // ---- SURGE READ PHASE ----
+      // Surges are an engagement-side opportunity; reward authority still
+      // lives here. We read the family's active Surge events inside the
+      // SAME transaction as the rest of the read phase so any concurrent
+      // edit either wins atomically or is rejected. The evaluator writes a
+      // SURGE_BONUS_AWARDED event into gamification_events with the
+      // snapshot reward captured at evaluation time (see
+      // src/domain/surge/eligibility.ts).
+      let surgeBonusAmount = 0
+      try {
+        const surgeEventsSnapshot = await transaction.get(
+          familyRef.collection('events').where('type', '==', 'surge').where('status', '==', 'active'),
+        )
+        const catalog = buildSurgeCatalog({
+          familyId: args.familyId,
+          familyPreferences: {
+            surgeHours: (family.engagementPreferences?.surgeHours ?? true) === true,
+          },
+          activeSurgeEvents: surgeEventsSnapshot.docs
+            .map(doc => surgeEventDocToActiveSurge(doc))
+            .filter((value): value is SurgeActiveSurge => value !== null),
+        })
+        const surgeResult = await evaluateAndAwardSurgeBonus(transaction as unknown as SurgeTransactionLike, {
+          familyId: args.familyId,
+          familyPreferences: catalog.familyPreferences,
+          catalog,
+          completion: {
+            id: args.completionId,
+            childId,
+            taskId,
+            completedAt,
+            ...(typeof completion.approvedAt !== 'undefined'
+              ? { approvedAt: millis(completion.approvedAt, 'completion approvedAt') }
+              : {}),
+          },
+          task: {
+            id: taskId,
+            title: typeof taskDocument.data()?.title === 'string' ? taskDocument.data()!.title : '',
+            pointsReward: task.pointsReward,
+            assigneeId: task.assigneeId,
+            requiresApproval: task.requiresApproval === true,
+          },
+          surgeEventRef: (sid, cid) =>
+            familyRef.collection('gamification_events').doc(surgeEventId(sid, cid)),
+          surgeEvidenceRef: (sid, cid) =>
+            familyRef.collection('surge_evidence').doc(`${sid}__${cid}`),
+          familyDocRef: () => familyRef,
+        })
+        if (surgeResult.status === 'awarded' && !alreadyInvalid) {
+          surgeBonusAmount = surgeResult.snapshot.rewardAmount
+        }
+      } catch (error) {
+        // Surge evaluation is a V1 additive feature. Failures MUST NOT block
+        // the base task approval — log and continue.
+        console.warn('[surge-evaluator-skipped]', JSON.stringify({
+          familyId: args.familyId, childId, taskId, error: (error as Error).message,
+        }))
+      }
+      if (!Number.isSafeInteger(surgeBonusAmount) || surgeBonusAmount < 0) surgeBonusAmount = 0
+      const nextPoints = alreadyInvalid ? currentPoints : currentPoints + effect.rewardPointsAward + surgeBonusAmount
       if (!Number.isSafeInteger(nextPoints)) throw new Error('Child rewardPoints would exceed the safe integer range')
 
       // ---- V3 shadow READ PHASE ----
@@ -778,13 +872,20 @@ export class AdminGamificationRepository implements
       transaction.create(familyRef.collection('feed').doc(feedId(logicalKey)), {
         actorId: typeof completion.reviewedBy === 'string' ? completion.reviewedBy : childId,
         actorName: typeof completion.reviewedByName === 'string' ? completion.reviewedByName : 'Parent',
-        type: 'custom', text: `Task approved: ${taskDocument.data()!.title ?? taskId} (+${effect.rewardPointsAward} pts)`,
+        type: 'custom',
+        text: surgeBonusAmount > 0
+          ? `Task approved: ${taskDocument.data()!.title ?? taskId} (+${effect.rewardPointsAward} pts, Surge Bonus +${surgeBonusAmount} pts)`
+          : `Task approved: ${taskDocument.data()!.title ?? taskId} (+${effect.rewardPointsAward} pts)`,
+        ...(surgeBonusAmount > 0 ? { surgeBonusAmount } : {}),
         visibleTo: [childId], timestamp: timestamp(args.processingAt), entityType: 'task_completion', entityId: args.completionId,
         createdAt: timestamp(args.processingAt),
       })
       transaction.create(familyRef.collection('notifications').doc(notificationId(logicalKey)), {
         familyId: args.familyId, type: 'task_approved', actorId: typeof completion.reviewedBy === 'string' ? completion.reviewedBy : childId,
-        recipientIds: [childId], title: 'Task approved', body: `${taskDocument.data()!.title ?? 'Task'} was approved. +${effect.rewardPointsAward} points`,
+        recipientIds: [childId], title: 'Task approved', body: surgeBonusAmount > 0
+          ? `${taskDocument.data()!.title ?? 'Task'} was approved. +${effect.rewardPointsAward} points + Surge Bonus +${surgeBonusAmount}`
+          : `${taskDocument.data()!.title ?? 'Task'} was approved. +${effect.rewardPointsAward} points`,
+        ...(surgeBonusAmount > 0 ? { surgeBonusAmount } : {}),
         entityType: 'task_completion', entityId: args.completionId, actionUrl: '/tasks', dedupeKey: notificationId(logicalKey), createdAt: timestamp(args.processingAt),
       })
       // ---- V3 shadow WRITE PHASE ----
@@ -858,8 +959,55 @@ export class AdminGamificationRepository implements
       const currentPoints = child.rewardPoints ?? 0
       const legacyAlreadyReversed = args.immutableReversalId !== undefined && child.lastReversalId === args.immutableReversalId
       const processorAlreadyReversed = completion.gamificationRewardRevokedBy !== undefined
+
+      // ---- SURGE REVERSAL READ PHASE ----
+      // Find any SURGE_BONUS_AWARDED event attributable to this completion
+      // and reverse it inside the same transaction. Idempotent: the
+      // reverseSurgeBonus helper writes a SURGE_BONUS_REVERSED sibling
+      // event and is a no-op when it already exists.
+      let surgeReversalPointsDelta = 0
+      try {
+        const surgeEventQuery = familyRef
+          .collection('gamification_events')
+          .where('sourceType', '==', 'task_completion')
+          .where('sourceId', '==', args.completionId)
+          .where('eventType', '==', 'SURGE_BONUS_AWARDED')
+        const surgeEventsSnapshot = await transaction.get(surgeEventQuery)
+        for (const surgeEventDoc of surgeEventsSnapshot.docs) {
+          const surgeEventData = surgeEventDoc.data()
+          const rewardAmount =
+            typeof surgeEventData.rewardPointsDelta === 'number'
+              ? surgeEventData.rewardPointsDelta
+              : 0
+          const metadata = (surgeEventData.metadata ?? {}) as Record<string, unknown>
+          const surgeId = typeof metadata.surgeId === 'string' ? metadata.surgeId : surgeEventDoc.id
+          const taskId = typeof metadata.taskId === 'string' ? metadata.taskId : effect.taskId
+          const reversalResult = await reverseSurgeBonus(transaction as unknown as SurgeTransactionLike, {
+            familyId: args.familyId,
+            childId: effect.childId,
+            taskId,
+            completionId: args.completionId,
+            surgeId,
+            rewardAmount,
+            rewardType: 'bonus_points',
+            now: args.processingAt,
+            surgeReversalEventRef: (sid, cid) =>
+              familyRef.collection('gamification_events').doc(surgeReversalEventId(sid, cid)),
+            surgeEventRef: (sid, cid) =>
+              familyRef.collection('gamification_events').doc(surgeEventId(sid, cid)),
+          })
+          if (reversalResult.status === 'reversed') {
+            surgeReversalPointsDelta += rewardAmount
+          }
+        }
+      } catch (error) {
+        console.warn('[surge-reversal-skipped]', JSON.stringify({
+          familyId: args.familyId, completionId: args.completionId, error: (error as Error).message,
+        }))
+      }
+
       if (!legacyAlreadyReversed && !processorAlreadyReversed) {
-        const nextPoints = currentPoints - effect.rewardPointsAward
+        const nextPoints = currentPoints - effect.rewardPointsAward - surgeReversalPointsDelta
         if (!Number.isSafeInteger(nextPoints) || nextPoints < 0) throw new Error('Task invalidation would make rewardPoints invalid')
         transaction.update(childRef, { rewardPoints: nextPoints })
       }
