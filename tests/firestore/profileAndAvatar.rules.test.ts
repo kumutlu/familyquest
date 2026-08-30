@@ -367,4 +367,42 @@ it('parent can approve profile update with avatarId change on child user doc', a
     avatarUrl: 'https://api.dicebear.com/7.x/avataaars/svg?seed=rare-neon',
   }));
 });
+
+describe('CHILD avatar immediate write (no parent approval)', () => {
+  it('child can update their own starter avatarId directly (avatarUrl not in child self-write allowlist)', async () => {
+    const db = testEnv.authenticatedContext(childId).firestore();
+    await assertSucceeds(updateDoc(doc(db, 'users', childId), {
+      avatarId: 'starter-robot',
+    }));
+  });
+
+  it('child can update their own owned premium avatarId directly (avatarUrl not in child self-write allowlist)', async () => {
+    const db = testEnv.authenticatedContext(childId).firestore();
+    await assertSucceeds(updateDoc(doc(db, 'users', childId), {
+      avatarId: 'rare-neon',
+    }));
+  });
+
+  it('child CANNOT update avatarId to a premium avatar they do not own', async () => {
+    const db = testEnv.authenticatedContext(childId).firestore();
+    await assertFails(updateDoc(doc(db, 'users', childId), {
+      avatarId: 'epic-dragon',
+    }));
+  });
+
+  it('child CANNOT update displayName directly (still requires approval)', async () => {
+    const db = testEnv.authenticatedContext(childId).firestore();
+    await assertFails(updateDoc(doc(db, 'users', childId), {
+      displayName: 'Hacked',
+    }));
+  });
+
+  it('child CANNOT update displayName + avatar together directly (requires approval)', async () => {
+    const db = testEnv.authenticatedContext(childId).firestore();
+    await assertFails(updateDoc(doc(db, 'users', childId), {
+      displayName: 'Hacked',
+      avatarId: 'starter-robot',
+    }));
+  });
+});
 });

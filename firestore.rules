@@ -240,6 +240,42 @@ service cloud.firestore {
       return avatarCatalogCost(avatarId) > 0;
     }
 
+    // AvatarConfigV1 — closed schema for composable avatar customization.
+    // Must match src/lib/api.ts isValidAvatarConfig exactly.
+    // AvatarConfigV1 — closed schema for composable avatar customization.
+    // Uses maps for O(1) value validation to stay under Firestore's 1000-expression budget.
+    function isValidAvatarConfig(config) {
+      let allowedBase = { 'round': true, 'soft': true, 'bold': true };
+      let allowedSkinTone = { 'porcelain': true, 'fair': true, 'warm': true, 'tan': true, 'brown': true, 'deep': true };
+      let allowedHairStyle = { 'short': true, 'crop': true, 'bob': true, 'waves': true, 'long': true, 'curls': true, 'coils': true, 'ponytail': true };
+      let allowedHairColor = { 'black': true, 'brown': true, 'chestnut': true, 'blonde': true, 'copper': true, 'pink': true, 'purple': true, 'blue': true };
+      let allowedFace = { 'smile': true, 'happy': true, 'bright': true, 'calm': true, 'cheeky': true };
+      let allowedAccessory = { 'none': true, 'glasses': true, 'round-glasses': true, 'cap': true, 'beanie': true, 'headband': true };
+      let allowedOutfit = { 'tee': true, 'hoodie': true, 'jacket': true, 'sweater': true };
+      let allowedOutfitColor = { 'purple': true, 'indigo': true, 'blue': true, 'teal': true, 'green': true, 'coral': true, 'pink': true, 'gold': true };
+      let allowedBackground = { 'lilac': true, 'sky': true, 'mint': true, 'peach': true, 'sunny': true, 'berry': true };
+
+      return config is map
+        && config.keys().hasAll([
+          'version', 'base', 'skinTone', 'hairStyle', 'hairColor', 'face',
+          'accessory', 'outfit', 'outfitColor', 'background'
+        ])
+        && config.keys().hasOnly([
+          'version', 'base', 'skinTone', 'hairStyle', 'hairColor', 'face',
+          'accessory', 'outfit', 'outfitColor', 'background'
+        ])
+        && config.version == 1
+        && allowedBase[config.base] == true
+        && allowedSkinTone[config.skinTone] == true
+        && allowedHairStyle[config.hairStyle] == true
+        && allowedHairColor[config.hairColor] == true
+        && allowedFace[config.face] == true
+        && allowedAccessory[config.accessory] == true
+        && allowedOutfit[config.outfit] == true
+        && allowedOutfitColor[config.outfitColor] == true
+        && allowedBackground[config.background] == true;
+    }
+
     function hasValidCreatorSnapshot(data) {
       let creatorDoc = get(/databases/$(database)/documents/users/$(authProfileId()));
       return creatorDoc != null && 'displayName' in creatorDoc.data && creatorDoc.data.displayName == data.get('createdByName', 'null');
@@ -1659,15 +1695,36 @@ service cloud.firestore {
           && isValidLanguage(request.resource.data.language)) ||
         (authProfileId() == uid && !request.resource.data.diff(resource.data).affectedKeys().hasAny([
           'role', 'familyId', 'lifecycle', 'rewardPoints', 'lifetimeXP', 'walletBalance', 'balance', 'lastFundTxId',
-          'displayName', 'avatarUrl', 'avatarId', 'language',
+          'displayName', 'avatarUrl', 'avatarId', 'avatarConfig', 'language',
           // Phase 1 child-login linking fields: server-only (Admin SDK). A client
           // must never be able to set its own login link, username, or flags.
           'hasLogin', 'username', 'loginEnabled', 'requiresPasswordChange', 'authUid'
         ])) ||
         // Owner/parent may self-edit only their own benign profile fields.
         // Children are not isParent, so they remain routed through the approval flow.
+        // Parent approval applies ONLY displayName (identity-only). Legacy avatar
+        // fields (avatarUrl, avatarId, avatarConfig) are NOT applied because the
+        // child may have since updated their appearance via updateChildAppearance().
         (isParent(resource.data.familyId) && authProfileId() == uid
-          && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['displayName', 'avatarUrl', 'avatarId'])) ||
+          && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['displayName'])) ||
+        // Child may update their own appearance (avatarConfig, avatarId) directly
+        // without parent approval. avatarUrl is NOT in the child self-write allowlist.
+        // The avatarConfig must satisfy the closed AvatarConfigV1 schema.
+        // The avatarId must be a starter avatar or an owned premium avatar.
+        // No other fields (displayName, rewardPoints, lifetimeXP, role, familyId, etc.) may change.
+        (authProfileId() == uid && resource.data.get('role', 'null') == 'child'
+          && request.resource.data.get('role', 'null') == 'child'
+          && request.resource.data.familyId == resource.data.familyId
+          && familyIsActive(resource.data.familyId)
+          && (!isManagedChildCaller() || isTrustedManagedChild())
+          && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['avatarConfig', 'avatarId'])
+          && (
+            // avatarConfig, if present, must be valid
+            (!('avatarConfig' in request.resource.data) || request.resource.data.avatarConfig == null || isValidAvatarConfig(request.resource.data.avatarConfig))
+            // avatarId, if present/non-null, must be starter or owned premium
+            && (!('avatarId' in request.resource.data) || request.resource.data.avatarId == null || request.resource.data.avatarId == '' || isStarterAvatar(request.resource.data.avatarId)
+              || exists(/databases/$(database)/documents/families/$(resource.data.familyId)/users/$(uid)/avatar_unlocks/$(request.resource.data.avatarId)))
+          )) ||
         (request.resource.data.diff(resource.data).affectedKeys().hasAny(['lastRedemptionId']) && isValidRedemptionDeduction(uid))
           || (request.resource.data.diff(resource.data).affectedKeys().hasAny(['lastTaskCompletionId']) && isValidTaskApprovalMutation(uid))
           || (request.resource.data.diff(resource.data).affectedKeys().hasAny(['lastBehaviourEventId']) && isValidBehaviourPointMutation(uid)) ||
@@ -1678,7 +1735,11 @@ service cloud.firestore {
         // grant 'owner' (no self-escalation to family owner) and may NEVER
         // touch 'lifecycle' (archive/remove/restore are server-only).
         ('familyId' in resource.data && isOwner(resource.data.familyId) && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['role']) && resource.data.get('role', 'null') != 'child' && request.resource.data.role != 'child' && request.resource.data.role != 'owner') ||
-        ('familyId' in resource.data && isParent(resource.data.familyId) && resource.data.get('role', 'null') == 'child' && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['displayName', 'avatarUrl', 'avatarId']))
+        // Parent approval on child profile applies ONLY displayName (identity-only).
+        // Legacy avatar fields (avatarUrl, avatarId, avatarConfig) are NOT applied
+        // because the child may have since updated their appearance via
+        // updateChildAppearance().
+        ('familyId' in resource.data && isParent(resource.data.familyId) && resource.data.get('role', 'null') == 'child' && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['displayName']))
       );
 
       allow create: if isAuthenticated() && (

@@ -1,6 +1,6 @@
 import {
   collection, doc, setDoc, updateDoc,
-  addDoc, runTransaction, query, where, orderBy, getDocs, getDoc, serverTimestamp, deleteDoc, writeBatch
+  addDoc, runTransaction, query, where, orderBy, getDocs, getDoc, serverTimestamp, deleteDoc, writeBatch, deleteField
 } from 'firebase/firestore';
 import {
   createUserWithEmailAndPassword,
@@ -46,6 +46,7 @@ import {
 import { useStore } from '../store/useStore';
 import { unregisterCurrentDevice } from './pushNotifications';
 import { getAvatarById, getAvatarCost, resolveAvatarImage } from '../config/avatarCatalog';
+import { type AvatarConfigV1, isValidAvatarConfig } from '../config/avatarConfig';
 import {
   periodKeyFor,
 } from './taskRecurrence';
@@ -3198,6 +3199,58 @@ export function validateProfileUpdateInput(
   return { displayName: name, avatarId: null, legacyAvatarUrl: legacy };
 }
 
+/**
+ * Child appearance update input.
+ * Only avatarConfig and avatarId are permitted; the function resolves the
+ * effective child profile ID itself (including managed-child auth).
+ */
+export interface ChildAppearanceUpdate {
+  avatarConfig?: AvatarConfigV1 | null;
+  avatarId?: string | null;
+}
+
+/**
+ * Updates the authenticated child's appearance immediately.
+ * - Resolves the effective actor/profile ID (handles managed-child auth).
+ * - Writes only the explicitly provided appearance fields.
+ * - Does NOT accept an arbitrary target child ID.
+ * - Payload contains only permitted appearance fields (avatarConfig, avatarId).
+ * - When avatarConfig is null, uses deleteField() to remove stale creator config.
+ */
+export const updateChildAppearance = async (
+  familyId: string,
+  update: ChildAppearanceUpdate,
+): Promise<void> => {
+  const actorId = await getEffectiveActorId();
+  if (!familyId.trim()) throw new Error('Family id is required');
+  if (update.avatarConfig === undefined && update.avatarId === undefined) {
+    throw new Error('No appearance changes to update');
+  }
+  if (update.avatarConfig !== undefined && update.avatarConfig !== null && !isValidAvatarConfig(update.avatarConfig)) {
+    throw new Error('Invalid avatar configuration.');
+  }
+  if (update.avatarId !== undefined && update.avatarId !== null && update.avatarId !== '') {
+    const def = getAvatarById(update.avatarId);
+    if (!def || !def.isActive) {
+      throw new Error('This avatar is no longer available. Please choose another.');
+    }
+  }
+
+  const payload: Record<string, unknown> = {};
+  if (update.avatarConfig !== undefined) {
+    if (update.avatarConfig === null) {
+      payload.avatarConfig = deleteField();
+    } else {
+      payload.avatarConfig = update.avatarConfig;
+    }
+  }
+  if (update.avatarId !== undefined) {
+    payload.avatarId = update.avatarId;
+  }
+
+  await updateDoc(doc(db, 'users', actorId), payload);
+};
+
 /** True when the value is a valid http(s) URL. Empty string is allowed (keeps current avatar). */
 export function isValidAvatarUrl(value: string): boolean {
   if (!value) return true;
@@ -3210,22 +3263,28 @@ export function isValidAvatarUrl(value: string): boolean {
 }
 
 /**
- * Child submits a profile update request. The child's `users/{childId}` document
- * is NOT modified here — only the request is created. A pre-flight `getDocs`
- * guard plus the disabled editor in the UI prevent multiple active requests;
- * the transaction then creates the request atomically alongside the feed entry
- * and the parent/owner notification.
+ * Child submits a profile update request for DISPLAY NAME ONLY.
+ * Avatar changes are now handled immediately via updateChildAppearance().
+ * The child's `users/{childId}` document is NOT modified here — only the
+ * identity-only request is created. A pre-flight `getDocs` guard plus the
+ * disabled editor in the UI prevent multiple active requests; the transaction
+ * then creates the request atomically alongside the feed entry and the
+ * parent/owner notification.
  */
 export const submitProfileUpdateRequest = async (
   familyId: string,
   requestedDisplayName: string,
-  requestedAvatarId: string | null,
+  // requestedAvatarId is no longer accepted for new requests — avatar changes
+  // are immediate via updateChildAppearance(). This parameter is kept for
+  // backward compatibility with any legacy callers but is ignored.
+  _requestedAvatarId: string | null,
   opts?: { ownedAvatarIds?: string[]; legacyAvatarUrl?: string | null },
 ) => {
   const currentUserUid = requireActorId();
-  const { displayName, avatarId, legacyAvatarUrl } = validateProfileUpdateInput(
+  // Validate display name only; avatarId is ignored for new requests.
+  const { displayName } = validateProfileUpdateInput(
     requestedDisplayName,
-    requestedAvatarId,
+    null, // avatarId is always null for new identity-only requests
     { ownedAvatarIds: opts?.ownedAvatarIds, legacyAvatarUrl: opts?.legacyAvatarUrl },
   );
 
@@ -3277,35 +3336,22 @@ export const submitProfileUpdateRequest = async (
     if (userData.role !== 'child') throw new Error('Only children can request profile updates.');
     if (userData.familyId !== familyId) throw new Error('Your family membership could not be verified.');
 
-    // Re-validate the requested avatar against the live profile to prevent forging.
-    const currentAvatarId = userData.avatarId || null;
-    const currentLegacyUrl = userData.avatarUrl || '';
-    if (avatarId && avatarId !== currentAvatarId) {
-      const def = getAvatarById(avatarId);
-      if (!def) throw new Error('This avatar is no longer available. Please choose another.');
-      if (def.unlockType === 'points' && !(opts?.ownedAvatarIds ?? []).includes(avatarId)) {
-        throw new Error('This avatar has not been unlocked yet.');
-      }
-    }
-
-    const requestedImage = avatarId
-      ? (getAvatarById(avatarId)?.imageUrl ?? '')
-      : (legacyAvatarUrl || currentLegacyUrl || '');
-
     // ---------------------------------------------------------------------
     // PHASE C — WRITES ONLY (no transaction.get may occur from here on)
     // ---------------------------------------------------------------------
+    // New requests are identity-only: no requestedAvatarId, no requestedAvatar.
+    // Legacy pending requests (created before this change) may still contain
+    // those fields and are handled by approveProfileUpdateRequest.
     transaction.set(reqRef, {
       id: reqRef.id,
       familyId,
       childId: currentUserUid,
       childName: userData.displayName,
       requestedDisplayName: displayName,
-      requestedAvatarId: avatarId,
-      requestedAvatar: requestedImage,
+      // Identity-only request — no avatar fields for new requests.
       currentDisplayName: userData.displayName,
-      currentAvatarId: currentAvatarId,
-      currentAvatar: currentLegacyUrl,
+      currentAvatarId: userData.avatarId || null,
+      currentAvatar: userData.avatarUrl || '',
       status: 'pending',
       createdAt: serverTimestamp(),
       actorId: currentUserUid,
@@ -3429,15 +3475,16 @@ export const approveProfileUpdateRequest = async (familyId: string, requestId: s
       dedupeKey: profileUpdateApprovedKey(requestId),
     });
 
-    // Apply the requested profile change. Resolve the avatar image from the
-    // catalog when an avatarId was requested; otherwise keep the current one.
-    const nextAvatarId = reqData.requestedAvatarId || userData.avatarId || null;
-    const nextAvatar = reqData.requestedAvatar
-      ? reqData.requestedAvatar
-      : (userData.avatarUrl || '');
+    // Apply the requested profile change. New requests are identity-only
+    // (displayName only). Legacy pending requests (created before the
+    // identity-only change) may contain requestedAvatarId, requestedAvatar,
+    // or requestedAvatarConfig. Those legacy avatar fields MUST NOT be applied
+    // because the child may have since updated their appearance via
+    // updateChildAppearance(). Approving a legacy request applies ONLY the
+    // displayName (the only field that still requires parent approval under
+    // the new model). Legacy avatar-only requests are safely marked
+    // approved/rejected for workflow/history without mutating current appearance.
     const updateFields: Record<string, unknown> = { displayName: reqData.requestedDisplayName };
-    if (nextAvatarId) updateFields.avatarId = nextAvatarId;
-    if (nextAvatar) updateFields.avatarUrl = nextAvatar;
     transaction.update(userRef, updateFields);
 
     transaction.update(reqRef, {
