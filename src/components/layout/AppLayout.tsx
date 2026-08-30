@@ -9,6 +9,7 @@ import { ProfileDropdown } from './ProfileDropdown';
 import { NotificationCenter } from './NotificationCenter';
 import { MandatoryChildPasswordChange } from '../auth/MandatoryChildPasswordChange';
 import { ChildChallengeCelebration } from '../challenges/ChildChallengeCelebration';
+import { ExperienceThemeRibbon } from '../experience/ExperienceThemeRibbon';
 import { StartupScreen } from './StartupScreen';
 import { deriveStartupPhase } from './startupState';
 import { signOut } from '../../lib/api';
@@ -216,6 +217,13 @@ export function AppLayout() {
           Presentation only — driven by the persisted notification + its
           existing per-user read state. Renders nothing for parents. */}
       <ChildChallengeCelebration />
+
+      {/* Engagement engine ribbon. Reads the resolved theme through the
+          single useExperienceTheme hook; renders nothing when no event is
+          live so the existing UI is untouched. */}
+      <div className="max-w-5xl mx-auto w-full px-4 pt-2">
+        <ExperienceThemeRibbon />
+      </div>
 
       {/* Main Content Area. Bottom padding clears the taller Queki v2 nav
           (including the overhanging centre Action button) plus the safe area. */}
