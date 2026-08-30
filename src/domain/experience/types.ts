@@ -37,7 +37,11 @@ export type EventType =
   | 'weekly_theme'
   | 'seasonal'
   | 'family_challenge'
-  | 'special';
+  | 'special'
+  // 'surge' reuses the generic event window/engagement infrastructure
+  // for time-bounded bonus opportunities. The reward authority lives in
+  // the Surge domain module; the Experience Engine NEVER awards bonuses.
+  | 'surge';
 
 /**
  * Lifecycle of a scheduled event. Authoritative events are written by future
