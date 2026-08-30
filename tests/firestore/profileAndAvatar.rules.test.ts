@@ -305,24 +305,32 @@ describe('PROFILE REQUEST regression: null requestedAvatarId (root-cause fix)', 
   });
 });
 
-describe('OWNER/PARENT self-edit save (Edit Profile modal) — root-cause fix', () => {
-  // The parent/owner "Edit Profile" modal writes displayName + avatarId (and
-  // avatarUrl) to users/{own uid} via updateDoc. The self-edit branch of the
-  // users/{uid} update rule must permit exactly those benign fields for
-  // owners/parents, while still blocking role / familyId / points / balance
-  // changes and keeping children routed through the approval flow.
-  it('owner can save their own displayName + starter avatarId', async () => {
+describe('OWNER/PARENT self-edit save (Edit Profile modal) — identity-only model', () => {
+  // After the identity-only child-appearance cutover, parent/owner self-edit
+  // applies ONLY displayName. avatarConfig/avatarId are NOT in the
+  // parent/owner self-write allowlist because appearance is child-controlled.
+  // (See: tests/firestore/childAppearance.rules.test.ts for the dedicated
+  // child self-service boundary.)
+  it('owner can save their own displayName only', async () => {
     const db = testEnv.authenticatedContext(ownerId).firestore();
     await assertSucceeds(updateDoc(doc(db, 'users', ownerId), {
-      displayName: 'Kemal Yilmaz', avatarId: 'starter-robot',
-      avatarUrl: 'https://api.dicebear.com/7.x/avataaars/svg?seed=starter-robot',
+      displayName: 'Kemal Yilmaz',
     }));
   });
 
-  it('parent can save their own displayName + starter avatarId', async () => {
+  it('parent can save their own displayName only', async () => {
     const db = testEnv.authenticatedContext(parentId).firestore();
     await assertSucceeds(updateDoc(doc(db, 'users', parentId), {
-      displayName: 'Kemal Updated', avatarId: 'starter-cat',
+      displayName: 'Kemal Updated',
+    }));
+  });
+
+  it('parent CANNOT self-write avatarConfig / avatarId / avatarUrl (child-controlled)', async () => {
+    const db = testEnv.authenticatedContext(parentId).firestore();
+    await assertFails(updateDoc(doc(db, 'users', parentId), {
+      avatarId: 'starter-cat',
+    }));
+    await assertFails(updateDoc(doc(db, 'users', parentId), {
       avatarUrl: 'https://api.dicebear.com/7.x/avataaars/svg?seed=starter-cat',
     }));
   });
@@ -348,12 +356,12 @@ it('a child cannot edit ANOTHER member profile', async () => {
   await assertFails(updateDoc(doc(db, 'users', siblingId), { displayName: 'Hijacked' }));
 });
 
-it('parent can approve profile update with avatarId change on child user doc', async () => {
-  // Regression test: when a parent approves a profile_update_request that
-  // includes a requestedAvatarId, the approveProfileUpdateRequest
-  // transaction writes avatarId to users/{childId}. The Firestore rule
-  // for users/{userId} must allow parent-updates of avatarId on child
-  // profiles (displayName + avatarUrl + avatarId).
+it('parent approval on child profile applies displayName ONLY (identity-only model)', async () => {
+  // After the identity-only child-appearance cutover, parent approval on a
+  // child profile applies ONLY displayName. Legacy avatar fields from
+  // pending requests must NOT be written. The child may have since updated
+  // their own appearance via updateChildAppearance(), so the parent must
+  // not be able to silently overwrite it.
   const db = testEnv.authenticatedContext(childId).firestore();
   await setDoc(doc(db, `families/${familyId}/profile_update_requests`, 'req1'), {
     ...baseRequest(childId, 'rare-neon'),
@@ -361,9 +369,17 @@ it('parent can approve profile update with avatarId change on child user doc', a
     requestedAvatar: 'https://api.dicebear.com/7.x/avataaars/svg?seed=rare-neon',
   });
   const pdb = testEnv.authenticatedContext(parentId).firestore();
+  // Allowed: displayName only.
   await assertSucceeds(updateDoc(doc(pdb, 'users', childId), {
     displayName: 'Alin Updated',
+  }));
+  // Denied: legacy avatarId must NOT be writable by parent approval.
+  await assertFails(updateDoc(doc(pdb, 'users', childId), {
+    displayName: 'Alin Updated',
     avatarId: 'rare-neon',
+  }));
+  await assertFails(updateDoc(doc(pdb, 'users', childId), {
+    displayName: 'Alin Updated',
     avatarUrl: 'https://api.dicebear.com/7.x/avataaars/svg?seed=rare-neon',
   }));
 });

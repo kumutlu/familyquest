@@ -9,6 +9,7 @@ import {
   submitProfileUpdateRequest,
   unlockAvatar,
   validateProfileUpdateInput,
+  updateChildAppearance,
 } from '../../lib/api';
 import { mapTransactionError } from '../../lib/transactionErrors';
 import { useStore } from '../../store/useStore';
@@ -91,6 +92,12 @@ export function ProfileEditorModal({ user, onClose }: ProfileEditorModalProps) {
     }
   };
 
+  // Compute dirty state and lock flags for both child block and footer
+  // These are computed at component level so they're available in both handleSave and footer
+  const displayNameLocked = isChild && hasPending;
+  const displayNameChanged = displayName.trim() !== (user?.displayName || '').trim();
+  const avatarChanged = selectedAvatarId !== (user?.avatarId || null);
+
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
     setError(null);
@@ -125,34 +132,97 @@ export function ProfileEditorModal({ user, onClose }: ProfileEditorModalProps) {
       return;
     }
 
-    // Child: submit for parent approval (never writes to users/{childId} here).
+    // Child: split behavior - avatar changes persist immediately, display name requires approval
     if (isChild) {
-      if (hasPending) {
-        setError(t('alreadyPending'));
+      // A pending display-name request does NOT lock avatar customization.
+      // Only the display-name input and submit-for-approval action are locked.
+
+      // If only avatar changed (and it's a valid selection), persist immediately
+      if (avatarChanged && !displayNameChanged) {
+        const def = selectedAvatarId ? getAvatarById(selectedAvatarId) : undefined;
+        // Validate avatar selection (starter or owned premium)
+        if (def && def.unlockType === 'points' && !ownedAvatarIds.includes(selectedAvatarId || '')) {
+          setError(t('lockedPremium'));
+          return;
+        }
+        setIsSubmitting(true);
+        try {
+          await updateChildAppearance(user.familyId, { avatarId: selectedAvatarId });
+          setSuccess(t('saveSuccess'));
+          window.setTimeout(onClose, 900);
+        } catch (err: any) {
+          setError(err?.message || t('saveFailed'));
+        } finally {
+          setIsSubmitting(false);
+        }
         return;
       }
-      setIsSubmitting(true);
-      try {
-        validateProfileUpdateInput(displayName, selectedAvatarId, {
-          ownedAvatarIds,
-          legacyAvatarUrl: user?.avatarUrl || null,
-        });
-        await submitProfileUpdateRequest(user.familyId, displayName, selectedAvatarId, {
-          ownedAvatarIds,
-          legacyAvatarUrl: user?.avatarUrl || null,
-        });
-        setSuccess(t('submittedForApproval'));
-        window.setTimeout(onClose, 1400);
-      } catch (err: any) {
-        // Map internal Firestore / transaction-order errors to a friendly message.
-        setError(mapTransactionError(err, { operation: 'submitProfileUpdateRequest' }));
-      } finally {
-        setIsSubmitting(false);
+
+      // If display name changed (with or without avatar), handle both paths
+      if (displayNameChanged) {
+        // If avatar also changed, persist appearance FIRST, then submit identity for approval
+        if (avatarChanged) {
+          const def = selectedAvatarId ? getAvatarById(selectedAvatarId) : undefined;
+          if (def && def.unlockType === 'points' && !ownedAvatarIds.includes(selectedAvatarId || '')) {
+            setError(t('lockedPremium'));
+            return;
+          }
+          setIsSubmitting(true);
+          try {
+            // Step 1: persist avatar immediately
+            await updateChildAppearance(user.familyId, { avatarId: selectedAvatarId });
+            // Step 2: submit display-name change for approval (identity-only)
+            validateProfileUpdateInput(displayName, null, {
+              ownedAvatarIds,
+              legacyAvatarUrl: user?.avatarUrl || null,
+            });
+            await submitProfileUpdateRequest(user.familyId, displayName, null, {
+              ownedAvatarIds,
+              legacyAvatarUrl: user?.avatarUrl || null,
+            });
+            setSuccess(t('submittedForApproval'));
+            window.setTimeout(onClose, 1400);
+          } catch (err: any) {
+            // If appearance succeeded but identity failed, report partial success
+            if (err?.message?.includes('waiting for approval') || err?.message?.includes('permission')) {
+              setError(mapTransactionError(err, { operation: 'submitProfileUpdateRequest' }));
+            } else {
+              setError(err?.message || t('saveFailed'));
+            }
+          } finally {
+            setIsSubmitting(false);
+          }
+        } else {
+          // Display name only - submit for approval
+          setIsSubmitting(true);
+          try {
+            validateProfileUpdateInput(displayName, null, {
+              ownedAvatarIds,
+              legacyAvatarUrl: user?.avatarUrl || null,
+            });
+            await submitProfileUpdateRequest(user.familyId, displayName, null, {
+              ownedAvatarIds,
+              legacyAvatarUrl: user?.avatarUrl || null,
+            });
+            setSuccess(t('submittedForApproval'));
+            window.setTimeout(onClose, 1400);
+          } catch (err: any) {
+            setError(mapTransactionError(err, { operation: 'submitProfileUpdateRequest' }));
+          } finally {
+            setIsSubmitting(false);
+          }
+        }
+        return;
       }
+
+      // No changes made
+      setError(t('noChanges'));
     }
   };
 
-  const locked = isChild && hasPending;
+  // Display-name input and submit-for-approval are locked when a name request is pending.
+  // Avatar picker and appearance save remain usable.
+  const appearanceLocked = false; // Never locked for children
   const selectedDef = selectedAvatarId ? getAvatarById(selectedAvatarId) : undefined;
   const selectedIsLockedPremium =
     selectedDef?.unlockType === 'points' && !ownedAvatarIds.includes(selectedAvatarId || '');
@@ -181,8 +251,13 @@ export function ProfileEditorModal({ user, onClose }: ProfileEditorModalProps) {
         </Button>
       )}
       {isChild && (
-        <Button type="submit" form="profile-editor-form" fullWidth disabled={isSubmitting || locked || selectedIsLockedPremium}>
-          {isSubmitting ? t('submitting') : t('submitForApproval')}
+        <Button
+          type="submit"
+          form="profile-editor-form"
+          fullWidth
+          disabled={isSubmitting || (displayNameLocked && !avatarChanged) || selectedIsLockedPremium}
+        >
+          {isSubmitting ? t('submitting') : (avatarChanged ? t('save') : t('submitForApproval'))}
         </Button>
       )}
     </div>
@@ -195,16 +270,7 @@ export function ProfileEditorModal({ user, onClose }: ProfileEditorModalProps) {
           {statusMessage}
         </div>
 
-        {isChild && !hasPending && (
-          <div
-            role="status"
-            className="p-3 bg-amber-50 text-amber-800 rounded-xl text-sm font-medium border border-amber-200"
-          >
-            {t('pendingApprovalNote')}
-          </div>
-        )}
-
-        {hasPending && (
+        {isChild && hasPending && (
           <div
             role="status"
             className="p-3 bg-blue-50 text-blue-800 rounded-xl text-sm font-medium border border-blue-200"
@@ -232,7 +298,7 @@ export function ProfileEditorModal({ user, onClose }: ProfileEditorModalProps) {
             id="profile-displayName"
             type="text"
             required
-            disabled={locked}
+            disabled={displayNameLocked}
             value={displayName}
             onChange={e => {
               setDisplayName(e.target.value);
@@ -253,7 +319,7 @@ export function ProfileEditorModal({ user, onClose }: ProfileEditorModalProps) {
               clearStaleError();
             }}
             onRequestUnlock={setUnlockTarget}
-            disabled={locked}
+            disabled={appearanceLocked}
           />
           {isChild && (
             <p className="mt-2 text-xs text-gray-500">

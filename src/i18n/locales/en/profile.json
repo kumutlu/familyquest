@@ -35,6 +35,7 @@
   "saveFailed": "We could not save your profile. Please try again.",
   "alreadyPending": "You already have a profile change waiting for approval.",
   "lockedPremium": "This avatar has not been unlocked yet. Unlock it before submitting.",
+  "noChanges": "No changes to save.",
   "pointsNote": "You have {{count}} points. Unlocking a premium avatar costs points once; selecting an owned avatar is free.",
   "avatar": {
     "filterLabel": "Filter avatars",
