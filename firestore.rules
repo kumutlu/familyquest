@@ -1665,6 +1665,12 @@ service cloud.firestore {
       return value is string && value in ['en', 'tr'];
     }
 
+    function isValidEngagementPreferences(value) {
+      return value is map
+        && value.keys().hasOnly(['surgeHours'])
+        && (!('surgeHours' in value) || value.surgeHours is bool);
+    }
+
     function isValidGamificationConfig(data) {
       return data.keys().hasOnly(['schemaVersion', 'dailyGoalPercentage'])
         && data.schemaVersion == 1
@@ -1832,6 +1838,12 @@ service cloud.firestore {
             || isValidGamificationConfig(request.resource.data.gamificationConfig))
         && (!('petBoxEnabled' in request.resource.data)
             || request.resource.data.petBoxEnabled is bool)
+        // engagementPreferences (e.g. surgeHours opt-in) is owner-writable and
+        // validated for closed shape on write. Keys outside the closed set are
+        // rejected so a malicious owner cannot stuff random data into a field
+        // that the client engine reads.
+        && (!('engagementPreferences' in request.resource.data)
+            || isValidEngagementPreferences(request.resource.data.engagementPreferences))
         // The setup audit block is validated only when this write actually
         // changes it. It pins completedAt == request.time, so re-validating an
         // untouched, previously-approved setup map would reject every later
@@ -2583,6 +2595,27 @@ service cloud.firestore {
       // Server-only collections: task_occurrences, gamification_events, daily_eligibility,
       // daily_progress, gamification_summaries, gamification_checkpoints
       match /task_occurrences/{occurrenceId} {
+        allow read, write: if false;
+      }
+
+      // SURGE EVIDENCE — server-only audit record for Surge bonus awards.
+      // A successful Surge bonus event writes an immutable snapshot here
+      // so parent-facing history can show "House Vacuum +15 / Surge Bonus +10"
+      // and so reversal can locate the bonus deterministically.
+      // Clients must NEVER be able to read OR write these records: a child
+      // who could read them could compute exact point balances and craft
+      // social-engineering exploits. A child who could write them could
+      // mint fake bonuses.
+      match /surge_evidence/{evidenceId} {
+        allow read, write: if false;
+      }
+
+      // EVENTS — Experience + Theme engine + Surge catalog. V1: server-only.
+      // A future operator-driven catalog will keep this rule and write
+      // through the trusted Admin SDK. Clients must NEVER be able to
+      // create or edit event definitions — a child who could mint an
+      // event could declare their own Surge and award themselves points.
+      match /events/{eventId} {
         allow read, write: if false;
       }
 
