@@ -1703,7 +1703,8 @@ service cloud.firestore {
       return isFamilyMember(familyId)
         && data.assigneeId == authProfileId()
         && task != null
-        && task.data.get('assigneeId', authProfileId()) == authProfileId()
+        && (task.data.get('assigneeId', null) == null
+          || task.data.assigneeId == authProfileId())
         && data.completedAt == request.time
         && ((requiresApproval && data.status == 'pending_approval' && data.approvedAt == null)
           || (!requiresApproval && data.status == 'approved' && data.approvedAt == request.time));
