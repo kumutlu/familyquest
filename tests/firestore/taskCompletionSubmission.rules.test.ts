@@ -7,6 +7,7 @@ import {
 import {
   doc,
   getDoc,
+  runTransaction,
   serverTimestamp,
   setDoc,
   updateDoc,
@@ -82,6 +83,12 @@ beforeEach(async () => {
         requiresApproval: false,
         pointsReward: 10,
       }),
+      setDoc(doc(db, `families/${FAMILY_ID}/tasks/unassigned-task`), {
+        title: 'Unassigned family task',
+        assigneeId: null,
+        requiresApproval: true,
+        pointsReward: 40,
+      }),
       setDoc(doc(db, `families/${FAMILY_ID}/tasks/approval-task`), {
         title: 'Approval task',
         assigneeId: CHILD_ID,
@@ -123,38 +130,49 @@ async function submitCompletion(
     taskId: string
     completionId: string
     requiresApproval: boolean
+    currentStreak?: number
+    longestStreak?: number
   },
 ) {
-  const batch = writeBatch(db)
-  batch.set(doc(db, `families/${FAMILY_ID}/task_completions/${options.completionId}`), {
-    taskId: options.taskId,
-    assigneeId: options.childId,
-    status: options.requiresApproval ? 'pending_approval' : 'approved',
-    periodKey: 'one-time',
-    completedAt: serverTimestamp(),
-    approvedAt: options.requiresApproval ? null : serverTimestamp(),
-  })
-  batch.update(doc(db, `users/${options.childId}`), {
-    currentStreak: 1,
-    longestStreak: 1,
-    lastActiveDate: serverTimestamp(),
-  })
-  if (options.requiresApproval) {
-    batch.set(doc(db, `families/${FAMILY_ID}/notifications/task_submitted_${options.completionId}`), {
-      familyId: FAMILY_ID,
-      type: 'task_submitted',
-      actorId: options.childId,
-      recipientIds: [PARENT_ID],
-      title: 'A child completed a task',
-      body: 'Review task completion',
-      entityType: 'task_completion',
-      entityId: options.completionId,
-      actionUrl: '/',
-      dedupeKey: `task_submitted:${options.completionId}`,
-      createdAt: serverTimestamp(),
+  const userRef = doc(db, `users/${options.childId}`)
+  const taskRef = doc(db, `families/${FAMILY_ID}/tasks/${options.taskId}`)
+  const completionRef = doc(db, `families/${FAMILY_ID}/task_completions/${options.completionId}`)
+  const notificationRef = doc(db, `families/${FAMILY_ID}/notifications/task_submitted_${options.completionId}`)
+  await runTransaction(db, async transaction => {
+    await transaction.get(userRef)
+    await transaction.get(taskRef)
+    await transaction.get(completionRef)
+    if (options.requiresApproval) await transaction.get(notificationRef)
+
+    transaction.set(completionRef, {
+      taskId: options.taskId,
+      assigneeId: options.childId,
+      status: options.requiresApproval ? 'pending_approval' : 'approved',
+      periodKey: 'one-time',
+      completedAt: serverTimestamp(),
+      approvedAt: options.requiresApproval ? null : serverTimestamp(),
     })
-  }
-  await batch.commit()
+    transaction.update(userRef, {
+      currentStreak: options.currentStreak ?? 1,
+      longestStreak: options.longestStreak ?? 1,
+      lastActiveDate: serverTimestamp(),
+    })
+    if (options.requiresApproval) {
+      transaction.set(notificationRef, {
+        familyId: FAMILY_ID,
+        type: 'task_submitted',
+        actorId: options.childId,
+        recipientIds: [PARENT_ID],
+        title: 'A child completed a task',
+        body: 'Review task completion',
+        entityType: 'task_completion',
+        entityId: options.completionId,
+        actionUrl: '/',
+        dedupeKey: `task_submitted:${options.completionId}`,
+        createdAt: serverTimestamp(),
+      })
+    }
+  })
 }
 
 describe('child authoritative task-completion submission', () => {
@@ -172,6 +190,34 @@ describe('child authoritative task-completion submission', () => {
       const child = await getDoc(doc(context.firestore(), `users/${CHILD_ID}`))
       expect(child.data()).toMatchObject({ rewardPoints: 10, lifetimeXP: 20 })
     })
+  })
+
+  it('normal child can complete an approval-required family task with a null assignee', async () => {
+    const db = normalChildDb()
+    await assertSucceeds(submitCompletion(db, {
+      childId: CHILD_ID,
+      taskId: 'unassigned-task',
+      completionId: 'unassigned-completion',
+      requiresApproval: true,
+    }))
+  })
+
+  it('normal child completion accepts a legacy streak where longest is below current', async () => {
+    await testEnv.withSecurityRulesDisabled(async context => {
+      await updateDoc(doc(context.firestore(), `users/${CHILD_ID}`), {
+        currentStreak: 4,
+        longestStreak: 0,
+      })
+    })
+    const db = normalChildDb()
+    await assertSucceeds(submitCompletion(db, {
+      childId: CHILD_ID,
+      taskId: 'normal-task',
+      completionId: 'legacy-streak-completion',
+      requiresApproval: false,
+      currentStreak: 4,
+      longestStreak: 0,
+    }))
   })
 
   it('managed child completion transaction creates the pending authoritative record and notification', async () => {
