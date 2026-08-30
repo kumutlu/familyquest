@@ -52,7 +52,6 @@ const S4_HEADING = /let's make this yours/i;
 const S5_HEADING = /here's how it works/i;
 const S6_HEADING = /every family needs a name/i;
 const S7_HEADING = /your family is ready/i;
-const P1_HEADING = /your family is taking shape/i;
 const P2_HEADING = /their first win/i;
 const P3_HEADING = /first task is ready/i;
 
@@ -64,6 +63,10 @@ export async function driveToStep(page: Page, data: OnboardingPersona, stopAt: P
   if (stopAt === 's1') return;
 
   await page.getByRole('button', { name: /set up your family/i }).click();
+  await expect.poll(() => page.evaluate(() => {
+    const raw = sessionStorage.getItem('queki.createFamilyIntent.v1');
+    return raw ? JSON.parse(raw).kind : null;
+  })).toBe('pre-auth-create-family');
   await expect(page.getByRole('heading', { name: S2_HEADING })).toBeVisible();
   if (stopAt === 's2') return;
 
@@ -91,9 +94,13 @@ export async function driveToStep(page: Page, data: OnboardingPersona, stopAt: P
   await expect(page.getByRole('heading', { name: S7_HEADING })).toBeVisible();
 }
 
-/** Complete S7 email signup, prove creation stays inert, then explicitly enter P1. */
+/** Complete S7 email signup and resume the create journey chosen at S1. */
 export async function signUpFromS7(page: Page, data: OnboardingPersona) {
   await expect(page.getByRole('heading', { name: S7_HEADING })).toBeVisible();
+  await expect.poll(() => page.evaluate(() => {
+    const raw = sessionStorage.getItem('queki.createFamilyIntent.v1');
+    return raw ? JSON.parse(raw).kind : null;
+  })).toBe('pre-auth-create-family');
   await page.getByRole('button', { name: /continue with email/i }).click();
 
   await expect(page).toHaveURL(/\/signup/, { timeout: 15000 });
@@ -103,25 +110,27 @@ export async function signUpFromS7(page: Page, data: OnboardingPersona) {
   await page.locator('input[type="password"]').fill(data.password);
   await page.getByRole('button', { name: /sign up/i }).click();
 
-  // Authentication alone may not authorize family creation. The no-family
-  // choice must render first, with both explicit affordances available.
-  await expect(page).toHaveURL(/\/no-family$/, { timeout: 20_000 });
-  await expect(page.getByRole('button', { name: 'Create a family' })).toBeVisible();
-  await expect(page.getByRole('button', { name: 'Join an existing family' })).toBeVisible();
-  const before = await getOnboardingOutcome(data.email, { familyCount: 0, childCount: 0, taskCount: 0 });
-  expect(before.familyCount, 'signup must not create a family').toBe(0);
-  expect(before.childCount, 'signup must not create a child').toBe(0);
-  expect(before.taskCount, 'signup must not create a task').toBe(0);
+  await page.waitForURL(url => !url.pathname.startsWith('/signup'), { timeout: 20_000 });
+  const boundIntent = await page.evaluate(() => {
+    const raw = sessionStorage.getItem('queki.createFamilyIntent.v1');
+    return raw ? JSON.parse(raw) : null;
+  });
+  expect(boundIntent, 'auth return must retain and UID-bind the S1 create intent').toMatchObject({
+    kind: 'create-family',
+  });
 
-  await page.getByRole('button', { name: 'Create a family' }).click();
+  // S1 already captured the explicit creation decision. Authentication binds
+  // that intent to this UID and resumes P1 without asking Create/Join again.
   await expect(page).toHaveURL(/\/onboarding\?mode=create$/, { timeout: 20_000 });
+  await expect(page.getByRole('button', { name: 'Create a family' })).toHaveCount(0);
+  await expect(page.getByRole('button', { name: 'Join an existing family' })).toHaveCount(0);
 
-  // The explicit create intent authorizes the preserved S7 draft to advance.
+  // The UID-bound explicit create intent authorizes the preserved S7 draft.
   await expectOnboardingP1TerminalState(page);
 }
 
 /** Drive P1 -> P2 -> P3 -> dashboard. */
-export async function completePostAuth(page: Page, data: OnboardingPersona) {
+export async function completePostAuth(page: Page, _data: OnboardingPersona) {
   // P1 auto-creates the family + first child; wait for the Continue control.
   await expect(page.getByRole('button', { name: CONTINUE })).toBeEnabled({ timeout: 20000 });
   await page.getByRole('button', { name: CONTINUE }).click();

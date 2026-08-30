@@ -202,6 +202,40 @@ beforeEach(() => {
 });
 
 describe('App auth routing and onboarding composition', () => {
+  it('honours the initial Set up your family choice after authentication without asking Create or Join again', async () => {
+    const user = userEvent.setup();
+    publishStore({
+      authStatus: 'unauthenticated',
+      authUser: null,
+      currentUser: null,
+      profileServerConfirmed: false,
+      appReady: true,
+    });
+    window.history.pushState({}, '', '/onboarding');
+
+    const view = render(<App />);
+    await user.click(await screen.findByRole('button', { name: 'Set up your family' }));
+
+    await act(async () => {
+      savePostAuthCreateDraft();
+      publishStore({
+        authStatus: 'authenticated',
+        authUser: { uid: 'owner-1' },
+        currentUser: { id: 'owner-1', role: 'parent' },
+        profileServerConfirmed: true,
+        appReady: true,
+        pendingMembershipStatus: 'none',
+      });
+      view.rerender(<App />);
+    });
+
+    await waitFor(() => expect(window.location.pathname).toBe('/onboarding'));
+    await waitFor(() => expect(window.location.search).toBe('?mode=create'));
+    await waitFor(() => expect(firestoreBoundary.transactions).toBe(1));
+    expect(screen.queryByRole('button', { name: 'Create a family' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Join a family' })).not.toBeInTheDocument();
+  });
+
   it('does not create a family when an auth transition reaches no-family root routing with a stale post-auth draft', async () => {
     savePostAuthCreateDraft();
     // Task 8 owns the /no-family screen itself. Task 7 deliberately owns the

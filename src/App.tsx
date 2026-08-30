@@ -40,7 +40,7 @@ import { markStartupStage } from './startupDiagnostics';
 import { E2EBootstrapDiagnostics } from './components/E2EBootstrapDiagnostics';
 import { AuthRoutingGate } from './auth/AuthRoutingGate';
 import {
-  clearCreateFamilyIntent,
+  clearBoundCreateFamilyIntent,
   hasCreateFamilyIntent,
   subscribeCreateFamilyIntent,
 } from './auth/createFamilyIntent';
@@ -53,11 +53,18 @@ function App() {
   const authUser = useStore(state => state.authUser);
   const currentFamilyId = useStore(state => state.currentUser?.familyId);
   const authUid = authUser?.uid ?? null;
-  const hasExplicitCreateIntent = useSyncExternalStore(
+  const previousAuthStatusRef = useRef(authStatus);
+  const reactiveCreateIntent = useSyncExternalStore(
     subscribeCreateFamilyIntent,
     () => authUid ? hasCreateFamilyIntent(authUid) : false,
     () => false,
   );
+  // Auth UID can become available in the same render that makes the routing
+  // gate authoritative. Read that UID directly as well as subscribing to
+  // same-tab intent changes so pre-auth selection binding cannot lose a race
+  // to the no-family redirect.
+  const hasExplicitCreateIntent = reactiveCreateIntent
+    || Boolean(authUid && hasCreateFamilyIntent(authUid));
   const [creationContinuation, setCreationContinuation] = useState<CreationContinuation | null>(null);
   // Firestore can publish the new family membership while React batches the
   // state update from the onboarding callback. The ref is the synchronous
@@ -94,7 +101,13 @@ function App() {
     // Keep the UID-bound intent for the whole P1-P3 journey. Clearing it as
     // soon as the profile listener publishes familyId races the in-flight P1
     // transaction and can eject the user before its continuation is confirmed.
-    if (authStatus === 'unauthenticated') clearCreateFamilyIntent();
+    if (
+      previousAuthStatusRef.current === 'authenticated'
+      && authStatus === 'unauthenticated'
+    ) {
+      clearBoundCreateFamilyIntent();
+    }
+    previousAuthStatusRef.current = authStatus;
   }, [authStatus]);
 
   useEffect(() => {

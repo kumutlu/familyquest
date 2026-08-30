@@ -11,6 +11,7 @@ import { FamilyHomeScene } from '../onboarding/visuals/OnboardingScenes';
 import { bindPendingInviteToUid, readPendingInvite } from '../auth/pendingInviteIntent';
 import { safeInternalReturnPath } from '../lib/googleRedirectAuth';
 import { mapAuthErrorKey } from '../auth/authErrorMessage';
+import { readCreateFamilyIntent } from '../auth/createFamilyIntent';
 
 export function Signup() {
   const { t } = useTranslation(['auth', 'common']);
@@ -50,9 +51,14 @@ export function Signup() {
     }
 
     const resumedInvite = readPendingInvite();
+    const resumedCreate = !resumedInvite
+      && returnTo === '/onboarding'
+      && readCreateFamilyIntent(authUser.uid) !== null;
     const destination = resumedInvite
       ? `/invite/${encodeURIComponent(resumedInvite.token)}`
-      : returnTo ?? postAuthDestination('/');
+      : resumedCreate
+        ? '/onboarding?mode=create'
+        : returnTo ?? postAuthDestination('/');
     navigationStarted.current = true;
     navigate(destination, { replace: true });
   }, [authStatus, authUser?.uid, navigate, returnTo]);

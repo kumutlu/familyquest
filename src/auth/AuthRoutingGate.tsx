@@ -57,6 +57,14 @@ const PUBLIC_PASSTHROUGH_PATHS = new Set([
 const isCurrentCreateRoute = (pathname: string, search: string) =>
   pathname === '/onboarding' && new URLSearchParams(search).get('mode') === 'create';
 
+const isCreateRouteOrCanonicalizableOnboarding = (pathname: string, search: string) =>
+  isCurrentCreateRoute(pathname, search)
+  || (pathname === '/onboarding' && new URLSearchParams(search).get('mode') === null)
+  || (
+    isInviteAuthEntryRoute(pathname)
+    && new URLSearchParams(search).get('next') === '/onboarding'
+  );
+
 const isInviteAuthEntryRoute = (pathname: string) =>
   pathname === '/login' || pathname === '/signup';
 
@@ -165,7 +173,10 @@ export function deriveAuthRouteDecision(input: AuthRouteDecisionInput): AuthRout
   // The generic no-family choice outranks stale creation state. Creation is a
   // narrower exception only after the user explicitly requested mode=create
   // and Task 8 supplies a current UID-bound intent.
-  if (!input.hasExplicitCreateIntent || !isCurrentCreateRoute(input.pathname, input.search)) {
+  if (
+    !input.hasExplicitCreateIntent
+    || !isCreateRouteOrCanonicalizableOnboarding(input.pathname, input.search)
+  ) {
     return 'noFamily';
   }
   return 'createOnboarding';

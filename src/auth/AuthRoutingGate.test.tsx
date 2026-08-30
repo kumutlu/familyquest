@@ -233,6 +233,15 @@ describe('deriveAuthRouteDecision', () => {
     })).toBe('noFamily');
   });
 
+  it('canonicalizes the authenticated S1 create journey before Signup can be pre-empted', () => {
+    expect(deriveAuthRouteDecision({
+      ...readyInput,
+      hasExplicitCreateIntent: true,
+      pathname: '/signup',
+      search: '?next=%2Fonboarding',
+    })).toBe('createOnboarding');
+  });
+
   it('sends signed-out root traffic to public onboarding and protected traffic to login', () => {
     const signedOut = {
       ...readyInput,

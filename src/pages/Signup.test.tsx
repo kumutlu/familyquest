@@ -39,6 +39,10 @@ vi.mock('../store/useStore', () => ({
 
 import { Signup } from './Signup';
 import { capturePendingInvite, readPendingInvite } from '../auth/pendingInviteIntent';
+import {
+  capturePreAuthCreateFamilySelection,
+  readCreateFamilyIntent,
+} from '../auth/createFamilyIntent';
 
 function renderSignup(path = '/signup') {
   return render(
@@ -70,6 +74,23 @@ beforeEach(async () => {
 });
 
 describe('Signup — validated authentication return', () => {
+  it('binds and resumes the explicit onboarding create selection after authentication', async () => {
+    capturePreAuthCreateFamilySelection();
+    const path = '/signup?next=%2Fonboarding';
+    const view = renderSignup(path);
+
+    storeState.authStatus = 'authenticated';
+    storeState.authUser = { uid: 'uid-1' };
+    view.rerender(
+      <MemoryRouter initialEntries={[path]}>
+        <Signup />
+      </MemoryRouter>,
+    );
+
+    await waitFor(() => expect(navigate).toHaveBeenCalledWith('/onboarding?mode=create', { replace: true }));
+    expect(readCreateFamilyIntent('uid-1')).not.toBeNull();
+  });
+
   it('preserves next and token when switching Signup to Login after an email error', async () => {
     apiMocks.signUp.mockRejectedValueOnce(new Error('signup failed'));
     const next = `/invite/${TOKEN}`;
