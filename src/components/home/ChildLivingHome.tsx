@@ -25,6 +25,10 @@ import { QuekiMascot } from '../queki/QuekiMascot';
 import { XPDisplay } from '../queki/semanticDisplays';
 import { ProgressBar } from '../queki/Progress';
 import { TactileButton } from '../queki/TactileButton';
+import { Mascot as EngineMascot } from '../mascot/Mascot';
+import { MascotMessage } from '../mascot/MascotMessage';
+import { useMascotPresentationFor } from '../../hooks/useMascotPresentation';
+import type { MascotContext } from '../../domain/mascot';
 
 /**
  * Child Living Home — Queki v2 Wave 1.
@@ -91,6 +95,47 @@ export function ChildLivingHome() {
     (['tasks', 'members'] as const).some(
       resource => bootstrapStatus[resource] === 'loading' || bootstrapStatus[resource] === 'idle',
     );
+
+  // Mascot Engine V1: read-only context from existing gamification state.
+  const mascotContext: Omit<MascotContext, 'now'> = useMemo(() => {
+    const childDisplayName = currentUser?.displayName;
+    const streak = gamification.currentStreak ?? 0;
+    const allDone = focus.length === 0 && !resourcesLoading;
+    const lastActiveAt = (() => {
+      const ms = Date.now();
+      if (Array.isArray(taskCompletions) && taskCompletions.length > 0) {
+        const sorted = [...taskCompletions].sort((a: any, b: any) => {
+          const ta = typeof a?.completedAt === 'number' ? a.completedAt : Number.MAX_SAFE_INTEGER;
+          const tb = typeof b?.completedAt === 'number' ? b.completedAt : Number.MAX_SAFE_INTEGER;
+          return tb - ta;
+        });
+        const top = sorted[0];
+        if (top && typeof top.completedAt === 'number') return top.completedAt;
+      }
+      return ms;
+    })();
+    return {
+      child: { displayName: childDisplayName },
+      activity: {
+        lastActiveAt,
+        currentStreak: streak,
+        questsRemaining: Array.isArray(tasks) ? tasks.length : 0,
+        questsCompletedToday:
+          gamification.todayProgress != null ? Math.round(gamification.todayProgress) : 0,
+        allQuestsCompleted: allDone && streak > 0,
+      },
+    };
+  }, [
+    currentUser?.displayName,
+    gamification.currentStreak,
+    gamification.todayProgress,
+    tasks,
+    taskCompletions,
+    focus.length,
+    resourcesLoading,
+  ]);
+
+  const mascotPresentation = useMascotPresentationFor(mascotContext);
 
   const renderFocus = (item: ChildFocus) => {
     switch (item.kind) {
@@ -282,12 +327,23 @@ export function ChildLivingHome() {
         )}
       </section>
 
-      {/* Mascot encouragement strip */}
-      <div className="flex items-center gap-3 rounded-card qk-bg-card qk-border-subtle qk-shadow-card border p-4">
-        <QuekiMascot state={mascotState === 'celebration' ? 'celebration' : 'encouraging'} size={56} />
-        <p className="text-body font-semibold qk-text-primary">
-          {mascotState === 'celebration' ? t('child.mascotCelebrate') : t('child.mascotEncourage')}
-        </p>
+      {/* Mascot Engine V1 — read-only presentation. Driven by the
+          useMascotPresentationFor hook which composes streak + activity
+          + Event Theme into a single presentation bundle. */}
+      <div
+        className="flex items-center gap-3 rounded-card qk-bg-card qk-border-subtle qk-shadow-card border p-4"
+        data-testid="mascot-strip"
+      >
+        <EngineMascot
+          presentation={mascotPresentation.presentation}
+          size={56}
+          className="shrink-0"
+        />
+        <MascotMessage
+          presentation={mascotPresentation.presentation}
+          message={mascotPresentation.message}
+          className="qk-text-primary"
+        />
       </div>
     </div>
   );
