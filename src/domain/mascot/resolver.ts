@@ -234,7 +234,36 @@ export function resolveMascotPresentation(
     });
   }
 
-  // --- 8) Seasonal theme is active → forward the costume on default ------
+  // --- 7b) Surge ending soon — placed BELOW major achievements / streak
+  //        (per the Surge V1 brief: "below major achievement / all-quests-
+  //        complete priority") but ABOVE seasonal/time-of-day because the
+  //        window is genuinely closing. ----
+  if (context.engagement?.surgeEndingSoon === true) {
+    return presentation({
+      mood: 'shocked',
+      expression: 'wide_eyes',
+      animationId: 'anim.shocked.jump_back',
+      messageKey: 'mascot.surge.ending_soon',
+      ...(costumeId ? { costumeId } : {}),
+      priorityTag: 'surge-ending-soon',
+    })
+  }
+
+  // --- 7c) Surge active — same level as a seasonal theme. The mascot never
+  //        tells the child what a Surge IS — only that something exciting is
+  //        happening. ----
+  if (context.engagement?.activeSurge === true) {
+    return presentation({
+      mood: 'excited',
+      expression: 'sparkle',
+      animationId: 'anim.talk.bounce',
+      messageKey: 'mascot.surge.active',
+      ...(costumeId ? { costumeId } : {}),
+      priorityTag: 'surge-active',
+    })
+  }
+
+    // --- 8) Seasonal theme is active → forward the costume on default ------
   const seasonalTag: MascotPresentation['priorityTag'] = costumeId
     ? 'seasonal'
     : 'default';

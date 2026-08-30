@@ -137,6 +137,8 @@ export interface MascotPresentation {
     | 'new-user'
     | 'time-of-day'
     | 'seasonal'
+    | 'surge-active'
+    | 'surge-ending-soon'
     | 'default';
 }
 
@@ -189,6 +191,13 @@ export interface MascotContext {
   state?: {
     /** Welcome-back signal: child was inactive and is now returning. */
     comebackJustOccurred?: boolean;
+  };
+  /** Optional engagement inputs from the Daily Engagement resolver. */
+  engagement?: {
+    /** At least one Surge is currently active for this child. */
+    activeSurge?: boolean;
+    /** An active Surge is within the "ending soon" window. */
+    surgeEndingSoon?: boolean;
   };
 }
 
