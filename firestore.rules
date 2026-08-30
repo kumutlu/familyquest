@@ -1674,6 +1674,41 @@ service cloud.firestore {
         && request.resource.data.lastActiveDate == request.time;
     }
 
+    // The task-completion transaction records legacy streak activity on the
+    // child's own profile. Keep this before the heavier generic mutation
+    // validators so an otherwise valid multi-document completion does not
+    // exhaust Firestore's shared expression budget.
+    function isValidChildTaskActivityUpdate(uid) {
+      let oldCurrent = resource.data.get('currentStreak', 0);
+      let oldLongest = resource.data.get('longestStreak', 0);
+      let newCurrent = request.resource.data.get('currentStreak', 0);
+      let newLongest = request.resource.data.get('longestStreak', 0);
+      return authProfileId() == uid
+        && resource.data.get('role', '') == 'child'
+        && request.resource.data.diff(resource.data).affectedKeys()
+          .hasOnly(['currentStreak', 'longestStreak', 'lastActiveDate'])
+        && request.resource.data.lastActiveDate == request.time
+        && newCurrent is int
+        && newLongest is int
+        && newCurrent >= 0
+        && newLongest >= newCurrent
+        && (newCurrent == oldCurrent || newCurrent == 1 || newCurrent == oldCurrent + 1)
+        && (newLongest == oldLongest || (newLongest == newCurrent && newLongest > oldLongest));
+    }
+
+    function isValidTaskCompletionCreate(familyId) {
+      let data = request.resource.data;
+      let task = get(/databases/$(database)/documents/families/$(familyId)/tasks/$(data.taskId));
+      let requiresApproval = task.data.get('requiresApproval', true);
+      return isFamilyMember(familyId)
+        && data.assigneeId == authProfileId()
+        && task != null
+        && task.data.get('assigneeId', authProfileId()) == authProfileId()
+        && data.completedAt == request.time
+        && ((requiresApproval && data.status == 'pending_approval' && data.approvedAt == null)
+          || (!requiresApproval && data.status == 'approved' && data.approvedAt == request.time));
+    }
+
     function isValidGamificationConfig(data) {
       return data.keys().hasOnly(['schemaVersion', 'dailyGoalPercentage'])
         && data.schemaVersion == 1
@@ -1699,6 +1734,7 @@ service cloud.firestore {
 
       allow update: if isAuthenticated() && (!isManagedChildCaller() || isTrustedManagedChild()) && (
         isValidChildSelfCosmeticUpdate(uid) ||
+        isValidChildTaskActivityUpdate(uid) ||
         isValidChildLastActiveUpdate(uid) ||
         isValidReversalPointsUpdate(uid) ||
         (authProfileId() == uid
@@ -1964,7 +2000,7 @@ service cloud.firestore {
 
       match /task_completions/{completionId} {
         allow read: if isFamilyMember(familyId);
-        allow create: if isFamilyMember(familyId);
+        allow create: if isValidTaskCompletionCreate(familyId);
         allow update: if (isParent(familyId) && resource.data.status == 'pending_approval'
           && request.resource.data.status in ['approved', 'rejected']
           && request.resource.data.reviewedBy == authProfileId()
