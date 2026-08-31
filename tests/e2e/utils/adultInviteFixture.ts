@@ -1,10 +1,12 @@
 import { createHash } from 'node:crypto';
 import { getApps, initializeApp } from 'firebase-admin/app';
 import { getFirestore, Timestamp } from 'firebase-admin/firestore';
+import { getAuth } from 'firebase-admin/auth';
 
 const PROJECT_ID = 'familyquest-beta-402cb';
 
 process.env.FIRESTORE_EMULATOR_HOST ||= '127.0.0.1:8080';
+process.env.FIREBASE_AUTH_EMULATOR_HOST ||= '127.0.0.1:9099';
 
 function assertLocalEmulator(): void {
   const host = process.env.FIRESTORE_EMULATOR_HOST ?? '';
@@ -17,7 +19,7 @@ if (getApps().length === 0) initializeApp({ projectId: PROJECT_ID });
 
 const db = getFirestore();
 
-type FixtureCommand = 'count-families' | 'create-invitation' | 'create-profile' | 'create-membership';
+type FixtureCommand = 'count-families' | 'create-invitation' | 'create-profile' | 'create-membership' | 'verify-user';
 
 function readPayload<T>(): T {
   const raw = process.argv[3];
@@ -29,6 +31,11 @@ async function main(): Promise<unknown> {
   assertLocalEmulator();
   const command = process.argv[2] as FixtureCommand | undefined;
   if (command === 'count-families') return (await db.collection('families').get()).size;
+  if (command === 'verify-user') {
+    const payload = readPayload<{ uid: string }>();
+    await getAuth().updateUser(payload.uid, { emailVerified: true });
+    return null;
+  }
 
   if (command === 'create-profile') {
     const payload = readPayload<{ uid: string; displayName: string }>();

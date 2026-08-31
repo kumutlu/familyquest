@@ -145,6 +145,38 @@ describe('Approval Center Actions', () => {
     await assertSucceeds(batch.commit());
   });
 
+  it('blocks unverified password family creation and owner bootstrap', async () => {
+    const uid = 'unverified-password-owner';
+    const newFamilyId = 'unverified-family';
+    await testEnv.withSecurityRulesDisabled(async (context: any) => {
+      await setDoc(doc(context.firestore(), 'users', uid), { uid, role: 'parent', displayName: 'Pending' });
+    });
+    const db = testEnv.authenticatedContext(uid, {
+      email_verified: false,
+      firebase: { sign_in_provider: 'password' },
+    }).firestore();
+    const batch = writeBatch(db);
+    batch.set(doc(db, 'families', newFamilyId), { name: 'Blocked Family' });
+    batch.update(doc(db, 'users', uid), { familyId: newFamilyId, role: 'owner' });
+    await assertFails(batch.commit());
+  });
+
+  it('allows verified password family creation and owner bootstrap', async () => {
+    const uid = 'verified-password-owner';
+    const newFamilyId = 'verified-family';
+    await testEnv.withSecurityRulesDisabled(async (context: any) => {
+      await setDoc(doc(context.firestore(), 'users', uid), { uid, role: 'parent', displayName: 'Verified' });
+    });
+    const db = testEnv.authenticatedContext(uid, {
+      email_verified: true,
+      firebase: { sign_in_provider: 'password' },
+    }).firestore();
+    const batch = writeBatch(db);
+    batch.set(doc(db, 'families', newFamilyId), { name: 'Allowed Family' });
+    batch.update(doc(db, 'users', uid), { familyId: newFamilyId, role: 'owner' });
+    await assertSucceeds(batch.commit());
+  });
+
   it('denies direct client-created join requests, including requester-supplied roles', async () => {
     const db = testEnv.authenticatedContext('joiner1').firestore();
     await assertFails(setDoc(doc(db, `families/${familyId}/join_requests/forged`), {

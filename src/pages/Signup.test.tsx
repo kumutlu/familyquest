@@ -74,6 +74,17 @@ beforeEach(async () => {
 });
 
 describe('Signup — validated authentication return', () => {
+  it('rejects malformed email locally before calling Firebase', async () => {
+    const user = userEvent.setup();
+    renderSignup();
+    const [nameInput, emailInput, passwordInput] = getSignupInputs();
+    await user.type(nameInput, 'Jane Doe');
+    await user.type(emailInput, 'not-an-email');
+    await user.type(passwordInput, 'secret123');
+    await user.click(screen.getByRole('button', { name: /^sign up$/i }));
+    expect(apiMocks.signUp).not.toHaveBeenCalled();
+  });
+
   it('binds and resumes the explicit onboarding create selection after authentication', async () => {
     capturePreAuthCreateFamilySelection();
     const path = '/signup?next=%2Fonboarding';

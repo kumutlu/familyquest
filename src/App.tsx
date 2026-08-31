@@ -12,6 +12,7 @@ import { Settings } from './pages/Settings';
 import { ContinueSetup } from './pages/ContinueSetup';
 import { Login } from './pages/Login';
 import { Signup } from './pages/Signup';
+import { VerifyEmail } from './pages/VerifyEmail';
 import { JoinFamily } from './pages/JoinFamily';
 import { JoinInvite } from './pages/JoinInvite';
 import { AdultInvite } from './pages/AdultInvite';
@@ -144,6 +145,7 @@ function App() {
             <Routes>
           <Route path="/login" element={<Login />} />
           <Route path="/signup" element={<Signup />} />
+          <Route path="/verify-email" element={<VerifyEmail />} />
           <Route path="/join-family" element={<JoinFamily />} />
           {/* Code-specific invitation link. Public: the invitation is
               validated server-side before any family detail is rendered. */}

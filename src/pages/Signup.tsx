@@ -12,6 +12,7 @@ import { bindPendingInviteToUid, readPendingInvite } from '../auth/pendingInvite
 import { safeInternalReturnPath } from '../lib/googleRedirectAuth';
 import { mapAuthErrorKey } from '../auth/authErrorMessage';
 import { readCreateFamilyIntent } from '../auth/createFamilyIntent';
+import { normalizeAndValidateEmail } from '../auth/emailVerification';
 
 export function Signup() {
   const { t } = useTranslation(['auth', 'common']);
@@ -72,10 +73,13 @@ export function Signup() {
     setSigningIn(true);
     setError('');
     try {
-      await signUp(email, password, name);
+      const normalizedEmail = normalizeAndValidateEmail(email);
+      await signUp(normalizedEmail, password, name);
       // Do not navigate here. The route guard redirects once auth is ready.
     } catch (err: any) {
-      setError(t(mapAuthErrorKey(err, { pendingInvite: pendingInvite !== null })));
+      setError(err?.message === 'INVALID_EMAIL'
+        ? t('errors.invalidEmail')
+        : t(mapAuthErrorKey(err, { pendingInvite: pendingInvite !== null })));
       setSigningIn(false);
     }
   };

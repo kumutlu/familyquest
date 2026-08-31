@@ -16,6 +16,7 @@ const TOKEN_B = 'BwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwc';
 const storeState = vi.hoisted(() => ({
   authStatus: 'authenticated' as 'initializing' | 'authenticated' | 'unauthenticated',
   authUser: { uid: 'u1' } as any,
+  authSignInProvider: null as string | null,
   currentUser: { id: 'u1', familyId: undefined, role: 'parent' } as any,
   familyData: null as any,
   profileServerConfirmed: true,
@@ -46,6 +47,7 @@ const readyInput: AuthRouteDecisionInput = {
   hasExplicitCreateIntent: false,
   pathname: '/',
   search: '',
+  emailVerificationRequired: false,
 };
 
 function CurrentPath() {
@@ -70,6 +72,7 @@ beforeEach(() => {
   localStorage.clear();
   storeState.authStatus = 'authenticated';
   storeState.authUser = { uid: 'u1' };
+  storeState.authSignInProvider = null;
   storeState.currentUser = { id: 'u1', familyId: undefined, role: 'parent' };
   storeState.familyData = null;
   storeState.profileServerConfirmed = true;
@@ -80,6 +83,22 @@ beforeEach(() => {
 });
 
 describe('deriveAuthRouteDecision', () => {
+  it('blocks an unverified password identity before create, join, or invitation authority', () => {
+    expect(deriveAuthRouteDecision({
+      ...readyInput,
+      emailVerificationRequired: true,
+      hasExplicitCreateIntent: true,
+      pathname: '/onboarding',
+      search: '?mode=create',
+    })).toBe('verifyEmail');
+    expect(deriveAuthRouteDecision({
+      ...readyInput,
+      emailVerificationRequired: true,
+      pendingInviteToken: TOKEN,
+      pathname: `/invite/${TOKEN}`,
+    })).toBe('verifyEmail');
+  });
+
   it('prioritizes a pending v2 invitation over no-family and explicit creation state', () => {
     expect(deriveAuthRouteDecision({
       ...readyInput,

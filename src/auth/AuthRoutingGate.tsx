@@ -8,6 +8,7 @@ import { StartupScreen } from '../components/layout/StartupScreen';
 import { useStore } from '../store/useStore';
 import { readPendingInvite } from './pendingInviteIntent';
 import { clearCreateFamilyIntent } from './createFamilyIntent';
+import { requiresPasswordEmailVerification } from './emailVerification';
 
 export type AuthRouteDecision =
   | 'startup'
@@ -17,7 +18,8 @@ export type AuthRouteDecision =
   | 'noFamily'
   | 'createOnboarding'
   | 'publicOnboarding'
-  | 'login';
+  | 'login'
+  | 'verifyEmail';
 
 export type PendingMembershipStatus = 'idle' | 'loading' | 'settling' | 'none' | 'pending' | 'recovery';
 
@@ -42,6 +44,7 @@ export interface AuthRouteDecisionInput {
   creationContinuation?: { authUid: string; familyId?: string } | null;
   pathname: string;
   search: string;
+  emailVerificationRequired: boolean;
 }
 
 const CURRENT_V2_INVITE = /^\/invite\/([^/]+)\/?$/;
@@ -100,7 +103,7 @@ export function deriveAuthRouteDecision(input: AuthRouteDecisionInput): AuthRout
 
   // Recipient routes own preview and terminal error UX even before Firebase Auth
   // resolves. URL and stored invitation intent outrank generic auth routing.
-  if (
+  const inviteJourney = (
     suppliedInviteJourney(input.pathname, input.search) ||
     validCurrentV2Invite ||
     validCurrentLegacyInvite ||
@@ -108,7 +111,8 @@ export function deriveAuthRouteDecision(input: AuthRouteDecisionInput): AuthRout
     input.legacyInviteCode ||
     CURRENT_V2_INVITE.test(input.pathname) ||
     input.pathname === '/join'
-  ) {
+  );
+  if (inviteJourney && input.authStatus !== 'authenticated') {
     return 'invite';
   }
 
@@ -130,6 +134,10 @@ export function deriveAuthRouteDecision(input: AuthRouteDecisionInput): AuthRout
     if (input.pathname === '/' || input.pathname === '/onboarding') return 'publicOnboarding';
     return 'login';
   }
+
+  if (input.emailVerificationRequired) return 'verifyEmail';
+
+  if (inviteJourney) return 'invite';
 
   // No authenticated redirect is safe until the server has confirmed the
   // profile. Cached identity can render startup context, but cannot choose a
@@ -213,6 +221,7 @@ export function AuthRoutingGate({
   const navigate = useNavigate();
   const authStatus = useStore(state => state.authStatus);
   const authUser = useStore(state => state.authUser);
+  const authSignInProvider = useStore(state => state.authSignInProvider);
   const currentUser = useStore(state => state.currentUser);
   const familyData = useStore(state => state.familyData);
   const profileServerConfirmed = useStore(state => state.profileServerConfirmed);
@@ -239,6 +248,7 @@ export function AuthRoutingGate({
     creationContinuation,
     pathname: location.pathname,
     search: location.search,
+    emailVerificationRequired: requiresPasswordEmailVerification(authUser, authSignInProvider),
   };
   const missingHarnessState = authStatus === undefined;
   const decision = missingHarnessState ? 'app' : deriveAuthRouteDecision(input);
@@ -297,6 +307,12 @@ export function AuthRoutingGate({
       return <Navigate to={`/join?code=${encodeURIComponent(legacyInviteCode)}`} replace />;
     }
     return children;
+  }
+
+  if (decision === 'verifyEmail') {
+    return location.pathname === '/verify-email'
+      ? children
+      : <Navigate to="/verify-email" replace />;
   }
 
   if (decision === 'pendingMembership') {

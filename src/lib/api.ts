@@ -4,6 +4,7 @@ import {
 } from 'firebase/firestore';
 import {
   createUserWithEmailAndPassword,
+  sendEmailVerification,
   signInWithEmailAndPassword,
   signOut as firebaseSignOut,
   sendPasswordResetEmail as firebaseSendPasswordResetEmail
@@ -55,6 +56,7 @@ import { isSupportedLanguage, type SupportedLanguage } from '../i18n';
 import { isPetBoxEnabled } from './familyFeatures';
 import { mapAuthErrorKey, type AuthErrorKey } from '../auth/authErrorMessage';
 import { buildInitialGamificationMigration } from '../domain/gamification/migrationState';
+import { EMAIL_VERIFICATION_CONTINUE_URL, normalizeAndValidateEmail } from '../auth/emailVerification';
 import { defaultFeatureFlags, resolveWriterRoute, type GamificationWriter } from '../domain/gamification/v4/featureFlags';
 import {
   computeNetChild,
@@ -118,8 +120,9 @@ async function getEffectiveActorId(): Promise<string> {
 }
 
 export const signUp = async (email: string, pass: string, name: string) => {
+  const normalizedEmail = normalizeAndValidateEmail(email);
   recordE2ETimeline('signup-request-started');
-  const cred = await createUserWithEmailAndPassword(auth, email, pass);
+  const cred = await createUserWithEmailAndPassword(auth, normalizedEmail, pass);
   recordE2ETimeline('firebase-auth-user-created', { uid: cred.user.uid });
   // Create user doc without familyId first
   recordE2ETimeline('profile-write-started', { uid: cred.user.uid });
@@ -135,7 +138,27 @@ export const signUp = async (email: string, pass: string, name: string) => {
     lastActiveDate: serverTimestamp()
   });
   recordE2ETimeline('profile-write-completed', { uid: cred.user.uid });
+  await sendEmailVerification(cred.user, {
+    url: EMAIL_VERIFICATION_CONTINUE_URL,
+    handleCodeInApp: false,
+  });
   return cred.user;
+};
+
+export const resendVerificationEmail = async () => {
+  const user = auth.currentUser;
+  if (!user) throw new Error('AUTH_REQUIRED');
+  await sendEmailVerification(user, { url: EMAIL_VERIFICATION_CONTINUE_URL, handleCodeInApp: false });
+};
+
+export const refreshEmailVerification = async () => {
+  const user = auth.currentUser;
+  if (!user) throw new Error('AUTH_REQUIRED');
+  await user.reload();
+  if (!user.emailVerified) return false;
+  await user.getIdToken(true);
+  useStore.setState({ authUser: user });
+  return true;
 };
 
 export const signIn = async (email: string, pass: string) => {

@@ -1040,6 +1040,11 @@ service cloud.firestore {
         && !('familyId' in data);
     }
 
+    function hasFamilyAuthority() {
+      return request.auth.token.get('firebase', {}).get('sign_in_provider', 'custom') != 'password'
+        || request.auth.token.get('email_verified', false) == true;
+    }
+
     function isValidManagedMemberCreate(uid) {
       let data = request.resource.data;
       return data.uid == uid
@@ -1055,6 +1060,7 @@ service cloud.firestore {
       let familyPath = /databases/$(database)/documents/families/$(familyId);
 
       return authProfileId() == uid
+        && hasFamilyAuthority()
         && !('familyId' in resource.data) // Must not have a family yet
         && resource.data.get('role', 'null') == 'parent'
         && data.get('uid', 'null') == uid
@@ -1874,7 +1880,7 @@ service cloud.firestore {
     // FAMILIES
     match /families/{familyId} {
       allow read: if isFamilyMember(familyId);
-      allow create: if isAuthenticated();
+      allow create: if isAuthenticated() && hasFamilyAuthority();
       // Server-only membership + historical-identity projection. Written
       // exclusively by Cloud Functions (join, lifecycle, deletion). Clients
       // must never read or write it, so archived/removed history cannot be

@@ -30,10 +30,10 @@ export async function seedTestFamily() {
   const familyId = 'test-fam';
 
   // Auth Users
-  await adminAuth.createUser({ uid: 'owner1', email: 'owner@test.com', password: 'password123', displayName: 'Owner Mom' });
-  await adminAuth.createUser({ uid: 'parent1', email: 'parent@test.com', password: 'password123', displayName: 'Parent Dad' });
-  await adminAuth.createUser({ uid: 'child1', email: 'child@test.com', password: 'password123', displayName: 'Child Leo' });
-  await adminAuth.createUser({ uid: 'child2', email: 'child2@test.com', password: 'password123', displayName: 'Child Ava' });
+  await adminAuth.createUser({ uid: 'owner1', email: 'owner@test.com', emailVerified: true, password: 'password123', displayName: 'Owner Mom' });
+  await adminAuth.createUser({ uid: 'parent1', email: 'parent@test.com', emailVerified: true, password: 'password123', displayName: 'Parent Dad' });
+  await adminAuth.createUser({ uid: 'child1', email: 'child@test.com', emailVerified: true, password: 'password123', displayName: 'Child Leo' });
+  await adminAuth.createUser({ uid: 'child2', email: 'child2@test.com', emailVerified: true, password: 'password123', displayName: 'Child Ava' });
 
   const batch = db.batch();
 

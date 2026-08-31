@@ -235,6 +235,14 @@ describe('acceptInvitationImpl', () => {
   const accept = (data: any, uid = 'joiner-1') =>
     acceptInvitationImpl(data, { auth: { uid } } as any, fixture.context);
 
+  it('rejects an unverified password identity before accepting an invitation', async () => {
+    await expect(acceptInvitationImpl(
+      { code: '7ZXWRZ', clientReqId: 'req-12345678' },
+      { auth: { uid: 'joiner-1', token: { firebase: { sign_in_provider: 'password' }, email_verified: false } } } as any,
+      fixture.context,
+    )).rejects.toMatchObject({ message: 'EMAIL_VERIFICATION_REQUIRED' });
+  });
+
   it('derives the pending role from the invitation record', async () => {
     seedInvitation(fixture.documents, { intendedRole: 'parent' });
 

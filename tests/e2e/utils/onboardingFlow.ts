@@ -110,7 +110,7 @@ export async function signUpFromS7(page: Page, data: OnboardingPersona) {
   await page.locator('input[type="password"]').fill(data.password);
   await page.getByRole('button', { name: /sign up/i }).click();
 
-  await page.waitForURL(url => !url.pathname.startsWith('/signup'), { timeout: 20_000 });
+  await expect(page).toHaveURL(/\/verify-email$/, { timeout: 20_000 });
   const boundIntent = await page.evaluate(() => {
     const raw = sessionStorage.getItem('queki.createFamilyIntent.v1');
     return raw ? JSON.parse(raw) : null;
@@ -118,6 +118,12 @@ export async function signUpFromS7(page: Page, data: OnboardingPersona) {
   expect(boundIntent, 'auth return must retain and UID-bind the S1 create intent').toMatchObject({
     kind: 'create-family',
   });
+
+  execSync('npx tsx tests/e2e/utils/verifyEmail.ts', {
+    stdio: 'ignore',
+    env: { ...process.env, ONBOARDING_EMAIL: data.email },
+  });
+  await page.getByRole('button', { name: /i've verified my email/i }).click();
 
   // S1 already captured the explicit creation decision. Authentication binds
   // that intent to this UID and resumes P1 without asking Create/Join again.

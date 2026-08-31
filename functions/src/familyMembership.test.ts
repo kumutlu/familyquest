@@ -74,6 +74,14 @@ describe('requestFamilyJoinImpl', () => {
     fixture.documents.set('families/family-1', { name: 'Family', inviteCode: 'ABC123' });
   });
 
+  it('rejects an unverified password identity before reading or writing family data', async () => {
+    await expect(requestFamilyJoinImpl(
+      { familyCode: 'ABC123', clientReqId: 'req-12345678' },
+      { auth: { uid: 'joiner-1', token: { firebase: { sign_in_provider: 'password' }, email_verified: false } } } as any,
+      fixture.context,
+    )).rejects.toMatchObject({ message: 'EMAIL_VERIFICATION_REQUIRED' });
+  });
+
   it('creates a pending request without storing any requester role', async () => {
     const result = await requestFamilyJoinImpl(
       { familyCode: ' abc123 ', clientReqId: 'req-12345678', requestedRole: 'owner' } as any,

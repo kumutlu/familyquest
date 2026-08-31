@@ -10,6 +10,7 @@ import {
   recordAdultInvitationEvent,
   type AdultInvitationEventFields,
 } from './adultInvitationEvents';
+import { requireFamilyAuthority } from './emailVerificationAuthority';
 
 export type AdultRole = 'parent' | 'adult';
 export type FamilyMembershipRole = 'owner' | 'parent' | 'adult' | 'child';
@@ -504,6 +505,7 @@ export async function acceptAdultInvitationImpl(
   // are never read, persisted, or used to choose an authority path.
   assertInputShape(input, ['token', 'clientReqId', 'role', 'familyId']);
   const uid = requireUid(request);
+  requireFamilyAuthority(request);
   const clientReqId = validateClientReqId(input.clientReqId);
   const invitationId = invitationIdFor(input.token);
   const invitationRef = context.db.doc(`familyInvitations/${invitationId}`);
