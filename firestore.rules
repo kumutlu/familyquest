@@ -1665,25 +1665,9 @@ service cloud.firestore {
       return value is string && value in ['en', 'tr'];
     }
 
-    // Presentation-only composable avatar contract. Every field is required,
-    // every value is closed over a fixed enum, and no free-form URL/CSS/SVG
-    // data can enter the profile through this map.
-    function isValidAvatarConfig(data) {
-      return data is map
-        && data.keys().hasOnly(['version', 'base', 'skinTone', 'hairStyle', 'hairColor', 'face', 'accessory', 'outfit', 'outfitColor', 'background'])
-        && data.keys().hasAll(['version', 'base', 'skinTone', 'hairStyle', 'hairColor', 'face', 'accessory', 'outfit', 'outfitColor', 'background'])
-        && data.version == 1
-        && data.base in ['round', 'soft', 'bold']
-        && data.skinTone in ['porcelain', 'fair', 'warm', 'tan', 'brown', 'deep']
-        && data.hairStyle in ['short', 'crop', 'bob', 'waves', 'long', 'curls', 'coils', 'ponytail']
-        && data.hairColor in ['black', 'brown', 'chestnut', 'blonde', 'copper', 'pink', 'purple', 'blue']
-        && data.face in ['smile', 'happy', 'bright', 'calm', 'cheeky']
-        && data.accessory in ['none', 'glasses', 'round-glasses', 'cap', 'beanie', 'headband']
-        && data.outfit in ['tee', 'hoodie', 'jacket', 'sweater']
-        && data.outfitColor in ['purple', 'indigo', 'blue', 'teal', 'green', 'coral', 'pink', 'gold']
-        && data.background in ['lilac', 'sky', 'mint', 'peach', 'sunny', 'berry'];
-    }
-
+    // isValidAvatarConfig is defined earlier (line 247) using the O(1) map
+    // form. Do NOT re-declare it here; the duplicate broke the Firestore
+    // rules compiler.
     function hasValidOptionalAvatarConfig(data) {
       return !('avatarConfig' in data) || isValidAvatarConfig(data.avatarConfig);
     }
@@ -1830,7 +1814,7 @@ service cloud.firestore {
         (!('familyId' in resource.data) && 'familyId' in request.resource.data ? isValidOwnerBootstrap(uid) || isValidJoinProfileUpdate(uid) : false) ||
         ('familyId' in resource.data && isParent(resource.data.familyId) && resource.data.get('role', 'null') == 'child'
           && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['displayName', 'avatarUrl', 'avatarId', 'avatarConfig'])
-          && hasValidOptionalAvatarConfig(request.resource.data)) ||
+          && hasValidOptionalAvatarConfig(request.resource.data))
       );
 
       allow create: if isAuthenticated() && (

@@ -1509,7 +1509,7 @@ service cloud.firestore {
       let data = request.resource.data;
       let requiredKeys = ['requestType', 'goalId', 'childId', 'amountPence', 'status', 'createdAt'];
       return data.keys().hasAll(requiredKeys)
-        && data.keys().hasOnly(['requestType', 'goalId', 'childId', 'amountPence', 'status', 'createdBy', 'createdAt', 'dedupeKey'])
+        && data.keys().hasOnly(['requestType', 'goalId', 'childId', 'amountPence', 'status', 'createdBy', 'createdAt', 'dedupeKey', 'familyId'])
         && data.familyId == familyId
         && data.status == 'pending'
         && data.amountPence is int && data.amountPence > 0

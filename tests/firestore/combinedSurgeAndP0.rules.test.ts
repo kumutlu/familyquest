@@ -27,6 +27,7 @@ import {
   setDoc,
   getDoc,
   setLogLevel,
+  serverTimestamp,
 } from 'firebase/firestore'
 import { readFileSync } from 'node:fs'
 import { afterAll, beforeAll, beforeEach, describe, it } from 'vitest'
@@ -119,16 +120,16 @@ beforeEach(async () => {
 // ============================================================
 describe('Assigned task + Surge', () => {
   it('child completes own assigned task; rules accept; base+Surge events are server-only', async () => {
-    const alice = testEnv.authenticatedContext(CHILD_ID, { uid: CHILD_ID })
+    const alice = testEnv.authenticatedContext(CHILD_ID, { sub: CHILD_ID })
     const aliceDb = alice.firestore()
 
     // Child writes the completion doc — rules should accept (P0)
     await assertSucceeds(setDoc(doc(aliceDb, `families/${FAMILY_ID}/task_completions/completion-1`), {
       taskId: TASK_ASSIGNED_TO_CHILD,
       assigneeId: CHILD_ID,
-      completedAt: new Date(),
+      completedAt: serverTimestamp(),
       status: 'approved',
-      approvedAt: new Date(),
+      approvedAt: serverTimestamp(),
     }))
 
     // Child cannot write surge_evidence (server-only)
@@ -150,27 +151,27 @@ describe('Assigned task + Surge', () => {
 // ============================================================
 describe('Null-assignee family task + Surge', () => {
   it('child completes unassigned family task; rules accept (P0 unassigned fix)', async () => {
-    const alice = testEnv.authenticatedContext(CHILD_ID, { uid: CHILD_ID })
+    const alice = testEnv.authenticatedContext(CHILD_ID, { sub: CHILD_ID })
     const aliceDb = alice.firestore()
 
     // P0: assigneeId is the completing child, task.assigneeId is null → ALLOWED
     await assertSucceeds(setDoc(doc(aliceDb, `families/${FAMILY_ID}/task_completions/completion-2`), {
       taskId: TASK_UNASSIGNED,
       assigneeId: CHILD_ID,
-      completedAt: new Date(),
+      completedAt: serverTimestamp(),
       status: 'pending_approval', // requiresApproval: true
       approvedAt: null,
     }))
   })
 
   it('sibling completing unassigned family task is also allowed by P0', async () => {
-    const sibling = testEnv.authenticatedContext(SIBLING_ID, { uid: SIBLING_ID })
+    const sibling = testEnv.authenticatedContext(SIBLING_ID, { sub: SIBLING_ID })
     const siblingDb = sibling.firestore()
 
     await assertSucceeds(setDoc(doc(siblingDb, `families/${FAMILY_ID}/task_completions/completion-3`), {
       taskId: TASK_UNASSIGNED,
       assigneeId: SIBLING_ID,
-      completedAt: new Date(),
+      completedAt: serverTimestamp(),
       status: 'pending_approval',
       approvedAt: null,
     }))
@@ -182,7 +183,7 @@ describe('Null-assignee family task + Surge', () => {
 // ============================================================
 describe('Sibling task + Surge', () => {
   it('child CANNOT complete task assigned to sibling (P0 sibling denial preserved)', async () => {
-    const alice = testEnv.authenticatedContext(CHILD_ID, { uid: CHILD_ID })
+    const alice = testEnv.authenticatedContext(CHILD_ID, { sub: CHILD_ID })
     const aliceDb = alice.firestore()
 
     // data.assigneeId == authProfileId() FAILS (child says they're the
@@ -190,28 +191,28 @@ describe('Sibling task + Surge', () => {
     await assertFails(setDoc(doc(aliceDb, `families/${FAMILY_ID}/task_completions/completion-sibling`), {
       taskId: TASK_ASSIGNED_TO_SIBLING,
       assigneeId: CHILD_ID,
-      completedAt: new Date(),
+      completedAt: serverTimestamp(),
       status: 'approved',
-      approvedAt: new Date(),
+      approvedAt: serverTimestamp(),
     }))
 
     // And a sibling cannot claim the same task under their own id
     // because the task is assigned to SIBLING_ID — that would actually be
     // a valid completion (sibling IS the assignee). Verify the positive
     // path: SIBLING_ID may complete it.
-    const sib = testEnv.authenticatedContext(SIBLING_ID, { uid: SIBLING_ID })
+    const sib = testEnv.authenticatedContext(SIBLING_ID, { sub: SIBLING_ID })
     const sibDb = sib.firestore()
     await assertSucceeds(setDoc(doc(sibDb, `families/${FAMILY_ID}/task_completions/completion-sibling-ok`), {
       taskId: TASK_ASSIGNED_TO_SIBLING,
       assigneeId: SIBLING_ID,
-      completedAt: new Date(),
+      completedAt: serverTimestamp(),
       status: 'approved',
-      approvedAt: new Date(),
+      approvedAt: serverTimestamp(),
     }))
   })
 
   it('non-assigned child cannot forge surgeBonusAmount on a feed entry', async () => {
-    const alice = testEnv.authenticatedContext(CHILD_ID, { uid: CHILD_ID })
+    const alice = testEnv.authenticatedContext(CHILD_ID, { sub: CHILD_ID })
     const aliceDb = alice.firestore()
 
     await assertFails(setDoc(doc(aliceDb, `families/${FAMILY_ID}/feed/feed-forged`), {
@@ -230,7 +231,7 @@ describe('Sibling task + Surge', () => {
 // ============================================================
 describe('Managed child + null-assignee + Surge', () => {
   it('managed child may complete unassigned family task (P0 unassigned + managed)', async () => {
-    const mc = testEnv.authenticatedContext(MANAGED_AUTH_UID, { uid: MANAGED_AUTH_UID })
+    const mc = testEnv.authenticatedContext(MANAGED_AUTH_UID, { sub: MANAGED_AUTH_UID })
     const mcDb = mc.firestore()
 
     // The managed child's "authProfileId" should resolve to their identity
@@ -239,7 +240,7 @@ describe('Managed child + null-assignee + Surge', () => {
     await assertSucceeds(setDoc(doc(mcDb, `families/${FAMILY_ID}/task_completions/completion-mc`), {
       taskId: TASK_UNASSIGNED,
       assigneeId: MANAGED_CHILD_ID,
-      completedAt: new Date(),
+      completedAt: serverTimestamp(),
       status: 'pending_approval',
       approvedAt: null,
     }))
@@ -253,15 +254,15 @@ describe('Legacy streak state + Surge', () => {
   it('child with pre-existing streak may complete assigned task (legacy path)', async () => {
     // The P0 lineage pre-seeds CHILD_ID with currentStreak:0, longestStreak:0.
     // The completion itself (not the streak update) is what we test here.
-    const alice = testEnv.authenticatedContext(CHILD_ID, { uid: CHILD_ID })
+    const alice = testEnv.authenticatedContext(CHILD_ID, { sub: CHILD_ID })
     const aliceDb = alice.firestore()
 
     await assertSucceeds(setDoc(doc(aliceDb, `families/${FAMILY_ID}/task_completions/completion-legacy`), {
       taskId: TASK_ASSIGNED_TO_CHILD,
       assigneeId: CHILD_ID,
-      completedAt: new Date(),
+      completedAt: serverTimestamp(),
       status: 'approved',
-      approvedAt: new Date(),
+      approvedAt: serverTimestamp(),
     }))
   })
 })
@@ -271,13 +272,13 @@ describe('Legacy streak state + Surge', () => {
 // ============================================================
 describe('Approval delay', () => {
   it('approval-required completion is held in pending_approval; rules accept that state', async () => {
-    const alice = testEnv.authenticatedContext(CHILD_ID, { uid: CHILD_ID })
+    const alice = testEnv.authenticatedContext(CHILD_ID, { sub: CHILD_ID })
     const aliceDb = alice.firestore()
 
     await assertSucceeds(setDoc(doc(aliceDb, `families/${FAMILY_ID}/task_completions/completion-pending`), {
       taskId: TASK_UNASSIGNED,
       assigneeId: CHILD_ID,
-      completedAt: new Date(),
+      completedAt: serverTimestamp(),
       status: 'pending_approval',
       approvedAt: null,
     }))
@@ -299,15 +300,15 @@ describe('Cross-family', () => {
         familyId: OTHER_FAMILY_ID, role: 'child', displayName: 'Outsider',
       })
     })
-    const outsider = testEnv.authenticatedContext('outsider-child', { uid: 'outsider-child' })
+    const outsider = testEnv.authenticatedContext('outsider-child', { sub: 'outsider-child' })
     const outsiderDb = outsider.firestore()
 
     await assertFails(setDoc(doc(outsiderDb, `families/${FAMILY_ID}/task_completions/completion-cross`), {
       taskId: TASK_ASSIGNED_TO_CHILD,
       assigneeId: 'outsider-child',
-      completedAt: new Date(),
+      completedAt: serverTimestamp(),
       status: 'approved',
-      approvedAt: new Date(),
+      approvedAt: serverTimestamp(),
     }))
   })
 })
@@ -317,16 +318,16 @@ describe('Cross-family', () => {
 // ============================================================
 describe('Duplicate processing', () => {
   it('re-writing the same completionId with a different status is rejected', async () => {
-    const alice = testEnv.authenticatedContext(CHILD_ID, { uid: CHILD_ID })
+    const alice = testEnv.authenticatedContext(CHILD_ID, { sub: CHILD_ID })
     const aliceDb = alice.firestore()
 
     // First write succeeds
     await assertSucceeds(setDoc(doc(aliceDb, `families/${FAMILY_ID}/task_completions/completion-dup`), {
       taskId: TASK_ASSIGNED_TO_CHILD,
       assigneeId: CHILD_ID,
-      completedAt: new Date(),
+      completedAt: serverTimestamp(),
       status: 'approved',
-      approvedAt: new Date(),
+      approvedAt: serverTimestamp(),
     }))
 
     // Trying to overwrite with a forged 'pending_approval' status fails
@@ -335,7 +336,7 @@ describe('Duplicate processing', () => {
     await assertFails(setDoc(doc(aliceDb, `families/${FAMILY_ID}/task_completions/completion-dup`), {
       taskId: TASK_ASSIGNED_TO_CHILD,
       assigneeId: CHILD_ID,
-      completedAt: new Date(),
+      completedAt: serverTimestamp(),
       status: 'pending_approval',
       approvedAt: null,
     }))
@@ -347,7 +348,7 @@ describe('Duplicate processing', () => {
 // ============================================================
 describe('engagementPreferences validator', () => {
   it('owner can set surgeHours=true; closed-shape key set rejects unrelated keys', async () => {
-    const parent = testEnv.authenticatedContext(PARENT_ID, { uid: PARENT_ID })
+    const parent = testEnv.authenticatedContext(PARENT_ID, { sub: PARENT_ID })
     const parentDb = parent.firestore()
 
     // Valid: surgeHours opt-in

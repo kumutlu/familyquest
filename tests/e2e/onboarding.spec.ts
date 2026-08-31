@@ -223,7 +223,10 @@ test.describe('Refined Queki onboarding', () => {
     await page.goto('/wallet');
     await expect(page).toHaveURL(/\/login/, { timeout: 15000 });
     await expect(page.locator('input[type="email"]')).toBeVisible();
-    await expect(page.getByRole('heading', { name: /small wins\. big habits\./i })).toHaveCount(0);
+    // The onboarding Step 1 CTA is the unambiguous onboarding marker: the
+    // login page's own brand panel legitimately reuses the "Small wins. Big
+    // habits." headline copy, so the headline cannot discriminate here.
+    await expect(page.getByRole('button', { name: /set up your family/i })).toHaveCount(0);
   });
 
   test('No auth/routing/family console errors during a full onboarding run', async ({ page }) => {

@@ -63,6 +63,8 @@ import {
   contributeToGoal,
   addParentGoalContribution,
   approveGoalWithdrawal,
+  approveGoalContribution,
+  rejectGoalContribution,
   completeGoalPurchased,
   returnGoalFunds,
   approveMatchProposal,
@@ -295,6 +297,104 @@ describe('Goals — contributeToGoal (child wallet -> goal)', () => {
     // No match money credited yet.
     expect(setCallsWhere(tx, (d) => d?.type === 'manual_match').length).toBe(0)
     expect(updateCall(tx, GOAL_PATH).currentAmountPence).toBe(250)
+  })
+
+  it('approvalRequired creates a pending contribution request and mutates NO balances', async () => {
+    const tx = transactionWith(baseDocs())
+    await contributeToGoal('family-1', 'goal-1', 'child-1', 200, { clientReqId: 'r1', approvalRequired: true })
+    const req = tx.set.mock.calls.find((c: any[]) => (c[0]?.path ?? '').includes('/goal_requests/'))?.[1]
+    expect(req).toBeTruthy()
+    expect(req.requestType).toBe('contribution')
+    expect(req.childId).toBe('child-1')
+    expect(req.amountPence).toBe(200)
+    expect(req.familyId).toBe('family-1')
+    expect(req.status).toBe('pending')
+    // No wallet or goal mutation before approval.
+    expect(tx.update).not.toHaveBeenCalled()
+    expect(updateCall(tx, WALLET_C1)).toBeUndefined()
+    expect(updateCall(tx, GOAL_PATH)).toBeUndefined()
+  })
+
+  it('approvalRequired still rejects when the wallet has insufficient funds (no request written)', async () => {
+    const tx = transactionWith({ ...baseDocs(), [WALLET_C1]: { balance: 100 } })
+    await expect(contributeToGoal('family-1', 'goal-1', 'child-1', 200, { clientReqId: 'r1', approvalRequired: true }))
+      .rejects.toThrow(/Insufficient funds/)
+    expect(tx.set.mock.calls.find((c: any[]) => (c[0]?.path ?? '').includes('/goal_requests/'))).toBeUndefined()
+  })
+})
+
+describe('Goals — approveGoalContribution / rejectGoalContribution (child-owned goal)', () => {
+  beforeEach(() => { vi.clearAllMocks(); firestore.reset(); authState.currentUser = { uid: 'parent-1' } })
+
+  const pendingRequest = (over: Record<string, any> = {}) => ({
+    requestType: 'contribution', goalId: 'goal-1', childId: 'child-1', amountPence: 200,
+    familyId: 'family-1', status: 'pending', createdBy: 'child-1', createdAt: { server: true }, ...over,
+  })
+
+  const setup = (over: Record<string, any> = {}) => ({
+    'users/parent-1': { familyId: 'family-1', role: 'parent', displayName: 'P1' },
+    'users/child-1': { familyId: 'family-1', role: 'child', displayName: 'C1' },
+    [WALLET_C1]: { balance: 660 },
+    [GOAL_PATH]: { goalId: 'goal-1', title: 'Curry cats banka', kind: 'child', childId: 'child-1', targetAmountPence: 2000, currentAmountPence: 0, currency: 'GBP', status: 'active', matching: { mode: 'none', perX: 0, matchY: 0 }, version: 1 },
+    [CONTRIB_PATH]: withLegs([]),
+    'families/family-1/goal_requests/req-1': pendingRequest(),
+    ...over,
+  })
+
+  const requestUpdate = (tx: any) => tx.update.mock.calls.find((c: any[]) => (c[0]?.path ?? '').includes('/goal_requests/req-1'))?.[1]
+
+  it('approve debits wallet, credits goal, writes leg+ledger, marks request approved', async () => {
+    const tx = transactionWith(setup())
+    await approveGoalContribution('family-1', 'req-1', 'r1')
+    // Authoritative wallet debit + goal credit (reproduction: 660 - 200 = 460).
+    expect(updateCall(tx, WALLET_C1).balance).toBe(460)
+    expect(updateCall(tx, GOAL_PATH).currentAmountPence).toBe(200)
+    const contribLegs = setCallsWhere(tx, (d) => d?.type === 'child_contribution')
+    expect(contribLegs.length).toBe(1)
+    expect(contribLegs[0].ownerId).toBe('child-1')
+    expect(contribLegs[0].amountPence).toBe(200)
+    expect(contribLegs[0].status).toBe('applied')
+    expect(ledgerCallsWhere(tx, (d) => d?.type === 'child_contribution').length).toBe(1)
+    const upd = requestUpdate(tx)
+    expect(upd.status).toBe('approved')
+    expect(upd.contribId).toBeDefined()
+    expect(upd.walletTxId).toBeDefined()
+  })
+
+  it('approve works for a child-owned goal (no parent-owned requirement)', async () => {
+    const tx = transactionWith(setup({ [GOAL_PATH]: { goalId: 'goal-1', title: 'Curry cats banka', kind: 'child', childId: 'child-1', targetAmountPence: 2000, currentAmountPence: 0, currency: 'GBP', status: 'active', matching: { mode: 'none' }, version: 1 } }))
+    await approveGoalContribution('family-1', 'req-1', 'r1')
+    expect(updateCall(tx, WALLET_C1).balance).toBe(460)
+    expect(updateCall(tx, GOAL_PATH).currentAmountPence).toBe(200)
+  })
+
+  it('reject leaves all balances untouched and marks request rejected', async () => {
+    const tx = transactionWith(setup())
+    await rejectGoalContribution('family-1', 'req-1', 'Not now')
+    const upd = requestUpdate(tx)
+    expect(upd.status).toBe('rejected')
+    expect(upd.rejectionReason).toBe('Not now')
+    // No wallet/goal mutation, no contribution leg.
+    expect(updateCall(tx, WALLET_C1)).toBeUndefined()
+    expect(updateCall(tx, GOAL_PATH)).toBeUndefined()
+    expect(setCallsWhere(tx, (d) => d?.type === 'child_contribution').length).toBe(0)
+  })
+
+  it('approve throws if the request is not pending', async () => {
+    transactionWith(setup({ 'families/family-1/goal_requests/req-1': pendingRequest({ status: 'approved' }) }))
+    await expect(approveGoalContribution('family-1', 'req-1', 'r1')).rejects.toThrow(/not pending/)
+  })
+
+  it('approve throws if the request is a withdrawal, not a contribution', async () => {
+    transactionWith(setup({ 'families/family-1/goal_requests/req-1': { ...pendingRequest(), requestType: 'withdrawal' } }))
+    await expect(approveGoalContribution('family-1', 'req-1', 'r1')).rejects.toThrow(/not a contribution/)
+  })
+
+  it('approve throws on insufficient funds at approval time (no mutation)', async () => {
+    const tx = transactionWith(setup({ [WALLET_C1]: { balance: 100 } }))
+    await expect(approveGoalContribution('family-1', 'req-1', 'r1')).rejects.toThrow(/Insufficient funds/)
+    expect(updateCall(tx, WALLET_C1)).toBeUndefined()
+    expect(updateCall(tx, GOAL_PATH)).toBeUndefined()
   })
 })
 

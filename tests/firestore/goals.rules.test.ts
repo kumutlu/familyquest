@@ -171,6 +171,47 @@ describe('Goals — cross-family access', () => {
   });
 });
 
+describe('Goals — goal_requests create (contribution + withdrawal)', () => {
+  // Regression: the create rule requires familyId (verified against the path)
+  // AND allows it in the field allow-list. A request missing familyId must be
+  // denied, and a child may only file a request for themselves.
+  it('child can create a contribution request for a self-owned child goal (with familyId)', async () => {
+    const db = testEnv.authenticatedContext('child1').firestore();
+    await assertSucceeds(setDoc(doc(db, requestPath('contrib1')), {
+      requestType: 'contribution', goalId: 'goal1', childId: 'child1',
+      amountPence: 200, familyId: FAMILY, status: 'pending',
+      createdBy: 'child1', createdAt: serverTimestamp(),
+    }));
+  });
+
+  it('contribution request WITHOUT familyId is denied', async () => {
+    const db = testEnv.authenticatedContext('child1').firestore();
+    await assertFails(setDoc(doc(db, requestPath('contrib2')), {
+      requestType: 'contribution', goalId: 'goal1', childId: 'child1',
+      amountPence: 200, status: 'pending',
+      createdBy: 'child1', createdAt: serverTimestamp(),
+    }));
+  });
+
+  it('contribution request filed by a different child is denied', async () => {
+    const db = testEnv.authenticatedContext('child2').firestore();
+    await assertFails(setDoc(doc(db, requestPath('contrib3')), {
+      requestType: 'contribution', goalId: 'goal1', childId: 'child1',
+      amountPence: 200, familyId: FAMILY, status: 'pending',
+      createdBy: 'child2', createdAt: serverTimestamp(),
+    }));
+  });
+
+  it('withdrawal request WITH familyId succeeds (familyId now required)', async () => {
+    const db = testEnv.authenticatedContext('child1').firestore();
+    await assertSucceeds(setDoc(doc(db, requestPath('wd1')), {
+      requestType: 'withdrawal', goalId: 'goal1', childId: 'child1',
+      amountPence: 200, familyId: FAMILY, status: 'pending',
+      createdBy: 'child1', createdAt: serverTimestamp(),
+    }));
+  });
+});
+
 describe('Goals — create', () => {
   it('2. parent can create family and child goals', async () => {
     const db = testEnv.authenticatedContext('parent1').firestore();

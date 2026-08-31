@@ -180,6 +180,7 @@ export interface GoalRequest {
   goalId: string;
   childId: string;
   amountPence: number;
+  familyId: string;
   status: 'pending' | 'approved' | 'rejected' | 'cancelled';
   reviewedBy?: string;
   reviewedByName?: string;

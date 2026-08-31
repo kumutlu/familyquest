@@ -83,7 +83,7 @@ describe('Firestore Rules — Surge event collection', () => {
         endsAt: Number.MAX_SAFE_INTEGER,
       })
     })
-    const ctx = testEnv.as('child-1')
+    const ctx = testEnv.authenticatedContext('child-1', { sub: 'child-1' })
     await assertFails(
       getDoc(doc(ctx.firestore(), 'families/fam-1/events/surge-1')),
     )
@@ -91,7 +91,7 @@ describe('Firestore Rules — Surge event collection', () => {
 
   it('denies child write of Surge event documents', async () => {
     await seedFamily({ familyId: 'fam-1', parentId: 'parent-1', childId: 'child-1' })
-    const ctx = testEnv.as('child-1')
+    const ctx = testEnv.authenticatedContext('child-1', { sub: 'child-1' })
     await assertFails(
       setDoc(doc(ctx.firestore(), 'families/fam-1/events/surge-1'), {
         type: 'surge',
@@ -102,7 +102,7 @@ describe('Firestore Rules — Surge event collection', () => {
 
   it('denies parent write of Surge event documents (server-only)', async () => {
     await seedFamily({ familyId: 'fam-1', parentId: 'parent-1', childId: 'child-1' })
-    const ctx = testEnv.as('parent-1')
+    const ctx = testEnv.authenticatedContext('parent-1', { sub: 'parent-1' })
     await assertFails(
       setDoc(doc(ctx.firestore(), 'families/fam-1/events/surge-1'), {
         type: 'surge',
@@ -116,7 +116,7 @@ describe('Firestore Rules — Surge event collection', () => {
 describe('Firestore Rules — Surge evidence collection', () => {
   it('denies child write of surge_evidence', async () => {
     await seedFamily({ familyId: 'fam-1', parentId: 'parent-1', childId: 'child-1' })
-    const ctx = testEnv.as('child-1')
+    const ctx = testEnv.authenticatedContext('child-1', { sub: 'child-1' })
     await assertFails(
       setDoc(doc(ctx.firestore(), 'families/fam-1/surge_evidence/surge-1__completion-1'), {
         schemaVersion: 1,
@@ -127,7 +127,7 @@ describe('Firestore Rules — Surge evidence collection', () => {
 
   it('denies parent write of surge_evidence (server-only audit record)', async () => {
     await seedFamily({ familyId: 'fam-1', parentId: 'parent-1', childId: 'child-1' })
-    const ctx = testEnv.as('parent-1')
+    const ctx = testEnv.authenticatedContext('parent-1', { sub: 'parent-1' })
     await assertFails(
       setDoc(doc(ctx.firestore(), 'families/fam-1/surge_evidence/surge-1__completion-1'), {
         schemaVersion: 1,
@@ -140,7 +140,7 @@ describe('Firestore Rules — Surge evidence collection', () => {
 describe('Firestore Rules — gamification_events Surge bonus protection', () => {
   it('denies client write of a Surge bonus event in gamification_events', async () => {
     await seedFamily({ familyId: 'fam-1', parentId: 'parent-1', childId: 'child-1' })
-    const ctx = testEnv.as('parent-1')
+    const ctx = testEnv.authenticatedContext('parent-1', { sub: 'parent-1' })
     await assertFails(
       setDoc(
         doc(ctx.firestore(), 'families/fam-1/gamification_events/surge:surge-1:completion:completion-1'),
@@ -155,7 +155,7 @@ describe('Firestore Rules — gamification_events Surge bonus protection', () =>
 
   it('denies child write of a Surge bonus event', async () => {
     await seedFamily({ familyId: 'fam-1', parentId: 'parent-1', childId: 'child-1' })
-    const ctx = testEnv.as('child-1')
+    const ctx = testEnv.authenticatedContext('child-1', { sub: 'child-1' })
     await assertFails(
       setDoc(
         doc(ctx.firestore(), 'families/fam-1/gamification_events/surge:surge-1:completion:completion-1'),
@@ -172,7 +172,7 @@ describe('Firestore Rules — gamification_events Surge bonus protection', () =>
 describe('Firestore Rules — feed entries cannot forge surgeBonusAmount', () => {
   it('still allows the normal feed entry write (no surgeBonusAmount field)', async () => {
     await seedFamily({ familyId: 'fam-1', parentId: 'parent-1', childId: 'child-1' })
-    const ctx = testEnv.as('parent-1')
+    const ctx = testEnv.authenticatedContext('parent-1', { sub: 'parent-1' })
     // A normal "Task approved" feed entry with no surgeBonusAmount is fine —
     // the family controls who can write feeds.
     await assertSucceeds(
@@ -194,7 +194,7 @@ describe('Firestore Rules — feed entries cannot forge surgeBonusAmount', () =>
 describe('Firestore Rules — engagementPreferences protection', () => {
   it('denies child write of engagementPreferences on the family doc', async () => {
     await seedFamily({ familyId: 'fam-1', parentId: 'parent-1', childId: 'child-1' })
-    const ctx = testEnv.as('child-1')
+    const ctx = testEnv.authenticatedContext('child-1', { sub: 'child-1' })
     await assertFails(
       updateDoc(doc(ctx.firestore(), 'families/fam-1'), {
         engagementPreferences: { surgeHours: false },
@@ -219,7 +219,7 @@ describe('Firestore Rules — task_completions create still enforces assigneeId'
         requiresApproval: false,
       })
     })
-    const ctx = testEnv.as('child-1')
+    const ctx = testEnv.authenticatedContext('child-1', { sub: 'child-1' })
     await assertFails(
       setDoc(doc(ctx.firestore(), 'families/fam-1/task_completions/completion-1'), {
         id: 'completion-1',
@@ -245,7 +245,7 @@ describe('Firestore Rules — task_completions create still enforces assigneeId'
         requiresApproval: true,
       })
     })
-    const ctx = testEnv.as('child-1')
+    const ctx = testEnv.authenticatedContext('child-1', { sub: 'child-1' })
     await assertSucceeds(
       setDoc(doc(ctx.firestore(), 'families/fam-1/task_completions/completion-1'), {
         id: 'completion-1',
