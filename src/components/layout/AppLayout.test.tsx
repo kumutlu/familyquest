@@ -2,7 +2,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { act, render, screen } from '@testing-library/react';
 import { AppLayout } from './AppLayout';
 import { useStore } from '../../store/useStore';
-import { MemoryRouter } from 'react-router-dom';
+import { MemoryRouter, Routes, Route } from 'react-router-dom';
 import '@testing-library/jest-dom/vitest';
 import i18n from '../../i18n/config';
 
@@ -23,45 +23,11 @@ vi.mock('../../store/useStore', () => ({
   useStore: vi.fn((selector: any) => selector ? selector(mockStoreState) : mockStoreState),
 }));
 
-vi.mock('../../lib/api', () => ({ signOut: vi.fn(async () => {}) }));
-
-vi.mock('../../lib/firebase', () => ({ auth: {} }));
-vi.mock('firebase/auth', () => ({ signOut: vi.fn(async () => {}) }));
-vi.mock('../../lib/childLoginApi', () => ({
-  completeChildPasswordChange: vi.fn(async () => {}),
-  mapChildLoginError: () => 'Unable to update password.',
-  validatePasswordClient: () => null,
-}));
-
-vi.mock('../../lib/useNotifications', () => ({
-  useNotifications: () => ({
-    notifications: [],
-    readIds: new Set<string>(),
-    unreadCount: 0,
-    error: null,
-    loading: false,
-    loadingMore: false,
-    hasMore: false,
-    connectionState: 'connected',
-    markRead: vi.fn(),
-    markAllRead: vi.fn(),
-    loadMore: vi.fn(),
-    retry: vi.fn(),
-  }),
-}));
-
-vi.mock('../challenges/ChildChallengeCelebration', () => ({
-  ChildChallengeCelebration: () => null,
-}));
-
-vi.mock('../bug-report/BugReportSheet', () => ({
-  BugReportSheet: () => null,
-}));
-
 vi.mock('../../config/navigation', () => ({
   getNavItems: () => [
     { labelKey: 'nav.home', path: '/', icon: () => null },
     { labelKey: 'nav.tasks', path: '/tasks', icon: () => null },
+    { labelKey: 'nav.goals', path: '/goals', icon: () => null },
     { labelKey: 'nav.rewards', path: '/rewards', icon: () => null },
     { labelKey: 'nav.family', path: '/family', icon: () => null },
   ],
@@ -116,13 +82,11 @@ describe('AppLayout — mobile bottom navigation layout', () => {
     expect(container.querySelector('main')!.contains(nav)).toBe(false);
   });
 
-  it('keeps the desktop header simple with Home, Tasks, Rewards, Family and More only', () => {
+  it('shows Goals and a text-labelled More action in desktop navigation', () => {
     renderAppLayout();
     const desktopNav = screen.getByTestId('desktop-primary-navigation');
-    expect(desktopNav).toHaveTextContent('HomeTasksRewardsFamilyMore');
-    expect(desktopNav).not.toHaveTextContent('Goals');
-    expect(desktopNav).not.toHaveTextContent('Wallets');
-    expect(desktopNav).not.toHaveTextContent('Pet Box');
+    expect(desktopNav).toHaveTextContent('Goals');
+    expect(desktopNav).toHaveTextContent('More');
     expect(screen.getByTestId('desktop-more-menu-button')).toHaveAccessibleName('More');
   });
 
@@ -188,7 +152,7 @@ describe('AppLayout — mobile bottom navigation layout', () => {
   });
 });
 
-describe('AppLayout — visual shell and managed-child gate', () => {
+describe('AppLayout — global startup gate', () => {
   const renderWith = (storeState: any, path = '/') => {
     const state = { ...mockStoreState, ...storeState };
     (useStore as any).mockImplementation((selector: any) => (selector ? selector(state) : state));
@@ -203,27 +167,56 @@ describe('AppLayout — visual shell and managed-child gate', () => {
     await act(async () => { await i18n.changeLanguage('en'); });
   });
 
-  it('renders the visual shell for a resolved member', () => {
+  it('shows the deterministic startup screen while auth is initializing', () => {
+    renderWith({ authStatus: 'initializing', authUser: undefined, currentUser: null, appReady: false });
+    expect(screen.getByRole('status')).toHaveTextContent('Preparing your family dashboard…');
+    expect(screen.getByText('Checking your sign-in')).toBeInTheDocument();
+  });
+
+  it('shows the profile step when the user document has not arrived yet', () => {
+    renderWith({ currentUser: null, appReady: false });
+    expect(screen.getByText('Loading your profile')).toBeInTheDocument();
+  });
+
+  it('shows the family step while family data is still bootstrapping', () => {
+    renderWith({ appReady: false });
+    expect(screen.getByText('Preparing your family data')).toBeInTheDocument();
+  });
+
+  it('shows a recoverable error with Retry wired to the store, not an endless spinner', async () => {
+    const retryBootstrap = vi.fn();
+    renderWith({ appReady: false, bootstrapError: '[Family] permission-denied: nope', retryBootstrap });
+    expect(screen.getByRole('alert')).toHaveTextContent('family access');
+    expect(screen.getByRole('alert')).not.toHaveTextContent('permission-denied');
+    await act(async () => { screen.getByRole('button', { name: 'Retry' }).click(); });
+    expect(retryBootstrap).toHaveBeenCalledTimes(1);
+  });
+
+  it('renders the dashboard chrome once startup is ready', () => {
     renderWith({});
+    expect(screen.queryByRole('status')).not.toBeInTheDocument();
     expect(screen.getAllByText('Home')).toHaveLength(2);
   });
 
-  it('does not own no-family routing policy', () => {
-    renderWith({ currentUser: { id: 'u1', familyId: undefined, role: 'parent' } });
-    expect(screen.getAllByText('Home')).toHaveLength(2);
-  });
-
-  it('keeps the managed-child password-change gate ahead of the visual shell', () => {
-    renderWith({
-      currentUser: {
-        id: 'child-1',
-        familyId: 'f1',
-        role: 'child',
-        isManaged: true,
-        requiresPasswordChange: true,
-      },
-    });
-    expect(screen.getByRole('heading', { name: 'Create your private password' })).toBeInTheDocument();
-    expect(screen.queryByTestId('desktop-primary-navigation')).not.toBeInTheDocument();
+  it('redirects an existing family owner away from /onboarding', () => {
+    const state = {
+      ...mockStoreState,
+      currentUser: { id: 'u1', uid: 'u1', familyId: 'f1', role: 'owner' },
+    };
+    (useStore as any).mockImplementation((selector: any) => (selector ? selector(state) : state));
+    render(
+      <MemoryRouter initialEntries={['/onboarding']}>
+        <Routes>
+          <Route path="/" element={<AppLayout />}>
+            <Route index element={<div>DASHBOARD</div>} />
+            <Route path="onboarding" element={<div>CREATE FAMILY SCREEN</div>} />
+          </Route>
+        </Routes>
+      </MemoryRouter>,
+    );
+    // The onboarding route must never render for a user who already has a
+    // family; the layout redirects to the dashboard instead.
+    expect(screen.queryByText('CREATE FAMILY SCREEN')).not.toBeInTheDocument();
+    expect(screen.getByText('DASHBOARD')).toBeInTheDocument();
   });
 });

@@ -36,6 +36,7 @@
   "saveFailed": "Profiliniz güncellenemedi. Lütfen tekrar deneyin.",
   "alreadyPending": "Onayınızı bekleyen zaten bir profil değişikliğiniz var.",
   "lockedPremium": "Bu avatar henüz açılmadı. Göndermeden önce açın.",
+  "noChanges": "Kaydedilecek değişiklik yok.",
   "pointsNote": "{{count}} puanınız var. Premium bir avatarı açmak yalnızca bir kez puan harcar; sahip olunan bir avatarı seçmek ücretsizdir.",
   "creator": {
     "title": "Karakterini oluştur",

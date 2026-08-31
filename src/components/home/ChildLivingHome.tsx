@@ -1,6 +1,6 @@
 import { useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Link, useNavigate } from 'react-router-dom';
+import { useNavigate } from 'react-router-dom';
 import {
   Hourglass,
   Wallet as WalletIcon,
@@ -12,9 +12,6 @@ import {
   PartyPopper,
   AlertTriangle,
   RefreshCw,
-  Target,
-  PawPrint,
-  ArrowRight,
 } from 'lucide-react';
 import { useStore } from '../../store/useStore';
 import { adaptGamificationSummary } from '../../lib/gamificationAdapters';
@@ -28,11 +25,10 @@ import { QuekiMascot } from '../queki/QuekiMascot';
 import { XPDisplay } from '../queki/semanticDisplays';
 import { ProgressBar } from '../queki/Progress';
 import { TactileButton } from '../queki/TactileButton';
-import { MoneyPrivacyToggle } from '../privacy/MoneyPrivacyToggle';
-import { MoneyValue } from '../privacy/MoneyValue';
-import { useMoneyPrivacy } from '../privacy/MoneyPrivacyContext';
-import { selectFeaturedChildGoal } from '../../lib/home/childFamilyTools';
-import { isPetBoxEnabled } from '../../lib/familyFeatures';
+import { Mascot as EngineMascot } from '../mascot/Mascot';
+import { MascotMessage } from '../mascot/MascotMessage';
+import { useMascotPresentationFor } from '../../hooks/useMascotPresentation';
+import type { MascotContext } from '../../domain/mascot';
 
 /**
  * Child Living Home — Queki v2 Wave 1.
@@ -54,7 +50,6 @@ const FOCUS_TESTID: Record<ChildFocus['kind'], string> = {
 export function ChildLivingHome() {
   const { t } = useTranslation('home');
   const navigate = useNavigate();
-  const { isMoneyHidden, maskFormattedMoney } = useMoneyPrivacy();
   const {
     currentUser,
     tasks,
@@ -65,9 +60,6 @@ export function ChildLivingHome() {
     myGamificationSummary,
     myDailyProgress,
     myWallet,
-    savingsGoals,
-    funds,
-    familyData,
     bootstrapStatus,
     retryFeature,
   } = useStore();
@@ -104,6 +96,47 @@ export function ChildLivingHome() {
       resource => bootstrapStatus[resource] === 'loading' || bootstrapStatus[resource] === 'idle',
     );
 
+  // Mascot Engine V1: read-only context from existing gamification state.
+  const mascotContext: Omit<MascotContext, 'now'> = useMemo(() => {
+    const childDisplayName = currentUser?.displayName;
+    const streak = gamification.currentStreak ?? 0;
+    const allDone = focus.length === 0 && !resourcesLoading;
+    const lastActiveAt = (() => {
+      const ms = Date.now();
+      if (Array.isArray(taskCompletions) && taskCompletions.length > 0) {
+        const sorted = [...taskCompletions].sort((a: any, b: any) => {
+          const ta = typeof a?.completedAt === 'number' ? a.completedAt : Number.MAX_SAFE_INTEGER;
+          const tb = typeof b?.completedAt === 'number' ? b.completedAt : Number.MAX_SAFE_INTEGER;
+          return tb - ta;
+        });
+        const top = sorted[0];
+        if (top && typeof top.completedAt === 'number') return top.completedAt;
+      }
+      return ms;
+    })();
+    return {
+      child: { displayName: childDisplayName },
+      activity: {
+        lastActiveAt,
+        currentStreak: streak,
+        questsRemaining: Array.isArray(tasks) ? tasks.length : 0,
+        questsCompletedToday:
+          gamification.todayProgress != null ? Math.round(gamification.todayProgress) : 0,
+        allQuestsCompleted: allDone && streak > 0,
+      },
+    };
+  }, [
+    currentUser?.displayName,
+    gamification.currentStreak,
+    gamification.todayProgress,
+    tasks,
+    taskCompletions,
+    focus.length,
+    resourcesLoading,
+  ]);
+
+  const mascotPresentation = useMascotPresentationFor(mascotContext);
+
   const renderFocus = (item: ChildFocus) => {
     switch (item.kind) {
       case 'approval_waiting':
@@ -118,22 +151,18 @@ export function ChildLivingHome() {
             onPress={() => navigate('/tasks')}
           />
         );
-      case 'money_received': {
-        const formattedAmount = formatMoney(item.amountPence ?? 0);
+      case 'money_received':
         return (
           <LivingHomeCard
             key={item.id}
             data-testid={FOCUS_TESTID[item.kind]}
             tone="mint"
             icon={<WalletIcon size={22} />}
-            title={t('child.moneyReceived.title', {
-              amount: isMoneyHidden ? maskFormattedMoney(formattedAmount) : formattedAmount,
-            })}
+            title={t('child.moneyReceived.title', { amount: formatMoney(item.amountPence ?? 0) })}
             description={t('child.moneyReceived.description')}
             onPress={() => navigate('/wallet')}
           />
         );
-      }
       case 'next_quest':
         return (
           <LivingHomeCard
@@ -192,17 +221,6 @@ export function ChildLivingHome() {
   const coreResourcesFailed =
     bootstrapStatus &&
     (['tasks', 'members'] as const).some(resource => bootstrapStatus[resource] === 'error');
-
-  const formattedWalletBalance = myWallet == null
-    ? null
-    : formatMoney(Number(myWallet.balance ?? 0));
-
-  const featuredGoal = useMemo(
-    () => selectFeaturedChildGoal(savingsGoals, currentUser?.id),
-    [savingsGoals, currentUser?.id],
-  );
-  const petBoxEnabled = isPetBoxEnabled(familyData);
-  const featuredFund = (funds ?? [])[0];
 
   if (coreResourcesFailed) {
     return (
@@ -269,26 +287,21 @@ export function ChildLivingHome() {
         {/* Points vs wallet — deliberately different rows, never interchangeable. */}
         <div className="mt-4 flex flex-wrap items-center justify-between gap-3">
           <PointsDisplayOnBrand points={currentUser?.rewardPoints ?? 0} />
-          <div className="flex items-center gap-1">
-            {formattedWalletBalance != null && (
-              <button
-                onClick={() => navigate('/wallet')}
-                className="inline-flex items-center gap-2 rounded-full bg-mint-50 py-1 pl-1.5 pr-3 hover:bg-mint-100 active:bg-mint-200 transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-mint-500"
-                data-testid="child-balance-chip"
-                aria-label={t('child.openWallet', {
-                  balance: isMoneyHidden ? maskFormattedMoney(formattedWalletBalance) : formattedWalletBalance,
-                })}
-              >
-                <span aria-hidden="true" className="flex h-6 w-6 items-center justify-center rounded-full bg-mint-500 text-white">
-                  <WalletIcon size={13} />
-                </span>
-                <MoneyValue className="font-balance text-base tabular-nums font-extrabold text-mint-700">
-                  {formattedWalletBalance}
-                </MoneyValue>
-              </button>
-            )}
-            <MoneyPrivacyToggle className="shrink-0 bg-white/15 text-white hover:bg-white/25 hover:text-white focus-visible:ring-white/80 focus-visible:ring-offset-0" />
-          </div>
+          {myWallet != null && (
+            <button
+              onClick={() => navigate('/wallet')}
+              className="inline-flex items-center gap-2 rounded-full bg-mint-50 py-1 pl-1.5 pr-3 hover:bg-mint-100 active:bg-mint-200 transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-mint-500"
+              data-testid="child-balance-chip"
+              aria-label={t('child.openWallet', { balance: formatMoney(Number(myWallet?.balance ?? 0)) })}
+            >
+              <span aria-hidden="true" className="flex h-6 w-6 items-center justify-center rounded-full bg-mint-500 text-white">
+                <WalletIcon size={13} />
+              </span>
+              <span className="font-balance text-base tabular-nums font-extrabold text-mint-700">
+                {formatMoney(Number(myWallet?.balance ?? 0))}
+              </span>
+            </button>
+          )}
         </div>
       </Surface>
 
@@ -314,77 +327,24 @@ export function ChildLivingHome() {
         )}
       </section>
 
-      {/* Mascot encouragement strip */}
-      <div className="flex items-center gap-3 rounded-card qk-bg-card qk-border-subtle qk-shadow-card border p-4">
-        <QuekiMascot state={mascotState === 'celebration' ? 'celebration' : 'encouraging'} size={56} />
-        <p className="text-body font-semibold qk-text-primary">
-          {mascotState === 'celebration' ? t('child.mascotCelebrate') : t('child.mascotEncourage')}
-        </p>
+      {/* Mascot Engine V1 — read-only presentation. Driven by the
+          useMascotPresentationFor hook which composes streak + activity
+          + Event Theme into a single presentation bundle. */}
+      <div
+        className="flex items-center gap-3 rounded-card qk-bg-card qk-border-subtle qk-shadow-card border p-4"
+        data-testid="mascot-strip"
+      >
+        <EngineMascot
+          presentation={mascotPresentation.presentation}
+          size={56}
+          className="shrink-0"
+        />
+        <MascotMessage
+          presentation={mascotPresentation.presentation}
+          message={mascotPresentation.message}
+          className="qk-text-primary"
+        />
       </div>
-
-      <section aria-labelledby="child-goals-heading" className="space-y-3">
-        <div className="flex items-center justify-between gap-3">
-          <h2 id="child-goals-heading" className="text-section-title qk-text-primary">{t('child.familyTools.heading')}</h2>
-          <span className="text-meta qk-text-secondary">{t('child.familyTools.viewAll')}</span>
-        </div>
-        <div
-          data-testid="child-family-tools-layout"
-          className={`grid grid-cols-1 gap-4 ${petBoxEnabled ? 'md:grid-cols-2' : ''}`}
-        >
-          <Link
-            to="/goals"
-            aria-label={t('child.familyTools.openGoals')}
-            data-testid="child-goals-card"
-            className="group min-w-0 rounded-card border border-primary-100 bg-gradient-to-br from-primary-50 to-white p-5 qk-shadow-card transition-transform hover:-translate-y-0.5 active:translate-y-0 active:scale-[0.99] focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-500"
-          >
-            <div className="flex items-center justify-between gap-3">
-              <span className="flex h-11 w-11 items-center justify-center rounded-2xl bg-primary-500 text-white"><Target size={22} aria-hidden="true" /></span>
-              <ArrowRight size={18} className="text-primary-400 transition-transform group-hover:translate-x-0.5" aria-hidden="true" />
-            </div>
-            <h3 className="mt-4 text-card-title qk-text-primary">{t('child.familyTools.goals')}</h3>
-            {featuredGoal ? (
-              <>
-                <p className="mt-1 text-meta font-semibold text-primary-600">{t(`child.familyTools.${featuredGoal.context}`)}</p>
-                <p className="mt-1 truncate text-body font-bold qk-text-primary">{featuredGoal.title}</p>
-                <p className="mt-3 font-balance text-lg qk-text-primary">
-                  {t('child.familyTools.goalAmounts', { current: formatMoney(featuredGoal.currentAmountPence), target: formatMoney(featuredGoal.targetAmountPence) })}
-                </p>
-                <ProgressBar className="mt-2" tone="brand" value={featuredGoal.progressPercent} aria-label={t('child.familyTools.goalProgressLabel')} />
-                <div className="mt-2 flex items-center justify-between gap-2 text-meta qk-text-secondary">
-                  <span>{t('child.familyTools.remaining', { amount: formatMoney(featuredGoal.remainingAmountPence) })}</span>
-                  <span className="font-bold text-primary-600">{featuredGoal.progressPercent}%</span>
-                </div>
-              </>
-            ) : (
-              <p className="mt-3 text-body qk-text-secondary">{t('child.familyTools.noGoals')}</p>
-            )}
-          </Link>
-
-          {petBoxEnabled && (
-            <Link
-              to="/pet-box"
-              aria-label={t('child.familyTools.openPetBox')}
-              data-testid="child-pet-box-card"
-              className="group min-w-0 rounded-card border border-mint-100 bg-gradient-to-br from-mint-50 to-white p-5 qk-shadow-card transition-transform hover:-translate-y-0.5 active:translate-y-0 active:scale-[0.99] focus:outline-none focus-visible:ring-2 focus-visible:ring-mint-500"
-            >
-              <div className="flex items-center justify-between gap-3">
-                <span className="flex h-11 w-11 items-center justify-center rounded-2xl bg-mint-500 text-white"><PawPrint size={22} aria-hidden="true" /></span>
-                <ArrowRight size={18} className="text-mint-500 transition-transform group-hover:translate-x-0.5" aria-hidden="true" />
-              </div>
-              <h3 className="mt-4 text-card-title qk-text-primary">{t('child.familyTools.petBox')}</h3>
-              {featuredFund ? (
-                <>
-                  <p className="mt-1 text-body font-bold qk-text-primary">{featuredFund.name}</p>
-                  <p className="mt-3 font-balance text-xl font-extrabold text-mint-700">{formatMoney(Number(featuredFund.balance ?? 0))}</p>
-                  <p className="mt-1 text-meta qk-text-secondary">{t('child.familyTools.petBoxSaved')}</p>
-                </>
-              ) : (
-                <p className="mt-3 text-body qk-text-secondary">{t('child.familyTools.noPetBox')}</p>
-              )}
-            </Link>
-          )}
-        </div>
-      </section>
     </div>
   );
 }
@@ -416,3 +376,4 @@ function PointsDisplayOnBrand({ points }: { points: number }) {
     </span>
   );
 }
+

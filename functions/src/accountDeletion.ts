@@ -26,7 +26,7 @@
 import { getAuth } from 'firebase-admin/auth';
 import { getFirestore, FieldValue } from 'firebase-admin/firestore';
 import { HttpsError, onCall, type CallableRequest } from 'firebase-functions/v2/https';
-import { getFunctions } from 'firebase-admin/functions';
+import { enqueueFamilyDeletionTask } from './deletionTaskQueue';
 import type { FamilyDeletionContext, FamilyDeletionJob } from './familyDeletion';
 
 export const RECENT_LOGIN_WINDOW_MS = 5 * 60 * 1000;
@@ -266,10 +266,9 @@ function makeContext(): FamilyDeletionContext {
   return {
     db: getFirestore(),
     auth: getAuth(),
-    enqueue: async (familyId: string) => {
-      const queue = getFunctions().taskQueue('processFamilyDeletion');
-      await queue.enqueue({ familyId });
-    },
+    // P0 root fix: fully-qualified europe-west1 target via the shared
+    // injectable boundary; enqueue failures are logged (sanitized), not silent.
+    enqueue: enqueueFamilyDeletionTask,
     now: () => Date.now(),
     invocationId: `acct-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`,
   };

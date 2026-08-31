@@ -27,7 +27,7 @@ import {
 } from 'firebase-functions/v2/https';
 import { onTaskDispatched } from 'firebase-functions/v2/tasks';
 import { onSchedule } from 'firebase-functions/v2/scheduler';
-import { getFunctions } from 'firebase-admin/functions';
+import { enqueueFamilyDeletionTask } from './deletionTaskQueue';
 
 // ---------------------------------------------------------------------------
 // Reviewed registry of known family subcollections (regression guard only —
@@ -1033,16 +1033,13 @@ export async function leaveFamilyImpl(
 // Deployment wiring
 // ---------------------------------------------------------------------------
 
-const QUEUE_NAME = 'processFamilyDeletion';
-
 function makeContext(): FamilyDeletionContext {
   return {
     db: getFirestore(),
     auth: getAuth(),
-    enqueue: async (familyId: string, delaySeconds = 0) => {
-      const queue = getFunctions().taskQueue(QUEUE_NAME);
-      await queue.enqueue({ familyId }, delaySeconds > 0 ? { scheduleDelaySeconds: delaySeconds } : undefined);
-    },
+    // P0 root fix: fully-qualified europe-west1 target via the shared
+    // injectable boundary; enqueue failures are logged (sanitized), not silent.
+    enqueue: enqueueFamilyDeletionTask,
     now: () => Date.now(),
     invocationId: `proc-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`,
   };

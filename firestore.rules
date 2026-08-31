@@ -240,6 +240,42 @@ service cloud.firestore {
       return avatarCatalogCost(avatarId) > 0;
     }
 
+    // AvatarConfigV1 — closed schema for composable avatar customization.
+    // Must match src/lib/api.ts isValidAvatarConfig exactly.
+    // AvatarConfigV1 — closed schema for composable avatar customization.
+    // Uses maps for O(1) value validation to stay under Firestore's 1000-expression budget.
+    function isValidAvatarConfig(config) {
+      let allowedBase = { 'round': true, 'soft': true, 'bold': true };
+      let allowedSkinTone = { 'porcelain': true, 'fair': true, 'warm': true, 'tan': true, 'brown': true, 'deep': true };
+      let allowedHairStyle = { 'short': true, 'crop': true, 'bob': true, 'waves': true, 'long': true, 'curls': true, 'coils': true, 'ponytail': true };
+      let allowedHairColor = { 'black': true, 'brown': true, 'chestnut': true, 'blonde': true, 'copper': true, 'pink': true, 'purple': true, 'blue': true };
+      let allowedFace = { 'smile': true, 'happy': true, 'bright': true, 'calm': true, 'cheeky': true };
+      let allowedAccessory = { 'none': true, 'glasses': true, 'round-glasses': true, 'cap': true, 'beanie': true, 'headband': true };
+      let allowedOutfit = { 'tee': true, 'hoodie': true, 'jacket': true, 'sweater': true };
+      let allowedOutfitColor = { 'purple': true, 'indigo': true, 'blue': true, 'teal': true, 'green': true, 'coral': true, 'pink': true, 'gold': true };
+      let allowedBackground = { 'lilac': true, 'sky': true, 'mint': true, 'peach': true, 'sunny': true, 'berry': true };
+
+      return config is map
+        && config.keys().hasAll([
+          'version', 'base', 'skinTone', 'hairStyle', 'hairColor', 'face',
+          'accessory', 'outfit', 'outfitColor', 'background'
+        ])
+        && config.keys().hasOnly([
+          'version', 'base', 'skinTone', 'hairStyle', 'hairColor', 'face',
+          'accessory', 'outfit', 'outfitColor', 'background'
+        ])
+        && config.version == 1
+        && allowedBase[config.base] == true
+        && allowedSkinTone[config.skinTone] == true
+        && allowedHairStyle[config.hairStyle] == true
+        && allowedHairColor[config.hairColor] == true
+        && allowedFace[config.face] == true
+        && allowedAccessory[config.accessory] == true
+        && allowedOutfit[config.outfit] == true
+        && allowedOutfitColor[config.outfitColor] == true
+        && allowedBackground[config.background] == true;
+    }
+
     function hasValidCreatorSnapshot(data) {
       let creatorDoc = get(/databases/$(database)/documents/users/$(authProfileId()));
       return creatorDoc != null && 'displayName' in creatorDoc.data && creatorDoc.data.displayName == data.get('createdByName', 'null');
@@ -1696,6 +1732,12 @@ service cloud.firestore {
         && (newLongest == oldLongest || (newLongest == newCurrent && newLongest > oldLongest));
     }
 
+    // P0: Allow child completion of unassigned family tasks. Either the task
+    // is assigned to the completing child (task.assigneeId == authProfileId())
+    // OR the task is unassigned (task.assigneeId == null) and a child in the
+    // family can claim it. Sibling-assigned tasks remain denied because the
+    // data.assigneeId == authProfileId() on the completion record and the
+    // task.data.assigneeId check must BOTH be satisfied.
     function isValidTaskCompletionCreate(familyId) {
       let data = request.resource.data;
       let task = get(/databases/$(database)/documents/families/$(familyId)/tasks/$(data.taskId));
@@ -1708,6 +1750,16 @@ service cloud.firestore {
         && data.completedAt == request.time
         && ((requiresApproval && data.status == 'pending_approval' && data.approvedAt == null)
           || (!requiresApproval && data.status == 'approved' && data.approvedAt == request.time));
+    }
+
+    // SURGE — closed-shape validator for the family-level engagement opt-in.
+    // engagementPreferences is owner-writable; any key outside the closed set
+    // is rejected so a malicious owner cannot stuff random data into a field
+    // that the client Surge engine reads.
+    function isValidEngagementPreferences(value) {
+      return value is map
+        && value.keys().hasOnly(['surgeHours'])
+        && (!('surgeHours' in value) || value.surgeHours is bool);
     }
 
     function isValidGamificationConfig(data) {
@@ -1755,13 +1807,30 @@ service cloud.firestore {
         (isParent(resource.data.familyId) && authProfileId() == uid
           && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['displayName', 'avatarUrl', 'avatarId', 'avatarConfig'])
           && hasValidOptionalAvatarConfig(request.resource.data)) ||
+        // ENGAGEMENT: Child may update their own appearance (avatarConfig, avatarId)
+        // directly without parent approval. avatarUrl is NOT in the child self-write
+        // allowlist. The avatarConfig must satisfy the closed AvatarConfigV1 schema.
+        // The avatarId must be a starter avatar or an owned premium avatar unlock.
+        // No other fields (displayName, rewardPoints, lifetimeXP, role, familyId, etc.)
+        // may change. Managed-child callers are routed through the same gate as a
+        // self call once isTrustedManagedChild() succeeds.
+        (authProfileId() == uid && resource.data.get('role', 'null') == 'child'
+          && request.resource.data.get('role', 'null') == 'child'
+          && request.resource.data.familyId == resource.data.familyId
+          && familyIsActive(resource.data.familyId)
+          && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['avatarConfig', 'avatarId'])
+          && (
+            (!('avatarConfig' in request.resource.data) || request.resource.data.avatarConfig == null || isValidAvatarConfig(request.resource.data.avatarConfig))
+            && (!('avatarId' in request.resource.data) || request.resource.data.avatarId == null || request.resource.data.avatarId == '' || isStarterAvatar(request.resource.data.avatarId)
+              || exists(/databases/$(database)/documents/families/$(resource.data.familyId)/users/$(uid)/avatar_unlocks/$(request.resource.data.avatarId)))
+          )) ||
         (request.resource.data.diff(resource.data).affectedKeys().hasAny(['lastRedemptionId']) && isValidRedemptionDeduction(uid))
           || (request.resource.data.diff(resource.data).affectedKeys().hasAny(['lastTaskCompletionId']) && isValidTaskApprovalMutation(uid))
           || (request.resource.data.diff(resource.data).affectedKeys().hasAny(['lastBehaviourEventId']) && isValidBehaviourPointMutation(uid)) ||
         (!('familyId' in resource.data) && 'familyId' in request.resource.data ? isValidOwnerBootstrap(uid) || isValidJoinProfileUpdate(uid) : false) ||
         ('familyId' in resource.data && isParent(resource.data.familyId) && resource.data.get('role', 'null') == 'child'
           && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['displayName', 'avatarUrl', 'avatarId', 'avatarConfig'])
-          && hasValidOptionalAvatarConfig(request.resource.data))
+          && hasValidOptionalAvatarConfig(request.resource.data)) ||
       );
 
       allow create: if isAuthenticated() && (
@@ -1891,6 +1960,12 @@ service cloud.firestore {
             || isValidGamificationConfig(request.resource.data.gamificationConfig))
         && (!('petBoxEnabled' in request.resource.data)
             || request.resource.data.petBoxEnabled is bool)
+        // engagementPreferences (e.g. surgeHours opt-in) is owner-writable and
+        // validated for closed shape on write. Keys outside the closed set are
+        // rejected so a malicious owner cannot stuff random data into a field
+        // that the client engine reads.
+        && (!('engagementPreferences' in request.resource.data)
+            || isValidEngagementPreferences(request.resource.data.engagementPreferences))
         // The setup audit block is validated only when this write actually
         // changes it. It pins completedAt == request.time, so re-validating an
         // untouched, previously-approved setup map would reject every later
@@ -2660,6 +2735,27 @@ service cloud.firestore {
       // Server-only collections: task_occurrences, gamification_events, daily_eligibility,
       // daily_progress, gamification_summaries, gamification_checkpoints
       match /task_occurrences/{occurrenceId} {
+        allow read, write: if false;
+      }
+
+      // SURGE EVIDENCE — server-only audit record for Surge bonus awards.
+      // A successful Surge bonus event writes an immutable snapshot here
+      // so parent-facing history can show "House Vacuum +15 / Surge Bonus +10"
+      // and so reversal can locate the bonus deterministically.
+      // Clients must NEVER be able to read OR write these records: a child
+      // who could read them could compute exact point balances and craft
+      // social-engineering exploits. A child who could write them could
+      // mint fake bonuses.
+      match /surge_evidence/{evidenceId} {
+        allow read, write: if false;
+      }
+
+      // EVENTS — Experience + Theme engine + Surge catalog. V1: server-only.
+      // A future operator-driven catalog will keep this rule and write
+      // through the trusted Admin SDK. Clients must NEVER be able to
+      // create or edit event definitions — a child who could mint an
+      // event could declare their own Surge and award themselves points.
+      match /events/{eventId} {
         allow read, write: if false;
       }
 
