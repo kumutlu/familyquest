@@ -115,24 +115,21 @@ export function OnboardingFlow({
       createFamilyAndParent: async (...args: Parameters<typeof createFamilyAndParent>) => {
         familyCreationAttemptedRef.current = true;
         onFamilyCreationStarted?.({ authUid: args[0] });
-        try {
-          const result = await createFamilyAndParent(...args);
-          onFamilyCreationConfirmed?.({
-            authUid: args[0],
-            familyId: result.user.familyId ?? result.familyId,
-          });
-          return result;
-        } catch (error) {
-          onCreationJourneyEnded?.();
-          throw error;
-        }
+        // A denied/offline bootstrap is retryable. Nothing is cleared until a
+        // successful response confirms the authoritative family.
+        const result = await createFamilyAndParent(...args);
+        onFamilyCreationConfirmed?.({
+          authUid: args[0],
+          familyId: result.user.familyId ?? result.familyId,
+        });
+        return result;
       },
       createManagedMember,
       createTask,
       refreshCurrentUser,
       getFamilyMembers: () => useStore.getState().familyMembers ?? [],
     }),
-    [authUser?.uid, currentUser?.id, onCreationJourneyEnded, onFamilyCreationConfirmed, onFamilyCreationStarted, refreshCurrentUser],
+    [authUser?.uid, currentUser?.id, onFamilyCreationConfirmed, onFamilyCreationStarted, refreshCurrentUser],
   );
 
   // Funnel: started (once, pre-auth).

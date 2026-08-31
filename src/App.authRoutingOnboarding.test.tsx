@@ -53,7 +53,11 @@ vi.mock('./store/useStore', async () => {
 
 vi.mock('./lib/firebase', () => ({
   app: {},
-  auth: { currentUser: { uid: 'owner-1' } },
+  auth: { currentUser: {
+    uid: 'owner-1', emailVerified: true,
+    reload: vi.fn(async () => {}),
+    getIdTokenResult: vi.fn(async () => ({ claims: { email_verified: true, firebase: { sign_in_provider: 'password' } } })),
+  } },
   db: {},
   googleProvider: {},
 }));

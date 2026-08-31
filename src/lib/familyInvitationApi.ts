@@ -1,5 +1,6 @@
 import { httpsCallable } from 'firebase/functions';
 import { functions } from './firebase';
+import { requireCurrentFamilyAuthority } from '../auth/clientFamilyAuthority';
 
 /** Roles an invitation may grant. `owner` is never issuable. */
 export type IntendedRole = 'parent' | 'child';
@@ -57,6 +58,7 @@ export async function acceptInvitation(
   code: string,
   clientReqId: string = crypto.randomUUID(),
 ): Promise<AcceptedInvitation> {
+  await requireCurrentFamilyAuthority();
   const callable = httpsCallable<
     { code: string; clientReqId: string },
     AcceptedInvitation

@@ -1,16 +1,23 @@
 import { execSync } from 'node:child_process';
 import { expect, test } from '@playwright/test';
 import { countFamiliesForE2E } from './utils/adultInvite';
+import { completePostAuth, driveToStep, getOnboardingOutcome } from './utils/onboardingFlow';
 
 test.beforeEach(() => execSync('npx tsx tests/e2e/utils/seed.ts', { stdio: 'ignore' }));
 
-test('unverified password signup cannot bypass family authority and resumes after verification', async ({ page }) => {
+test('real verification link preserves and resumes UID-bound family onboarding', async ({ page, context }) => {
   const email = `verify-${Date.now()}@example.com`;
   const familyCountBeforeAuth = await countFamiliesForE2E();
-  await page.goto('/signup');
-  await page.locator('input[type="text"]').fill('Pending Parent');
+  const persona = {
+    parent: 'Pending Parent', relationship: 'Dad', child: 'QA Child',
+    family: 'Verified QA Family', email, password: 'password123',
+  };
+  await page.goto('/onboarding');
+  await driveToStep(page, persona, 's7');
+  await page.getByRole('button', { name: /continue with email/i }).click();
+  await page.locator('input[type="text"]').fill(persona.parent);
   await page.locator('input[type="email"]').fill(email);
-  await page.locator('input[type="password"]').fill('password123');
+  await page.locator('input[type="password"]').fill(persona.password);
   await page.getByRole('button', { name: /^sign up$/i }).click();
 
   await expect(page).toHaveURL(/\/verify-email$/);
@@ -20,10 +27,26 @@ test('unverified password signup cannot bypass family authority and resumes afte
   await expect(page).toHaveURL(/\/verify-email$/);
   await expect(page.getByRole('heading', { name: /verify your email/i })).toBeVisible();
 
-  execSync('npx tsx tests/e2e/utils/verifyEmail.ts', {
-    stdio: 'ignore', env: { ...process.env, ONBOARDING_EMAIL: email },
+  const verificationLink = execSync('npx tsx tests/e2e/utils/readVerificationLink.ts', {
+    encoding: 'utf8', env: { ...process.env, ONBOARDING_EMAIL: email },
   });
+  const verificationPage = await context.newPage();
+  await verificationPage.goto(verificationLink.trim());
+  await expect(verificationPage).toHaveURL(url =>
+    url.origin === 'https://queki.app'
+    && (url.pathname === '/verify-email' || url.searchParams.get('next') === '/verify-email'),
+  );
+  const verified = JSON.parse(execSync('npx tsx tests/e2e/utils/readEmailVerified.ts', {
+    encoding: 'utf8', env: { ...process.env, ONBOARDING_EMAIL: email },
+  }));
+  expect(verified.emailVerified).toBe(true);
+  await verificationPage.close();
+
   await page.getByRole('button', { name: /i've verified my email/i }).click();
-  await expect(page).toHaveURL(/\/no-family$/);
-  expect(await countFamiliesForE2E()).toBe(familyCountBeforeAuth);
+  await expect(page).toHaveURL(/\/onboarding\?mode=create$/);
+  await expect(page.getByRole('button', { name: 'Create a family' })).toHaveCount(0);
+  await completePostAuth(page, persona);
+  const outcome = await getOnboardingOutcome(email);
+  expect(outcome).toMatchObject({ familyCount: 1, childCount: 1, taskCount: 1 });
+  expect(await countFamiliesForE2E()).toBe(familyCountBeforeAuth + 1);
 });

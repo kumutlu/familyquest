@@ -288,6 +288,13 @@ describe('deriveAuthRouteDecision', () => {
 });
 
 describe('AuthRoutingGate navigation', () => {
+  it('keeps a newly verified no-family user on /verify-email so the page can refresh and resume', () => {
+    storeState.authUser = { uid: 'u1', emailVerified: true };
+    storeState.authSignInProvider = 'password';
+    renderGate('/verify-email', true);
+    expect(screen.getByTestId('current-path')).toHaveTextContent('/verify-email');
+  });
+
   it('routes an authenticated no-family invite recipient to the invite, never onboarding', () => {
     capturePendingInvite(TOKEN);
     renderGate('/');

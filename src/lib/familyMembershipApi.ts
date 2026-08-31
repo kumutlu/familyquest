@@ -1,5 +1,6 @@
 import { httpsCallable } from 'firebase/functions';
 import { functions } from './firebase';
+import { requireCurrentFamilyAuthority } from '../auth/clientFamilyAuthority';
 
 export interface FamilyJoinResult {
   familyId: string;
@@ -10,6 +11,7 @@ export async function requestFamilyJoin(
   familyCode: string,
   clientReqId: string = crypto.randomUUID(),
 ): Promise<FamilyJoinResult> {
+  await requireCurrentFamilyAuthority();
   const callable = httpsCallable<
     { familyCode: string; clientReqId: string },
     FamilyJoinResult

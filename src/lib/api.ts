@@ -57,6 +57,8 @@ import { isPetBoxEnabled } from './familyFeatures';
 import { mapAuthErrorKey, type AuthErrorKey } from '../auth/authErrorMessage';
 import { buildInitialGamificationMigration } from '../domain/gamification/migrationState';
 import { EMAIL_VERIFICATION_CONTINUE_URL, normalizeAndValidateEmail } from '../auth/emailVerification';
+import { refreshFamilyAuthority } from '../auth/familyAuthority';
+import { requireCurrentFamilyAuthority } from '../auth/clientFamilyAuthority';
 import { defaultFeatureFlags, resolveWriterRoute, type GamificationWriter } from '../domain/gamification/v4/featureFlags';
 import {
   computeNetChild,
@@ -154,11 +156,9 @@ export const resendVerificationEmail = async () => {
 export const refreshEmailVerification = async () => {
   const user = auth.currentUser;
   if (!user) throw new Error('AUTH_REQUIRED');
-  await user.reload();
-  if (!user.emailVerified) return false;
-  await user.getIdToken(true);
+  const allowed = await refreshFamilyAuthority(user);
   useStore.setState({ authUser: user });
-  return true;
+  return allowed;
 };
 
 export const signIn = async (email: string, pass: string) => {
@@ -265,6 +265,7 @@ export const updateLanguagePreference = async (language: SupportedLanguage): Pro
 };
 
 export const createFamilyAndParent = async (uid: string, _name: string, familyName: string) => {
+  await requireCurrentFamilyAuthority();
   const familyRef = doc(collection(db, 'families'));
   const userRef = doc(db, 'users', uid);
   const inviteCode = Math.random().toString(36).substring(2, 8).toUpperCase();

@@ -33,7 +33,9 @@ The verification page provides:
 - friendly mappings for invalid email, duplicate account, weak password, rate limiting, network failure, and an email that remains unverified;
 - sign-out/change-account access without granting family authority.
 
-The central auth routing gate sends an existing unverified password login to `/verify-email` before any family, invite-acceptance, join, or onboarding-finalization route. After successful refresh, the existing routing priority runs unchanged.
+The central auth routing gate sends an existing unverified password login to `/verify-email` before any family, invite-acceptance, join, or onboarding-finalization route. An authenticated `/verify-email` route remains on that page even after the user record first reports verified, allowing the page to complete the authoritative refresh and resume itself.
+
+Every client family-authority boundary uses the same ordered operation: `reload()`, forced `getIdTokenResult(true)`, then an explicit `email_verified === true` claim check for password identities. Family bootstrap and all three join/invite acceptance wrappers fail closed unless that operation succeeds.
 
 The create-family intent and pending invitation remain in their existing tab-scoped storage and retain their UID binding. Verification neither clears nor recreates them. Sign-out continues to clear dangerous UID-bound create authority. A stale or wrong-UID intent remains invalid.
 
@@ -60,7 +62,7 @@ Verification emails always specify `https://queki.app/verify-email` as their con
 
 ## Failure and recovery behavior
 
-Unknown or stale client verification state fails closed at routing. Server enforcement uses only the verified Firebase token claims. After the user verifies, the client reloads the Firebase user and refreshes the ID token before retrying routing. No family operation is automatically replayed until the verified state is authoritative.
+Unknown or stale client verification state fails closed at routing. Server enforcement uses only the verified Firebase token claims. After the user verifies, the client reloads the Firebase user and force-refreshes the ID token before retrying routing. A failed family bootstrap retains the valid UID-bound create intent; Retry repeats the same idempotent finalization instead of falling back to Create/Join.
 
 ## Test strategy
 
@@ -83,4 +85,3 @@ RED tests first prove the current bypasses:
 15. resend, refresh, cooldown, and friendly error behavior.
 
 Emulator E2E covers password signup through verification and exact-intent resume, existing unverified login, no-intent fail-closed behavior, invite precedence, and the trusted-provider/managed-child regressions supported by the repository harness.
-

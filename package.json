@@ -20,6 +20,7 @@
     "test:migration:gamification": "firebase emulators:exec --only firestore 'vitest run scripts/migrate-legacy-xp.test.ts'",
     "test:functions:gamification": "firebase emulators:exec --only firestore 'vitest run tests/functions/gamification.integration.test.ts'",
     "test:e2e": "firebase emulators:exec --only firestore,auth,functions 'playwright test'",
+    "test:e2e:email-verification": "firebase emulators:exec --only firestore,auth 'playwright test --config playwright.email-verification.config.ts'",
     "test:e2e:onboarding:chromium": "tsx scripts/onboarding-gate/launcher.ts chromium",
     "test:e2e:onboarding:webkit": "tsx scripts/onboarding-gate/launcher.ts webkit",
     "test:e2e:mobile": "firebase emulators:exec --only firestore,auth,functions 'playwright test --config playwright.mobile.config.ts'",

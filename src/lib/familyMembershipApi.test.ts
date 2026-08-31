@@ -2,11 +2,13 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const httpsCallable = vi.fn();
 const callable = vi.fn();
+const requireCurrentFamilyAuthority = vi.hoisted(() => vi.fn(async () => {}));
 
 vi.mock('firebase/functions', () => ({
   httpsCallable: (...args: unknown[]) => httpsCallable(...args),
 }));
 vi.mock('./firebase', () => ({ functions: { region: 'europe-west1' } }));
+vi.mock('../auth/clientFamilyAuthority', () => ({ requireCurrentFamilyAuthority }));
 
 import { requestFamilyJoin, regenerateFamilyCode } from './familyMembershipApi';
 
@@ -16,6 +18,12 @@ beforeEach(() => {
 });
 
 describe('familyMembershipApi', () => {
+  it('does not submit authenticated join authority before refreshed family authority is confirmed', async () => {
+    requireCurrentFamilyAuthority.mockRejectedValueOnce(new Error('EMAIL_VERIFICATION_REQUIRED'));
+    await expect(requestFamilyJoin('ABC123', 'request-12345678')).rejects.toThrow('EMAIL_VERIFICATION_REQUIRED');
+    expect(httpsCallable).not.toHaveBeenCalled();
+  });
+
   it('submits a join request with no requester-controlled role', async () => {
     callable.mockResolvedValue({ data: { familyId: 'family-1', status: 'pending' } });
     await requestFamilyJoin('ABC123', 'request-12345678');

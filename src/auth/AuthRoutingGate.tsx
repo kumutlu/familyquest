@@ -135,6 +135,10 @@ export function deriveAuthRouteDecision(input: AuthRouteDecisionInput): AuthRout
     return 'login';
   }
 
+  // This route owns the authoritative reload + forced token refresh and must
+  // not be pre-empted after the Auth user record flips to verified.
+  if (input.pathname === '/verify-email') return 'verifyEmail';
+
   if (input.emailVerificationRequired) return 'verifyEmail';
 
   if (inviteJourney) return 'invite';

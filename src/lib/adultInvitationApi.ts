@@ -1,6 +1,7 @@
 import { httpsCallable } from 'firebase/functions';
 import { functions } from './firebase';
 import contractJson from '../../scripts/parent-invite-v2-contract.json';
+import { requireCurrentFamilyAuthority } from '../auth/clientFamilyAuthority';
 
 export const ADULT_INVITATION_CONTRACT = contractJson.frontend;
 
@@ -88,6 +89,7 @@ export async function acceptAdultInvitation(
   input: AcceptAdultInvitationInput,
 ): Promise<AdultInvitationAcceptance> {
   assertAdultInvitationContract();
+  await requireCurrentFamilyAuthority();
   const callable = httpsCallable<AcceptAdultInvitationInput, AdultInvitationAcceptance>(
     functions,
     'acceptAdultInvitation',

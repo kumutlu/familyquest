@@ -80,6 +80,7 @@
     "title": "Every family needs a name.",
     "label": "Family name",
     "placeholder": "e.g. The Umutlu Family",
+    "defaultFamilyName": "My Family",
     "suggestion": "How about \"{{family}}\"?",
     "continue": "Continue",
     "back": "Back"
