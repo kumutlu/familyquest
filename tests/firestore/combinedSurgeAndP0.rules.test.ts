@@ -85,6 +85,9 @@ beforeEach(async () => {
     await setDoc(doc(db, `users/${MANAGED_CHILD_ID}`), {
       familyId: FAMILY_ID, role: 'child', displayName: 'Managed',
       isManaged: true, authUid: MANAGED_AUTH_UID,
+      // The managed-child outer gate isTrustedManagedChild() rejects any
+      // managed caller whose user doc still has requiresPasswordChange=true.
+      requiresPasswordChange: false,
     })
 
     // Tasks
@@ -102,8 +105,12 @@ beforeEach(async () => {
     await setDoc(doc(db, `families/${FAMILY_ID}/events/surge-1`), {
       type: 'surge',
       status: 'active',
-      startsAt: Date.now() - 60_000,
-      endsAt: Date.now() + 3_600_000,
+      // Firestore Timestamps are required for date-typed fields. Plain numbers
+      // are accepted by the wire protocol but fail equality checks against
+      // `request.time`/`Timestamp.now()` in any rules or evaluators that
+      // compare window boundaries.
+      startsAt: Timestamp.fromMillis(Date.now() - 60_000),
+      endsAt: Timestamp.fromMillis(Date.now() + 3_600_000),
       metadata: {
         surge: {
           kind: 'task_bonus',
@@ -231,12 +238,19 @@ describe('Sibling task + Surge', () => {
 // ============================================================
 describe('Managed child + null-assignee + Surge', () => {
   it('managed child may complete unassigned family task (P0 unassigned + managed)', async () => {
-    const mc = testEnv.authenticatedContext(MANAGED_AUTH_UID, { sub: MANAGED_AUTH_UID })
+    // Real managed-child identity path. authProfileId() resolves to the
+    // childId custom claim when `managedChild: true` is present, which is
+    // the only way isFamilyMember + isValidTaskCompletionCreate will accept
+    // a completion whose `assigneeId` is the managed child's profile id
+    // (not the auth uid). Seeded user doc carries requiresPasswordChange:
+    // false so isTrustedManagedChild() resolves true.
+    const mc = testEnv.authenticatedContext(MANAGED_AUTH_UID, {
+      role: 'child',
+      managedChild: true,
+      childId: MANAGED_CHILD_ID,
+      familyId: FAMILY_ID,
+    })
     const mcDb = mc.firestore()
-
-    // The managed child's "authProfileId" should resolve to their identity
-    // document via isManagedChildIdentity(). Task is unassigned; rules
-    // should accept.
     await assertSucceeds(setDoc(doc(mcDb, `families/${FAMILY_ID}/task_completions/completion-mc`), {
       taskId: TASK_UNASSIGNED,
       assigneeId: MANAGED_CHILD_ID,

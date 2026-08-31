@@ -1950,7 +1950,7 @@ service cloud.firestore {
       match /users/{userId} {
         allow read, write: if false;
       }
-      allow update: if isOwner(familyId)
+      allow update: if isParent(familyId)
         && !request.resource.data.diff(resource.data).affectedKeys().hasAny(['inviteCode'])
         && !request.resource.data.diff(resource.data).affectedKeys().hasAny([
           'lifecycleState', 'deletionJobId', 'deletionRequestedAt', 'deletionRequestedBy'
@@ -1959,10 +1959,12 @@ service cloud.firestore {
             || isValidGamificationConfig(request.resource.data.gamificationConfig))
         && (!('petBoxEnabled' in request.resource.data)
             || request.resource.data.petBoxEnabled is bool)
-        // engagementPreferences (e.g. surgeHours opt-in) is owner-writable and
-        // validated for closed shape on write. Keys outside the closed set are
-        // rejected so a malicious owner cannot stuff random data into a field
-        // that the client engine reads.
+        // engagementPreferences (e.g. surgeHours opt-in) is parent/owner-
+        // writable and validated for closed shape on write. Keys outside the
+        // closed set are rejected so a malicious caller cannot stuff random
+        // data into a field that the client engine reads. Parents are
+        // authorized alongside owners because Daily Engagement opt-in is a
+        // household setting both co-parents manage.
         && (!('engagementPreferences' in request.resource.data)
             || isValidEngagementPreferences(request.resource.data.engagementPreferences))
         // The setup audit block is validated only when this write actually
