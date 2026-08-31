@@ -1751,6 +1751,74 @@ service cloud.firestore {
         && (!('surgeHours' in value) || value.surgeHours is bool);
     }
 
+    // SMART NOTIFICATIONS V1 — closed-shape validator for the family-level
+    // notification opt-in (parent-writable). Mirrors the closed-key set in
+    // src/domain/notifications/preferences.ts. The `intensity` string is
+    // constrained to a known union and drives the daily cap via a
+    // server-side mapping (the resolver never trusts a numeric maxPerDay).
+    //
+    // HH:mm validation uses a character-set allowlist via `in [...strings]`
+    // rather than regex matches() (expensive in the rules expression budget
+    // — see the in-repo comment near isValidIdempotencyOperation).
+    function isValidNotificationHHmm(value) {
+      return value is string
+        && value.size() == 5
+        && value[2] == ':'
+        // Hour tens (00–19 → 0/1; 20–23 → 2). Reject 24+.
+        && value[0] in ['0', '1', '2']
+        // Hour ones: 0–9 when tens < 2; 0–3 when tens == 2.
+        && ((value[0] in ['0', '1'] && value[1] in ['0','1','2','3','4','5','6','7','8','9'])
+          || (value[0] == '2' && value[1] in ['0', '1', '2', '3']))
+        // Minute tens: 0–5 only.
+        && value[3] in ['0', '1', '2', '3', '4', '5']
+        // Minute ones: 0–9.
+        && value[4] in ['0','1','2','3','4','5','6','7','8','9'];
+    }
+
+    function isValidNotificationQuietHours(value) {
+      return value is map
+        && value.keys().hasOnly(['start', 'end'])
+        && isValidNotificationHHmm(value.start)
+        && isValidNotificationHHmm(value.end);
+    }
+
+    function isValidNotificationIntensity(value) {
+      return value in ['off', 'low', 'normal', 'high'];
+    }
+
+    function isValidNotificationWeatherLocation(value) {
+      return value is map
+        && value.keys().hasOnly(['countryCode', 'postalArea', 'city', 'timezone'])
+        && value.countryCode is string
+        && value.countryCode.size() > 0
+        && value.countryCode.size() <= 8
+        && value.timezone is string
+        && value.timezone.size() > 0
+        && (!('postalArea' in value) || (value.postalArea is string && value.postalArea.size() <= 24))
+        && (!('city' in value) || (value.city is string && value.city.size() <= 80));
+    }
+
+    function isValidNotificationPreferences(value) {
+      return value is map
+        && value.keys().hasOnly([
+          'enabled', 'intensity', 'quietHours', 'morningBrief', 'weather',
+          'questReminders', 'surgeAlerts', 'streakAlerts', 'familyProgress',
+          'seasonalEvents', 'weatherLocation'
+        ])
+        && value.enabled is bool
+        && isValidNotificationIntensity(value.intensity)
+        && isValidNotificationQuietHours(value.quietHours)
+        && value.morningBrief is bool
+        && value.weather is bool
+        && value.questReminders is bool
+        && value.surgeAlerts is bool
+        && value.streakAlerts is bool
+        && value.familyProgress is bool
+        && value.seasonalEvents is bool
+        && (!('weatherLocation' in value)
+            || isValidNotificationWeatherLocation(value.weatherLocation));
+    }
+
     function isValidGamificationConfig(data) {
       return data.keys().hasOnly(['schemaVersion', 'dailyGoalPercentage'])
         && data.schemaVersion == 1
@@ -1967,6 +2035,17 @@ service cloud.firestore {
         // household setting both co-parents manage.
         && (!('engagementPreferences' in request.resource.data)
             || isValidEngagementPreferences(request.resource.data.engagementPreferences))
+        // SMART NOTIFICATIONS V1 — notificationPreferences is parent/owner-
+        // writable, validated for closed shape on write. The diff is pinned
+        // to the closed key set so a malicious caller cannot mutate unrelated
+        // protected family fields (e.g. gamificationConfig, setup, petBox,
+        // inviteCode, lifecycleState) in the same write. Notification state
+        // and delivery records are server-owned (see the notification_state
+        // and notification_delivery matches below).
+        && (!('notificationPreferences' in request.resource.data)
+            || (isValidNotificationPreferences(request.resource.data.notificationPreferences)
+                && request.resource.data.diff(resource.data).affectedKeys()
+                    .hasOnly(['notificationPreferences'])))
         // The setup audit block is validated only when this write actually
         // changes it. It pins completedAt == request.time, so re-validating an
         // untouched, previously-approved setup map would reject every later
@@ -2748,6 +2827,25 @@ service cloud.firestore {
       // social-engineering exploits. A child who could write them could
       // mint fake bonuses.
       match /surge_evidence/{evidenceId} {
+        allow read, write: if false;
+      }
+
+      // SMART NOTIFICATIONS V1 — server-owned per-child delivery state.
+      // The Decision Engine (pure client/server module) consumes this read
+      // to enforce daily cap + dedupe. Writes are restricted to the
+      // trusted backend (Cloud Functions). Parents can read for UI
+      // counters; the relevant child can read their own state.
+      match /notification_state/{childId} {
+        allow read: if isParent(familyId) || (isAuthenticated() && authProfileId() == childId);
+        allow write: if false;
+      }
+
+      // SMART NOTIFICATIONS V1 — server-owned reservation / delivery record.
+      // The doc id is the dedupeKey (e.g. `morning_brief:childAli:2026-08-31`).
+      // create-if-absent is the idempotency contract: two evaluators racing
+      // for the same key observe `alreadyExists` and only one wins.
+      // Clients must NEVER be able to mutate delivery records.
+      match /notification_delivery/{dedupeKey} {
         allow read, write: if false;
       }
 

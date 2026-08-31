@@ -54,6 +54,7 @@ import { ProfileEditorModal } from '../components/profile/ProfileEditorModal';
 import { FamilySettings } from '../components/family/FamilySettings';
 import { DeleteAccountDialog } from '../components/settings/DeleteAccountDialog';
 import { AppearanceSection } from '../components/settings/AppearanceSection';
+import { NotificationPreferencesSection } from '../components/settings/NotificationPreferencesSection';
 import { getLegalLinks } from '../config/legalLinks';
 import { BugReportSheet } from '../components/bug-report/BugReportSheet';
 
@@ -534,6 +535,15 @@ export function Settings() {
           </CardContent>
         </Card>
       </Section>
+
+      {/* 3.4 SMART NOTIFICATIONS V1 — parent/owner only */}
+      {familyData?.id && isParentOrOwner && (
+        <NotificationPreferencesSection
+          familyId={familyData.id}
+          currentUserRole={role as 'parent' | 'owner' | 'child' | 'adult' | undefined}
+          existing={(familyData as { notificationPreferences?: unknown }).notificationPreferences as never}
+        />
+      )}
 
       {/* 3.5 LANGUAGE */}
       <Section
