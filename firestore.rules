@@ -1672,6 +1672,11 @@ service cloud.firestore {
       return !('avatarConfig' in data) || isValidAvatarConfig(data.avatarConfig);
     }
 
+    // P0 base semantic, retained for backwards compatibility with the
+    // production tests. The Engagement semantic (no direct displayName
+    // write) is enforced by a stricter overlap test in
+    // childAppearance.rules.test.ts; both are pinned so the strict
+    // child-appearance tests do not regress.
     function isValidChildSelfCosmeticUpdate(uid) {
       let avatarId = request.resource.data.get('avatarId', '');
       let familyId = resource.data.get('familyId', '');
@@ -1787,10 +1792,17 @@ service cloud.firestore {
           // must never be able to set its own login link, username, or flags.
           'hasLogin', 'username', 'loginEnabled', 'requiresPasswordChange', 'authUid'
         ])) ||
-        // Owner/parent may self-edit only their own benign profile fields.
+        // Owner/parent may self-edit only their own displayName. Avatar
+        // changes for parents flow through a separate, server-validated
+        // path (not yet exposed in V1). The engagement branch tightened
+        // the parent self-edit to identity-only to match the child
+        // appearance flow (where child controls their own avatar
+        // directly via updateChildAppearance()).
         (isParent(resource.data.familyId) && authProfileId() == uid
-          && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['displayName', 'avatarUrl', 'avatarId', 'avatarConfig'])
-          && hasValidOptionalAvatarConfig(request.resource.data)) ||
+          && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['displayName'])
+          && request.resource.data.displayName is string
+          && request.resource.data.displayName.trim().size() > 0
+          && request.resource.data.displayName.size() <= 40) ||
         // ENGAGEMENT: Child may update their own appearance (avatarConfig, avatarId)
         // directly without parent approval. avatarUrl is NOT in the child self-write
         // allowlist. The avatarConfig must satisfy the closed AvatarConfigV1 schema.
@@ -1812,9 +1824,12 @@ service cloud.firestore {
           || (request.resource.data.diff(resource.data).affectedKeys().hasAny(['lastTaskCompletionId']) && isValidTaskApprovalMutation(uid))
           || (request.resource.data.diff(resource.data).affectedKeys().hasAny(['lastBehaviourEventId']) && isValidBehaviourPointMutation(uid)) ||
         (!('familyId' in resource.data) && 'familyId' in request.resource.data ? isValidOwnerBootstrap(uid) || isValidJoinProfileUpdate(uid) : false) ||
+        // Parent approval on child profile applies ONLY displayName (identity-only).
+        // Legacy avatar fields (avatarUrl, avatarId, avatarConfig) are NOT applied
+        // because the child may have since updated their appearance via
+        // updateChildAppearance().
         ('familyId' in resource.data && isParent(resource.data.familyId) && resource.data.get('role', 'null') == 'child'
-          && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['displayName', 'avatarUrl', 'avatarId', 'avatarConfig'])
-          && hasValidOptionalAvatarConfig(request.resource.data))
+          && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['displayName']))
       );
 
       allow create: if isAuthenticated() && (
