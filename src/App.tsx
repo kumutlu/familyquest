@@ -39,15 +39,68 @@ import { consumeGoogleRedirectResult } from './lib/googleRedirectAuth';
 import { markStartupStage } from './startupDiagnostics';
 import { E2EBootstrapDiagnostics } from './components/E2EBootstrapDiagnostics';
 import { AuthRoutingGate } from './auth/AuthRoutingGate';
+import { DevPreviewRoot } from './components/preview/EngagementPreviewRoute';
 import {
   clearCreateFamilyIntent,
   hasCreateFamilyIntent,
   subscribeCreateFamilyIntent,
 } from './auth/createFamilyIntent';
 
+/**
+ * Returns true only when the URL carries `?dev-preview=engagement` AND the
+ * build is NOT production. Lives at module scope so it can be called during
+ * render without hook-order constraints. Re-evaluated on every render so it
+ * tracks in-app navigation that mutates `window.location.search`.
+ *
+ * The production guard is enforced at the call site by `isProductionBuild()`
+ * — see `EngagementPreviewRoute.tsx`. This function only inspects the URL.
+ */
+function isDevPreviewRequested(): boolean {
+  if (typeof window === 'undefined') return false
+  const search = window.location?.search ?? ''
+  const params = new URLSearchParams(search)
+  return params.get('dev-preview') === 'engagement'
+}
+
 type CreationContinuation = { authUid: string; familyId?: string };
 
 function App() {
+  // Track `window.location.search` reactively so navigating to the dev
+  // preview URL after first mount still re-routes the preview surface.
+  // The router's own `useLocation` would also work, but `BrowserRouter`
+  // is mounted AFTER this short-circuit — reading directly is the
+  // narrowest solution that does not move the Router earlier in the tree.
+  // IMPORTANT: this hook is unconditional so the Rules of Hooks are
+  // preserved on every render (preview or not).
+  const [searchTick, setSearchTick] = useState(0);
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const bump = () => setSearchTick(t => t + 1);
+    window.addEventListener('popstate', bump);
+    // Patch history.pushState / replaceState so SPA navigations that don't
+    // dispatch popstate also re-render this component.
+    const originalPush = window.history.pushState;
+    const originalReplace = window.history.replaceState;
+    const wrap =
+      (orig: typeof window.history.pushState) =>
+      (...args: Parameters<typeof orig>) => {
+        const out = orig.apply(window.history, args);
+        bump();
+        return out;
+      };
+    window.history.pushState = wrap(originalPush) as typeof window.history.pushState;
+    window.history.replaceState = wrap(originalReplace) as typeof window.history.replaceState;
+    return () => {
+      window.removeEventListener('popstate', bump);
+      window.history.pushState = originalPush;
+      window.history.replaceState = originalReplace;
+    };
+  }, []);
+  // Reading searchTick into the dependency array guarantees the render
+  // observes URL mutations without breaking the Rules of Hooks.
+  void searchTick;
+  const devPreviewActive = isDevPreviewRequested();
+
   const initAuth = useStore(state => state.initAuth);
   const authStatus = useStore(state => state.authStatus);
   const authUser = useStore(state => state.authUser);
@@ -74,6 +127,7 @@ function App() {
   }, []);
 
   useEffect(() => {
+    if (devPreviewActive) return; // preview harness must NEVER touch Firebase.
     markStartupStage('REACT_MOUNTED');
     logAuthTrace('app-mount');
     initAuth();
@@ -88,7 +142,7 @@ function App() {
       .catch(error => {
         console.error('[auth] Google redirect bootstrap failed', { code: error?.code });
       });
-  }, [initAuth]);
+  }, [initAuth, devPreviewActive]);
 
   useEffect(() => {
     // Keep the UID-bound intent for the whole P1-P3 journey. Clearing it as
@@ -116,6 +170,25 @@ function App() {
     // Notification Center (Firestore listener) is the primary UI.
     initForegroundMessaging().catch(() => undefined);
   }, []);
+
+  if (devPreviewActive) {
+    // DEV-only preview harness: rendered BEFORE the router, BEFORE
+    // AuthRoutingGate, BEFORE any Firebase-aware context. It must NEVER
+    // touch the auth store, Firestore, or family membership state.
+    return (
+      <Suspense
+        fallback={
+          <div
+            data-testid="route-translations-loading"
+            aria-busy="true"
+            className="min-h-screen bg-gray-50"
+          />
+        }
+      >
+        <DevPreviewRoot />
+      </Suspense>
+    );
+  }
 
   return (
     <Suspense fallback={<div data-testid="route-translations-loading" aria-busy="true" className="min-h-screen bg-gray-50" />}>

@@ -16,7 +16,7 @@
  * - A pinned test asserts the production guard is intact.
  */
 
-import { useEffect, useState } from 'react';
+import React, { useEffect, useState } from 'react';
 
 declare const importMetaEnv: { PROD?: boolean } | undefined;
 
@@ -208,5 +208,138 @@ function PreviewFixtureCanvas({ fixture }: { fixture: PreviewFixture }) {
   }
 }
 
-export { EngagementPreviewSurface }
+/**
+ * Narrow DEV-only error boundary that wraps the fixture browser so a render
+ * failure in any single fixture produces a visible "Preview failed to render"
+ * message plus diagnostics INSTEAD of a completely blank screen.
+ *
+ * The boundary NEVER lets the surrounding application error boundary observe
+ * the error — it owns the error completely so the harness is self-contained.
+ * In production, no fixture is ever mounted so this boundary is unreachable.
+ */
+interface PreviewErrorBoundaryProps {
+  readonly children: React.ReactNode
+}
+
+interface PreviewErrorBoundaryState {
+  readonly error: Error | null
+}
+
+class EngagementPreviewErrorBoundary extends React.Component<
+  PreviewErrorBoundaryProps,
+  PreviewErrorBoundaryState
+> {
+  state: PreviewErrorBoundaryState = { error: null }
+
+  static getDerivedStateFromError(error: Error): PreviewErrorBoundaryState {
+    return { error }
+  }
+
+  componentDidCatch(error: Error, info: { componentStack?: string | null }): void {
+    // Surface to the dev console but never to the production error reporter.
+    if (typeof console !== 'undefined') {
+      // eslint-disable-next-line no-console -- DEV-only diagnostic surface
+      console.error('[engagement-preview] fixture render failed', {
+        message: error?.message,
+        componentStack: info?.componentStack ?? null,
+      })
+    }
+  }
+
+  private readonly handleReset = (): void => {
+    this.setState({ error: null })
+  }
+
+  render(): React.ReactNode {
+    const { error } = this.state
+    if (error === null) return this.props.children
+    const dev = !isProductionBuild()
+    return (
+      <section
+        role="alert"
+        data-testid="engagement-preview-error"
+        className="rounded-card qk-bg-card qk-border-subtle qk-shadow-card border p-4"
+      >
+        <h2 className="text-card-title qk-text-primary">Preview failed to render</h2>
+        <p className="mt-1 text-meta qk-text-secondary">
+          The fixture browser caught an error. Switch back to the index and pick
+          another fixture, or retry the same one.
+        </p>
+        {dev ? (
+          <pre
+            data-testid="engagement-preview-error-details"
+            className="mt-3 max-h-48 overflow-auto rounded qk-bg-inset p-2 text-meta qk-text-secondary"
+          >
+            {String(error?.message ?? 'unknown')}
+            {'\n'}
+            {String(error?.stack ?? '')}
+          </pre>
+        ) : null}
+        <div className="mt-3 flex gap-2">
+          <button
+            type="button"
+            data-testid="engagement-preview-error-reset"
+            onClick={this.handleReset}
+            className="rounded-full qk-bg-inset px-3 py-1 text-meta qk-text-secondary hover:bg-xp-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-family-500"
+          >
+            Retry fixture
+          </button>
+        </div>
+      </section>
+    )
+  }
+}
+
+/**
+ * Surface wrapped in the narrow DEV-only error boundary. This is the
+ * component `App.tsx` mounts at the top level when the URL carries
+ * `?dev-preview=engagement` AND the build is not production.
+ *
+ * Returns `null` (unreachable) when:
+ *   - `import.meta.env.PROD === true`
+ *   - The URL does not carry the `dev-preview=engagement` query
+ *
+ * In every other case it renders the fixture browser.
+ */
+function DevPreviewRoot(): React.ReactNode {
+  if (isProductionBuild()) return null
+  if (typeof window === 'undefined') return null
+  const search = window.location?.search ?? ''
+  const params = new URLSearchParams(search)
+  if (params.get('dev-preview') !== 'engagement') return null
+  return (
+    <div
+      data-testid="engagement-preview-root"
+      className="min-h-screen w-full bg-gray-50 px-4 py-6 text-gray-900 dark:bg-[#0e1116] dark:text-gray-100"
+    >
+      <div className="mx-auto max-w-3xl space-y-3">
+        <header className="space-y-1">
+          <p className="text-meta uppercase tracking-wide opacity-70">DEV preview</p>
+          <h1 className="text-page-title font-semibold">Engagement experience preview</h1>
+          <p className="text-meta opacity-80">
+            Fixture-only visual QA harness. No Firestore reads or writes.
+          </p>
+        </header>
+        <EngagementPreviewErrorBoundary>
+          <EngagementPreviewSurface />
+        </EngagementPreviewErrorBoundary>
+        <footer className="pt-2 text-meta opacity-60">
+          <a
+            href="/"
+            data-testid="engagement-preview-exit"
+            className="underline hover:opacity-100"
+          >
+            Exit preview (return to Queki)
+          </a>
+        </footer>
+      </div>
+    </div>
+  )
+}
+
+export {
+  EngagementPreviewSurface,
+  EngagementPreviewErrorBoundary,
+  DevPreviewRoot,
+}
 export default EngagementPreviewSurface

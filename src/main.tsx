@@ -3,7 +3,6 @@ import { createRoot } from 'react-dom/client'
 import { I18nextProvider } from 'react-i18next'
 import { FAMILYQUEST_BUILD } from './buildInfo'
 import './index.css'
-import App from './App.tsx'
 import {
   installServiceWorkerControllerListener,
   installServiceWorkerUpdateHandler,
@@ -13,6 +12,13 @@ import { installChunkLoadErrorMonitor } from './chunkLoadErrorMonitor'
 import i18n, { bootstrapI18n } from './i18n'
 import { markStartupStage, resetStartupMetrics } from './startupDiagnostics'
 import { useAppearanceStore } from './store/appearanceStore'
+
+// `App.tsx` is intentionally NOT statically imported. The dev-only preview
+// surface mounts directly from this entry point so it can never be blocked
+// by a broken transitive import (e.g. an unrelated module error) in the
+// main app graph. Production routing is unaffected: when the URL does not
+// carry `?dev-preview=engagement`, we lazy-load the main `App` module just
+// like before.
 
 resetStartupMetrics()
 markStartupStage('APP_SCRIPT_READY')
@@ -77,10 +83,56 @@ console.info(`[FamilyQuest Build SHA:${__FAMILYQUEST_BUILD_SHA__}]`, {
 void bootstrapI18n()
 
 markStartupStage('REACT_MOUNT_START')
-createRoot(document.getElementById('root')!).render(
-  <StrictMode>
-    <I18nextProvider i18n={i18n}>
-      <App />
-    </I18nextProvider>
-  </StrictMode>,
-)
+
+/**
+ * Narrow DEV-only preview entry point. When the URL carries
+ * `?dev-preview=engagement` AND we are NOT in a production build, mount the
+ * fixture browser directly from `main.tsx`. This deliberately bypasses
+ * `<App />` so the preview never imports:
+ *
+ *   - Firebase / AuthRoutingGate
+ *   - Firestore / membership / onboarding guards
+ *   - The full route surface (only the preview surface is needed)
+ *
+ * The same guard is re-asserted inside `EngagementPreviewRoute.tsx`, so this
+ * entry point cannot leak the preview into a production bundle.
+ */
+function isDevPreviewRequestedFromUrl(): boolean {
+  if (typeof window === 'undefined') return false
+  const search = window.location?.search ?? ''
+  const params = new URLSearchParams(search)
+  return params.get('dev-preview') === 'engagement'
+}
+
+async function mountPreviewIfRequested(root: HTMLElement): Promise<boolean> {
+  if (!isDevPreviewRequestedFromUrl()) return false
+  // Lazy-import the preview module so production bundles never load it.
+  const mod = await import('./components/preview/EngagementPreviewRoute')
+  if (mod.DevPreviewRoot == null) return false
+  createRoot(root).render(
+    <StrictMode>
+      <I18nextProvider i18n={i18n}>
+        <mod.DevPreviewRoot />
+      </I18nextProvider>
+    </StrictMode>,
+  )
+  return true
+}
+
+async function bootstrap() {
+  const root = document.getElementById('root')!
+  const mountedPreview = await mountPreviewIfRequested(root)
+  if (mountedPreview) return
+  // Lazy-load the main app module so a broken transitive import in the
+  // app graph can never block preview rendering.
+  const { default: App } = await import('./App.tsx')
+  createRoot(root).render(
+    <StrictMode>
+      <I18nextProvider i18n={i18n}>
+        <App />
+      </I18nextProvider>
+    </StrictMode>,
+  )
+}
+
+void bootstrap()
