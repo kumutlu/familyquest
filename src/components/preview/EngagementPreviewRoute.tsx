@@ -5,6 +5,17 @@
  * precedence, mystery ready/locked, comeback tiers, seasonal accents,
  * XP feedback, and reduced motion without touching authoritative state.
  *
+ * URL CONTRACT (see ./engagementPreviewUrl.ts)
+ * --------------------------------------------
+ *   INDEX_URL   = ?dev-preview=engagement
+ *   FIXTURE_URL = ?dev-preview=engagement&fixture=<id>
+ *
+ * The marker is ALWAYS preserved by `buildEngagementPreviewUrl`. A click
+ * in the index navigates via `history.pushState` to the corresponding
+ * fixture URL. The marker can never be silently dropped, so the preview
+ * can never fall through to the normal `App` graph (Firebase Auth,
+ * AuthRoutingGate, ProfileGate, FamilyGate, onboarding, Firestore).
+ *
  * SAFETY
  * ------
  * - Activated ONLY when `import.meta.env.PROD === false`.
@@ -14,9 +25,23 @@
  *   writes, NO wallet writes, NO inventory writes, NO task completion
  *   writes. Everything is fixture data.
  * - A pinned test asserts the production guard is intact.
+ * - Every fixture render path is wrapped in `EngagementPreviewErrorBoundary`
+ *   so a render failure surfaces a diagnostic panel INSTEAD of a blank
+ *   page.
  */
 
-import React, { useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import {
+  buildEngagementPreviewUrl,
+  isDevPreviewQueryActive,
+  parseFixtureFromSearch,
+} from './engagementPreviewUrl';
+import {
+  PREVIEW_FIXTURES as FIXTURES,
+  findFixtureById,
+  type PreviewFixture,
+} from './previewFixtures';
+export type { PreviewFixture };
 
 declare const importMetaEnv: { PROD?: boolean } | undefined;
 
@@ -35,47 +60,6 @@ function isProductionBuild(): boolean {
     ? importMetaEnv.PROD === true
     : false;
 }
-
-export interface PreviewFixture {
-  readonly id: string
-  readonly title: string
-  readonly kind:
-    | 'normal-quests'
-    | 'normal-all-caught-up'
-    | 'surge'
-    | 'mystery-locked'
-    | 'mystery-ready'
-    | 'mystery-reveal'
-    | 'comeback-1d'
-    | 'comeback-3d'
-    | 'comeback-7d'
-    | 'seasonal-christmas'
-    | 'seasonal-halloween'
-    | 'seasonal-ramadan-eid'
-    | 'seasonal-neon'
-    | 'xp-pop-mystery'
-    | 'xp-pop-comeback'
-    | 'reduced-motion'
-}
-
-const FIXTURES: readonly PreviewFixture[] = [
-  { id: 'normal-quests',         title: 'Normal · quests waiting',   kind: 'normal-quests' },
-  { id: 'normal-all-caught-up',  title: 'Normal · all caught up',    kind: 'normal-all-caught-up' },
-  { id: 'surge',                 title: 'Active Surge',              kind: 'surge' },
-  { id: 'mystery-locked',        title: 'Mystery · locked',          kind: 'mystery-locked' },
-  { id: 'mystery-ready',         title: 'Mystery · ready',           kind: 'mystery-ready' },
-  { id: 'mystery-reveal',        title: 'Mystery · reveal',          kind: 'mystery-reveal' },
-  { id: 'comeback-1d',           title: 'Comeback · return_1d',      kind: 'comeback-1d' },
-  { id: 'comeback-3d',           title: 'Comeback · return_3d',      kind: 'comeback-3d' },
-  { id: 'comeback-7d',           title: 'Comeback · return_7d',      kind: 'comeback-7d' },
-  { id: 'seasonal-christmas',    title: 'Seasonal · Christmas',      kind: 'seasonal-christmas' },
-  { id: 'seasonal-halloween',    title: 'Seasonal · Halloween',      kind: 'seasonal-halloween' },
-  { id: 'seasonal-ramadan-eid',  title: 'Seasonal · Ramadan / Eid',      kind: 'seasonal-ramadan-eid' },
-  { id: 'seasonal-neon',         title: 'Seasonal · Neon weekly',    kind: 'seasonal-neon' },
-  { id: 'xp-pop-mystery',        title: 'XP pop · Mystery',          kind: 'xp-pop-mystery' },
-  { id: 'xp-pop-comeback',       title: 'XP pop · Comeback',         kind: 'xp-pop-comeback' },
-  { id: 'reduced-motion',        title: 'Reduced motion',            kind: 'reduced-motion' },
-]
 
 /**
  * Hook-style helper used by the host (`ChildLivingHome`). Returns the
@@ -107,17 +91,129 @@ function useIsPreviewEnabled(): boolean {
       setEnabled(false)
       return
     }
-    const search = window.location?.search ?? ''
-    const params = new URLSearchParams(search)
-    setEnabled(params.get('dev-preview') === 'engagement')
+    const apply = () => {
+      setEnabled(isDevPreviewQueryActive(window.location?.search ?? ''))
+    }
+    apply()
+    window.addEventListener('popstate', apply)
+    return () => window.removeEventListener('popstate', apply)
   }, [])
 
   return enabled
 }
 
+interface PreviewNavigationApi {
+  readonly navigateToFixture: (fixtureId: string) => void
+  readonly navigateToIndex: () => void
+}
+
+/**
+ * Use the URL as the single source of truth for fixture selection.
+ *
+ * - `pushState` is used so browser Back / Forward work normally.
+ * - The new URL is always produced via `buildEngagementPreviewUrl`, so
+ *   the dev-preview marker is preserved across every navigation.
+ * - Both `pushState` and a manual `popstate` event are dispatched so
+ *   React's URL observers re-evaluate on the same tick (Safari does not
+ *   fire `popstate` after `pushState`).
+ */
+function usePreviewNavigation(): {
+  fixtureId: string | null
+  navigation: PreviewNavigationApi
+} {
+  const readFixtureFromUrl = useCallback((): string | null => {
+    if (typeof window === 'undefined') return null
+    if (!isDevPreviewQueryActive(window.location?.search ?? '')) return null
+    return parseFixtureFromSearch(window.location?.search ?? '')
+  }, [])
+
+  const [fixtureId, setFixtureId] = useState<string | null>(() =>
+    readFixtureFromUrl(),
+  )
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return
+    const sync = () => {
+      // If the marker is gone we must NOT render the preview.
+      if (!isDevPreviewQueryActive(window.location?.search ?? '')) {
+        setFixtureId(null)
+        return
+      }
+      setFixtureId(parseFixtureFromSearch(window.location?.search ?? ''))
+    }
+    window.addEventListener('popstate', sync)
+    // Some browsers (and Safari in particular) also dispatch this when
+    // history.pushState is called from JS.
+    window.addEventListener('pushstate' as any, sync)
+    return () => {
+      window.removeEventListener('popstate', sync)
+      window.removeEventListener('pushstate' as any, sync)
+    }
+  }, [])
+
+  const navigation = useMemo<PreviewNavigationApi>(() => {
+    const goTo = (next: string | null): void => {
+      if (typeof window === 'undefined') return
+      const currentSearch = window.location?.search ?? ''
+      const url = buildEngagementPreviewUrl(next, { currentSearch })
+      // Use the path with the rebuilt search; never touch the hash so we
+      // do not accidentally scroll-jump.
+      const nextHref = `${window.location.pathname}${url}${window.location.hash ?? ''}`
+      // Push a new entry so browser Back returns to the previous surface.
+      window.history.pushState({}, '', nextHref)
+      // Manually re-evaluate because pushState does NOT fire popstate.
+      setFixtureId(next)
+      // Dispatch a synthetic event so other observers can react.
+      try {
+        window.dispatchEvent(new PopStateEvent('popstate'))
+      } catch {
+        // ignore — Safari has emitted warnings on PopStateEvent in older
+        // versions; the manual setFixtureId above is the canonical update.
+      }
+    }
+    return {
+      navigateToFixture: (id: string) => goTo(id),
+      navigateToIndex: () => goTo(null),
+    }
+  }, [])
+
+  return { fixtureId, navigation }
+}
+
 function EngagementPreviewSurface() {
-  const [fixture, setFixture] = useState<PreviewFixture | null>(null)
+  const { fixtureId, navigation } = usePreviewNavigation()
+  const fixture = findFixtureById(fixtureId)
+  // Unknown ids fall through to a safe diagnostic panel; the preview
+  // shell is still visible so the user is never trapped on a blank page.
   if (fixture === null) {
+    if (fixtureId !== null) {
+      return (
+        <section
+          data-testid="engagement-preview-unknown"
+          className="rounded-card qk-bg-card qk-border-subtle qk-shadow-card border p-4"
+        >
+          <header className="mb-2 flex items-center justify-between gap-2">
+            <h2 className="text-card-title qk-text-primary">
+              Unknown fixture
+            </h2>
+            <button
+              type="button"
+              data-testid="engagement-preview-back"
+              onClick={navigation.navigateToIndex}
+              className="rounded-full qk-bg-inset px-3 py-1 text-meta qk-text-secondary hover:bg-xp-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-family-500"
+            >
+              Back to fixtures
+            </button>
+          </header>
+          <p
+            data-testid="engagement-preview-unknown-id"
+            className="text-meta qk-text-secondary"
+          >
+            Unknown fixture id: {fixtureId}
+          </p>
+        </section>
+      )
+    }
     return (
       <section
         data-testid="engagement-preview-index"
@@ -133,7 +229,7 @@ function EngagementPreviewSurface() {
               <button
                 type="button"
                 data-testid={`engagement-preview-${f.id}`}
-                onClick={() => setFixture(f)}
+                onClick={() => navigation.navigateToFixture(f.id)}
                 className="w-full rounded-card qk-bg-inset px-3 py-2 text-left text-card-title qk-text-primary hover:bg-xp-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-family-500"
               >
                 {f.title}
@@ -155,14 +251,19 @@ function EngagementPreviewSurface() {
         <h2 className="text-card-title qk-text-primary">{fixture.title}</h2>
         <button
           type="button"
-          onClick={() => setFixture(null)}
+          onClick={navigation.navigateToIndex}
           data-testid="engagement-preview-back"
           className="rounded-full qk-bg-inset px-3 py-1 text-meta qk-text-secondary hover:bg-xp-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-family-500"
         >
           Back to fixtures
         </button>
       </header>
-      <PreviewFixtureCanvas fixture={fixture} />
+      <EngagementPreviewErrorBoundary
+        fixtureId={fixture.id}
+        onNavigateToIndex={navigation.navigateToIndex}
+      >
+        <PreviewFixtureCanvas fixture={fixture} />
+      </EngagementPreviewErrorBoundary>
     </section>
   )
 }
@@ -209,16 +310,17 @@ function PreviewFixtureCanvas({ fixture }: { fixture: PreviewFixture }) {
 }
 
 /**
- * Narrow DEV-only error boundary that wraps the fixture browser so a render
- * failure in any single fixture produces a visible "Preview failed to render"
- * message plus diagnostics INSTEAD of a completely blank screen.
+ * Narrow DEV-only error boundary that wraps each fixture render so a
+ * render failure in any single fixture produces a visible
+ * "Preview failed to render" message INSTEAD of a blank screen.
  *
- * The boundary NEVER lets the surrounding application error boundary observe
- * the error — it owns the error completely so the harness is self-contained.
- * In production, no fixture is ever mounted so this boundary is unreachable.
+ * The boundary is intentionally per-fixture: an earlier fixture failure
+ * does not prevent navigation to a healthy one.
  */
 interface PreviewErrorBoundaryProps {
+  readonly fixtureId: string
   readonly children: React.ReactNode
+  readonly onNavigateToIndex: () => void
 }
 
 interface PreviewErrorBoundaryState {
@@ -240,6 +342,7 @@ class EngagementPreviewErrorBoundary extends React.Component<
     if (typeof console !== 'undefined') {
       // eslint-disable-next-line no-console -- DEV-only diagnostic surface
       console.error('[engagement-preview] fixture render failed', {
+        fixtureId: this.props.fixtureId,
         message: error?.message,
         componentStack: info?.componentStack ?? null,
       })
@@ -255,12 +358,14 @@ class EngagementPreviewErrorBoundary extends React.Component<
     if (error === null) return this.props.children
     const dev = !isProductionBuild()
     return (
-      <section
+      <div
         role="alert"
         data-testid="engagement-preview-error"
         className="rounded-card qk-bg-card qk-border-subtle qk-shadow-card border p-4"
       >
-        <h2 className="text-card-title qk-text-primary">Preview failed to render</h2>
+        <h2 className="text-card-title qk-text-primary">
+          Preview failed to render
+        </h2>
         <p className="mt-1 text-meta qk-text-secondary">
           The fixture browser caught an error. Switch back to the index and pick
           another fixture, or retry the same one.
@@ -278,14 +383,22 @@ class EngagementPreviewErrorBoundary extends React.Component<
         <div className="mt-3 flex gap-2">
           <button
             type="button"
-            data-testid="engagement-preview-error-reset"
+            data-testid="engagement-preview-error-retry"
             onClick={this.handleReset}
             className="rounded-full qk-bg-inset px-3 py-1 text-meta qk-text-secondary hover:bg-xp-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-family-500"
           >
             Retry fixture
           </button>
+          <button
+            type="button"
+            data-testid="engagement-preview-error-back"
+            onClick={this.props.onNavigateToIndex}
+            className="rounded-full qk-bg-inset px-3 py-1 text-meta qk-text-secondary hover:bg-xp-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-family-500"
+          >
+            Back to fixtures
+          </button>
         </div>
-      </section>
+      </div>
     )
   }
 }
@@ -304,9 +417,7 @@ class EngagementPreviewErrorBoundary extends React.Component<
 function DevPreviewRoot(): React.ReactNode {
   if (isProductionBuild()) return null
   if (typeof window === 'undefined') return null
-  const search = window.location?.search ?? ''
-  const params = new URLSearchParams(search)
-  if (params.get('dev-preview') !== 'engagement') return null
+  if (!isDevPreviewQueryActive(window.location?.search ?? '')) return null
   return (
     <div
       data-testid="engagement-preview-root"
@@ -320,9 +431,7 @@ function DevPreviewRoot(): React.ReactNode {
             Fixture-only visual QA harness. No Firestore reads or writes.
           </p>
         </header>
-        <EngagementPreviewErrorBoundary>
-          <EngagementPreviewSurface />
-        </EngagementPreviewErrorBoundary>
+        <EngagementPreviewSurface />
         <footer className="pt-2 text-meta opacity-60">
           <a
             href="/"

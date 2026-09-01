@@ -7,19 +7,27 @@
  *     wallet / inventory / task-completion writes.
  *   - The preview surface MUST only render when the URL carries the
  *     `dev-preview=engagement` query.
+ *   - Click navigation MUST preserve the `dev-preview=engagement`
+ *     marker so the preview can never fall into the normal app graph.
+ *   - A throwing fixture MUST surface the error boundary, NOT a blank
+ *     page.
  */
 
-import { describe, expect, it, vi } from 'vitest'
-import { render, screen } from '@testing-library/react'
+import { beforeAll, describe, expect, it, vi } from 'vitest'
+import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import {
   DevPreviewRoot,
+  EngagementPreviewErrorBoundary,
   EngagementPreviewSurface,
 } from './EngagementPreviewRoute'
+import { findFixtureById } from './previewFixtures'
+import {
+  buildEngagementPreviewUrl,
+  isDevPreviewQueryActive,
+} from './engagementPreviewUrl'
 
 describe('EngagementPreviewRoute — production guard', () => {
   it('renders the fixture index when the dev route is on and PROD=false', async () => {
-    // The hook reads window.location.search on mount. We mock it via
-    // jsdom history before mount.
     window.history.pushState({}, '', '/?dev-preview=engagement')
     render(<EngagementPreviewSurface />)
     expect(await screen.findByTestId('engagement-preview-index')).toBeInTheDocument()
@@ -45,12 +53,7 @@ describe('EngagementPreviewRoute — production guard', () => {
       'reduced-motion',
     ]
     for (const id of ids) {
-      expect(
-        document.querySelector(`[data-testid="engagement-preview-${id}"]`) ||
-          // The list is rendered post-mount; we only assert the index
-          // surfaces here. The fixture canvas is tested separately.
-          true,
-      ).toBeTruthy()
+      expect(findFixtureById(id)?.id).toBe(id)
     }
   })
 
@@ -82,5 +85,170 @@ describe('EngagementPreviewRoute — production guard', () => {
     } finally {
       vi.unstubAllEnvs()
     }
+  })
+
+  it('DevPreviewRoot returns null when the URL carries an unknown preview marker value', () => {
+    window.history.pushState({}, '', '/?dev-preview=other')
+    const { container } = render(<DevPreviewRoot />)
+    expect(
+      container.querySelector('[data-testid="engagement-preview-root"]'),
+    ).not.toBeInTheDocument()
+  })
+})
+
+describe('EngagementPreviewRoute — click navigation preserves the preview marker', () => {
+  it('clicking "Mystery · ready" preserves dev-preview=engagement in the URL', async () => {
+    window.history.pushState({}, '', '/?dev-preview=engagement')
+    render(<EngagementPreviewSurface />)
+    const trigger = await screen.findByTestId('engagement-preview-mystery-ready')
+    fireEvent.click(trigger)
+    await waitFor(() => {
+      expect(
+        document.querySelector(
+          '[data-testid="engagement-preview-frame-mystery-ready"]',
+        ),
+      ).toBeInTheDocument()
+    })
+    expect(isDevPreviewQueryActive(window.location.search)).toBe(true)
+    expect(window.location.search).toBe(
+      '?dev-preview=engagement&fixture=mystery-ready',
+    )
+  })
+
+  it('clicking the Back button returns to the index URL while keeping the marker', async () => {
+    window.history.pushState(
+      {},
+      '',
+      '/?dev-preview=engagement&fixture=mystery-ready',
+    )
+    render(<EngagementPreviewSurface />)
+    await screen.findByTestId('engagement-preview-frame-mystery-ready')
+    const back = screen.getByTestId('engagement-preview-back')
+    fireEvent.click(back)
+    await waitFor(() => {
+      expect(
+        screen.getByTestId('engagement-preview-index'),
+      ).toBeInTheDocument()
+    })
+    expect(window.location.search).toBe('?dev-preview=engagement')
+  })
+
+  it('switching fixture from index → Mystery Ready → Surge preserves the marker at every step', async () => {
+    window.history.pushState({}, '', '/?dev-preview=engagement')
+    render(<EngagementPreviewSurface />)
+    fireEvent.click(await screen.findByTestId('engagement-preview-mystery-ready'))
+    await waitFor(() => {
+      expect(
+        screen.getByTestId('engagement-preview-frame-mystery-ready'),
+      ).toBeInTheDocument()
+    })
+    // Switch directly using the URL helper (simulating a fast user).
+    const nextUrl = buildEngagementPreviewUrl('surge', { currentSearch: window.location.search })
+    window.history.pushState({}, '', nextUrl)
+    // Synthesize the popstate the preview listens for.
+    window.dispatchEvent(new PopStateEvent('popstate'))
+    await waitFor(() => {
+      expect(
+        screen.getByTestId('engagement-preview-frame-surge'),
+      ).toBeInTheDocument()
+    })
+    expect(isDevPreviewQueryActive(window.location.search)).toBe(true)
+    expect(window.location.search).toBe('?dev-preview=engagement&fixture=surge')
+  })
+
+  it('an unknown fixture id renders a safe fallback surface (NOT a blank page)', async () => {
+    window.history.pushState(
+      {},
+      '',
+      '/?dev-preview=engagement&fixture=does-not-exist',
+    )
+    render(<EngagementPreviewSurface />)
+    const unknown = await screen.findByTestId('engagement-preview-unknown')
+    expect(unknown).toBeInTheDocument()
+    expect(
+      screen.getByTestId('engagement-preview-unknown-id'),
+    ).toHaveTextContent('does-not-exist')
+    // The preview shell must STILL be present.
+    expect(screen.getByTestId('engagement-preview-back')).toBeInTheDocument()
+  })
+
+  it('opening the surface directly on a fixture URL renders the fixture (deep-link safe)', async () => {
+    window.history.pushState(
+      {},
+      '',
+      '/?dev-preview=engagement&fixture=comeback-7d',
+    )
+    render(<EngagementPreviewSurface />)
+    expect(
+      await screen.findByTestId('engagement-preview-frame-comeback-7d'),
+    ).toBeInTheDocument()
+    expect(
+      screen.getByTestId('preview-comeback-7d'),
+    ).toHaveTextContent('Comeback · return_7d · +50 XP')
+  })
+})
+
+describe('EngagementPreviewRoute — error boundary', () => {
+  // Silence the React/console.error noise from intentional fixture throws.
+  beforeAll(() => {
+    vi.spyOn(console, 'error').mockImplementation(() => undefined)
+  })
+
+  // A deliberately throwing test fixture is mounted through the public
+  // surface so the boundary can be exercised in isolation. We render it
+  // through the boundary directly because PreviewFixtureCanvas is internal.
+  function ThrowingChild(): React.ReactNode {
+    throw new Error('boom')
+  }
+  it('renders "Preview failed to render" when a fixture throws, NOT a blank page', () => {
+    const { container } = render(
+      <EngagementPreviewErrorBoundary
+        fixtureId="test-throw"
+        onNavigateToIndex={() => undefined}
+      >
+        <ThrowingChild />
+      </EngagementPreviewErrorBoundary>,
+    )
+    expect(
+      container.querySelector('[data-testid="engagement-preview-error"]'),
+    ).toBeInTheDocument()
+    expect(
+      container.querySelector('[data-testid="engagement-preview-error-retry"]'),
+    ).toBeInTheDocument()
+  })
+
+  it('does not expose the stack trace in production builds', () => {
+    vi.stubEnv('PROD', true)
+    try {
+      const { container } = render(
+        <EngagementPreviewErrorBoundary
+          fixtureId="test-throw"
+          onNavigateToIndex={() => undefined}
+        >
+          <ThrowingChild />
+        </EngagementPreviewErrorBoundary>,
+      )
+      expect(
+        container.querySelector('[data-testid="engagement-preview-error-details"]'),
+      ).toBeNull()
+    } finally {
+      vi.unstubAllEnvs()
+    }
+  })
+
+  it('does expose the stack trace in DEV for fast debugging', () => {
+    const { container } = render(
+      <EngagementPreviewErrorBoundary
+        fixtureId="test-throw"
+        onNavigateToIndex={() => undefined}
+      >
+        <ThrowingChild />
+      </EngagementPreviewErrorBoundary>,
+    )
+    const details = container.querySelector(
+      '[data-testid="engagement-preview-error-details"]',
+    )
+    expect(details).toBeInTheDocument()
+    expect(details?.textContent ?? '').toContain('boom')
   })
 })

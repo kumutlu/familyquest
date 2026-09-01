@@ -40,6 +40,7 @@ import { markStartupStage } from './startupDiagnostics';
 import { E2EBootstrapDiagnostics } from './components/E2EBootstrapDiagnostics';
 import { AuthRoutingGate } from './auth/AuthRoutingGate';
 import { DevPreviewRoot } from './components/preview/EngagementPreviewRoute';
+import { isDevPreviewQueryActive } from './components/preview/engagementPreviewUrl';
 import {
   clearCreateFamilyIntent,
   hasCreateFamilyIntent,
@@ -54,12 +55,13 @@ import {
  *
  * The production guard is enforced at the call site by `isProductionBuild()`
  * — see `EngagementPreviewRoute.tsx`. This function only inspects the URL.
+ *
+ * The contract is owned by `engagementPreviewUrl.ts`; this function is
+ * just a thin wrapper so the rest of `App.tsx` can keep its current shape.
  */
 function isDevPreviewRequested(): boolean {
   if (typeof window === 'undefined') return false
-  const search = window.location?.search ?? ''
-  const params = new URLSearchParams(search)
-  return params.get('dev-preview') === 'engagement'
+  return isDevPreviewQueryActive(window.location?.search ?? '')
 }
 
 type CreationContinuation = { authUid: string; familyId?: string };

@@ -12,6 +12,7 @@ import { installChunkLoadErrorMonitor } from './chunkLoadErrorMonitor'
 import i18n, { bootstrapI18n } from './i18n'
 import { markStartupStage, resetStartupMetrics } from './startupDiagnostics'
 import { useAppearanceStore } from './store/appearanceStore'
+import { isDevPreviewQueryActive } from './components/preview/engagementPreviewUrl'
 
 // `App.tsx` is intentionally NOT statically imported. The dev-only preview
 // surface mounts directly from this entry point so it can never be blocked
@@ -96,12 +97,14 @@ markStartupStage('REACT_MOUNT_START')
  *
  * The same guard is re-asserted inside `EngagementPreviewRoute.tsx`, so this
  * entry point cannot leak the preview into a production bundle.
+ *
+ * The URL contract is owned by `engagementPreviewUrl.ts` — that file is
+ * the single source of truth for what "preview active" means and how the
+ * marker is preserved across fixture navigation.
  */
 function isDevPreviewRequestedFromUrl(): boolean {
   if (typeof window === 'undefined') return false
-  const search = window.location?.search ?? ''
-  const params = new URLSearchParams(search)
-  return params.get('dev-preview') === 'engagement'
+  return isDevPreviewQueryActive(window.location?.search ?? '')
 }
 
 async function mountPreviewIfRequested(root: HTMLElement): Promise<boolean> {
