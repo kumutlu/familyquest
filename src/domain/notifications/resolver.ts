@@ -37,7 +37,9 @@ const PRIORITY = Object.freeze({
   surge: 10,
   streak: 20,
   family_progress: 30,
+  mystery_drop: 35,
   seasonal: 40,
+  comeback: 45,
   morning_brief: 50,
   quest_reminder: 60,
 } as const)
@@ -249,6 +251,61 @@ function makeQuestReminderCandidate(
 }
 
 /** Public entry point. PURE. No I/O. */
+function makeMysteryDropCandidate(
+  ctx: NotificationDecisionContext,
+  localDate: string,
+  slot: NotificationSlot,
+): Candidate | null {
+  const md = ctx.dailyContext.activeMysteryDrop
+  if (!md) return null
+  // Only fire when the drop is ready to be revealed (or about to be).
+  const remaining = Math.max(0, md.endsAt - ctx.now)
+  const minutesRemaining = Math.ceil(remaining / 60_000)
+  return {
+    type: 'mystery_drop',
+    priority: PRIORITY.mystery_drop,
+    preferenceEnabled: true,
+    dedupeKey: buildDedupeKey({
+      type: 'mystery_drop',
+      childId: ctx.child.id,
+      familyId: '',
+      slot,
+      localDate,
+    }),
+    messageKey: 'mysteryDrop.appeared',
+    variables: {
+      rarity: md.rarity ?? 'rare',
+      minutesRemaining,
+    },
+  }
+}
+
+function makeComebackCandidate(
+  ctx: NotificationDecisionContext,
+  localDate: string,
+  slot: NotificationSlot,
+): Candidate | null {
+  const cb = ctx.dailyContext.activeComeback
+  if (!cb) return null
+  if (!cb.missionAvailable) return null
+  return {
+    type: 'comeback',
+    priority: PRIORITY.comeback,
+    preferenceEnabled: true,
+    dedupeKey: buildDedupeKey({
+      type: 'comeback',
+      childId: ctx.child.id,
+      familyId: '',
+      slot,
+      localDate,
+    }),
+    messageKey: 'comeback.welcome',
+    variables: {
+      tier: cb.tier,
+    },
+  }
+}
+
 export function resolveNotificationDecision(
   ctx: NotificationDecisionContext,
   options: ResolveOptions,
@@ -279,7 +336,7 @@ export function resolveNotificationDecision(
   const sentKeys = new Set(ctx.deliveryState.sentKeysToday)
 
   // Build candidates in priority order.
-  const ordered: NotificationType[] = ['surge', 'streak', 'family_progress', 'seasonal', 'morning_brief', 'quest_reminder']
+  const ordered: NotificationType[] = ['surge', 'streak', 'family_progress', 'mystery_drop', 'seasonal', 'comeback', 'morning_brief', 'quest_reminder']
   const candidates: Candidate[] = []
   for (const t of ordered) {
     let c: Candidate | null = null
@@ -289,6 +346,8 @@ export function resolveNotificationDecision(
     else if (t === 'seasonal') c = makeSeasonalCandidate(ctx, localDate, options.slot, options.familyId)
     else if (t === 'morning_brief') c = makeMorningBriefCandidate(ctx, localDate)
     else if (t === 'quest_reminder') c = makeQuestReminderCandidate(ctx, localDate, options.slot)
+    else if (t === 'mystery_drop') c = makeMysteryDropCandidate(ctx, localDate, options.slot)
+    else if (t === 'comeback') c = makeComebackCandidate(ctx, localDate, options.slot)
     if (c) candidates.push(c)
   }
 

@@ -22,6 +22,8 @@ export type NotificationType =
   | 'family_progress'
   | 'seasonal'
   | 'quest_reminder'
+  | 'mystery_drop'
+  | 'comeback'
 
 export type NotificationReason =
   | 'selected'
@@ -83,6 +85,20 @@ export interface ActiveSeasonContext {
   readonly name: string
 }
 
+/** Mystery Drop availability — read-only view surfaced to notifications. */
+export interface ActiveMysteryDropContext {
+  readonly dropId: string
+  readonly rarity?: 'common' | 'rare' | 'epic'
+  readonly unlockReady: boolean
+  readonly endsAt: number
+}
+
+/** Comeback Mission availability — read-only view surfaced to notifications. */
+export interface ActiveComebackContext {
+  readonly tier: 'return_1d' | 'return_3d' | 'return_7d'
+  readonly missionAvailable: boolean
+}
+
 export interface NotificationDeliveryState {
   readonly sentToday: number
   readonly sentKeysToday: readonly string[]
@@ -97,6 +113,8 @@ export interface NotificationDailyContext {
   readonly activeSurge?: ActiveSurgeContext
   readonly familyProgress?: FamilyProgressContext
   readonly activeSeason?: ActiveSeasonContext
+  readonly activeMysteryDrop?: ActiveMysteryDropContext
+  readonly activeComeback?: ActiveComebackContext
 }
 
 export interface NotificationDecisionContext {
@@ -199,6 +217,10 @@ export function buildDedupeKey(args: {
       return `seasonal:${args.familyId}:${args.localDate}:${args.slot}`
     case 'quest_reminder':
       return `quest-reminder:${args.childId}:${args.localDate}:${args.slot}`
+    case 'mystery_drop':
+      return `mystery-drop:${args.childId}:${args.localDate}`
+    case 'comeback':
+      return `comeback:${args.childId}:${args.localDate}`
   }
 }
 

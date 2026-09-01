@@ -127,6 +127,36 @@ export const SEASONAL_NEW_DISCOVERY: CatalogEntry = Object.freeze({
   }),
 })
 
+export const MYSTERY_DROP_APPEARED: CatalogEntry = Object.freeze({
+  messageKey: 'mysteryDrop.appeared',
+  type: 'mystery_drop',
+  variants: Object.freeze({
+    en: Object.freeze([
+      { title: 'A Mystery Drop appeared', body: 'A mysterious {rarity} box showed up in your family world.' },
+      { title: 'Something mysterious is waiting', body: 'Open the {rarity} Mystery Drop when you complete a quest.' },
+    ]),
+    tr: Object.freeze([
+      { title: 'Gizemli bir Kutu belirdi', body: 'Aile dünyanda gizemli bir {rarity} kutu ortaya çıktı.' },
+      { title: 'Gizemli bir şey bekliyor', body: 'Bir görevi tamamladığında {rarity} Gizemli Kutuyu açabilirsin.' },
+    ]),
+  }),
+})
+
+export const COMEBACK_WELCOME: CatalogEntry = Object.freeze({
+  messageKey: 'comeback.welcome',
+  type: 'comeback',
+  variants: Object.freeze({
+    en: Object.freeze([
+      { title: 'Welcome back!', body: 'I saved something for you. Complete one quest today to earn a comeback bonus.' },
+      { title: 'You’re back!', body: 'Great to see you. A small quest today restarts your momentum.' },
+    ]),
+    tr: Object.freeze([
+      { title: 'Tekrar hoş geldin!', body: 'Sana bir şey sakladım. Bugün bir görev tamamlayarak dönüş bonusu kazanabilirsin.' },
+      { title: 'Geri döndün!', body: 'Seni görmek güzel. Bugünkü küçük bir görev, ivmeni yeniden başlatır.' },
+    ]),
+  }),
+})
+
 export const QUEST_REMINDER_WAITING: CatalogEntry = Object.freeze({
   messageKey: 'questReminder.waiting',
   type: 'quest_reminder',
@@ -148,6 +178,8 @@ export const CATALOG: readonly CatalogEntry[] = Object.freeze([
   SURGE_ALERT,
   FAMILY_PROGRESS_NEAR_COMPLETE,
   SEASONAL_NEW_DISCOVERY,
+  MYSTERY_DROP_APPEARED,
+  COMEBACK_WELCOME,
   QUEST_REMINDER_WAITING,
 ])
 

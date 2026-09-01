@@ -29,6 +29,7 @@ import {
   reverseSurgeBonus,
   type SurgeTransactionLike,
 } from './surge/evaluator'
+import { runEngagementBonuses, type EngagementWireContext } from './engagement/wire'
 import { buildSurgeCatalog, type ActiveSurge as SurgeActiveSurge } from './surge/catalog'
 import { surgeEventId, surgeReversalEventId } from '../../src/domain/surge/types'
 import { mapDailyGoal, mapPerfectDay } from './gamificationV3/sourceMappers/dailyAwardMapper'
@@ -800,6 +801,35 @@ export class AdminGamificationRepository implements
         }))
       }
       if (!Number.isSafeInteger(surgeBonusAmount) || surgeBonusAmount < 0) surgeBonusAmount = 0
+      // ---- MYSTERY DROP + COMEBACK WRITE PHASE ----
+      // Both evaluators run inside the same transaction so the engagement
+      // writes are atomic with the base task award. Each evaluator writes
+      // its own gamification_events / evidence / inventory docs directly.
+      // Any failure is isolated and absorbed so the base award still
+      // completes (mirrors the existing Surge contract).
+      let engagementXpAwarded = 0
+      try {
+        const engagementContext: EngagementWireContext = {
+          familyId: args.familyId,
+          childId,
+          taskId,
+          completionId: args.completionId,
+          completedAt,
+          requiresApproval: typeof (taskDocument.data() ?? {}).requiresApproval === 'boolean' ? (taskDocument.data() ?? {}).requiresApproval as boolean : false,
+          timezone: timezoneOf(family),
+          now: args.processingAt,
+          alreadyInvalid,
+        }
+        const engagementResult = await runEngagementBonuses(this.db, transaction, engagementContext)
+        engagementXpAwarded = engagementResult.mysteryDropXpAwarded + engagementResult.comebackXpAwarded
+      } catch (error) {
+        // Engagement bonuses are V1 additive. Failures MUST NOT block the
+        // base task approval — log and continue.
+        console.warn('[engagement-bonuses-skipped]', JSON.stringify({
+          familyId: args.familyId, childId, taskId, error: (error as Error).message,
+        }))
+      }
+      if (!Number.isSafeInteger(engagementXpAwarded) || engagementXpAwarded < 0) engagementXpAwarded = 0
       const nextPoints = alreadyInvalid ? currentPoints : currentPoints + effect.rewardPointsAward + surgeBonusAmount
       if (!Number.isSafeInteger(nextPoints)) throw new Error('Child rewardPoints would exceed the safe integer range')
 
