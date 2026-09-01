@@ -25,6 +25,9 @@ const CANONICAL_EVENT_TYPES = new Set([
   'xp_awarded', 'xp_revoked', 'daily_goal_awarded', 'daily_goal_revoked',
   'daily_goal_qualification_changed', 'perfect_day_awarded', 'perfect_day_revoked',
   'perfect_day_qualification_changed', 'legacy_xp_baseline',
+  'MYSTERY_DROP_XP_AWARDED', 'MYSTERY_DROP_XP_REVERSED',
+  'COMEBACK_MISSION_XP_AWARDED', 'COMEBACK_MISSION_XP_REVERSED',
+  'SURGE_BONUS_AWARDED', 'SURGE_BONUS_REVERSED',
 ])
 
 function timestamp(value: unknown, documentId: string, field: string): number {

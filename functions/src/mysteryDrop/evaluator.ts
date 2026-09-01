@@ -38,6 +38,7 @@ import {
   mysteryDropEvidenceId,
   mysteryDropEventId,
   mysteryDropInventoryItemId,
+  mysteryDropReversalEventId,
   type MysteryDropCompletionContext,
   type MysteryDropDefinition,
   type MysteryDropEligibilityInput,
@@ -48,6 +49,7 @@ import {
 // Re-exports for callers that want a single import surface
 export {
   mysteryDropEventId,
+  mysteryDropReversalEventId,
   mysteryDropInventoryItemId,
   type MysteryDropDefinition,
   type MysteryDropCompletionContext,
@@ -290,12 +292,19 @@ export interface MysteryDropReverseContext {
   readonly dropId: string
   readonly amount: number
   readonly now: number
+  /** Source completion that originally triggered the award. */
+  readonly completionId: string
+  /** The set of completion ids that still qualify as approved
+   *  for this drop/child after authoritative re-evaluation. With V1
+   *  count=1 the drop is qualified iff this set is non-empty. */
+  readonly qualifyingCompletionIds: readonly string[]
   readonly mysteryDropEventRef: (dropId: string, childId: string) => { id: string }
   readonly mysteryDropReversalEventRef: (dropId: string, childId: string) => { id: string }
 }
 
 export type MysteryDropReverseResult =
   | { status: 'reversed' }
+  | { status: 'kept_qualified' }
   | { status: 'duplicate' }
   | { status: 'not_found' }
 
@@ -303,6 +312,12 @@ export type MysteryDropReverseResult =
  * Reverse a previously-awarded Mystery Drop XP. Writes a sibling
  * reversal event with negative `xpDelta` and `reversalOfEventId`.
  * Inventory ownership is NOT revoked in V1 (see design doc §10).
+ *
+ * Re-evaluation: with V1 count=1, the reward is qualified iff any
+ * approved completion within the drop window remains. We accept a
+ * `qualifyingCompletionIds` set from the caller so the authoritative
+ * evaluator can decide whether the drop should still be qualified
+ * after the invalidated completion has been removed.
  */
 export async function reverseMysteryDropXp(
   transaction: MysteryDropTransactionLike,
@@ -315,6 +330,14 @@ export async function reverseMysteryDropXp(
   const originalRef = context.mysteryDropEventRef(context.dropId, context.childId)
   const original = await transaction.get(originalRef)
   if (!original.exists) return { status: 'not_found' }
+
+  // V1 only supports count=1. The drop remains qualified iff any
+  // qualifying completion remains after the invalidated completion
+  // has been removed from the set.
+  const stillQualifying = context.qualifyingCompletionIds.filter(id => id !== context.completionId).length
+  if (stillQualifying > 0) {
+    return { status: 'kept_qualified' }
+  }
 
   await transaction.create(reversalRef, {
     schemaVersion: 1,
@@ -335,6 +358,8 @@ export async function reverseMysteryDropXp(
       childId: context.childId,
       rewardType: 'xp_bonus',
       rewardAmount: context.amount,
+      sourceCompletionId: context.completionId,
+      qualifyingCompletionIds: [...context.qualifyingCompletionIds],
     },
   })
   return { status: 'reversed' }

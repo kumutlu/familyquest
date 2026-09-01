@@ -106,15 +106,51 @@ describe('resolveComeback', () => {
     expect(result.inactivityDays).toBeGreaterThanOrEqual(10)
   })
 
-  it('treats missing lastMeaningfulActivityAt as return_7d', () => {
+  it('treats missing lastMeaningfulActivityAt as tier=none)', () => {
+    // Authoritative contract: missing evidence MUST NOT manufacture a
+    // comeback. New managed children stay tier=none so the normal
+    // first-user / mascot onboarding flow runs.
     const result = resolveComeback(input({ lastMeaningfulActivityAt: undefined }))
-    expect(result.tier).toBe('return_7d')
-    expect(result.inactivityDays).toBe(Number.MAX_SAFE_INTEGER)
+    expect(result.tier).toBe('none')
+    expect(result.inactivityDays).toBe(0)
+    expect(result.missionId).toBeNull()
   })
 
-  it('treats null lastMeaningfulActivityAt as return_7d', () => {
+  it('treats null lastMeaningfulActivityAt as tier=none', () => {
     const result = resolveComeback(input({ lastMeaningfulActivityAt: null }))
+    expect(result.tier).toBe('none')
+    expect(result.missionId).toBeNull()
+  })
+
+  it('treats non-finite lastMeaningfulActivityAt as tier=none', () => {
+    const result = resolveComeback(input({ lastMeaningfulActivityAt: Number.NaN as unknown as number }))
+    expect(result.tier).toBe('none')
+  })
+
+  it('treats zero / negative lastMeaningfulActivityAt as tier=none', () => {
+    expect(resolveComeback(input({ lastMeaningfulActivityAt: 0 })).tier).toBe('none')
+    expect(resolveComeback(input({ lastMeaningfulActivityAt: -1 })).tier).toBe('none')
+  })
+
+  it('actual 7+ day returning child IS eligible for return_7d', () => {
+    const tenDaysAgo = localMidnight(2026, 5, 4)
+    const result = resolveComeback(input({ lastMeaningfulActivityAt: tenDaysAgo }))
     expect(result.tier).toBe('return_7d')
+    expect(result.missionId).toBe(`mission-${LOCAL_TODAY}-return_7d`)
+  })
+
+  it('actual 3-6 day returning child IS eligible for return_3d', () => {
+    const threeDaysAgo = localMidnight(2026, 5, 12)
+    const result = resolveComeback(input({ lastMeaningfulActivityAt: threeDaysAgo }))
+    expect(result.tier).toBe('return_3d')
+    expect(result.missionId).toBe(`mission-${LOCAL_TODAY}-return_3d`)
+  })
+
+  it('actual 1 day returning child IS eligible for return_1d', () => {
+    const yesterday = localMidnight(2026, 5, 14)
+    const result = resolveComeback(input({ lastMeaningfulActivityAt: yesterday }))
+    expect(result.tier).toBe('return_1d')
+    expect(result.missionId).toBe(`mission-${LOCAL_TODAY}-return_1d`)
   })
 
   it('reports missionCompleted=true when the active tier has already been completed for today', () => {

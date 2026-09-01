@@ -30,6 +30,18 @@ import {
   type SurgeTransactionLike,
 } from './surge/evaluator'
 import { runEngagementBonuses, type EngagementWireContext } from './engagement/wire'
+import {
+  reverseComebackXp,
+  comebackEventId,
+  comebackReversalEventId,
+  type ComebackTransactionLike,
+} from './comeback/evaluator'
+import {
+  reverseMysteryDropXp,
+  mysteryDropEventId,
+  mysteryDropReversalEventId,
+  type MysteryDropTransactionLike,
+} from './mysteryDrop/evaluator'
 import { buildSurgeCatalog, type ActiveSurge as SurgeActiveSurge } from './surge/catalog'
 import { surgeEventId, surgeReversalEventId } from '../../src/domain/surge/types'
 import { mapDailyGoal, mapPerfectDay } from './gamificationV3/sourceMappers/dailyAwardMapper'
@@ -832,6 +844,22 @@ export class AdminGamificationRepository implements
       if (!Number.isSafeInteger(engagementXpAwarded) || engagementXpAwarded < 0) engagementXpAwarded = 0
       const nextPoints = alreadyInvalid ? currentPoints : currentPoints + effect.rewardPointsAward + surgeBonusAmount
       if (!Number.isSafeInteger(nextPoints)) throw new Error('Child rewardPoints would exceed the safe integer range')
+      // ---- SYNCHRONOUS XP PROJECTION ----
+      // Mystery Drop + Comeback awards write their own gamification_events
+      // docs inside the engagement write phase above. Those events ride
+      // the canonical XP ledger (see foldXpEvents), so we MUST fold the
+      // engagement XP into summary.xpTotal and lifetimeXP IN THE SAME
+      // TRANSACTION so the child UI sees the award immediately — no
+      // second XP authority, no waiting on daily finalization.
+      const engagementAdjustedXpTotal = summary.xpTotal + engagementXpAwarded
+      if (!Number.isSafeInteger(engagementAdjustedXpTotal) || engagementAdjustedXpTotal < 0) {
+        throw new Error('Engagement XP would corrupt summary.xpTotal')
+      }
+      const projectedSummary = {
+        ...summary,
+        xpTotal: engagementAdjustedXpTotal,
+        level: levelForXp(engagementAdjustedXpTotal, 1000),
+      }
 
       // ---- V3 shadow READ PHASE ----
       // Firestore aborts the whole transaction if a read follows a write, which
@@ -889,7 +917,7 @@ export class AdminGamificationRepository implements
       // Mirror the authoritative gamification_summaries.xpTotal into the
       // users.lifetimeXP compatibility field, in the SAME transaction, so the
       // legacy mirror can never drift from the projection.
-      const childUpdate: Record<string, unknown> = { lifetimeXP: summary.xpTotal }
+      const childUpdate: Record<string, unknown> = { lifetimeXP: projectedSummary.xpTotal }
       if (nextPoints !== currentPoints) {
         childUpdate.rewardPoints = nextPoints
         childUpdate.lastTaskCompletionId = args.completionId
@@ -897,7 +925,7 @@ export class AdminGamificationRepository implements
       transaction.update(childRef, childUpdate)
       for (const document of plan.events) transaction.create(familyRef.collection('gamification_events').doc(document.id), eventToData(document.event))
       transaction.set(progressRef, progressToData(plan.progress, [...existingEvents, ...plan.events]))
-      transaction.set(summaryRef, summaryToData(summary))
+      transaction.set(summaryRef, summaryToData(projectedSummary))
       if (checkpointDocument.exists && checkpointDocument.data()!.dirty !== true) transaction.update(checkpointRef, { dirty: true })
       transaction.create(familyRef.collection('feed').doc(feedId(logicalKey)), {
         actorId: typeof completion.reviewedBy === 'string' ? completion.reviewedBy : childId,
@@ -1036,14 +1064,136 @@ export class AdminGamificationRepository implements
         }))
       }
 
+      // ---- ENGAGEMENT REVERSAL READ PHASE ----
+      // Mystery Drop + Comeback bonuses may have been awarded for this
+      // completion. Re-evaluate each award authoritatively against the
+      // remaining qualifying completions for the child/localDate; reverse
+      // only when no qualifying completion remains. The XP delta we
+      // observe here is folded into the summary in the synchronous XP
+      // projection block below.
+      let engagementReversalXpDelta = 0
+      const invalidationLocalDate = familyDayKey(args.processingAt, timezoneOf(family))
+      const qualifyingCompletionIds: string[] = []
+      try {
+        const qualifyingQuery = familyRef
+          .collection('task_completions')
+          .where('assigneeId', '==', effect.childId)
+          .where('status', '==', 'approved')
+        const qualifyingSnapshot = await transaction.get(qualifyingQuery)
+        for (const qualifyingDoc of qualifyingSnapshot.docs) {
+          if (qualifyingDoc.id === args.completionId) continue
+          const qualifyingData = qualifyingDoc.data()
+          if (typeof qualifyingData.approvedAt !== 'number' && qualifyingData.approvedAt === undefined) continue
+          const qualifyingDataCompletedAt = typeof qualifyingData.completedAt === 'number'
+            ? qualifyingData.completedAt : null
+          if (qualifyingDataCompletedAt === null) continue
+          const qualifyingLocalDate = familyDayKey(qualifyingDataCompletedAt, timezoneOf(family))
+          if (qualifyingLocalDate !== invalidationLocalDate) continue
+          qualifyingCompletionIds.push(qualifyingDoc.id)
+        }
+      } catch (error) {
+        console.warn('[engagement-qualifying-completions-skipped]', JSON.stringify({
+          familyId: args.familyId, completionId: args.completionId, error: (error as Error).message,
+        }))
+      }
+      try {
+        const mysteryEventQuery = familyRef
+          .collection('gamification_events')
+          .where('sourceType', '==', 'task_completion')
+          .where('sourceId', '==', args.completionId)
+          .where('eventType', '==', 'MYSTERY_DROP_XP_AWARDED')
+        const mysterySnapshot = await transaction.get(mysteryEventQuery)
+        for (const mysteryDoc of mysterySnapshot.docs) {
+          const mysteryData = mysteryDoc.data()
+          const metadata = (mysteryData.metadata ?? {}) as Record<string, unknown>
+          const dropId = typeof metadata.dropId === 'string' ? metadata.dropId : mysteryDoc.id.split(':')[1] ?? mysteryDoc.id
+          const amount = typeof metadata.rewardAmount === 'number'
+            ? metadata.rewardAmount
+            : (typeof mysteryData.xpDelta === 'number' ? mysteryData.xpDelta : 0)
+          const result = await reverseMysteryDropXp(transaction as unknown as MysteryDropTransactionLike, {
+            familyId: args.familyId,
+            childId: effect.childId,
+            dropId,
+            amount,
+            now: args.processingAt,
+            completionId: args.completionId,
+            qualifyingCompletionIds,
+            mysteryDropEventRef: (dId, cId) =>
+              familyRef.collection('gamification_events').doc(mysteryDropEventId(dId, cId)),
+            mysteryDropReversalEventRef: (dId, cId) =>
+              familyRef.collection('gamification_events').doc(mysteryDropReversalEventId(dId, cId)),
+          })
+          if (result.status === 'reversed') {
+            engagementReversalXpDelta += amount
+          }
+        }
+      } catch (error) {
+        console.warn('[mystery-drop-reversal-skipped]', JSON.stringify({
+          familyId: args.familyId, completionId: args.completionId, error: (error as Error).message,
+        }))
+      }
+      try {
+        const comebackEventQuery = familyRef
+          .collection('gamification_events')
+          .where('sourceType', '==', 'task_completion')
+          .where('sourceId', '==', args.completionId)
+          .where('eventType', '==', 'COMEBACK_MISSION_XP_AWARDED')
+        const comebackSnapshot = await transaction.get(comebackEventQuery)
+        for (const comebackDoc of comebackSnapshot.docs) {
+          const comebackData = comebackDoc.data()
+          const metadata = (comebackData.metadata ?? {}) as Record<string, unknown>
+          const tier = (metadata.tier === 'return_1d' || metadata.tier === 'return_3d' || metadata.tier === 'return_7d')
+            ? metadata.tier
+            : 'return_3d'
+          const localDate = typeof metadata.localDate === 'string' ? metadata.localDate : invalidationLocalDate
+          const amount = typeof metadata.rewardXp === 'number'
+            ? metadata.rewardXp
+            : (typeof comebackData.xpDelta === 'number' ? comebackData.xpDelta : 0)
+          const result = await reverseComebackXp(transaction as unknown as ComebackTransactionLike, {
+            familyId: args.familyId,
+            childId: effect.childId,
+            localDate,
+            tier,
+            amount,
+            now: args.processingAt,
+            completionId: args.completionId,
+            qualifyingCompletionIds,
+            comebackEventRef: (cId, ld, t) =>
+              familyRef.collection('gamification_events').doc(comebackEventId(cId, ld, t)),
+            comebackReversalEventRef: (cId, ld, t) =>
+              familyRef.collection('gamification_events').doc(comebackReversalEventId(cId, ld, t)),
+          })
+          if (result.status === 'reversed') {
+            engagementReversalXpDelta += amount
+          }
+        }
+      } catch (error) {
+        console.warn('[comeback-reversal-skipped]', JSON.stringify({
+          familyId: args.familyId, completionId: args.completionId, error: (error as Error).message,
+        }))
+      }
+
       if (!legacyAlreadyReversed && !processorAlreadyReversed) {
         const nextPoints = currentPoints - effect.rewardPointsAward - surgeReversalPointsDelta
         if (!Number.isSafeInteger(nextPoints) || nextPoints < 0) throw new Error('Task invalidation would make rewardPoints invalid')
         transaction.update(childRef, { rewardPoints: nextPoints })
       }
+      // ---- SYNCHRONOUS XP PROJECTION (REVERSAL) ----
+      // Fold the engagement reversal XP delta into the projection so the
+      // child UI sees the reversal immediately. No second XP authority.
+      const reversalAdjustedXpTotal = summary.xpTotal - engagementReversalXpDelta
+      if (!Number.isSafeInteger(reversalAdjustedXpTotal) || reversalAdjustedXpTotal < 0) {
+        throw new Error('Engagement reversal XP would corrupt summary.xpTotal')
+      }
+      const reversedSummary = {
+        ...summary,
+        xpTotal: reversalAdjustedXpTotal,
+        level: levelForXp(reversalAdjustedXpTotal, 1000),
+      }
+      transaction.update(childRef, { lifetimeXP: reversedSummary.xpTotal })
       for (const document of plan.events) transaction.create(familyRef.collection('gamification_events').doc(document.id), eventToData(document.event))
       transaction.set(progressRef, progressToData(plan.progress, [...existingEvents, ...plan.events]))
-      transaction.set(summaryRef, summaryToData(summary))
+      transaction.set(summaryRef, summaryToData(reversedSummary))
       transaction.update(completionRef, { gamificationRewardRevokedBy: args.immutableReversalId ?? `status:${completion.status}`, gamificationInvalidatedAt: timestamp(args.processingAt) })
       if (checkpointDocument.exists && checkpointDocument.data()!.dirty !== true) transaction.update(checkpointRef, { dirty: true })
       return { status: 'processed', logicalCompletionKey: effect.logicalCompletionKey }

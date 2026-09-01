@@ -42,8 +42,13 @@ export type MysteryDropUnlockCondition =
   /** Eligible when the child has at least `count` approved completions
    *  across the drop window — but in V1 we simplify: the drop is
    *  unlocked the moment the resolver sees `count` qualifying
-   *  completion ids inside the same drop window for that child. */
-  | { readonly type: 'complete_any_quest'; readonly count: number }
+   *  completion ids inside the same drop window for that child.
+   *
+   *  V1 server implementation is deterministic and supports ONLY
+   *  `count: 1`. Other counts MUST be rejected by the resolver so the
+   *  schema never advertises a capability the authoritative evaluator
+   *  cannot preserve correctly across multi-completion reversals. */
+  | { readonly type: 'complete_any_quest'; readonly count: 1 }
   /** Eligible only when a specific task has been approved within the
    *  window. The `taskId` is canonical (matches `task.id`). */
   | { readonly type: 'complete_specific_task'; readonly taskId: string }

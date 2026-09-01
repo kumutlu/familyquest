@@ -41,8 +41,9 @@ export interface ResolveComebackInput {
   /** Current epoch ms. */
   readonly now: number
   /** Last meaningful activity for the child (e.g. last approved task
-   *  completion timestamp). When `undefined` or `null`, the resolver
-   *  treats the child as `return_7d`. */
+   *  completion timestamp). When missing / non-finite / non-positive the
+   *  resolver MUST treat the child as `none` — never as `return_7d`.
+   *  New managed children MUST NOT be manufactured as comeback children. */
   readonly lastMeaningfulActivityAt?: number | null
   /** Already-completed comeback tiers for this child for the local
    *  date (server-derived). When the active tier is in this set, the

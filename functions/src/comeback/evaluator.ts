@@ -202,14 +202,29 @@ export interface ComebackReverseContext {
   readonly tier: ComebackTier
   readonly amount: number
   readonly now: number
+  /** Source completion that triggered the original award (the completion
+   *  being invalidated). */
+  readonly completionId: string
+  /** The set of completion ids that currently still qualify as approved
+   *  for this child/localDate after authoritative re-evaluation. The
+   *  reversal MUST only fire when this set is empty — otherwise the
+   *  alternate completion remains a valid qualifying completion and the
+   *  comeback reward stays awarded. */
+  readonly qualifyingCompletionIds: readonly string[]
   readonly comebackEventRef: (childId: string, localDate: string, tier: ComebackTier) => { id: string }
   readonly comebackReversalEventRef: (childId: string, localDate: string, tier: ComebackTier) => { id: string }
 }
 
+export type ComebackReverseResult =
+  | { status: 'reversed' }
+  | { status: 'kept_qualified' }
+  | { status: 'duplicate' }
+  | { status: 'not_found' }
+
 export async function reverseComebackXp(
   transaction: ComebackTransactionLike,
   context: ComebackReverseContext,
-): Promise<{ status: 'reversed' | 'duplicate' | 'not_found' }> {
+): Promise<ComebackReverseResult> {
   const reversalRef = context.comebackReversalEventRef(context.childId, context.localDate, context.tier)
   const existingReversal = await transaction.get(reversalRef)
   if (existingReversal.exists) return { status: 'duplicate' }
@@ -217,6 +232,15 @@ export async function reverseComebackXp(
   const originalRef = context.comebackEventRef(context.childId, context.localDate, context.tier)
   const original = await transaction.get(originalRef)
   if (!original.exists) return { status: 'not_found' }
+
+  // Authoritative re-evaluation: only reverse when no qualifying approved
+  // completion remains for this mission/localDate. If another completion
+  // (e.g. Task B after Task A) still counts as a valid qualifying
+  // completion for the same mission, the reward must stay awarded.
+  const stillQualifying = context.qualifyingCompletionIds.filter(id => id !== context.completionId).length
+  if (stillQualifying > 0) {
+    return { status: 'kept_qualified' }
+  }
 
   await transaction.create(reversalRef, {
     schemaVersion: 1,
@@ -237,6 +261,8 @@ export async function reverseComebackXp(
       tier: context.tier,
       localDate: context.localDate,
       rewardXp: context.amount,
+      sourceCompletionId: context.completionId,
+      qualifyingCompletionIds: [...context.qualifyingCompletionIds],
     },
   })
   return { status: 'reversed' }
@@ -247,4 +273,4 @@ export function comebackEvidenceDocId(childId: string, localDate: string, tier: 
   return comebackEvidenceId(childId, localDate, tier)
 }
 /* Re-exports for callers that want a single import surface */
-export { comebackEventId, familyLocalDateKey, type ComebackTier, type ResolveComebackInput, type ResolveComebackResult } from '../../../src/domain/comeback/types';
+export { comebackEventId, comebackReversalEventId, familyLocalDateKey, type ComebackTier, type ResolveComebackInput, type ResolveComebackResult } from '../../../src/domain/comeback/types';

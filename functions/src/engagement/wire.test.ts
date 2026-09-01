@@ -116,6 +116,12 @@ describe('runEngagementBonuses — orchestration contract', () => {
 
   it('absorbs any thrown error and still resolves with 0s', async () => {
     const db = new FakeFirestore()
+    // Seed the child user doc so the wire reads a 7-day-old
+    // lastMeaningfulActivityAt and the comeback resolver actually
+    // attempts to award (return_7d). Without evidence the new
+    // contract correctly stays tier=none and the test would not
+    // exercise the error path.
+    db.set('users/child-A', { lastTaskCompletionApprovedAt: WIN_START - 7 * 24 * 60 * 60 * 1000 })
     const tx = new FakeTransaction(db)
     const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined)
     tx.create = async () => { throw new Error('boom') }
@@ -124,5 +130,16 @@ describe('runEngagementBonuses — orchestration contract', () => {
     expect(result.comebackXpAwarded).toBe(0)
     expect(warn).toHaveBeenCalled()
     warn.mockRestore()
+  })
+
+  it('returns 0/0 for a brand-new managed child with no lastMeaningfulActivityAt (no comeback minted)', async () => {
+    const db = new FakeFirestore()
+    const tx = new FakeTransaction(db)
+    const result = await runEngagementBonuses(db as never, tx as never, baseContext())
+    expect(result).toEqual({ mysteryDropXpAwarded: 0, comebackXpAwarded: 0 })
+    // No mystery drop events AND no comeback_evidence doc was written
+    // because the resolver returns tier=none for missing evidence.
+    expect(db.docsUnder('families/family-1/gamification_events')).toEqual([])
+    expect(db.docsUnder('families/family-1/comeback_evidence')).toEqual([])
   })
 })

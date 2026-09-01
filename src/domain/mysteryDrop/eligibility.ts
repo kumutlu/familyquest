@@ -75,10 +75,12 @@ export function evaluateMysteryDropEligibility(
       }
       break
     case 'complete_any_quest':
-      // The resolver sees a single completion at a time; the count is
-      // enforced upstream by the caller (server evaluator compares
-      // accumulated completion ids within the window). We simply
-      // require a non-empty completion record here.
+      // V1 server impl only supports count=1; any other count is
+      // rejected here so we never expose a schema capability the
+      // authoritative evaluator cannot preserve under reversal.
+      if (drop.unlockCondition.count !== 1) {
+        return ineligible('invalid_definition')
+      }
       if (completion.id.length === 0) {
         return ineligible('invalid_definition')
       }

@@ -198,6 +198,9 @@ describe('reverseComebackXp', () => {
       tier: 'return_7d',
       amount: 50,
       now: NOW_UTC,
+      completionId: 'completion-1',
+      // No other qualifying completion remains after invalidation.
+      qualifyingCompletionIds: [],
       comebackEventRef: (childId, localDate, tier) => comebackEventRef('family-1', childId, localDate, tier),
       comebackReversalEventRef: (childId, localDate, tier) => ({
         id: `families/family-1/gamification_events/${comebackEventId(childId, localDate, tier)}:reversal`,
@@ -243,12 +246,123 @@ describe('reverseComebackXp', () => {
       tier: 'return_7d',
       amount: 50,
       now: NOW_UTC,
+      completionId: 'completion-1',
+      qualifyingCompletionIds: [],
       comebackEventRef: (childId, localDate, tier) => comebackEventRef('family-1', childId, localDate, tier),
       comebackReversalEventRef: (childId, localDate, tier) => ({
         id: `families/family-1/gamification_events/${comebackEventId(childId, localDate, tier)}:reversal`,
       }),
     })
     expect(result.status).toBe('not_found')
+  })
+})
+
+
+/* ----- re-evaluation: alternate completion remains ----- */
+
+describe('reverseComebackXp — re-evaluation', () => {
+  it('keeps the reward qualified when an alternate approved completion still exists', async () => {
+    const eventId = comebackEventId('child-A', LOCAL_TODAY, 'return_7d')
+    const tx = new FakeTransaction({
+      [`families/family-1/gamification_events/${eventId}`]: {
+        schemaVersion: 1, eventType: 'COMEBACK_MISSION_XP_AWARDED',
+      },
+    })
+    const result = await reverseComebackXp(tx as never, {
+      familyId: 'family-1',
+      childId: 'child-A',
+      localDate: LOCAL_TODAY,
+      tier: 'return_7d',
+      amount: 50,
+      now: NOW_UTC,
+      completionId: 'completion-A',
+      qualifyingCompletionIds: ['completion-A', 'completion-B'],
+      comebackEventRef: (childId, localDate, tier) => comebackEventRef('family-1', childId, localDate, tier),
+      comebackReversalEventRef: (childId, localDate, tier) => ({
+        id: `families/family-1/gamification_events/${comebackEventId(childId, localDate, tier)}:reversal`,
+      }),
+    })
+    expect(result.status).toBe('kept_qualified')
+    // No reversal event written when kept qualified.
+    expect(tx.hasWritten(`families/family-1/gamification_events/${eventId}:reversal`)).toBe(false)
+  })
+
+  it('is idempotent under duplicate invalidation processing (same completion id)', async () => {
+    const eventId = comebackEventId('child-A', LOCAL_TODAY, 'return_7d')
+    const tx1 = new FakeTransaction({
+      [`families/family-1/gamification_events/${eventId}`]: {
+        schemaVersion: 1, eventType: 'COMEBACK_MISSION_XP_AWARDED',
+      },
+    })
+    const result1 = await reverseComebackXp(tx1 as never, {
+      familyId: 'family-1', childId: 'child-A', localDate: LOCAL_TODAY,
+      tier: 'return_7d', amount: 50, now: NOW_UTC,
+      completionId: 'completion-A', qualifyingCompletionIds: [],
+      comebackEventRef: (childId, localDate, tier) => comebackEventRef('family-1', childId, localDate, tier),
+      comebackReversalEventRef: (childId, localDate, tier) => ({
+        id: `families/family-1/gamification_events/${comebackEventId(childId, localDate, tier)}:reversal`,
+      }),
+    })
+    expect(result1.status).toBe('reversed')
+
+    // A second call sees the reversal already exists ⇒ duplicate.
+    const tx2 = new FakeTransaction({
+      [`families/family-1/gamification_events/${eventId}`]: {
+        schemaVersion: 1, eventType: 'COMEBACK_MISSION_XP_AWARDED',
+      },
+      [`families/family-1/gamification_events/${eventId}:reversal`]: {
+        schemaVersion: 1, eventType: 'COMEBACK_MISSION_XP_REVERSED',
+      },
+    })
+    const result2 = await reverseComebackXp(tx2 as never, {
+      familyId: 'family-1', childId: 'child-A', localDate: LOCAL_TODAY,
+      tier: 'return_7d', amount: 50, now: NOW_UTC,
+      completionId: 'completion-A', qualifyingCompletionIds: [],
+      comebackEventRef: (childId, localDate, tier) => comebackEventRef('family-1', childId, localDate, tier),
+      comebackReversalEventRef: (childId, localDate, tier) => ({
+        id: `families/family-1/gamification_events/${comebackEventId(childId, localDate, tier)}:reversal`,
+      }),
+    })
+    expect(result2.status).toBe('duplicate')
+  })
+
+  it('a second invalidation after the alternate also reversed triggers exactly one more reversal event', async () => {
+    // A and B both originally qualified for the comeback. After A is
+    // reversed the reward must stay. After B is also eventually
+    // reversed, exactly one (additional) reversal event MUST be
+    // written. We assert this by running both reversals sequentially.
+    const eventId = comebackEventId('child-A', LOCAL_TODAY, 'return_7d')
+    const tx = new FakeTransaction({
+      [`families/family-1/gamification_events/${eventId}`]: {
+        schemaVersion: 1, eventType: 'COMEBACK_MISSION_XP_AWARDED',
+      },
+    })
+
+    // Step 1: reverse A while B remains.
+    const r1 = await reverseComebackXp(tx as never, {
+      familyId: 'family-1', childId: 'child-A', localDate: LOCAL_TODAY,
+      tier: 'return_7d', amount: 50, now: NOW_UTC,
+      completionId: 'completion-A', qualifyingCompletionIds: ['completion-A', 'completion-B'],
+      comebackEventRef: (childId, localDate, tier) => comebackEventRef('family-1', childId, localDate, tier),
+      comebackReversalEventRef: (childId, localDate, tier) => ({
+        id: `families/family-1/gamification_events/${comebackEventId(childId, localDate, tier)}:reversal`,
+      }),
+    })
+    expect(r1.status).toBe('kept_qualified')
+    expect(tx.hasWritten(`families/family-1/gamification_events/${eventId}:reversal`)).toBe(false)
+
+    // Step 2: reverse B with no qualifying completions remaining.
+    const r2 = await reverseComebackXp(tx as never, {
+      familyId: 'family-1', childId: 'child-A', localDate: LOCAL_TODAY,
+      tier: 'return_7d', amount: 50, now: NOW_UTC,
+      completionId: 'completion-B', qualifyingCompletionIds: [],
+      comebackEventRef: (childId, localDate, tier) => comebackEventRef('family-1', childId, localDate, tier),
+      comebackReversalEventRef: (childId, localDate, tier) => ({
+        id: `families/family-1/gamification_events/${comebackEventId(childId, localDate, tier)}:reversal`,
+      }),
+    })
+    expect(r2.status).toBe('reversed')
+    expect(tx.hasWritten(`families/family-1/gamification_events/${eventId}:reversal`)).toBe(true)
   })
 })
 

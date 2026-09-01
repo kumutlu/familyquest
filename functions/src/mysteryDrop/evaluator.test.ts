@@ -297,6 +297,8 @@ describe('reverseMysteryDropXp', () => {
       dropId: 'drop-xp-01',
       amount: 20,
       now: Date.UTC(2026, 5, 1, 16, 0, 0),
+      completionId: 'completion-1',
+      qualifyingCompletionIds: [],
       mysteryDropEventRef: (dropId, childId) => gamificationEventsRef('family-1', mysteryDropEventId(dropId, childId)),
       mysteryDropReversalEventRef: (dropId, childId) => gamificationEventsRef('family-1', `${mysteryDropEventId(dropId, childId)}:reversal`),
     })
@@ -322,6 +324,8 @@ describe('reverseMysteryDropXp', () => {
       dropId: 'drop-xp-01',
       amount: 20,
       now: Date.UTC(2026, 5, 1, 16, 0, 0),
+      completionId: 'completion-1',
+      qualifyingCompletionIds: [],
       mysteryDropEventRef: (dropId, childId) => gamificationEventsRef('family-1', mysteryDropEventId(dropId, childId)),
       mysteryDropReversalEventRef: (dropId, childId) => gamificationEventsRef('family-1', `${mysteryDropEventId(dropId, childId)}:reversal`),
     })
@@ -336,6 +340,8 @@ describe('reverseMysteryDropXp', () => {
       dropId: 'drop-xp-01',
       amount: 20,
       now: Date.UTC(2026, 5, 1, 16, 0, 0),
+      completionId: 'completion-1',
+      qualifyingCompletionIds: [],
       mysteryDropEventRef: (dropId, childId) => gamificationEventsRef('family-1', mysteryDropEventId(dropId, childId)),
       mysteryDropReversalEventRef: (dropId, childId) => gamificationEventsRef('family-1', `${mysteryDropEventId(dropId, childId)}:reversal`),
     })
@@ -343,6 +349,92 @@ describe('reverseMysteryDropXp', () => {
   })
 })
 
+
+/* ----- multi-completion re-evaluation ----------------------------------- */
+
+describe('reverseMysteryDropXp — multi-completion re-evaluation', () => {
+  it('keeps the reward qualified when another approved completion remains', async () => {
+    const eventId = mysteryDropEventId('drop-xp-01', 'child-A')
+    const tx = new FakeTransaction({
+      [`families/family-1/gamification_events/${eventId}`]: {
+        schemaVersion: 1, eventType: 'MYSTERY_DROP_XP_AWARDED',
+      },
+    })
+    const result = await reverseMysteryDropXp(tx as never, {
+      familyId: 'family-1',
+      childId: 'child-A',
+      dropId: 'drop-xp-01',
+      amount: 20,
+      now: Date.UTC(2026, 5, 1, 16, 0, 0),
+      completionId: 'completion-A',
+      qualifyingCompletionIds: ['completion-A', 'completion-B'],
+      mysteryDropEventRef: (dropId, childId) => gamificationEventsRef('family-1', mysteryDropEventId(dropId, childId)),
+      mysteryDropReversalEventRef: (dropId, childId) => gamificationEventsRef('family-1', `${mysteryDropEventId(dropId, childId)}:reversal`),
+    })
+    expect(result.status).toBe('kept_qualified')
+    expect(tx.hasWritten(`families/family-1/gamification_events/${eventId}:reversal`)).toBe(false)
+  })
+
+  it('is idempotent under duplicate invalidation processing (same completion id)', async () => {
+    const eventId = mysteryDropEventId('drop-xp-01', 'child-A')
+    const tx = new FakeTransaction({
+      [`families/family-1/gamification_events/${eventId}`]: {
+        schemaVersion: 1, eventType: 'MYSTERY_DROP_XP_AWARDED',
+      },
+    })
+    const r1 = await reverseMysteryDropXp(tx as never, {
+      familyId: 'family-1', childId: 'child-A', dropId: 'drop-xp-01', amount: 20,
+      now: Date.UTC(2026, 5, 1, 16, 0, 0), completionId: 'completion-A',
+      qualifyingCompletionIds: [],
+      mysteryDropEventRef: (dropId, childId) => gamificationEventsRef('family-1', mysteryDropEventId(dropId, childId)),
+      mysteryDropReversalEventRef: (dropId, childId) => gamificationEventsRef('family-1', `${mysteryDropEventId(dropId, childId)}:reversal`),
+    })
+    expect(r1.status).toBe('reversed')
+
+    const tx2 = new FakeTransaction({
+      [`families/family-1/gamification_events/${eventId}`]: {
+        schemaVersion: 1, eventType: 'MYSTERY_DROP_XP_AWARDED',
+      },
+      [`families/family-1/gamification_events/${eventId}:reversal`]: {
+        schemaVersion: 1, eventType: 'MYSTERY_DROP_XP_REVERSED',
+      },
+    })
+    const r2 = await reverseMysteryDropXp(tx2 as never, {
+      familyId: 'family-1', childId: 'child-A', dropId: 'drop-xp-01', amount: 20,
+      now: Date.UTC(2026, 5, 1, 16, 0, 0), completionId: 'completion-A',
+      qualifyingCompletionIds: [],
+      mysteryDropEventRef: (dropId, childId) => gamificationEventsRef('family-1', mysteryDropEventId(dropId, childId)),
+      mysteryDropReversalEventRef: (dropId, childId) => gamificationEventsRef('family-1', `${mysteryDropEventId(dropId, childId)}:reversal`),
+    })
+    expect(r2.status).toBe('duplicate')
+  })
+
+  it('multi-completion scenario: A+B → reverse A → keep; reverse B → reversed', async () => {
+    const eventId = mysteryDropEventId('drop-xp-01', 'child-A')
+    const tx = new FakeTransaction({
+      [`families/family-1/gamification_events/${eventId}`]: {
+        schemaVersion: 1, eventType: 'MYSTERY_DROP_XP_AWARDED',
+      },
+    })
+    const r1 = await reverseMysteryDropXp(tx as never, {
+      familyId: 'family-1', childId: 'child-A', dropId: 'drop-xp-01', amount: 20,
+      now: Date.UTC(2026, 5, 1, 16, 0, 0), completionId: 'completion-A',
+      qualifyingCompletionIds: ['completion-A', 'completion-B'],
+      mysteryDropEventRef: (dropId, childId) => gamificationEventsRef('family-1', mysteryDropEventId(dropId, childId)),
+      mysteryDropReversalEventRef: (dropId, childId) => gamificationEventsRef('family-1', `${mysteryDropEventId(dropId, childId)}:reversal`),
+    })
+    expect(r1.status).toBe('kept_qualified')
+
+    const r2 = await reverseMysteryDropXp(tx as never, {
+      familyId: 'family-1', childId: 'child-A', dropId: 'drop-xp-01', amount: 20,
+      now: Date.UTC(2026, 5, 1, 16, 0, 0), completionId: 'completion-B',
+      qualifyingCompletionIds: [],
+      mysteryDropEventRef: (dropId, childId) => gamificationEventsRef('family-1', mysteryDropEventId(dropId, childId)),
+      mysteryDropReversalEventRef: (dropId, childId) => gamificationEventsRef('family-1', `${mysteryDropEventId(dropId, childId)}:reversal`),
+    })
+    expect(r2.status).toBe('reversed')
+  })
+})
 /* ----- safety: transaction type --------------------------------------- */
 
 describe('MysteryDropTransactionLike surface', () => {

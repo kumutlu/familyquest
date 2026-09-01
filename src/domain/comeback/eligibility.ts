@@ -60,9 +60,16 @@ export function resolveComeback(input: ResolveComebackInput): ResolveComebackRes
 }
 
 function computeInactivityDays(input: ResolveComebackInput, localToday: string): number {
-  if (input.lastMeaningfulActivityAt === undefined || input.lastMeaningfulActivityAt === null) {
-    // Treat first evaluation as `return_7d`.
-    return Number.MAX_SAFE_INTEGER
+  // Authoritative contract: missing evidence MUST NOT manufacture a comeback.
+  // New managed children / never-active children stay tier=none and follow
+  // the normal first-user / mascot onboarding path.
+  if (
+    input.lastMeaningfulActivityAt === undefined
+    || input.lastMeaningfulActivityAt === null
+    || !Number.isFinite(input.lastMeaningfulActivityAt)
+    || input.lastMeaningfulActivityAt <= 0
+  ) {
+    return 0
   }
   const last = familyLocalDateKey(input.lastMeaningfulActivityAt, input.timezone)
   return inactivityDaysBetween(localToday, last)
