@@ -32,6 +32,10 @@ export interface OnboardingDraft {
   /** Display-only relationship (Mum/Dad/…). Never a security role. */
   parentRoleDisplay: string;
   childFirstName: string;
+  /** Stable identity for the first onboarding child across retries/reloads. */
+  firstChildRequestId?: string;
+  /** Stable identity for the first onboarding task across retries/reloads. */
+  firstTaskRequestId?: string;
   familyName: string;
   // Post-auth reconciliation ids. Persisted so refresh/retry is idempotent.
   familyId?: string;
@@ -41,6 +45,12 @@ export interface OnboardingDraft {
   updatedAt: number;
 }
 
+function createOnboardingRequestId(): string {
+  const randomUUID = globalThis.crypto?.randomUUID?.bind(globalThis.crypto);
+  if (randomUUID) return randomUUID();
+  return `${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}-${Math.random().toString(36).slice(2)}`;
+}
+
 export function createEmptyDraft(step: Step = 's1'): OnboardingDraft {
   return {
     version: DRAFT_VERSION,
@@ -48,6 +58,8 @@ export function createEmptyDraft(step: Step = 's1'): OnboardingDraft {
     parentFirstName: '',
     parentRoleDisplay: '',
     childFirstName: '',
+    firstChildRequestId: createOnboardingRequestId(),
+    firstTaskRequestId: createOnboardingRequestId(),
     familyName: '',
     updatedAt: Date.now(),
   };
@@ -130,8 +142,17 @@ export function loadDraft(currentFamilyId?: string | null): OnboardingDraft | nu
   // A matching post-auth draft is the durable continuation for a family this
   // journey already created. Any other draft belongs to an established-family
   // session and must never drive another creation.
+  const parsedDraft = parsed as OnboardingDraft;
+  const draft: OnboardingDraft = parsedDraft.firstChildRequestId && parsedDraft.firstTaskRequestId
+    ? parsedDraft
+    : {
+        ...parsedDraft,
+        firstChildRequestId: parsedDraft.firstChildRequestId || createOnboardingRequestId(),
+        firstTaskRequestId: parsedDraft.firstTaskRequestId || createOnboardingRequestId(),
+      };
+  if (draft !== parsedDraft) saveDraft(draft);
+
   if (currentFamilyId) {
-    const draft = parsed as OnboardingDraft;
     if (POST_AUTH_STEPS.includes(draft.step) && draft.familyId === currentFamilyId) {
       return draft;
     }
@@ -139,7 +160,7 @@ export function loadDraft(currentFamilyId?: string | null): OnboardingDraft | nu
     return null;
   }
 
-  return parsed as OnboardingDraft;
+  return draft;
 }
 
 /** Removes the draft from both storages. */

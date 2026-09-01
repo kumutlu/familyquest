@@ -92,4 +92,33 @@ describe('onboardingDraft', () => {
     expect(loaded?.familyId).toBe('family-1');
     expect(loaded?.childId).toBe('child-1');
   });
+
+  it('preserves child and task request identities across a reload during finalization', () => {
+    const draft = sampleDraft({
+      step: 'p1',
+      firstChildRequestId: 'onboarding-child-request-1',
+      firstTaskRequestId: 'onboarding-task-request-1',
+    });
+    saveDraft(draft);
+
+    const loaded = loadDraft();
+
+    expect(loaded?.firstChildRequestId).toBe('onboarding-child-request-1');
+    expect(loaded?.firstTaskRequestId).toBe('onboarding-task-request-1');
+  });
+
+  it('migrates an in-flight legacy draft to stable request identities once', () => {
+    const legacy = sampleDraft() as Partial<OnboardingDraft>;
+    delete legacy.firstChildRequestId;
+    delete legacy.firstTaskRequestId;
+    sessionStorage.setItem(ONBOARDING_DRAFT_KEY, JSON.stringify(legacy));
+
+    const firstLoad = loadDraft();
+    const secondLoad = loadDraft();
+
+    expect(firstLoad?.firstChildRequestId).toBeTruthy();
+    expect(firstLoad?.firstTaskRequestId).toBeTruthy();
+    expect(secondLoad?.firstChildRequestId).toBe(firstLoad?.firstChildRequestId);
+    expect(secondLoad?.firstTaskRequestId).toBe(firstLoad?.firstTaskRequestId);
+  });
 });

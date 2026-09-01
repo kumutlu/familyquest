@@ -474,6 +474,13 @@ export interface CreateManagedMemberProfile {
   colour?: string | null;
 }
 
+export interface CreateManagedMemberOptions {
+  /** Stable client operation identity used only to make retries idempotent. */
+  clientReqId?: string;
+}
+
+const MANAGED_MEMBER_REQUEST_ID = /^[A-Za-z0-9_-]{16,128}$/;
+
 /**
  * Creates a managed family member (child or parent). The optional `profile`
  * carries the extra onboarding fields (date of birth, avatar, colour) without
@@ -485,8 +492,15 @@ export const createManagedMember = async (
   role: 'parent' | 'child',
   displayName: string,
   profile?: CreateManagedMemberProfile,
+  options?: CreateManagedMemberOptions,
 ) => {
-  const userRef = doc(collection(db, 'users'));
+  const clientReqId = options?.clientReqId;
+  if (clientReqId !== undefined && !MANAGED_MEMBER_REQUEST_ID.test(clientReqId)) {
+    throw new Error('Invalid managed-member request id');
+  }
+  const userRef = clientReqId
+    ? doc(db, 'users', `managed_${clientReqId}`)
+    : doc(collection(db, 'users'));
   const defaultAvatarUrl = `https://api.dicebear.com/7.x/${role === 'parent' ? 'avataaars' : 'bottts'}/svg?seed=${displayName}`;
 
   const memberDoc: Record<string, unknown> = {
@@ -502,6 +516,7 @@ export const createManagedMember = async (
     longestStreak: 0,
     lastActiveDate: serverTimestamp(),
   };
+  if (clientReqId) memberDoc.clientReqId = clientReqId;
 
   // Apply optional onboarding profile fields. Avatar resolution always goes
   // through the curated catalog so a managed child can never store an arbitrary
@@ -513,14 +528,42 @@ export const createManagedMember = async (
   if (profile?.dob) memberDoc.dob = profile.dob;
   if (profile?.colour) memberDoc.colour = profile.colour;
 
-  const batch = writeBatch(db);
-  batch.set(doc(db, `families/${familyId}/wallets`, userRef.id), {
+  const walletRef = doc(db, `families/${familyId}/wallets`, userRef.id);
+  const walletDoc = {
     balance: 0,
     createdAt: serverTimestamp(),
     migratedFromLegacy: true,
-  });
-  batch.set(userRef, memberDoc);
-  await batch.commit();
+  };
+
+  if (clientReqId) {
+    const batch = writeBatch(db);
+    batch.set(walletRef, walletDoc);
+    batch.set(userRef, memberDoc);
+    try {
+      await batch.commit();
+    } catch (error) {
+      // Rules intentionally deny reading a missing users/{id} document, so a
+      // client transaction cannot probe-before-create. A deterministic create
+      // is attempted atomically instead. If a concurrent/replayed request won,
+      // its now-existing same-family document is readable and proves success.
+      const existing = await getDoc(userRef);
+      const data = existing.exists() ? existing.data() : null;
+      if (
+        !data
+        || data.clientReqId !== clientReqId
+        || data.familyId !== familyId
+        || data.role !== role
+        || data.isManaged !== true
+      ) {
+        throw error;
+      }
+    }
+  } else {
+    const batch = writeBatch(db);
+    batch.set(walletRef, walletDoc);
+    batch.set(userRef, memberDoc);
+    await batch.commit();
+  }
   return userRef.id;
 };
 
@@ -569,21 +612,51 @@ export const submitClaimRequest = async (uid: string, displayName: string, claim
 // 2. TASKS & COMPLETIONS
 // ---------------------------
 
-export const createTask = async (familyId: string, taskData: any) => {
+export const createTask = async (
+  familyId: string,
+  taskData: any,
+  options?: { clientReqId?: string },
+) => {
   const actorId = requireActorId();
-  const taskRef = doc(collection(db, `families/${familyId}/tasks`));
-  const feedRef = doc(collection(db, `families/${familyId}/feed`));
-  const batch = writeBatch(db);
-  batch.set(taskRef, {
+  const clientReqId = options?.clientReqId;
+  if (clientReqId !== undefined && !MANAGED_MEMBER_REQUEST_ID.test(clientReqId)) {
+    throw new Error('Invalid task request id');
+  }
+  const taskRef = clientReqId
+    ? doc(db, `families/${familyId}/tasks`, `onboarding_${clientReqId}`)
+    : doc(collection(db, `families/${familyId}/tasks`));
+  const feedRef = clientReqId
+    ? doc(db, `families/${familyId}/feed`, `onboarding_${clientReqId}`)
+    : doc(collection(db, `families/${familyId}/feed`));
+  const taskDoc = {
     ...taskData,
+    ...(clientReqId ? { clientReqId } : {}),
     isActive: true,
-    createdAt: serverTimestamp()
-  });
-  batch.set(feedRef, {
+    createdAt: serverTimestamp(),
+  };
+  const feedDoc = {
     actorId,
     text: `New task added: ${taskData.title}`,
-    timestamp: serverTimestamp()
-  });
+    timestamp: serverTimestamp(),
+  };
+  if (clientReqId) {
+    await runTransaction(db, async transaction => {
+      const existing = await transaction.get(taskRef);
+      if (existing.exists()) {
+        const data = existing.data();
+        if (data.clientReqId !== clientReqId || data.assigneeId !== taskData.assigneeId) {
+          throw new Error('Task request identity conflict');
+        }
+        return;
+      }
+      transaction.set(taskRef, taskDoc);
+      transaction.set(feedRef, feedDoc);
+    });
+    return taskRef;
+  }
+  const batch = writeBatch(db);
+  batch.set(taskRef, taskDoc);
+  batch.set(feedRef, feedDoc);
   console.log('[createTask]', {
     buildId: FAMILYQUEST_BUILD.sha,
     actorId,

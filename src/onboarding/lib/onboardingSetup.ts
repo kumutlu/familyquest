@@ -29,10 +29,14 @@ export interface SetupDeps {
     role: 'parent' | 'child',
     displayName: string,
     profile?: { avatarId?: string | null; dob?: string | null; colour?: string | null },
+    options?: { clientReqId?: string },
   ) => Promise<string>;
-  createTask: (familyId: string, taskData: unknown) => Promise<{ id: string }>;
+  createTask: (
+    familyId: string,
+    taskData: unknown,
+    options?: { clientReqId?: string },
+  ) => Promise<{ id: string }>;
   refreshCurrentUser: (uid: string, updated: { familyId: string; role: string }) => void;
-  /** Optional: current family members, used to skip a duplicate first child. */
   getFamilyMembers?: () => Array<{ id: string; displayName?: string; role?: string }>;
 }
 
@@ -56,22 +60,23 @@ export async function ensureFamily(draft: OnboardingDraft, deps: SetupDeps): Pro
 
 /**
  * Creates the first managed child exactly once. Skipped when no child name was
- * provided, when the child already exists (name match against current members),
- * or when `draft.childId` is already set.
+ * provided or when `draft.childId` is already set. Retry identity is carried by
+ * `firstChildRequestId`; names are never used as an identity boundary.
  */
 export async function ensureFirstChild(draft: OnboardingDraft, deps: SetupDeps): Promise<OnboardingDraft> {
   if (draft.childId) return draft;
   if (!draft.familyId) throw new Error('Family must be created before the first child');
   const childName = draft.childFirstName.trim();
   if (!childName) return draft;
+  if (!draft.firstChildRequestId) throw new Error('Onboarding child request identity is missing');
 
-  const members = deps.getFamilyMembers?.() ?? [];
-  const alreadyExists = members.some(
-    m => m.role === 'child' && m.displayName?.trim().toLowerCase() === childName.toLowerCase(),
+  const childId = await deps.createManagedMember(
+    draft.familyId,
+    'child',
+    childName,
+    undefined,
+    { clientReqId: draft.firstChildRequestId },
   );
-  if (alreadyExists) return draft;
-
-  const childId = await deps.createManagedMember(draft.familyId, 'child', childName);
   return { ...draft, childId };
 }
 
@@ -87,7 +92,12 @@ export async function ensureFirstTask(
   if (draft.firstTaskId) return draft;
   if (!draft.familyId) throw new Error('Family must be created before the first task');
   if (!draft.childId) throw new Error('A child must exist before assigning the first task');
+  if (!draft.firstTaskRequestId) throw new Error('Onboarding task request identity is missing');
 
-  const ref = await deps.createTask(draft.familyId, { ...(taskData as object), assigneeId: draft.childId });
+  const ref = await deps.createTask(
+    draft.familyId,
+    { ...(taskData as object), assigneeId: draft.childId },
+    { clientReqId: draft.firstTaskRequestId },
+  );
   return { ...draft, firstTaskId: ref.id };
 }

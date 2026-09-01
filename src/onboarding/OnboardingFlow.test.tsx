@@ -214,6 +214,7 @@ describe('OnboardingFlow — post-auth idempotent setup', () => {
     expect(api.createTask).toHaveBeenCalledWith(
       'family-1',
       expect.objectContaining({ title: 'Tidy bedroom', assigneeId: 'child-1' }),
+      expect.objectContaining({ clientReqId: expect.any(String) }),
     );
 
     // P3 → dashboard.
