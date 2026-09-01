@@ -88,6 +88,109 @@
     },
     "walletHeading": "Your wallet",
     "openWallet": "Open your wallet, balance {{balance}}",
+    "adventure": {
+      "heading": "Today's Adventure",
+      "endingSoon": "Ending soon",
+      "loading": "Getting today's adventure ready…",
+      "viewQuests": "View quests",
+      "viewQuestsAria": "View today's quests",
+      "mystery": {
+        "title": "Mystery Drop available",
+        "lockedTitle": "Mystery Drop",
+        "lockedLead": "Something mysterious appeared…",
+        "lockedProgress_one": "Complete {{count}} quest to unlock it.",
+        "lockedProgress_other": "Complete {{count}} quests to unlock it.",
+        "lockedProgressDone": "Ready to open!",
+        "readyTitle": "Mystery Drop unlocked",
+        "readyAria": "Open mystery drop",
+        "readyAction": "Open",
+        "revealTitle": "Mystery drop reveal: {{title}}",
+        "rewardCosmeticTitle": "New look unlocked!",
+        "rewardCosmeticDescription": "Cosmetic · {{itemId}}",
+        "rewardCollectionTitle": "Added to your collection!",
+        "rewardCollectionDescription": "Collection · {{itemId}}",
+        "rewardXpDescription": "Bonus experience",
+        "revealLoading": "Unwrapping your surprise…",
+        "closeAria": "Close",
+        "acknowledgeAction": "Awesome!"
+      },
+      "seasonal": {
+        "title": "This week's world",
+        "description": "Today's adventure has a special seasonal feel."
+      }
+    },
+    "normal": {
+      "title": "Today's Adventure",
+      "questCount_one": "{{count}} quest waiting",
+      "questCount_other": "{{count}} quests waiting",
+      "body": "Complete one to keep moving.",
+      "allCaughtUp": "You're all caught up.",
+      "allCaughtUpBody": "Check back later for something new.",
+      "viewQuests": "View quests"
+    },
+    "xpPop": {
+      "awarded": "Awarded {{amount}} XP",
+      "removed": "Removed {{amount}} XP",
+      "mysteryAwarded": "Mystery +{{amount}} XP",
+      "comebackAwarded": "Comeback +{{amount}} XP"
+    },
+    "comeback": {
+      "mission": {
+        "return_1d": {
+          "title": "Welcome back!",
+          "description": "Pick any quest today to get rolling again."
+        },
+        "return_3d": {
+          "title": "Glad you're back!",
+          "description": "Complete one quest today for a +25 XP boost."
+        },
+        "return_7d": {
+          "title": "Long time no see!",
+          "description": "Complete one quest today for a +50 XP comeback bonus."
+        }
+      },
+      "completed": {
+        "return_1d": {
+          "title": "You're back on track!",
+          "description": "Nice — your comeback is logged for today."
+        },
+        "return_3d": {
+          "title": "Comeback complete",
+          "description": "+25 XP",
+          "full": "Comeback complete! +25 XP"
+        },
+        "return_7d": {
+          "title": "Comeback complete",
+          "description": "+50 XP",
+          "full": "Comeback complete! +50 XP"
+        }
+      },
+      "noXpPromise": {
+        "title": "No XP for this return",
+        "description": "Just a friendly welcome — your comeback XP comes from another tier."
+      }
+    },
+    "theme": {
+      "weeklyLabel": "This week's world",
+      "seasonalLabel": "Seasonal world",
+      "equippedLabel": "Your theme"
+    },
+    "preview": {
+      "title": "Engagement preview",
+      "description": "Dev-only fixture browser. No Firestore writes.",
+      "productionBlocked": "Engagement preview is dev-only."
+    },
+    "quests": {
+      "heading": "Today's Quests",
+      "preview": {
+        "points_one": "Worth {{count}} point",
+        "points_other": "Worth {{count}} points",
+        "open": "Open",
+        "completed": "Completed",
+        "viewAll": "See all quests",
+        "aria": "{{title}}, {{points}} points, {{status}}. Open to start."
+      }
+    },
     "familyTools": {
       "heading": "Your goals",
       "viewAll": "View all",

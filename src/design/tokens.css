@@ -203,3 +203,52 @@
     --animate-duration-next-card: 0ms;
   }
 }
+
+/* --------------------------------------------------------------------------
+   Engagement Experience V1 — XP-pop and mystery-reveal keyframes.
+
+   These two animations are pure CSS so the JS keeps zero timer logic
+   beyond mount/unmount. They honour the `--animate-duration-celebration`
+   token (which already collapses to 0ms under `prefers-reduced-motion`).
+   -------------------------------------------------------------------------- */
+
+@keyframes xp-pop-enter {
+  0% {
+    opacity: 0;
+    transform: translateY(8px) scale(0.85);
+  }
+  60% {
+    opacity: 1;
+    transform: translateY(-4px) scale(1.08);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+@keyframes mystery-reveal-enter {
+  0% {
+    opacity: 0;
+    transform: translateY(12px) scale(0.92) rotate(-2deg);
+  }
+  60% {
+    opacity: 1;
+    transform: translateY(-2px) scale(1.02) rotate(0);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0) scale(1) rotate(0);
+  }
+}
+
+@keyframes quest-card-enter {
+  0% {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}

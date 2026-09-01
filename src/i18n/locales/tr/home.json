@@ -44,7 +44,7 @@
       "saved": "{{amount}} birikti",
       "fundCount_one": "{{count}} aktif fon",
       "fundCount_other": "{{count}} aktif fon",
-      "unavailable": "Kullanılamıyor"
+      "unavailable": "Kullanılamaz"
     },
     "childrenHeading": "Ekibin",
     "childSubtitle": "Seviye {{level}} · {{points}} puan",
@@ -88,6 +88,109 @@
     },
     "walletHeading": "Cüzdanın",
     "openWallet": "Cüzdanını aç, bakiye {{balance}}",
+    "adventure": {
+      "heading": "Bugünün Macerası",
+      "endingSoon": "Az kaldı",
+      "loading": "Bugünün macerası hazırlanıyor…",
+      "viewQuests": "Görevleri gör",
+      "viewQuestsAria": "Bugünün görevlerini gör",
+      "mystery": {
+        "title": "Sürpriz Drop hazır",
+        "lockedTitle": "Sürpriz Drop",
+        "lockedLead": "Tuhaf bir şey göründü…",
+        "lockedProgress_one": "Açmak için {{count}} görev tamamla.",
+        "lockedProgress_other": "Açmak için {{count}} görev tamamla.",
+        "lockedProgressDone": "Açılmaya hazır!",
+        "readyTitle": "Sürpriz Drop açıldı",
+        "readyAria": "Sürpriz drop'u aç",
+        "readyAction": "Aç",
+        "revealTitle": "Sürpriz drop açılışı: {{title}}",
+        "rewardCosmeticTitle": "Yeni görünüm açıldı!",
+        "rewardCosmeticDescription": "Kozmetik · {{itemId}}",
+        "rewardCollectionTitle": "Koleksiyona eklendi!",
+        "rewardCollectionDescription": "Koleksiyon · {{itemId}}",
+        "rewardXpDescription": "Bonus deneyim",
+        "revealLoading": "Sürpriz çözülüyor…",
+        "closeAria": "Kapat",
+        "acknowledgeAction": "Harika!"
+      },
+      "seasonal": {
+        "title": "Bu haftanın dünyası",
+        "description": "Bugünün macerası özel bir mevsim havası taşıyor."
+      }
+    },
+    "normal": {
+      "title": "Bugünün Macerası",
+      "questCount_one": "{{count}} görev seni bekliyor",
+      "questCount_other": "{{count}} görev seni bekliyor",
+      "body": "İlerlemek için birini tamamla.",
+      "allCaughtUp": "Her şeyi bitirdin.",
+      "allCaughtUpBody": "Yeni bir şey için sonra tekrar gel.",
+      "viewQuests": "Görevleri gör"
+    },
+    "xpPop": {
+      "awarded": "{{amount}} XP kazandın",
+      "removed": "{{amount}} XP silindi",
+      "mysteryAwarded": "Sürpriz +{{amount}} XP",
+      "comebackAwarded": "Comeback +{{amount}} XP"
+    },
+    "comeback": {
+      "mission": {
+        "return_1d": {
+          "title": "Tekrar hoş geldin!",
+          "description": "Bugün herhangi bir görev seç, yola devam et."
+        },
+        "return_3d": {
+          "title": "Geri döndüğüne sevindim!",
+          "description": "Bugün bir görev tamamla, +25 XP kazan."
+        },
+        "return_7d": {
+          "title": "Seni çok özledik!",
+          "description": "Bugün bir görev tamamla, +50 XP comeback bonusu kazan."
+        }
+      },
+      "completed": {
+        "return_1d": {
+          "title": "Yoldasın yine!",
+          "description": "Güzel — comeback bugün için kaydedildi."
+        },
+        "return_3d": {
+          "title": "Comeback tamam",
+          "description": "+25 XP",
+          "full": "Comeback tamam! +25 XP"
+        },
+        "return_7d": {
+          "title": "Comeback tamam",
+          "description": "+50 XP",
+          "full": "Comeback tamam! +50 XP"
+        }
+      },
+      "noXpPromise": {
+        "title": "Bu dönüş için XP yok",
+        "description": "Sadece sıcak bir karşılama — comeback XP'n başka bir seviyeden gelir."
+      }
+    },
+    "theme": {
+      "weeklyLabel": "Bu haftanın dünyası",
+      "seasonalLabel": "Mevsim dünyası",
+      "equippedLabel": "Senin teman"
+    },
+    "preview": {
+      "title": "Etkileşim önizlemesi",
+      "description": "Yalnızca geliştirici için fixture tarayıcı. Firestore yazmaz.",
+      "productionBlocked": "Etkileşim önizlemesi yalnızca geliştirici içindir."
+    },
+    "quests": {
+      "heading": "Bugünün Görevleri",
+      "preview": {
+        "points_one": "{{count}} puan değerinde",
+        "points_other": "{{count}} puan değerinde",
+        "open": "Aç",
+        "completed": "Tamamlandı",
+        "viewAll": "Tüm görevleri gör",
+        "aria": "{{title}}, {{points}} puan, {{status}}. Başlamak için aç."
+      }
+    },
     "familyTools": {
       "heading": "Hedeflerin",
       "viewAll": "Tümünü gör",

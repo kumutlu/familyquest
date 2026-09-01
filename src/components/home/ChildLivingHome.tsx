@@ -1,4 +1,4 @@
-import { useMemo } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useNavigate } from 'react-router-dom';
 import {
@@ -7,11 +7,12 @@ import {
   Sword,
   Flame,
   Gift,
-  Star,
   Swords,
   PartyPopper,
   AlertTriangle,
   RefreshCw,
+  ListChecks,
+  Star,
 } from 'lucide-react';
 import { useStore } from '../../store/useStore';
 import { adaptGamificationSummary } from '../../lib/gamificationAdapters';
@@ -25,17 +26,59 @@ import { QuekiMascot } from '../queki/QuekiMascot';
 import { XPDisplay } from '../queki/semanticDisplays';
 import { ProgressBar } from '../queki/Progress';
 import { TactileButton } from '../queki/TactileButton';
+import { TodaysAdventure, type MysteryDropDisplay } from '../queki/TodaysAdventure';
+import { QuestPreviewList, type QuestPreviewItem } from '../queki/QuestPreviewRow';
+import { XpPop } from '../queki/XpPop';
+import { MysteryReveal } from '../queki/MysteryReveal';
 import { Mascot as EngineMascot } from '../mascot/Mascot';
 import { MascotMessage } from '../mascot/MascotMessage';
 import { useMascotPresentationFor } from '../../hooks/useMascotPresentation';
+import { useChildAdventure } from '../../hooks/useChildAdventure';
+import { useExperienceTheme } from '../../hooks/useExperienceTheme';
 import type { MascotContext } from '../../domain/mascot';
+import type { TaskSummary } from '../../domain/engagement/resolver';
+import type { MysteryDropReward } from '../../domain/mysteryDrop/types';
+import type {
+  MysteryDropResolverInput,
+} from '../../domain/mysteryDrop/types';
+import {
+  acknowledgeComebackCompletion,
+  acknowledgeMysteryReveal,
+  isComebackCompletionAcknowledged,
+  isMysteryRevealAcknowledged,
+} from '../../lib/presentation/acknowledgement.v1';
+import {
+  localDateKey,
+} from '../../domain/comeback/types';
+import {
+  evaluateMysteryDropEligibility,
+} from '../../domain/mysteryDrop/eligibility';
+import {
+  unstable_DevOnlyPreviewRoute,
+} from '../preview/EngagementPreviewRoute';
 
 /**
- * Child Living Home — Queki v2 Wave 1.
+ * Child Living Home — Queki v2 Wave 1 + Engagement Experience V1.
  *
  * Personal state first (character, level, XP, streak, points, wallet), then
- * 1–3 dynamic focus items from the deterministic child selector. XP / points /
- * real money each keep their own semantic identity. No history feeds.
+ * the V1 Engagement Experience layers in this fixed order:
+ *
+ *   1. Mascot strip              (welcome + mood)
+ *   2. Today's Adventure         (Surge · Mystery Drop · Comeback · Normal)
+ *   3. Today's Quests            (preview of the most relevant quests)
+ *   4. XP / Level Progress       (level hero + XP pop feedback)
+ *   5. Reward feedback overlays  (Mystery reveal · XP pop)
+ *
+ * XP / points / real money each keep their own semantic identity.
+ * No history feeds.
+ *
+ * Mystery Drop authority
+ * ----------------------
+ * The Mystery Drop is awarded AUTHORITATIVELY by the gamification
+ * processor when the qualifying completion is approved. This host
+ * treats `MysteryOpen` as PRESENTATION ONLY: when a child taps OPEN,
+ * we render the already-authoritative reward that the resolver has
+ * already produced. The client NEVER invents a reward amount.
  */
 
 const FOCUS_TESTID: Record<ChildFocus['kind'], string> = {
@@ -47,9 +90,25 @@ const FOCUS_TESTID: Record<ChildFocus['kind'], string> = {
   family_quest: 'focus-family-quest',
 };
 
+const MAX_QUEST_PREVIEWS = 3;
+
+interface MysteryDropHost {
+  /** Definition needed for the pure resolver. */
+  readonly definition: MysteryDropResolverInput['drop']
+  /** Whether the drop is currently reveal-ready. */
+  readonly isRevealReady: boolean
+  /** Optional override progress label for the locked state. */
+  readonly progressLabel?: string
+  /** Resolved reward from the authoritative award path. */
+  readonly resolvedReward: MysteryDropReward | null
+  /** Mystery drop id used for acknowledgement. */
+  readonly id: string
+}
+
 export function ChildLivingHome() {
   const { t } = useTranslation('home');
   const navigate = useNavigate();
+  const store = useStore() as any;
   const {
     currentUser,
     tasks,
@@ -62,7 +121,10 @@ export function ChildLivingHome() {
     myWallet,
     bootstrapStatus,
     retryFeature,
-  } = useStore();
+    mysteryDropDefinition,
+    comebackXpReward,
+    familyTimezone,
+  } = store;
 
   const gamification = useMemo(
     () => adaptGamificationSummary(myGamificationSummary, myDailyProgress, currentUser),
@@ -96,7 +158,178 @@ export function ChildLivingHome() {
       resource => bootstrapStatus[resource] === 'loading' || bootstrapStatus[resource] === 'idle',
     );
 
-  // Mascot Engine V1: read-only context from existing gamification state.
+  // Theme — applied via the experience theme hook. The surface CSS
+  // variables are bound to the resolved theme so the world visibly
+  // shifts for base / weekly / seasonal / child-equipped states.
+  const experienceTheme = useExperienceTheme();
+
+  // ----- Engagement Experience V1 --------------------------------------
+  const adventureTasks: TaskSummary[] = useMemo(() => {
+    return (Array.isArray(tasks) ? tasks : []).map(task => ({
+      id: String(task?.id ?? ''),
+      title: String(task?.title ?? ''),
+      pointsReward: Number(task?.pointsReward ?? 0),
+      assigneeId: task?.assigneeId ?? null,
+      isCompleted: Boolean(task?.isCompleted),
+    }));
+  }, [tasks]);
+
+  // Build the Mystery Drop display from the host-provided authoritative
+  // definition + reward. When the server has not surfaced a drop, the
+  // entire field stays null and the resolver can show normal / seasonal.
+  const mysteryDropHost: MysteryDropHost | null = useMemo(() => {
+    if (!mysteryDropDefinition || !currentUser) return null;
+    const resolved = mysteryDropDefinition.resolvedReward ?? null;
+    const progress = typeof mysteryDropDefinition.progressLabel === 'string'
+      ? mysteryDropDefinition.progressLabel
+      : undefined;
+    return {
+      definition: mysteryDropDefinition.definition,
+      isRevealReady: mysteryDropDefinition.isRevealReady === true,
+      progressLabel: progress,
+      resolvedReward: resolved,
+      id: mysteryDropDefinition.definition.id,
+    };
+  }, [mysteryDropDefinition, currentUser]);
+
+  // Resolve a Mystery Drop input for the resolver hook. The hook treats
+  // isRevealReady from the host as authoritative — the same flag the
+  // gamification processor sets after the awarding transaction.
+  const mysteryDropInput = useMemo(() => {
+    if (!mysteryDropHost) return null;
+    return {
+      id: mysteryDropHost.id,
+      rarity: mysteryDropHost.definition.rarity ?? ('common' as const),
+      isRevealReady: mysteryDropHost.isRevealReady,
+    };
+  }, [mysteryDropHost]);
+
+  // ----- Mystery reveal acknowledgement ---------------------------------
+  // UI state only: never reward authority. The host opens the reveal the
+  // first time the child taps OPEN, and remembers the ack so subsequent
+  // remounts render the owned beat (no replay).
+  const [mysteryRevealOpen, setMysteryRevealOpen] = useState(false);
+  const [pendingReward, setPendingReward] = useState<MysteryDropReward | null>(null);
+
+  // ----- XP-pop feedback -----------------------------------------------
+  // The XP pop is sourced from AUTHORITATIVE gamification_events. We
+  // track the last seen award event id so we never replay. The amount
+  // and variant come from authoritative metadata; the host never invents
+  // them. For V1 the host receives the most recent award via the store
+  // (`lastXpAward`) which is a presentation-side cache keyed by event id.
+  const [xpPop, setXpPop] = useState<{
+    amount: number;
+    visible: boolean;
+    variant: 'generic' | 'mystery' | 'comeback' | 'reverse';
+  }>({ amount: 0, visible: false, variant: 'generic' });
+
+  const xpAward = store.lastXpAward ?? null;
+
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- We trigger on event id only.
+  useEffect(() => {
+    if (!xpAward || typeof xpAward.id !== 'string') return;
+    // The store hands us a fresh award event; trigger exactly one pop.
+    setXpPop({
+      amount: Number.isFinite(xpAward.amount) ? Number(xpAward.amount) : 0,
+      visible: true,
+      variant: xpAward.kind === 'mystery'
+        ? 'mystery'
+        : xpAward.kind === 'comeback'
+          ? 'comeback'
+          : 'generic',
+    });
+    // We only trigger on the event id, intentionally. The full award
+    // object may change reference between renders without producing a
+    // new logical event.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [xpAward?.id]);
+
+  const adventure = useChildAdventure({
+    now: Date.now(),
+    activeSurges: store.activeSurges ?? [],
+    availableTasks: adventureTasks,
+    surgeHoursEnabled: true,
+    currentStreak: gamification.currentStreak,
+    questsRemaining: adventureTasks.filter(task => !task.isCompleted).length,
+    questsCompletedToday: gamification.todayProgress != null
+      ? Math.round(gamification.todayProgress)
+      : 0,
+    activeEventId: null,
+    comeback: store.comebackInput ?? null,
+    mysteryDrop: mysteryDropInput,
+    // Resolved only when the bootstrap has settled; otherwise we
+    // suppress the entire precedence ladder and the surface stays calm.
+    resolved: !resourcesLoading,
+    seasonalActive: experienceTheme.seasonalEvent != null || experienceTheme.weeklyEvent != null,
+  });
+
+  // ----- Comeback completion acknowledgement ----------------------------
+  // Source of truth for comeback XP is the `COMEBACK_MISSION_XP_AWARDED`
+  // gamification event. We surface a one-shot XP pop when a NEW
+  // completion arrives — same mechanism as Mystery reveal, but the key
+  // includes the local date so the same tier can celebrate again on a
+  // new day.
+  const comebackTier = adventure.comeback?.tier ?? 'none';
+  const comebackCompleted = adventure.comeback?.missionCompleted === true;
+  const prevComebackCompletedRef = useRef<boolean | null>(null);
+
+  useEffect(() => {
+    if (!comebackCompleted) {
+      prevComebackCompletedRef.current = false;
+      return;
+    }
+    const prev = prevComebackCompletedRef.current;
+    prevComebackCompletedRef.current = true;
+    if (prev === true) return; // already acknowledged in this mount
+    const tz = typeof familyTimezone === 'string' ? familyTimezone : 'UTC';
+    const localDate = localDateKey(Date.now(), tz);
+    const key = `${currentUser?.id ?? ''}|${localDate}|${comebackTier}`;
+    if (isComebackCompletionAcknowledged(key)) return;
+    acknowledgeComebackCompletion(key);
+    const xp = Number(comebackXpReward) || 0;
+    if (xp > 0) {
+      setXpPop({ amount: xp, visible: true, variant: 'comeback' });
+    }
+  }, [comebackCompleted, comebackTier, currentUser?.id, comebackXpReward, familyTimezone]);
+
+  const handleSelectSurgeTask = useCallback((taskId: string) => {
+    navigate(`/tasks?focus=${encodeURIComponent(taskId)}`);
+  }, [navigate]);
+
+  const handlePressMystery = useCallback((dropId: string) => {
+    const host = mysteryDropHost;
+    if (!host || host.id !== dropId) return;
+    const reward = host.resolvedReward;
+    // Defense in depth: a reward is required. If the host never set
+    // one, we never let OPEN mint anything.
+    if (!reward) return;
+    // Re-run the pure resolver with the most recent completion to be
+    // sure the drop is still in its eligible window before we reveal.
+    const completedAt = Date.now();
+    const eligibility = evaluateMysteryDropEligibility({
+      drop: host.definition,
+      completion: {
+        id: `${host.id}__reveal`,
+        childId: currentUser?.id ?? '',
+        taskId: 'any',
+        completedAt,
+        requiresApproval: false,
+      },
+    });
+    // If the resolver is not currently eligible, refuse to reveal —
+    // we never present a celebration without authoritative backing.
+    if (!eligibility.eligible) return;
+    setPendingReward(reward);
+    setMysteryRevealOpen(true);
+  }, [mysteryDropHost, currentUser?.id]);
+
+  const handleCloseMystery = useCallback(() => {
+    setMysteryRevealOpen(false);
+    if (mysteryDropHost) acknowledgeMysteryReveal(mysteryDropHost.id);
+    setPendingReward(null);
+  }, [mysteryDropHost]);
+
+  // ----- Mascot Engine V1 ----------------------------------------------
   const mascotContext: Omit<MascotContext, 'now'> = useMemo(() => {
     const childDisplayName = currentUser?.displayName;
     const streak = gamification.currentStreak ?? 0;
@@ -124,6 +357,10 @@ export function ChildLivingHome() {
           gamification.todayProgress != null ? Math.round(gamification.todayProgress) : 0,
         allQuestsCompleted: allDone && streak > 0,
       },
+      engagement: {
+        activeSurge: adventure.surge !== null,
+        surgeEndingSoon: adventure.urgency === 'ending',
+      },
     };
   }, [
     currentUser?.displayName,
@@ -133,9 +370,43 @@ export function ChildLivingHome() {
     taskCompletions,
     focus.length,
     resourcesLoading,
+    adventure.surge,
+    adventure.urgency,
   ]);
 
   const mascotPresentation = useMascotPresentationFor(mascotContext);
+
+  // ----- Today's Quests (V1 preview) -----------------------------------
+  const questPreviewItems: QuestPreviewItem[] = useMemo(() => {
+    const childId = currentUser?.id;
+    const completedToday = new Set(
+      (Array.isArray(taskCompletions) ? taskCompletions : [])
+        .filter((c: any) => c?.childId === childId)
+        .map((c: any) => c?.taskId),
+    );
+    return (Array.isArray(tasks) ? tasks : [])
+      .filter((task: any) => task?.isActive !== false)
+      .map((task: any) => ({
+        id: String(task?.id ?? ''),
+        title: String(task?.title ?? ''),
+        pointsReward: Number(task?.pointsReward ?? 0),
+        isCompletedToday: completedToday.has(String(task?.id ?? '')),
+      }))
+      .filter((q: QuestPreviewItem) => q.id.length > 0)
+      .slice(0, MAX_QUEST_PREVIEWS);
+  }, [tasks, taskCompletions, currentUser?.id]);
+
+  // Build the Mystery Drop display for the surface.
+  const mysteryDropDisplay: MysteryDropDisplay | null = useMemo(() => {
+    if (!mysteryDropHost) return null;
+    return {
+      id: mysteryDropHost.id,
+      rarity: mysteryDropHost.definition.rarity ?? ('common' as const),
+      messageKey: 'child.adventure.mystery.lockedLead',
+      isRevealReady: mysteryDropHost.isRevealReady,
+      progressLabel: mysteryDropHost.progressLabel,
+    };
+  }, [mysteryDropHost]);
 
   const renderFocus = (item: ChildFocus) => {
     switch (item.kind) {
@@ -238,9 +509,30 @@ export function ChildLivingHome() {
     );
   }
 
+  // Map the active theme accent (if any) to CSS custom properties on the
+  // root surface wrapper. The surface tokens are defined in
+  // `src/design/tokens.css`; we layer the theme accent on top of them so
+  // every child sees the world visibly shift for base / weekly /
+  // seasonal / child-equipped.
+  const themeAccent = experienceTheme.theme?.tokens?.accent as string | undefined;
+  const surfaceStyle = themeAccent
+    ? ({ ['--qk-theme-accent' as any]: themeAccent } as React.CSSProperties)
+    : undefined;
+
+  const allCaughtUp = adventure.presentation.kind === 'normal' &&
+    questPreviewItems.every(q => q.isCompletedToday !== true || q.id.length === 0);
+
+  // Dev-only preview harness. Renders nothing in production builds —
+  // the component hard-fails when `import.meta.env.PROD` is true.
+  const previewSlot = unstable_DevOnlyPreviewRoute();
+
   return (
-    <div className="space-y-6 pb-8" data-testid="child-living-home">
-      {/* ---- Hero: personal state ------------------------------------------ */}
+    <div className="space-y-6 pb-8" data-testid="child-living-home" style={surfaceStyle}>
+      {previewSlot}
+
+      {/* ============================================================== */}
+      {/* Hero: personal state                                            */}
+      {/* ============================================================== */}
       <Surface
         level="card"
         className="relative overflow-hidden rounded-hero p-6 text-white"
@@ -305,7 +597,94 @@ export function ChildLivingHome() {
         </div>
       </Surface>
 
-      {/* ---- Dynamic focus (max 3) ----------------------------------------- */}
+      {/* ============================================================== */}
+      {/* Mascot strip (V1 welcome + mood)                                */}
+      {/* ============================================================== */}
+      <div
+        className="flex items-center gap-3 rounded-card qk-bg-card qk-border-subtle qk-shadow-card border p-4"
+        data-testid="mascot-strip"
+      >
+        <EngineMascot
+          presentation={mascotPresentation.presentation}
+          size={56}
+          className="shrink-0"
+        />
+        <MascotMessage
+          presentation={mascotPresentation.presentation}
+          message={mascotPresentation.message}
+          className="qk-text-primary"
+        />
+      </div>
+
+      {/* ============================================================== */}
+      {/* V1: Today's Adventure                                          */}
+      {/* ============================================================== */}
+      <TodaysAdventure
+        surge={adventure.surge ? {
+          surgeId: adventure.surge.surgeId,
+          surge: adventure.surge.surge,
+          window: adventure.surge.window,
+          eligibleTasks: adventure.surge.eligibleTasks,
+        } : null}
+        urgency={adventure.urgency}
+        comeback={adventure.comeback ? {
+          tier: adventure.comeback.tier,
+          inactivityDays: adventure.comeback.inactivityDays,
+          missionCompleted: adventure.comeback.missionCompleted,
+        } : null}
+        mysteryDrop={mysteryDropDisplay}
+        onSelectSurgeTask={handleSelectSurgeTask}
+        onPressMysteryDrop={handlePressMystery}
+        onViewQuests={() => navigate('/tasks')}
+        presentation={adventure.presentation}
+        normalQuestCount={questPreviewItems.filter(q => q.isCompletedToday !== true).length}
+        allCaughtUp={allCaughtUp}
+      />
+
+      {/* ============================================================== */}
+      {/* V1: Today's Quests (preview list, max 3)                       */}
+      {/* ============================================================== */}
+      {questPreviewItems.length > 0 && (
+        <section
+          aria-label={t('child.quests.heading')}
+          data-testid="todays-quests"
+          className="space-y-3"
+        >
+          <header className="flex items-center gap-2 px-1">
+            <ListChecks size={16} aria-hidden="true" className="text-family-500" />
+            <h2 className="text-card-title qk-text-primary">
+              {t('child.quests.heading')}
+            </h2>
+          </header>
+          <QuestPreviewList
+            quests={questPreviewItems}
+            onPressQuest={handleSelectSurgeTask}
+            onViewAll={() => navigate('/tasks')}
+          />
+        </section>
+      )}
+
+      {/* ============================================================== */}
+      {/* V1: Reward feedback (XP pop · Mystery reveal)                 */}
+      {/* ============================================================== */}
+      <XpPop
+        amount={xpPop.amount}
+        visible={xpPop.visible}
+        variant={xpPop.variant}
+        className="fixed left-1/2 top-4 z-40 -translate-x-1/2"
+      />
+
+      <MysteryReveal
+        open={mysteryRevealOpen}
+        reward={pendingReward}
+        rarity={mysteryDropHost?.definition.rarity ?? 'rare'}
+        onClose={handleCloseMystery}
+        acknowledged={mysteryDropHost ? isMysteryRevealAcknowledged(mysteryDropHost.id) : false}
+      />
+
+      {/* ============================================================== */}
+      {/* Dynamic focus (max 3) — kept from Wave 1 for parent signal    */}
+      {/* ============================================================== */}
       <section aria-label={t('child.heroSubtitle')} className="space-y-3">
         {resourcesLoading ? (
           <>
@@ -326,25 +705,6 @@ export function ChildLivingHome() {
           </TactileCard>
         )}
       </section>
-
-      {/* Mascot Engine V1 — read-only presentation. Driven by the
-          useMascotPresentationFor hook which composes streak + activity
-          + Event Theme into a single presentation bundle. */}
-      <div
-        className="flex items-center gap-3 rounded-card qk-bg-card qk-border-subtle qk-shadow-card border p-4"
-        data-testid="mascot-strip"
-      >
-        <EngineMascot
-          presentation={mascotPresentation.presentation}
-          size={56}
-          className="shrink-0"
-        />
-        <MascotMessage
-          presentation={mascotPresentation.presentation}
-          message={mascotPresentation.message}
-          className="qk-text-primary"
-        />
-      </div>
     </div>
   );
 }
@@ -376,4 +736,3 @@ function PointsDisplayOnBrand({ points }: { points: number }) {
     </span>
   );
 }
-
