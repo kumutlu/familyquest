@@ -47,6 +47,12 @@ test('real verification link preserves and resumes UID-bound family onboarding',
   await expect(page.getByRole('button', { name: 'Create a family' })).toHaveCount(0);
   await completePostAuth(page, persona);
   const outcome = await getOnboardingOutcome(email);
-  expect(outcome).toMatchObject({ familyCount: 1, childCount: 1, taskCount: 1 });
+  expect(outcome).toMatchObject({
+    familyCount: 1,
+    childCount: 1,
+    walletCount: 1,
+    taskCount: 1,
+    feedCount: 1,
+  });
   expect(await countFamiliesForE2E()).toBe(familyCountBeforeAuth + 1);
 });

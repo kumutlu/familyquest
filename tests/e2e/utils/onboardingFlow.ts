@@ -41,8 +41,12 @@ export interface OnboardingOutcome {
   familyCount: number;
   /** Managed children (role === 'child') in the family. */
   childCount: number;
+  /** Managed-child wallets in the family. */
+  walletCount: number;
   /** Active tasks in the family. */
   taskCount: number;
+  /** Setup/feed artifacts written with the first task. */
+  feedCount: number;
 }
 
 const S1_HEADING = /small wins\. big habits\./i;
@@ -163,7 +167,13 @@ export async function completeEmailOnboarding(page: Page, data: OnboardingPerson
 /** Read the authoritative Firestore outcome for a just-onboarded user. */
 export async function getOnboardingOutcome(
   email: string,
-  expected: Partial<OnboardingOutcome> = { familyCount: 1, childCount: 1, taskCount: 1 },
+  expected: Partial<OnboardingOutcome> = {
+    familyCount: 1,
+    childCount: 1,
+    walletCount: 1,
+    taskCount: 1,
+    feedCount: 1,
+  },
 ): Promise<OnboardingOutcome> {
   const raw = execSync(`npx tsx "${READ_OUTCOME_SCRIPT}"`, {
     encoding: 'utf8',
@@ -176,7 +186,9 @@ export async function getOnboardingOutcome(
     familyId: parsed.familyId ?? null,
     familyCount: parsed.familyCount ?? 0,
     childCount: parsed.childCount ?? 0,
+    walletCount: parsed.walletCount ?? 0,
     taskCount: parsed.taskCount ?? 0,
+    feedCount: parsed.feedCount ?? 0,
   };
 }
 

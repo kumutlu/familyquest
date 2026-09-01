@@ -5,7 +5,7 @@ import { OnboardingCard } from '../components/OnboardingCard';
 import { OnboardingError } from '../components/OnboardingError';
 import { ensureFirstTask, type SetupDeps } from '../lib/onboardingSetup';
 import { classifyOnboardingError, withBoundedTimeout, SETUP_WAIT_MS } from '../lib/onboardingErrors';
-import type { OnboardingDraft } from '../lib/onboardingDraft';
+import { saveDraft, type OnboardingDraft } from '../lib/onboardingDraft';
 import { BookOpen, BrushCleaning, HandHeart, PencilLine } from 'lucide-react';
 import { OnboardingChoiceCard } from '../components/OnboardingChoiceCard';
 
@@ -70,6 +70,9 @@ export function FirstTask({ draft, patch, goNext, goBack, deps }: FirstTaskProps
         SETUP_WAIT_MS,
         t('errors.offline'),
       );
+      // Checkpoint the authoritative task + feed transaction before React
+      // advances. A reload can then replay the same deterministic operation.
+      saveDraft(next);
       patch({ firstTaskId: next.firstTaskId });
       goNext();
     } catch (caught: unknown) {

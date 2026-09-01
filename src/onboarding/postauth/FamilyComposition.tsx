@@ -12,7 +12,7 @@ import {
   PROFILE_WAIT_MS,
   SETUP_WAIT_MS,
 } from '../lib/onboardingErrors';
-import type { OnboardingDraft } from '../lib/onboardingDraft';
+import { saveDraft, type OnboardingDraft } from '../lib/onboardingDraft';
 import { recordE2ETimeline } from '../../lib/e2eDiagnostics';
 import { readCreateFamilyIntent } from '../../auth/createFamilyIntent';
 
@@ -114,6 +114,12 @@ export function FamilyComposition({ draft, patch, goNext, deps }: FamilyComposit
           recordE2ETimeline('ensure-family-start');
           next = await withBoundedTimeout(ensureFamily(next, deps), SETUP_WAIT_MS, t('errors.offline'));
           recordE2ETimeline('ensure-family-end', { familyId: next.familyId });
+          // Checkpoint each authoritative boundary immediately. A production
+          // profile listener or reload can observe family membership before the
+          // slower managed-child write settles; without this checkpoint,
+          // loadDraft(currentFamilyId) treats the still-familyless P1 draft as
+          // stale and routes to Dashboard before P2 can create the first task.
+          saveDraft(next);
           // Keep the UID-bound intent through P3. It is the durable authorization
           // that lets a reload resume this idempotent creation journey; completion
           // or sign-out clears it at the container boundary.
@@ -122,6 +128,7 @@ export function FamilyComposition({ draft, patch, goNext, deps }: FamilyComposit
           recordE2ETimeline('ensure-first-child-start');
           next = await withBoundedTimeout(ensureFirstChild(next, deps), SETUP_WAIT_MS, t('errors.offline'));
           recordE2ETimeline('ensure-first-child-end', { childId: next.childId });
+          saveDraft(next);
         }
         completedRef.current = true;
         // Persist even if StrictMode already "unmounted" this run — the draft is

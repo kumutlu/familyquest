@@ -6,7 +6,7 @@ import i18n from '../i18n/config';
 import { clearCreateFamilyIntent, readCreateFamilyIntent, startCreateFamilyIntent } from '../auth/createFamilyIntent';
 import { useStore } from '../store/useStore';
 import { FamilyComposition } from './postauth/FamilyComposition';
-import { createEmptyDraft, saveDraft, clearDraft, type OnboardingDraft } from './lib/onboardingDraft';
+import { createEmptyDraft, loadDraft, saveDraft, clearDraft, type OnboardingDraft } from './lib/onboardingDraft';
 import type { SetupDeps } from './lib/onboardingSetup';
 
 // --- Mocks -----------------------------------------------------------------
@@ -223,6 +223,36 @@ describe('PRIORITY 0 — post-auth "User not found" race', () => {
 });
 
 describe('PRIORITY 1 — StrictMode / effect idempotency', () => {
+  it('checkpoints family identity before the first-child write can settle', async () => {
+    let resolveChild!: (childId: string) => void;
+    api.createManagedMember.mockImplementationOnce(() => new Promise<string>((resolve) => {
+      resolveChild = resolve;
+    }));
+    const draft = p1Draft();
+    saveDraft(draft);
+
+    await setStore({
+      currentUser: { id: 'u1', role: 'parent' },
+      familyData: null,
+      profileServerConfirmed: true,
+      profileLoading: false,
+    });
+
+    render(createElement(FamilyComposition, {
+      draft,
+      patch: vi.fn(),
+      goNext: vi.fn(),
+      deps: makeDeps(),
+    }));
+
+    await waitFor(() => expect(api.createManagedMember).toHaveBeenCalledTimes(1));
+    expect(loadDraft('fam-1')).toMatchObject({ step: 'p1', familyId: 'fam-1' });
+    expect(loadDraft('fam-1')?.childId).toBeUndefined();
+
+    resolveChild('child-1');
+    await waitFor(() => expect(loadDraft('fam-1')?.childId).toBe('child-1'));
+  });
+
   it('completes setup exactly once under React.StrictMode (no permanent disabled state)', async () => {
     const goNext = vi.fn();
     const deps = makeDeps();
