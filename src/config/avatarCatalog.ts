@@ -1,3 +1,5 @@
+import { avatarConfigToDataUrl, isValidAvatarConfig, type AvatarConfigV1 } from './avatarConfig';
+
 /**
  * Central, curated avatar catalog for FamilyQuest.
  *
@@ -151,4 +153,3 @@ export function mapLegacyUrlToAvatarId(legacyUrl: string | null | undefined): st
   const match = AVATAR_CATALOG.find(a => a.tier === 'starter' && seed === `starter-${a.id.replace('starter-', '')}` || a.imageUrl.includes(`seed=${seed}`));
   return match?.id;
 }
-import { avatarConfigToDataUrl, isValidAvatarConfig, type AvatarConfigV1 } from './avatarConfig';
