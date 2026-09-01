@@ -83,6 +83,24 @@ beforeEach(() => {
 });
 
 describe('deriveAuthRouteDecision', () => {
+  it('leaves the Queki email action handler public before and after authentication', () => {
+    expect(deriveAuthRouteDecision({
+      ...readyInput,
+      authStatus: 'unauthenticated',
+      authUser: null,
+      currentUser: null,
+      profileServerConfirmed: false,
+      appReady: false,
+      pathname: '/auth/verify',
+      emailVerificationRequired: false,
+    })).toBe('app');
+    expect(deriveAuthRouteDecision({
+      ...readyInput,
+      pathname: '/auth/verify',
+      emailVerificationRequired: true,
+    })).toBe('app');
+  });
+
   it('blocks an unverified password identity before create, join, or invitation authority', () => {
     expect(deriveAuthRouteDecision({
       ...readyInput,

@@ -16,6 +16,10 @@ vi.mock('../store/useStore', () => ({ useStore: (selector: any) => selector({ au
 
 import { VerifyEmail } from './VerifyEmail';
 import { capturePreAuthCreateFamilySelection, readCreateFamilyIntent } from '../auth/createFamilyIntent';
+import { capturePendingInvite } from '../auth/pendingInviteIntent';
+import { rememberPendingInvite } from '../lib/inviteLink';
+
+const INVITE_TOKEN = 'CwsLCwsLCwsLCwsLCwsLCwsLCwsLCwsLCwsLCwsLCws';
 
 beforeEach(async () => {
   vi.clearAllMocks();
@@ -56,6 +60,29 @@ describe('VerifyEmail', () => {
     render(<MemoryRouter><VerifyEmail /></MemoryRouter>);
     await user.click(screen.getByRole('button', { name: /i've verified/i }));
     expect(navigate).toHaveBeenCalledWith('/onboarding?mode=create', { replace: true });
+  });
+
+  it('resumes an adult invitation ahead of create and legacy join intents', async () => {
+    capturePreAuthCreateFamilySelection();
+    readCreateFamilyIntent('u1');
+    rememberPendingInvite('ABC123');
+    capturePendingInvite(INVITE_TOKEN);
+    api.refreshEmailVerification.mockResolvedValue(true);
+
+    render(<MemoryRouter><VerifyEmail /></MemoryRouter>);
+    await userEvent.click(screen.getByRole('button', { name: /i've verified/i }));
+
+    expect(navigate).toHaveBeenCalledWith(`/invite/${INVITE_TOKEN}`, { replace: true });
+  });
+
+  it('resumes a legacy join intent when no adult invitation is pending', async () => {
+    rememberPendingInvite('ABC123');
+    api.refreshEmailVerification.mockResolvedValue(true);
+
+    render(<MemoryRouter><VerifyEmail /></MemoryRouter>);
+    await userEvent.click(screen.getByRole('button', { name: /i've verified/i }));
+
+    expect(navigate).toHaveBeenCalledWith('/join?code=ABC123', { replace: true });
   });
 
   it('signs out explicitly without exposing a Firebase error', async () => {

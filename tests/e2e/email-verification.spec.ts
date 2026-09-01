@@ -30,12 +30,19 @@ test('real verification link preserves and resumes UID-bound family onboarding',
   const verificationLink = execSync('npx tsx tests/e2e/utils/readVerificationLink.ts', {
     encoding: 'utf8', env: { ...process.env, ONBOARDING_EMAIL: email },
   });
+  const firebaseAction = new URL(verificationLink.trim());
+  const handlerSearch = new URLSearchParams({
+    mode: firebaseAction.searchParams.get('mode') ?? 'verifyEmail',
+    oobCode: firebaseAction.searchParams.get('oobCode') ?? '',
+    continueUrl: 'https://evil.example/steal',
+    lang: firebaseAction.searchParams.get('lang') ?? 'en',
+  });
   const verificationPage = await context.newPage();
-  await verificationPage.goto(verificationLink.trim());
-  await expect(verificationPage).toHaveURL(url =>
-    url.origin === 'https://queki.app'
-    && (url.pathname === '/verify-email' || url.searchParams.get('next') === '/verify-email'),
-  );
+  await verificationPage.goto(`/auth/verify?${handlerSearch}`);
+  await expect(verificationPage.getByRole('heading', { name: /email verified/i })).toBeVisible();
+  await verificationPage.getByRole('button', { name: /^continue$/i }).click();
+  await expect(verificationPage).toHaveURL(url => url.pathname === '/verify-email');
+  expect(new URL(verificationPage.url()).hostname).not.toBe('evil.example');
   const verified = JSON.parse(execSync('npx tsx tests/e2e/utils/readEmailVerified.ts', {
     encoding: 'utf8', env: { ...process.env, ONBOARDING_EMAIL: email },
   }));
