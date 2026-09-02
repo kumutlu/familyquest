@@ -78,9 +78,13 @@ export function MascotBridge({
         className={cn('qk-mascot-bridge__character', cue)}
         aria-hidden="true"
       >
-        <EngineMascot presentation={presentation} size={28} className="drop-shadow-sm" />
+        <EngineMascot
+          presentation={presentation}
+          size={44}
+          className="drop-shadow-md sm:!h-[3.25rem] sm:!w-[3.25rem]"
+        />
       </div>
-      <div
+      <p
         data-testid="mascot-bridge-bubble"
         className="qk-mascot-bridge__bubble"
         role="note"
@@ -99,7 +103,7 @@ export function MascotBridge({
           className="inline"
           testId="mascot-bridge-message"
         />
-      </div>
+      </p>
     </section>
   );
 }

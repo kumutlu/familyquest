@@ -23,7 +23,7 @@
  */
 
 import { useTranslation } from 'react-i18next';
-import { Sparkles, ListChecks, PartyPopper, Gift, Timer } from 'lucide-react';
+import { Sparkles, PartyPopper, Gift, Timer } from 'lucide-react';
 import { TactileCard } from '../queki/TactileCard';
 import { TactileButton } from '../queki/TactileButton';
 import type {
@@ -364,46 +364,41 @@ function NormalShell({
   heading: string;
 }) {
   const { t } = useTranslation('home');
+  // COMPACT NORMAL ADVENTURE.
+  // The normal day is intentionally calm and lightweight. We render a
+  // single header row that introduces the day's activity and hands the
+  // child straight to the quest group below. NO giant duplicate card,
+  // NO "View quests" button that repeats the upcoming list. Special
+  // states (Surge / Mystery / Comeback) keep their expanded treatment.
   return (
-    <section
+    <div
       aria-label={heading}
       data-testid="adventure-centerpiece-normal"
       data-normal-state={allCaughtUp ? 'all-caught-up' : 'quests-waiting'}
-      className="space-y-3"
+      className="qk-adventure-compact"
     >
-      <header className="flex items-center gap-2 px-1">
-        <Sparkles size={16} aria-hidden="true" className="text-xp-500" />
-        <h2 className="text-card-title qk-text-primary">{heading}</h2>
-      </header>
-      <TactileCard
-        onClick={onViewQuests}
-        className="flex items-center gap-4 rounded-2xl border qk-bg-card qk-border-subtle qk-shadow-card p-4"
-      >
-        <span
-          aria-hidden="true"
-          className={`flex h-12 w-12 items-center justify-center rounded-2xl ${allCaughtUp ? 'bg-mint-50 text-mint-600' : 'bg-xp-50 text-xp-600'}`}
+      <Sparkles size={14} aria-hidden="true" className="text-xp-500 shrink-0" />
+      <h2 className="qk-adventure-compact__title">{heading}</h2>
+      <span aria-hidden="true" className="text-qk-text-secondary">·</span>
+      <p className="qk-adventure-compact__body">
+        {allCaughtUp
+          ? t('child.normal.allCaughtUp')
+          : t('child.normal.questCount', { count: questCount })}
+      </p>
+      {onViewQuests ? (
+        <button
+          type="button"
+          onClick={onViewQuests}
+          aria-label={t('child.adventure.viewQuestsAria', {
+            defaultValue: "View today's quests",
+          })}
+          data-testid="adventure-centerpiece-normal-view"
+          className="ml-auto text-meta font-bold uppercase tracking-wide text-family-600 hover:text-family-700 focus:outline-none focus-visible:underline"
         >
-          {allCaughtUp ? <PartyPopper size={22} /> : <ListChecks size={22} />}
-        </span>
-        <div className="min-w-0 flex-1">
-          <p className="text-card-title font-bold qk-text-primary">
-            {allCaughtUp
-              ? t('child.normal.allCaughtUp')
-              : t('child.normal.questCount', { count: questCount })}
-          </p>
-          <p className="mt-0.5 text-meta qk-text-secondary">
-            {allCaughtUp
-              ? t('child.normal.allCaughtUpBody')
-              : t('child.normal.body')}
-          </p>
-        </div>
-        {onViewQuests ? (
-          <TactileButton size="sm" variant="ghost" onClick={onViewQuests}>
-            {t('child.normal.viewQuests')}
-          </TactileButton>
-        ) : null}
-      </TactileCard>
-    </section>
+          {t('child.normal.viewQuests')}
+        </button>
+      ) : null}
+    </div>
   );
 }
 

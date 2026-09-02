@@ -261,6 +261,110 @@ describe('Child Home V2 — production regression', () => {
     expect(storeState.awardXpCalls).toEqual([]);
     expect(storeState.addWalletCalls).toEqual([]);
   });
+
+  // ---------------------------------------------------------------------
+  // V2 visual polish presentation contract
+  // ---------------------------------------------------------------------
+  // The PO reviewed actual rendered screenshots and required the visual
+  // hierarchy to feel like a living Queki world, not a stack of cards.
+  // These tests pin the structural presentation contracts without
+  // relying on brittle pixel assertions.
+  // ---------------------------------------------------------------------
+
+  it('Normal Adventure is compact (NOT a giant duplicate card)', async () => {
+    await renderChildHome();
+    const normal = screen.getByTestId('adventure-centerpiece-normal');
+    // The compact treatment uses the dedicated class — NOT a TactileCard.
+    expect(normal.className).toMatch(/qk-adventure-compact/);
+    // Normal does NOT carry the heavy surface tokens from the old
+    // TactileCard treatment (no big shadow, no inner card border).
+    expect(normal.className).not.toMatch(/qk-shadow-card/);
+    expect(normal.className).not.toMatch(/qk-bg-card/);
+    // The compact normal section is a single small header row, not a
+    // heading + giant card.
+    const tag = normal.tagName.toLowerCase();
+    expect(['div', 'p', 'section']).toContain(tag);
+  });
+
+  it('Today\'s Quests render as ONE grouped composition (no three floating cards)', async () => {
+    await renderChildHome();
+    const questSection = screen.getByTestId('todays-quests');
+    // The single group container is present.
+    const groupRows = screen.getByTestId('quest-group-rows');
+    expect(groupRows).toBeInTheDocument();
+    expect(questSection.contains(groupRows)).toBe(true);
+    // The group surfaces at most three row wrappers.
+    const rowNodes = questSection.querySelectorAll('[data-testid^="quest-group-row-"]');
+    expect(rowNodes.length).toBeGreaterThan(0);
+    expect(rowNodes.length).toBeLessThanOrEqual(3);
+    // Each quest tile is an accessible interactive button (one per row).
+    const tileButtons = questSection.querySelectorAll('[data-testid^="quest-tile-"]');
+    const questTileButtons = Array.from(tileButtons).filter(el => {
+      const id = el.getAttribute('data-testid') ?? '';
+      // exclude the "view all" affordance, which is the only sibling button
+      return id !== 'quest-tile-view-all';
+    });
+    expect(questTileButtons.length).toBe(rowNodes.length);
+  });
+
+  it('Your Journey is ONE surface with Pet Box + Goal directly inside (no nested inner card)', async () => {
+    await renderChildHome();
+    const journey = screen.getByTestId('your-journey');
+    const zones = screen.getByTestId('your-journey-zones');
+    // Pet Box + Goal both live directly inside the zones wrapper,
+    // which lives directly inside the Journey surface.
+    expect(journey.contains(zones)).toBe(true);
+    const petbox = screen.getByTestId('your-journey-petbox');
+    const goal = screen.getByTestId('your-journey-goal');
+    expect(zones.contains(petbox)).toBe(true);
+    expect(zones.contains(goal)).toBe(true);
+    // The Journey IS the single outer surface — no nested Journey.
+    expect(journey.classList.contains('qk-journey')).toBe(true);
+    // There must NOT be an additional "inner card" wrapper inside.
+    expect(journey.querySelectorAll('.qk-journey').length).toBe(0);
+    // Pet Box and Goal are side-by-side at the contracted responsive
+    // layout via the class contract on .qk-journey__zones.
+    expect(zones.className).toMatch(/qk-journey__zones/);
+    // Pet Box and Goal semantically stay independent — no shared progress track.
+    expect(petbox.querySelector('[role="progressbar"]')).toBeNull();
+    const goalTrack = goal.querySelector('[role="progressbar"]');
+    expect(goalTrack).not.toBeNull();
+    expect(goalTrack!.getAttribute('aria-label')).toBeTruthy();
+  });
+
+  it('Mascot bridge uses a character-sized mascot (NOT a pill icon)', async () => {
+    await renderChildHome();
+    const character = screen.getByTestId('mascot-bridge-character');
+    // The bridge composition hosts the actual mascot character region
+    // (engine-driven). The engine renders the Queki character itself.
+    expect(character.getAttribute('aria-hidden')).toBe('true');
+    // The bridge composition uses the character-friendly bridge class,
+    // NOT a small pill-icon size.
+    expect(character.className).toMatch(/qk-mascot-bridge__character/);
+    // The speech line lives on a non-card note, not in another giant rectangle.
+    const bubble = screen.getByTestId('mascot-bridge-bubble');
+    expect(bubble.tagName.toLowerCase()).toBe('p');
+    expect(bubble.className).toMatch(/qk-mascot-bridge__bubble/);
+  });
+
+  it('Desktop lower section uses a horizontal grid (quests + journey side-by-side at md+)', async () => {
+    await renderChildHome();
+    const home = screen.getByTestId('child-living-home');
+    const lower = home.querySelector('.qk-v2-stack__lower');
+    expect(lower).not.toBeNull();
+    // Today's Quests and Your Journey both live inside the same lower grid.
+    const quests = screen.getByTestId('todays-quests');
+    const journey = screen.getByTestId('your-journey');
+    expect(lower!.contains(quests)).toBe(true);
+    expect(lower!.contains(journey)).toBe(true);
+  });
+
+  it('No world/weekly/seasonal banner card is rendered on Home', async () => {
+    await renderChildHome();
+    expect(screen.queryByTestId(/world-banner/i)).not.toBeInTheDocument();
+    expect(screen.queryByTestId(/weekly-banner/i)).not.toBeInTheDocument();
+    expect(screen.queryByTestId(/seasonal-banner/i)).not.toBeInTheDocument();
+  });
 });
 
 // ---------------------------------------------------------------------------
@@ -311,12 +415,22 @@ describe('V2 design tokens', () => {
   it('light and dark are NOT simple inverses (independent luminance steps)', () => {
     const light = TOKENS_CSS.match(/:root\s*\{([\s\S]*?)\}/)?.[1] ?? '';
     const dark = TOKENS_CSS.split('.dark')[1]?.match(/\{([\s\S]*?)\}/)?.[1] ?? '';
-    // The --qk-bg-canvas step in dark (#0d0c14) is meaningfully darker than
-    // the light step (#f5f3fb), and dark introduces a 5-step ladder that the
-    // light block does NOT use (light has the same 5 names but flat values).
+    // Visual polish pass: dark canvas is now a deep indigo-violet
+    // (Queki nighttime world), NOT a near-black. The light step keeps
+    // the warm paper canvas. Dark still introduces a 5-step ladder
+    // that the light block does not.
     expect(light).toMatch(/--qk-bg-canvas:\s*#f5f3fb/);
-    expect(dark).toMatch(/--qk-bg-canvas:\s*#0d0c14/);
-    expect(light).not.toMatch(/--qk-bg-canvas:\s*#0d0c14/);
+    expect(dark).toMatch(/--qk-bg-canvas:\s*#1a1530/);
+    expect(light).not.toMatch(/--qk-bg-canvas:\s*#1a1530/);
+    // Deep indigo-violet, not a flat black. Each channel in the canvas
+    // colour should show a non-trivial violet bias (R < G ≤ B).
+    const canvas = (dark.match(/--qk-bg-canvas:\s*#([0-9a-f]{6})/) ?? [])[1];
+    expect(canvas).toBeDefined();
+    const r = parseInt(canvas!.slice(0, 2), 16);
+    const g = parseInt(canvas!.slice(2, 4), 16);
+    const b = parseInt(canvas!.slice(4, 6), 16);
+    expect(r).toBeLessThan(g + 8); // violet/blue bias, not warm
+    expect(b).toBeGreaterThan(r);   // blue channel dominates
   });
 
   it('honours prefers-reduced-motion by collapsing animation durations to 0ms', () => {

@@ -383,223 +383,224 @@ export function ChildLivingHome() {
         {previewSlot}
 
         {/* ============================================================== */}
-        {/* 1. Identity / Progression hero                                  */}
+        {/* LEAD: Identity + Mascot + Adventure (full-width, top of page)    */}
         {/* ============================================================== */}
-        <section
-          aria-label={t('child.heroAria', { defaultValue: 'Your identity and progression' })}
-          data-testid="child-identity-hero"
-          className="qk-hero"
-        >
-          <div className="relative z-10 flex flex-col gap-3 p-4 sm:p-5 text-white">
-            <header className="flex items-center gap-3">
-              <div className="min-w-0 flex-1">
-                <p className="qk-section-eyebrow text-white/70">
-                  {t('child.identityGreeting', { defaultValue: 'Hello' })}
+        <div className="qk-v2-stack__lead">
+          {/* 1. Identity / Progression hero */}
+          <section
+            aria-label={t('child.heroAria', { defaultValue: 'Your identity and progression' })}
+            data-testid="child-identity-hero"
+            className="qk-hero"
+          >
+            <div className="relative z-10 flex flex-col gap-3 p-4 sm:p-5 text-white">
+              <header className="flex items-center gap-3">
+                <div className="min-w-0 flex-1">
+                  <p className="qk-section-eyebrow text-white/70">
+                    {t('child.identityGreeting', { defaultValue: 'Hello' })}
+                  </p>
+                  <h1
+                    className="text-title font-extrabold tracking-tight"
+                    data-testid="child-identity-name"
+                  >
+                    {currentUser?.displayName ?? ''}
+                  </h1>
+                </div>
+                <div className="flex items-center gap-2">
+                  {gamification.isAvailable ? (
+                    <span
+                      className="inline-flex items-center gap-1 rounded-full bg-white/20 px-2.5 py-0.5 text-meta font-bold tabular-nums"
+                      data-testid="child-level-chip"
+                      aria-label={t('child.levelAria', {
+                        level: gamification.level,
+                        defaultValue: `Level ${gamification.level}`,
+                      })}
+                    >
+                      {t('child.levelLabel', { defaultValue: 'Lv' })} {gamification.level}
+                    </span>
+                  ) : null}
+                  {gamification.isAvailable && gamification.currentStreak > 0 ? (
+                    <span
+                      className="inline-flex items-center gap-1 rounded-full bg-streak-500/95 px-2.5 py-0.5 text-meta font-extrabold text-white"
+                      data-testid="child-streak-chip"
+                      aria-label={t('child.streakAria', {
+                        days: gamification.currentStreak,
+                        defaultValue: `${gamification.currentStreak} day streak`,
+                      })}
+                    >
+                      <Flame size={12} aria-hidden="true" className="fill-current" />
+                      {gamification.currentStreak}
+                    </span>
+                  ) : null}
+                </div>
+              </header>
+
+              {/* XP progress */}
+              <div className="qk-hero__panel p-3" data-testid="child-xp-panel">
+                <XPDisplay
+                  total={gamification.xpTotal}
+                  level={gamification.level}
+                  compact
+                  className="text-white"
+                />
+                <ProgressBar
+                  className="mt-2 bg-white/20"
+                  tone="xp"
+                  value={
+                    gamification.isAvailable && gamification.xpToNextLevel > 0
+                      ? (gamification.xpProgressInLevel /
+                          (gamification.xpProgressInLevel + gamification.xpToNextLevel)) * 100
+                      : 0
+                  }
+                  aria-label={t('child.xpAria', { defaultValue: 'Level progress' })}
+                />
+                <p className="mt-1 text-meta text-white/85">
+                  {gamification.isAvailable
+                    ? t('child.xpToNext', {
+                        xp: gamification.xpToNextLevel,
+                        level: gamification.level + 1,
+                        defaultValue: `${gamification.xpToNextLevel} XP to level ${gamification.level + 1}`,
+                      })
+                    : t('loading')}
                 </p>
-                <h1
-                  className="text-title font-extrabold tracking-tight"
-                  data-testid="child-identity-name"
-                >
-                  {currentUser?.displayName ?? ''}
-                </h1>
               </div>
-              <div className="flex items-center gap-2">
-                {gamification.isAvailable ? (
-                  <span
-                    className="inline-flex items-center gap-1 rounded-full bg-white/20 px-2.5 py-0.5 text-meta font-bold tabular-nums"
-                    data-testid="child-level-chip"
-                    aria-label={t('child.levelAria', {
-                      level: gamification.level,
-                      defaultValue: `Level ${gamification.level}`,
-                    })}
-                  >
-                    {t('child.levelLabel', { defaultValue: 'Lv' })} {gamification.level}
-                  </span>
-                ) : null}
-                {gamification.isAvailable && gamification.currentStreak > 0 ? (
-                  <span
-                    className="inline-flex items-center gap-1 rounded-full bg-streak-500/95 px-2.5 py-0.5 text-meta font-extrabold text-white"
-                    data-testid="child-streak-chip"
-                    aria-label={t('child.streakAria', {
-                      days: gamification.currentStreak,
-                      defaultValue: `${gamification.currentStreak} day streak`,
-                    })}
-                  >
-                    <Flame size={12} aria-hidden="true" className="fill-current" />
-                    {gamification.currentStreak}
-                  </span>
-                ) : null}
-              </div>
-            </header>
 
-            {/* XP progress */}
-            <div className="qk-hero__panel p-3" data-testid="child-xp-panel">
-              <XPDisplay
-                total={gamification.xpTotal}
-                level={gamification.level}
-                compact
-                className="text-white"
-              />
-              <ProgressBar
-                className="mt-2 bg-white/20"
-                tone="xp"
-                value={
-                  gamification.isAvailable && gamification.xpToNextLevel > 0
-                    ? (gamification.xpProgressInLevel /
-                        (gamification.xpProgressInLevel + gamification.xpToNextLevel)) * 100
-                    : 0
-                }
-                aria-label={t('child.xpAria', { defaultValue: 'Level progress' })}
-              />
-              <p className="mt-1 text-meta text-white/85">
-                {gamification.isAvailable
-                  ? t('child.xpToNext', {
-                      xp: gamification.xpToNextLevel,
-                      level: gamification.level + 1,
-                      defaultValue: `${gamification.xpToNextLevel} XP to level ${gamification.level + 1}`,
-                    })
-                  : t('loading')}
-              </p>
-            </div>
-
-            {/* Points vs wallet — kept on separate rows, never interchangeable. */}
-            <div className="flex flex-wrap items-center justify-between gap-2">
-              <span
-                className="inline-flex items-center gap-1.5"
-                data-testid="child-points-chip"
-                aria-label={t('child.pointsAria', {
-                  count: currentUser?.rewardPoints ?? 0,
-                  defaultValue: `${currentUser?.rewardPoints ?? 0} points`,
-                })}
-              >
+              {/* Points vs wallet — kept on separate rows, never interchangeable. */}
+              <div className="flex flex-wrap items-center justify-between gap-2">
                 <span
-                  aria-hidden="true"
-                  className="flex h-7 w-7 items-center justify-center rounded-lg bg-xp-500 text-white"
-                >
-                  <Star size={14} className="fill-current" />
-                </span>
-                <span className="font-balance tabular-nums">
-                  {(currentUser?.rewardPoints ?? 0).toLocaleString()}
-                </span>
-                <span className="text-meta font-bold uppercase tracking-wide opacity-80">
-                  {t('child.ptsLabel', { defaultValue: 'pts' })}
-                </span>
-              </span>
-              {myWallet != null ? (
-                <button
-                  type="button"
-                  onClick={() => navigate('/wallet')}
-                  data-testid="child-balance-chip"
-                  aria-label={t('child.openWallet', {
-                    balance: formatMoney(Number(myWallet?.balance ?? 0)),
+                  className="inline-flex items-center gap-1.5"
+                  data-testid="child-points-chip"
+                  aria-label={t('child.pointsAria', {
+                    count: currentUser?.rewardPoints ?? 0,
+                    defaultValue: `${currentUser?.rewardPoints ?? 0} points`,
                   })}
-                  className="inline-flex items-center gap-2 rounded-full bg-mint-500 py-1 pl-1.5 pr-3 text-white hover:bg-mint-600 active:bg-mint-700 focus:outline-none focus-visible:ring-2 focus-visible:ring-mint-300"
                 >
                   <span
                     aria-hidden="true"
-                    className="flex h-6 w-6 items-center justify-center rounded-full bg-white text-mint-600"
+                    className="flex h-7 w-7 items-center justify-center rounded-lg bg-xp-500 text-white"
                   >
-                    <WalletIcon size={13} />
+                    <Star size={14} className="fill-current" />
                   </span>
-                  <span className="font-balance text-base tabular-nums font-extrabold">
-                    {formatMoney(Number(myWallet?.balance ?? 0))}
+                  <span className="font-balance tabular-nums">
+                    {(currentUser?.rewardPoints ?? 0).toLocaleString()}
                   </span>
+                  <span className="text-meta font-bold uppercase tracking-wide opacity-80">
+                    {t('child.ptsLabel', { defaultValue: 'pts' })}
+                  </span>
+                </span>
+                {myWallet != null ? (
+                  <button
+                    type="button"
+                    onClick={() => navigate('/wallet')}
+                    data-testid="child-balance-chip"
+                    aria-label={t('child.openWallet', {
+                      balance: formatMoney(Number(myWallet?.balance ?? 0)),
+                    })}
+                    className="inline-flex items-center gap-2 rounded-full bg-mint-500 py-1 pl-1.5 pr-3 text-white hover:bg-mint-600 active:bg-mint-700 focus:outline-none focus-visible:ring-2 focus-visible:ring-mint-300"
+                  >
+                    <span
+                      aria-hidden="true"
+                      className="flex h-6 w-6 items-center justify-center rounded-full bg-white text-mint-600"
+                    >
+                      <WalletIcon size={13} />
+                    </span>
+                    <span className="font-balance text-base tabular-nums font-extrabold">
+                      {formatMoney(Number(myWallet?.balance ?? 0))}
+                    </span>
+                  </button>
+                ) : null}
+              </div>
+
+              {rewardProximityItem ? (
+                <button
+                  type="button"
+                  onClick={() => navigate('/rewards')}
+                  data-testid="child-reward-proximity"
+                  aria-label={t('child.rewardProximityAria', {
+                    title: String(rewardProximityItem?.title ?? ''),
+                    defaultValue: `Reward available: ${String(rewardProximityItem?.title ?? '')}`,
+                  })}
+                  className="qk-reward-proximity mt-1 self-start focus:outline-none focus-visible:ring-2 focus-visible:ring-amber-500"
+                >
+                  <Sparkles size={12} aria-hidden="true" />
+                  {t('child.rewardProximity', {
+                    title: String(rewardProximityItem?.title ?? ''),
+                    defaultValue: `Reward ready: ${String(rewardProximityItem?.title ?? '')}`,
+                  })}
+                  <ChevronRight size={12} aria-hidden="true" />
                 </button>
               ) : null}
             </div>
+          </section>
 
-            {rewardProximityItem ? (
-              <button
-                type="button"
-                onClick={() => navigate('/rewards')}
-                data-testid="child-reward-proximity"
-                aria-label={t('child.rewardProximityAria', {
-                  title: String(rewardProximityItem?.title ?? ''),
-                  defaultValue: `Reward available: ${String(rewardProximityItem?.title ?? '')}`,
-                })}
-                className="qk-reward-proximity mt-1 self-start focus:outline-none focus-visible:ring-2 focus-visible:ring-amber-500"
-              >
-                <Sparkles size={12} aria-hidden="true" />
-                {t('child.rewardProximity', {
-                  title: String(rewardProximityItem?.title ?? ''),
-                  defaultValue: `Reward ready: ${String(rewardProximityItem?.title ?? '')}`,
-                })}
-                <ChevronRight size={12} aria-hidden="true" />
-              </button>
-            ) : null}
-          </div>
-        </section>
-
-        {/* ============================================================== */}
-        {/* 2. Mascot bridge (engine-driven, NOT a full-width rectangle)    */}
-        {/* ============================================================== */}
-        <MascotBridge
-          presentation={mascotPresentation.presentation}
-          message={mascotPresentation.message}
-          greeting={t('child.mascot.greetingPrefix', {
-            name: currentUser?.displayName ?? '',
-            defaultValue: 'Hi',
-          })}
-        />
-
-        {/* ============================================================== */}
-        {/* 3. TODAY › Today's Adventure                                    */}
-        {/* ============================================================== */}
-        <div data-testid="todays-adventure" data-adventure-kind={adventure.presentation.kind}>
-          <TodaysAdventureCenterpiece
-            presentation={adventure.presentation}
-            mysteryDrop={mysteryDropDisplay}
-            comeback={adventure.comeback ? {
-              tier: adventure.comeback.tier,
-              inactivityDays: adventure.comeback.inactivityDays,
-              missionCompleted: adventure.comeback.missionCompleted,
-            } : null}
-            surge={adventure.surge ? {
-              surgeId: adventure.surge.surgeId,
-              eligibleTasks: adventure.surge.eligibleTasks,
-              endsAt: adventure.surge.window?.endsAt ?? Date.now(),
-            } : null}
-            normalQuestCount={questPreviewItems.filter((q: any) => q.isCompletedToday !== true).length}
-            allCaughtUp={adventure.presentation.kind === 'normal' &&
-              questPreviewItems.every((q: any) => q.isCompletedToday !== true)}
-            onSelectSurgeTask={handleSelectSurgeTask}
-            onPressMysteryDrop={handlePressMystery}
-            onViewQuests={() => navigate('/tasks')}
+          {/* 2. Mascot bridge (engine-driven, character enters the scene)   */}
+          <MascotBridge
+            presentation={mascotPresentation.presentation}
+            message={mascotPresentation.message}
+            greeting={t('child.mascot.greetingPrefix', {
+              name: currentUser?.displayName ?? '',
+              defaultValue: 'Hi',
+            })}
           />
+
+          {/* 3. TODAY › Today's Adventure                                    */}
+          <div data-testid="todays-adventure" data-adventure-kind={adventure.presentation.kind}>
+            <TodaysAdventureCenterpiece
+              presentation={adventure.presentation}
+              mysteryDrop={mysteryDropDisplay}
+              comeback={adventure.comeback ? {
+                tier: adventure.comeback.tier,
+                inactivityDays: adventure.comeback.inactivityDays,
+                missionCompleted: adventure.comeback.missionCompleted,
+              } : null}
+              surge={adventure.surge ? {
+                surgeId: adventure.surge.surgeId,
+                eligibleTasks: adventure.surge.eligibleTasks,
+                endsAt: adventure.surge.window?.endsAt ?? Date.now(),
+              } : null}
+              normalQuestCount={questPreviewItems.filter((q: any) => q.isCompletedToday !== true).length}
+              allCaughtUp={adventure.presentation.kind === 'normal' &&
+                questPreviewItems.every((q: any) => q.isCompletedToday !== true)}
+              onSelectSurgeTask={handleSelectSurgeTask}
+              onPressMysteryDrop={handlePressMystery}
+              onViewQuests={() => navigate('/tasks')}
+            />
+          </div>
         </div>
 
         {/* ============================================================== */}
-        {/* 4. TODAY › Today's Quests (max 3, coherent group surface)       */}
+        {/* LOWER: Today's Quests (group) + Your Journey (side-by-side)    */}
+        {/* At md+ these become a horizontal grid; on mobile they stack.   */}
         {/* ============================================================== */}
-        {questPreviewItems.length > 0 ? (
-          <section
-            aria-label={t('child.quests.heading', { defaultValue: "Today's Quests" })}
-            data-testid="todays-quests"
-          >
-            <header className="qk-section-eyebrow mb-1.5 flex items-center gap-2 px-1">
-              <ListChecks size={14} aria-hidden="true" />
-              <span>{t('child.quests.today', { defaultValue: "TODAY'S QUESTS" })}</span>
-            </header>
-            <div className="qk-quest-group">
-              <QuestTileList
-                quests={questPreviewItems.map((q: any) => ({
-                  id: q.id,
-                  title: q.title,
-                  pointsReward: q.pointsReward,
-                  isCompletedToday: q.isCompletedToday,
-                  onPress: handleSelectSurgeTask,
-                }))}
-                onPressQuest={handleSelectSurgeTask}
-                onViewAll={() => navigate('/tasks')}
-              />
-            </div>
-          </section>
-        ) : null}
+        <div className="qk-v2-stack__lower">
+          {/* 4. TODAY › Today's Quests (max 3, ONE coherent surface) */}
+          {questPreviewItems.length > 0 ? (
+            <section
+              aria-label={t('child.quests.heading', { defaultValue: "Today's Quests" })}
+              data-testid="todays-quests"
+            >
+              <header className="qk-section-eyebrow mb-1.5 flex items-center gap-2 px-1">
+                <ListChecks size={14} aria-hidden="true" />
+                <span>{t('child.quests.today', { defaultValue: "TODAY'S QUESTS" })}</span>
+              </header>
+              <div className="qk-quest-group">
+                <QuestTileList
+                  quests={questPreviewItems.map((q: any) => ({
+                    id: q.id,
+                    title: q.title,
+                    pointsReward: q.pointsReward,
+                    isCompletedToday: q.isCompletedToday,
+                    onPress: handleSelectSurgeTask,
+                  }))}
+                  onPressQuest={handleSelectSurgeTask}
+                  onViewAll={() => navigate('/tasks')}
+                />
+              </div>
+            </section>
+          ) : null}
 
-        {/* ============================================================== */}
-        {/* 5. LONG TERM › Your journey (Pet Box + Current Goal, side-by)   */}
-        {/* ============================================================== */}
-        <YourJourney familyData={(store as any).familyData} />
+          {/* 5. LONG TERM › Your Journey (Pet Box + Current Goal, side-by) */}
+          <YourJourney familyData={(store as any).familyData} />
+        </div>
 
         {/* ============================================================== */}
         {/* Reward feedback (XP pop · Mystery reveal)                       */}

@@ -16,32 +16,38 @@
 /* Default theme values. The shell overrides these via inline style. */
 :root {
   --qk-theme-accent: #7c3aed;
-  --qk-theme-ambient-from: #f6f5fb;
-  --qk-theme-ambient-to: #ffffff;
+  --qk-theme-ambient-from: var(--qk-world-from);
+  --qk-theme-ambient-to: var(--qk-world-to);
   --qk-theme-pattern-density: 0;
   /* Optional tinted stop for seasonal/weekly worlds — falls through
      to ambientTo when unset so the base state stays calm. */
-  --qk-theme-accent-soft: transparent;
+  --qk-theme-accent-soft: var(--qk-world-mid);
 }
 
 /* World wrapper — provides a calm background that follows the theme.
-   No card-soup here; this is a single page-level surface. */
+   No card-soup here; this is a single page-level surface. The wrapper
+   itself sits on the canvas (qk-bg-page) so the world reads as
+   continuous — never a panel pasted on a black canvas. */
 .qk-child-experience {
   position: relative;
   isolation: isolate;
 }
 
-/* Ambient gradient layer — sits behind every surface, hand-off the
-   cascade to whichever two stop colours the theme emitted. We use a
-   multi-stop gradient so a seasonal world visibly announces itself
-   (within ~1 second) without recolouring individual components. */
+/* Ambient world layer — a continuous atmospheric gradient + radial glows
+   that hand-off to the world tokens. Light: lavender-paper. Dark:
+   deep indigo-violet with violet + blue-violet ambient glows. NO
+   bright grey sheet, NO light vertical pillar, NO flat black canvas. */
 .qk-child-experience-ambient {
-  background: linear-gradient(
-    180deg,
-    var(--qk-theme-ambient-from) 0%,
-    var(--qk-theme-accent-soft) 55%,
-    var(--qk-theme-ambient-to) 100%
-  );
+  background:
+    radial-gradient(circle at 12% -8%, var(--qk-world-glow-a) 0%, transparent 55%),
+    radial-gradient(circle at 92% 8%, var(--qk-world-glow-b) 0%, transparent 50%),
+    radial-gradient(circle at 50% 110%, var(--qk-world-glow-a) 0%, transparent 55%),
+    linear-gradient(
+      180deg,
+      var(--qk-theme-ambient-from) 0%,
+      var(--qk-theme-accent-soft) 55%,
+      var(--qk-theme-ambient-to) 100%
+    );
 }
 
 /* Pattern layer — decorative motifs driven by density token. We
@@ -73,13 +79,13 @@
 /* Mascot composition --------------------------------------------------- */
 
 .qk-mascot-scene {
-  padding-top: 1.75rem;
+  padding-top: 0.5rem;
 }
 
 .qk-mascot-bubble {
-  padding-top: 0.75rem;
-  padding-bottom: 0.75rem;
-  padding-left: 5rem;
+  padding-top: 0.625rem;
+  padding-bottom: 0.625rem;
+  padding-left: 4.25rem;
   padding-right: 1rem;
 }
 
@@ -195,33 +201,36 @@
   to   { transform: scale(1.05); opacity: 0.85; }
 }
 
-/* Quest tile ---------------------------------------------------------- */
+/* Quest tile ----------------------------------------------------------
+   Tile is now a SEPARATOR-driven row inside ONE group surface, not an
+   independent floating card. The group supplies the surface; tiles only
+   need to remain accessible interactive rows. */
 
 .qk-quest-tile {
   display: flex;
   align-items: center;
   gap: 0.75rem;
   padding: 0.75rem 0.875rem;
-  border-radius: 0.875rem;
-  background: var(--qk-surface-card);
-  border: 1px solid var(--qk-border-subtle);
-  box-shadow: var(--qk-shadow-card);
+  border-radius: 0;
+  background: transparent;
+  border: 0;
+  box-shadow: none;
   color: inherit;
   text-align: left;
   width: 100%;
   cursor: pointer;
-  transition: transform var(--animate-duration-tap) var(--ease-tap),
-    box-shadow var(--animate-duration-tap) var(--ease-tap);
+  transition: background-color var(--animate-duration-tap) var(--ease-tap);
 }
 .qk-quest-tile:hover {
-  transform: translateY(-1px);
+  background: var(--qk-bg-interactive);
 }
 .qk-quest-tile:active {
-  transform: translateY(0);
+  background: var(--qk-bg-subtle);
 }
 .qk-quest-tile:focus-visible {
   outline: none;
-  box-shadow: 0 0 0 2px var(--color-family-500);
+  box-shadow: inset 0 0 0 2px var(--color-family-500);
+  border-radius: 0.625rem;
 }
 
 .qk-quest-tile__reward {
@@ -337,17 +346,33 @@
   padding-inline: 0.25rem;
 }
 
-/* --- Quest group (coherent quest area, not three independent cards) ----- */
+/* --- Quest group (ONE coherent surface for today's quests) -------------- */
 
 .qk-quest-group {
   border-radius: 1.25rem;
-  background: var(--qk-bg-elevated);
+  background: var(--qk-bg-default);
   border: 1px solid var(--qk-border-subtle);
   box-shadow: var(--qk-shadow-card);
-  padding: 0.5rem;
+  padding: 0.25rem 0.625rem;
   display: flex;
   flex-direction: column;
-  gap: 0.375rem;
+}
+
+.qk-quest-group__row {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  width: 100%;
+}
+
+.qk-quest-group__row + .qk-quest-group__row {
+  border-top: 1px solid var(--qk-border-subtle);
+}
+
+.qk-quest-group__footer {
+  padding: 0.5rem 0.5rem 0.25rem;
+  display: flex;
+  justify-content: flex-end;
 }
 
 .qk-quest-group__header {
@@ -357,11 +382,13 @@
   padding: 0.5rem 0.5rem 0.25rem;
 }
 
-/* --- Your Journey (PO-corrected) ---------------------------------------- */
+/* --- Your Journey (PO-corrected) ----------------------------------------
+   ONE Journey surface. Inside it directly: Pet Box | Current Goal.
+   No nested inner card — the journey surface IS the surface. */
 
 .qk-journey {
   border-radius: 1.25rem;
-  background: var(--qk-bg-elevated);
+  background: var(--qk-bg-default);
   border: 1px solid var(--qk-border-subtle);
   box-shadow: var(--qk-shadow-card);
   padding: 0.875rem;
@@ -381,21 +408,22 @@
   grid-template-columns: 1fr 1fr;
   gap: 0;
   align-items: stretch;
-  border-radius: 0.875rem;
-  background: var(--qk-bg-default);
-  border: 1px solid var(--qk-border-subtle);
-  overflow: hidden;
   min-height: 6.5rem;
 }
 
 .qk-journey__zone {
-  padding: 0.875rem;
+  padding: 0.875rem 0.75rem;
   display: flex;
   flex-direction: column;
   gap: 0.375rem;
   min-width: 0;
   position: relative;
-  background: var(--qk-bg-default);
+  background: transparent;
+  transition: background-color var(--animate-duration-tap) var(--ease-tap);
+}
+
+.qk-journey__zone:hover {
+  background: var(--qk-bg-interactive);
 }
 
 .qk-journey__zone + .qk-journey__zone {
@@ -524,48 +552,73 @@
   z-index: 1;
 }
 
-/* --- Mascot bridge (between hero and adventure) ------------------------- */
+/* --- Mascot bridge (between hero and adventure) -------------------------
+   V2 visual polish: mascot is now a CHARACTER entering the scene, not a
+   pill icon. The bridge composition floats Queki between hero and
+   Adventure with a lighter speech treatment (no full-width card). */
 
 .qk-mascot-bridge {
   position: relative;
-  margin-top: -1.5rem;
-  margin-bottom: -0.5rem;
-  padding-left: 0.5rem;
-  padding-right: 0.5rem;
+  margin-top: -1.25rem;
+  margin-bottom: -0.75rem;
+  padding-left: 0;
+  padding-right: 0;
   display: flex;
   align-items: center;
-  gap: 0.625rem;
+  gap: 0.5rem;
+  min-height: 3.5rem;
 }
 
 .qk-mascot-bridge__character {
   flex-shrink: 0;
-  width: 2.75rem;
-  height: 2.75rem;
+  width: 3.5rem;
+  height: 3.5rem;
+  margin-left: 0.5rem;
   display: flex;
   align-items: center;
   justify-content: center;
   border-radius: 999px;
-  background: var(--qk-bg-elevated);
-  border: 1px solid var(--qk-border-subtle);
-  box-shadow: var(--qk-shadow-card);
+  background: transparent;
+  border: 0;
+  box-shadow: none;
+  /* Mascot drops into the scene from between hero & adventure */
+  margin-top: -0.5rem;
+}
+
+.qk-mascot-bridge__character::before {
+  content: '';
+  position: absolute;
+  inset: -8% -12% -8% -12%;
+  background: radial-gradient(circle at 50% 50%, var(--qk-world-glow-a) 0%, transparent 60%);
+  z-index: -1;
+  pointer-events: none;
 }
 
 .qk-mascot-bridge__bubble {
   flex: 1 1 auto;
   min-width: 0;
-  padding: 0.5rem 0.75rem;
-  border-radius: 1rem;
-  background: var(--qk-bg-default);
-  border: 1px solid var(--qk-border-subtle);
+  padding: 0.375rem 0.875rem;
+  border-radius: 1.125rem;
+  background: transparent;
+  border: 0;
   color: var(--qk-text-primary);
   font-size: 0.8125rem;
   font-weight: 600;
   line-height: 1.25rem;
-  display: -webkit-box;
-  -webkit-box-orient: vertical;
-  overflow: hidden;
+  display: block;
+  overflow: visible;
   word-break: break-word;
-  box-shadow: var(--qk-shadow-card);
+  box-shadow: none;
+}
+
+@media (min-width: 768px) {
+  .qk-mascot-bridge {
+    min-height: 4rem;
+  }
+  .qk-mascot-bridge__character {
+    width: 4.5rem;
+    height: 4.5rem;
+  }
 }
 
 /* --- Reward proximity (contextual, not a giant card) -------------------- */
@@ -591,6 +644,11 @@
 
 /* --- Vertical density helpers ------------------------------------------- */
 
+/* V2 stack: top → bottom on mobile.
+   Desktop: turn the lower section (quests + journey) into a horizontal
+   grid so the page uses the wider canvas intelligently, instead of
+   stretching the mobile column. The upper section (hero + mascot bridge
+   + adventure) stays stacked across the page width. */
 .qk-v2-stack {
   display: flex;
   flex-direction: column;
@@ -598,8 +656,58 @@
   padding-bottom: 5rem; /* clear bottom nav on mobile */
 }
 
+.qk-v2-stack__lead {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.qk-v2-stack__lower {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
 @media (min-width: 768px) {
   .qk-v2-stack {
     padding-bottom: 2rem;
   }
+  .qk-v2-stack__lower {
+    display: grid;
+    grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr);
+    gap: 1rem;
+    align-items: stretch;
+  }
+}
+
+@media (min-width: 1024px) {
+  .qk-v2-stack__lower {
+    grid-template-columns: minmax(0, 1.6fr) minmax(0, 1fr);
+  }
+}
+
+/* --- Normal Adventure compact treatment --------------------------------
+   Compact header that introduces the day's activity WITHOUT creating
+   another large card duplicating the upcoming quest list. The actual
+   quest rows appear directly below inside the same quest group. */
+.qk-adventure-compact {
+  display: flex;
+  align-items: center;
+  gap: 0.625rem;
+  padding: 0.125rem 0.25rem 0.25rem;
+  color: var(--qk-text-secondary);
+}
+
+.qk-adventure-compact__title {
+  font-size: 0.75rem;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--qk-text-primary);
+}
+
+.qk-adventure-compact__body {
+  font-size: 0.8125rem;
+  font-weight: 600;
+  color: var(--qk-text-secondary);
 }

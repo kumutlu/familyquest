@@ -162,16 +162,25 @@
   --qk-bg-reward: #fff7ed;
   --qk-bg-positive: #ecfdf5;
   --qk-bg-warning: #fff1f0;
+
+  /* Queki world — ambient world tokens (light). Felt, not a panel. */
+  --qk-world-from: #f5f3fb;
+  --qk-world-mid:  #ede9f6;
+  --qk-world-to:   #ffffff;
+  --qk-world-glow-a: rgba(124, 58, 237, 0.10);
+  --qk-world-glow-b: rgba(99, 102, 241, 0.08);
 }
 
 .dark {
-  /* V2 luminance ladder — Dark. Each step adds +8–20% luminance so cards
-     read as distinct elevation layers at a glance. */
-  --qk-bg-canvas: #0d0c14;
-  --qk-bg-subtle: #16151f;
-  --qk-bg-default: #1f1d2c;
-  --qk-bg-elevated: #2a2738;
-  --qk-bg-interactive: #34304a;
+  /* V2 luminance ladder — Dark. Each step adds a meaningful visual step so
+     cards read as distinct elevation layers at a glance. The canvas is a
+     deep indigo-violet (Queki nighttime), NOT a near-black. The whole
+     page sits inside one continuous atmospheric world. */
+  --qk-bg-canvas: #1a1530;
+  --qk-bg-subtle: #221b3d;
+  --qk-bg-default: #2a2349;
+  --qk-bg-elevated: #332b56;
+  --qk-bg-interactive: #3d3465;
 
   --qk-surface-page: var(--qk-bg-canvas);
   --qk-surface-card: var(--qk-bg-default);
@@ -180,19 +189,27 @@
   --qk-surface-hero-from: #4338ca;
   --qk-surface-hero-to: #6d28d9;
   --qk-text-primary: #f3f1fb;
-  --qk-text-secondary: #a8a3c2;
+  --qk-text-secondary: #b8b2d4;
   --qk-text-onbrand: #ffffff;
   --qk-text-link: #b8a4ff;
-  --qk-border-subtle: rgba(165, 180, 252, 0.14);
-  --qk-border-default: rgba(165, 180, 252, 0.20);
-  --qk-border-strong: rgba(165, 180, 252, 0.32);
-  --qk-shadow-card: 0 1px 2px rgba(0, 0, 0, 0.4), 0 12px 32px -16px rgba(0, 0, 0, 0.55);
-  --qk-shadow-elevated: 0 1px 2px rgba(0, 0, 0, 0.5), 0 18px 40px -20px rgba(0, 0, 0, 0.7);
+  --qk-border-subtle: rgba(184, 164, 255, 0.10);
+  --qk-border-default: rgba(184, 164, 255, 0.18);
+  --qk-border-strong: rgba(184, 164, 255, 0.30);
+  --qk-shadow-card: 0 1px 2px rgba(8, 6, 22, 0.35), 0 14px 36px -18px rgba(40, 20, 90, 0.55);
+  --qk-shadow-elevated: 0 1px 2px rgba(8, 6, 22, 0.45), 0 20px 44px -22px rgba(40, 20, 90, 0.70);
 
   /* V2 ambient surface tints — dark, hue-preserving */
   --qk-bg-reward: #2a1d0a;
   --qk-bg-positive: #0e2419;
   --qk-bg-warning: #2a1414;
+
+  /* Queki world — ambient world tokens (dark). Deep indigo-violet with
+     violet glow stops. NOT black, NOT a grey sheet. */
+  --qk-world-from: #1a1530;
+  --qk-world-mid:  #221b3d;
+  --qk-world-to:   #2a2349;
+  --qk-world-glow-a: rgba(124, 58, 237, 0.22);
+  --qk-world-glow-b: rgba(99, 102, 241, 0.18);
 
   /* Semantic tints become dark, hue-preserving versions of themselves so chips
      and badges keep their meaning without blinding light surfaces. */
@@ -208,9 +225,9 @@
   --color-streak-50: #2a1a0c;
   --color-streak-100: #3a2710;
   --color-streak-200: #4a3414;
-  --color-family-50: #0e1b2e;
-  --color-family-100: #14243d;
-  --color-family-200: #1b3355;
+  --color-family-50: #14243d;
+  --color-family-100: #1b3355;
+  --color-family-200: #234c7a;
 }
 
 /* Utility hooks for the surface variables (kept as real classes so components

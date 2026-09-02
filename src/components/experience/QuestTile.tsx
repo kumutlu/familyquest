@@ -100,12 +100,18 @@ export function QuestTileList({ quests, onPressQuest, onViewAll }: QuestTileList
   const items = Array.isArray(quests) ? quests.slice(0, 3) : [];
   if (items.length === 0) return null;
   return (
-    <div className="space-y-2">
+    <div data-testid="quest-group-rows">
       {items.map(q => (
-        <QuestTile key={q.id} {...q} onPress={onPressQuest} />
+        <div
+          key={q.id}
+          data-testid={`quest-group-row-${q.id}`}
+          className="qk-quest-group__row"
+        >
+          <QuestTile {...q} onPress={onPressQuest} />
+        </div>
       ))}
       {onViewAll ? (
-        <div className="flex justify-end pt-1">
+        <div className="qk-quest-group__footer">
           <button
             type="button"
             data-testid="quest-tile-view-all"
