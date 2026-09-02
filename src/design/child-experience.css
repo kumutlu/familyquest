@@ -1,0 +1,271 @@
+/* ============================================================================
+   Child Experience V1 — productization styling.
+
+   Provides the visual scaffolding for Child Home so the world visibly
+   shifts for base / weekly / seasonal / child-equipped states.
+
+   These rules are intentionally token-driven. Components only ever read
+   CSS variables (--qk-theme-*) — they never reference the raw colours
+   directly. Tokens are emitted by the ChildExperienceShell component.
+
+   Reduced motion contract: every animation defined here collapses to 0ms
+   under `prefers-reduced-motion: reduce` (durations are sourced from
+   tokens.css).
+   ========================================================================== */
+
+/* Default theme values. The shell overrides these via inline style. */
+:root {
+  --qk-theme-accent: #7c3aed;
+  --qk-theme-ambient-from: #f6f5fb;
+  --qk-theme-ambient-to: #ffffff;
+  --qk-theme-pattern-density: 0;
+}
+
+/* World wrapper — provides a calm background that follows the theme.
+   No card-soup here; this is a single page-level surface. */
+.qk-child-experience {
+  position: relative;
+  isolation: isolate;
+}
+
+/* Ambient gradient layer — sits behind every surface, hand-off the
+   cascade to whichever two stop colours the theme emitted. */
+.qk-child-experience-ambient {
+  background: linear-gradient(
+    180deg,
+    var(--qk-theme-ambient-from) 0%,
+    var(--qk-theme-ambient-to) 100%
+  );
+}
+
+/* Pattern layer — extremely subtle decorative motifs. The density
+   token controls opacity so it never overwhelms a calm base state. */
+.qk-child-experience-pattern {
+  opacity: calc(0.6 * var(--qk-theme-pattern-density));
+  background-image:
+    radial-gradient(circle at 12% 18%, rgba(124, 58, 237, 0.06) 0, transparent 36%),
+    radial-gradient(circle at 88% 32%, rgba(245, 158, 11, 0.05) 0, transparent 30%),
+    radial-gradient(circle at 24% 78%, rgba(59, 130, 246, 0.05) 0, transparent 30%);
+}
+
+/* Mascot composition --------------------------------------------------- */
+
+.qk-mascot-scene {
+  padding-top: 1.75rem;
+}
+
+.qk-mascot-bubble {
+  padding-top: 0.75rem;
+  padding-bottom: 0.75rem;
+  padding-left: 5rem;
+  padding-right: 1rem;
+}
+
+.qk-mascot-bubble--enter {
+  animation: mascot-bubble-enter var(--animate-duration-card)
+    var(--ease-enter) both;
+}
+
+.qk-mascot-character {
+  z-index: 1;
+}
+
+/* Mood cues — small visual gestures. The mascot itself rotates via the
+   engine; we only modulate the wrapper. */
+.qk-mascot-cue--cheer {
+  animation: mascot-breathe var(--animate-duration-success) ease-in-out infinite alternate;
+}
+.qk-mascot-cue--wave {
+  animation: mascot-tilt 1.2s var(--ease-enter) 1;
+}
+.qk-mascot-cue--soft {
+  opacity: 0.95;
+}
+.qk-mascot-cue--tilt {
+  animation: mascot-tilt var(--animate-duration-card) var(--ease-enter) 1;
+  transform-origin: center bottom;
+}
+
+@keyframes mascot-breathe {
+  from { transform: translateY(0) scale(1); }
+  to   { transform: translateY(-2px) scale(1.02); }
+}
+
+@keyframes mascot-tilt {
+  0%   { transform: rotate(0deg); }
+  40%  { transform: rotate(-6deg); }
+  100% { transform: rotate(0deg); }
+}
+
+@keyframes mascot-bubble-enter {
+  from { opacity: 0; transform: translateY(6px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+/* Mystery Ready — productized focal surface ----------------------------- */
+
+.qk-mystery-ready {
+  position: relative;
+  overflow: hidden;
+  border-radius: 1.25rem;
+  background: linear-gradient(135deg, #fde68a 0%, #fbbf24 55%, #d97706 100%);
+  color: #1f1300;
+  padding: 1.25rem 1.25rem 1.5rem;
+  box-shadow: 0 1px 2px rgba(31, 19, 0, 0.08),
+    0 18px 40px -20px rgba(245, 158, 11, 0.55);
+}
+.qk-mystery-ready::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background:
+    radial-gradient(circle at 14% 24%, rgba(255, 255, 255, 0.7) 0 1px, transparent 2px),
+    radial-gradient(circle at 78% 64%, rgba(255, 255, 255, 0.55) 0 1px, transparent 2px),
+    radial-gradient(circle at 52% 14%, rgba(255, 255, 255, 0.45) 0 1px, transparent 2px);
+  pointer-events: none;
+  opacity: 0.7;
+}
+
+@keyframes mystery-float {
+  from { transform: translateY(0); }
+  to   { transform: translateY(-4px); }
+}
+
+.qk-mystery-ready__chest {
+  animation: mystery-float var(--animate-duration-success) ease-in-out infinite alternate;
+}
+
+/* Surge surface — visible "special" treatment --------------------------- */
+
+.qk-surge-shell {
+  position: relative;
+  overflow: hidden;
+  border-radius: 1.25rem;
+  background: linear-gradient(135deg, #ef4444 0%, #f97316 60%, #f59e0b 100%);
+  color: #fff7ed;
+  padding: 1.25rem;
+  box-shadow: 0 1px 2px rgba(124, 45, 18, 0.25),
+    0 18px 40px -20px rgba(249, 115, 22, 0.55);
+}
+.qk-surge-shell::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background:
+    radial-gradient(circle at 90% 12%, rgba(255, 255, 255, 0.55) 0 1.5px, transparent 2px),
+    radial-gradient(circle at 18% 64%, rgba(255, 255, 255, 0.45) 0 1.5px, transparent 2px),
+    radial-gradient(circle at 60% 80%, rgba(255, 255, 255, 0.5) 0 1.5px, transparent 2px);
+  pointer-events: none;
+  opacity: 0.7;
+}
+.qk-surge-shell::after {
+  content: '';
+  position: absolute;
+  inset: -20%;
+  background: radial-gradient(circle at 50% 50%, rgba(255, 200, 100, 0.3) 0%, transparent 60%);
+  pointer-events: none;
+  z-index: 0;
+  animation: surge-halo 2.4s ease-in-out infinite;
+}
+
+@keyframes surge-halo {
+  from { transform: scale(1); opacity: 0.55; }
+  to   { transform: scale(1.05); opacity: 0.85; }
+}
+
+/* Quest tile ---------------------------------------------------------- */
+
+.qk-quest-tile {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.75rem 0.875rem;
+  border-radius: 0.875rem;
+  background: var(--qk-surface-card);
+  border: 1px solid var(--qk-border-subtle);
+  box-shadow: var(--qk-shadow-card);
+  color: inherit;
+  text-align: left;
+  width: 100%;
+  cursor: pointer;
+  transition: transform var(--animate-duration-tap) var(--ease-tap),
+    box-shadow var(--animate-duration-tap) var(--ease-tap);
+}
+.qk-quest-tile:hover {
+  transform: translateY(-1px);
+}
+.qk-quest-tile:active {
+  transform: translateY(0);
+}
+.qk-quest-tile:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 2px var(--color-family-500);
+}
+
+.qk-quest-tile__reward {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  padding: 0.25rem 0.5rem;
+  border-radius: 999px;
+  background: var(--color-xp-50);
+  color: var(--color-xp-700);
+  font-size: 0.8125rem;
+  font-weight: 700;
+  white-space: nowrap;
+}
+.qk-quest-tile[data-quest-completed='1'] .qk-quest-tile__reward {
+  background: var(--color-mint-50);
+  color: var(--color-mint-700);
+}
+
+/* Companion chips for streak/points/wallet inside the hero ----------- */
+
+.qk-hero-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.4rem 0.75rem;
+  border-radius: 999px;
+  font-weight: 700;
+  font-size: 0.875rem;
+  background: rgba(255, 255, 255, 0.18);
+  color: #fff;
+  backdrop-filter: blur(6px);
+}
+
+/* Mystery reveal staged sequence -------------------------------------- */
+
+@keyframes mystery-stage-anticipation {
+  0%   { transform: scale(1); }
+  60%  { transform: scale(1.06); }
+  100% { transform: scale(1.03); }
+}
+@keyframes mystery-stage-open {
+  0%   { transform: scale(1.03); opacity: 1; }
+  60%  { transform: scale(1.18) rotate(-3deg); opacity: 1; }
+  100% { transform: scale(1) rotate(0); opacity: 1; }
+}
+@keyframes mystery-stage-reward {
+  0%   { opacity: 0; transform: translateY(8px) scale(0.96); }
+  100% { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+.qk-mystery-stage-chest {
+  animation: mystery-stage-anticipation 360ms var(--ease-enter) 1,
+    mystery-stage-open 360ms var(--ease-celebrate) 360ms 1;
+  transform-origin: center;
+}
+
+.qk-mystery-stage-reward {
+  animation: mystery-stage-reward 320ms var(--ease-enter) 720ms both;
+}
+
+/* Responsive: reduce mascot overlap on very small screens ---------- */
+
+@media (max-width: 380px) {
+  .qk-mascot-character {
+    transform: scale(0.85);
+    transform-origin: top left;
+  }
+}

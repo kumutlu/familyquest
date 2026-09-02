@@ -10,7 +10,20 @@
  * The registry is intentionally local: it never touches Firestore, XP,
  * points, wallet, inventory, or task-completion writes. The preview is
  * fixture-only.
+ *
+ * CHILD EXPERIENCE V1
+ * -------------------
+ * Each fixture carries enough data (presentation, mystery drop, surge,
+ * comeback, quests, mascot mood) for the visual canvas to render the
+ * REAL product composition (MascotScene, TodaysAdventureCenterpiece,
+ * QuestTileList, LongTermProgress) inside the ChildExperienceShell.
+ * QA judges hierarchy and theme, not isolated text.
  */
+
+import type { MascotExpression, MascotMood } from '../../domain/mascot';
+import type { DailyAdventurePresentation } from '../../domain/adventure/presentation.v1';
+import type { ComebackTier } from '../../domain/comeback/types';
+import type { MysteryDropDisplay } from '../queki/TodaysAdventure';
 
 export type PreviewFixtureKind =
   | 'normal-quests'
@@ -34,25 +47,321 @@ export interface PreviewFixture {
   readonly id: string
   readonly title: string
   readonly kind: PreviewFixtureKind
+  readonly mood: MascotMood
+  readonly expression: MascotExpression
+  readonly messageKey: string
+  readonly mascotLine: string
+  readonly adventurePresentation: DailyAdventurePresentation
+  readonly mysteryDrop: MysteryDropDisplay | null
+  readonly surge: {
+    readonly surgeId: string
+    readonly eligibleTasks: ReadonlyArray<{ id: string; title: string; pointsReward: number }>
+    readonly endsAt: number
+  } | null
+  readonly comeback: {
+    readonly tier: ComebackTier
+    readonly inactivityDays: number
+    readonly missionCompleted: boolean
+  } | null
+  readonly normalQuestCount: number
+  readonly allCaughtUp: boolean
+  readonly quests: ReadonlyArray<{
+    readonly id: string
+    readonly title: string
+    readonly pointsReward: number
+    readonly isCompletedToday?: boolean
+    readonly onPress: (id: string) => void
+  }>
 }
 
+const SAMPLE_QUESTS = [
+  { id: 'q-1', title: 'Brush teeth morning', pointsReward: 5, onPress: () => {} },
+  { id: 'q-2', title: 'Read 15 minutes', pointsReward: 10, onPress: () => {} },
+  { id: 'q-3', title: 'Tidy your room', pointsReward: 30, onPress: () => {} },
+] as const
+
 export const PREVIEW_FIXTURES: readonly PreviewFixture[] = [
-  { id: 'normal-quests',         title: 'Normal · quests waiting',   kind: 'normal-quests' },
-  { id: 'normal-all-caught-up',  title: 'Normal · all caught up',    kind: 'normal-all-caught-up' },
-  { id: 'surge',                 title: 'Active Surge',              kind: 'surge' },
-  { id: 'mystery-locked',        title: 'Mystery · locked',          kind: 'mystery-locked' },
-  { id: 'mystery-ready',         title: 'Mystery · ready',           kind: 'mystery-ready' },
-  { id: 'mystery-reveal',        title: 'Mystery · reveal',          kind: 'mystery-reveal' },
-  { id: 'comeback-1d',           title: 'Comeback · return_1d',      kind: 'comeback-1d' },
-  { id: 'comeback-3d',           title: 'Comeback · return_3d',      kind: 'comeback-3d' },
-  { id: 'comeback-7d',           title: 'Comeback · return_7d',      kind: 'comeback-7d' },
-  { id: 'seasonal-christmas',    title: 'Seasonal · Christmas',      kind: 'seasonal-christmas' },
-  { id: 'seasonal-halloween',    title: 'Seasonal · Halloween',      kind: 'seasonal-halloween' },
-  { id: 'seasonal-ramadan-eid',  title: 'Seasonal · Ramadan / Eid',      kind: 'seasonal-ramadan-eid' },
-  { id: 'seasonal-neon',         title: 'Seasonal · Neon weekly',    kind: 'seasonal-neon' },
-  { id: 'xp-pop-mystery',        title: 'XP pop · Mystery',          kind: 'xp-pop-mystery' },
-  { id: 'xp-pop-comeback',       title: 'XP pop · Comeback',         kind: 'xp-pop-comeback' },
-  { id: 'reduced-motion',        title: 'Reduced motion',            kind: 'reduced-motion' },
+  {
+    id: 'normal-quests',
+    title: 'Normal · quests waiting',
+    kind: 'normal-quests',
+    mood: 'friendly',
+    expression: 'soft_smile',
+    messageKey: 'mascot.welcome.morning',
+    mascotLine: 'Three quests are waiting for you.',
+    adventurePresentation: { kind: 'normal' },
+    mysteryDrop: null,
+    surge: null,
+    comeback: null,
+    normalQuestCount: 3,
+    allCaughtUp: false,
+    quests: SAMPLE_QUESTS,
+  },
+  {
+    id: 'normal-all-caught-up',
+    title: 'Normal · all caught up',
+    kind: 'normal-all-caught-up',
+    mood: 'celebrating',
+    expression: 'big_smile',
+    messageKey: 'mascot.celebrate.complete',
+    mascotLine: 'Everything is done for today — amazing work!',
+    adventurePresentation: { kind: 'normal' },
+    mysteryDrop: null,
+    surge: null,
+    comeback: null,
+    normalQuestCount: 0,
+    allCaughtUp: true,
+    quests: SAMPLE_QUESTS.map(q => ({ ...q, isCompletedToday: true })),
+  },
+  {
+    id: 'surge',
+    title: 'Active Surge',
+    kind: 'surge',
+    mood: 'excited',
+    expression: 'sparkle_burst',
+    messageKey: 'mascot.celebrate.surge',
+    mascotLine: 'Surge is live — get a 2× XP bonus right now!',
+    adventurePresentation: { kind: 'surge' },
+    mysteryDrop: null,
+    surge: {
+      surgeId: 'sg-1',
+      eligibleTasks: [{ id: 't-surge', title: 'House Vacuum', pointsReward: 30 }],
+      endsAt: Date.now() + 18 * 60_000,
+    },
+    comeback: null,
+    normalQuestCount: 0,
+    allCaughtUp: false,
+    quests: SAMPLE_QUESTS,
+  },
+  {
+    id: 'mystery-locked',
+    title: 'Mystery · locked',
+    kind: 'mystery-locked',
+    mood: 'curious',
+    expression: 'raised_eyebrow',
+    messageKey: 'mascot.celebrate.locked',
+    mascotLine: 'Something mysterious appeared…',
+    adventurePresentation: { kind: 'mystery_available' },
+    mysteryDrop: {
+      id: 'd-1',
+      rarity: 'common',
+      messageKey: 'child.adventure.mystery.lockedLead',
+      isRevealReady: false,
+      progressLabel: '0 / 1',
+    },
+    surge: null,
+    comeback: null,
+    normalQuestCount: 3,
+    allCaughtUp: false,
+    quests: SAMPLE_QUESTS,
+  },
+  {
+    id: 'mystery-ready',
+    title: 'Mystery · ready',
+    kind: 'mystery-ready',
+    mood: 'excited',
+    expression: 'sparkle',
+    messageKey: 'mascot.celebrate.ready',
+    mascotLine: 'Your Mystery Drop is unlocked — tap to open!',
+    adventurePresentation: { kind: 'mystery_ready' },
+    mysteryDrop: {
+      id: 'd-2',
+      rarity: 'rare',
+      messageKey: 'child.adventure.mystery.readyLead',
+      isRevealReady: true,
+    },
+    surge: null,
+    comeback: null,
+    normalQuestCount: 3,
+    allCaughtUp: false,
+    quests: SAMPLE_QUESTS,
+  },
+  {
+    id: 'mystery-reveal',
+    title: 'Mystery · reveal',
+    kind: 'mystery-reveal',
+    mood: 'celebrating',
+    expression: 'sparkle_burst',
+    messageKey: 'mascot.celebrate.reward',
+    mascotLine: 'You got +25 XP and a brand-new look!',
+    adventurePresentation: { kind: 'mystery_ready' },
+    mysteryDrop: {
+      id: 'd-3',
+      rarity: 'epic',
+      messageKey: 'child.adventure.mystery.rewardCollectionTitle',
+      isRevealReady: true,
+    },
+    surge: null,
+    comeback: null,
+    normalQuestCount: 3,
+    allCaughtUp: false,
+    quests: SAMPLE_QUESTS,
+  },
+  {
+    id: 'comeback-1d',
+    title: 'Comeback · return_1d',
+    kind: 'comeback-1d',
+    mood: 'welcome_back',
+    expression: 'big_smile',
+    messageKey: 'mascot.welcome.back',
+    mascotLine: 'Welcome back!',
+    adventurePresentation: { kind: 'comeback' },
+    mysteryDrop: null,
+    surge: null,
+    comeback: { tier: 'return_1d', inactivityDays: 1, missionCompleted: false },
+    normalQuestCount: 0,
+    allCaughtUp: false,
+    quests: SAMPLE_QUESTS,
+  },
+  {
+    id: 'comeback-3d',
+    title: 'Comeback · return_3d',
+    kind: 'comeback-3d',
+    mood: 'welcome_back',
+    expression: 'big_smile',
+    messageKey: 'mascot.welcome.back',
+    mascotLine: 'Glad you are back!',
+    adventurePresentation: { kind: 'comeback' },
+    mysteryDrop: null,
+    surge: null,
+    comeback: { tier: 'return_3d', inactivityDays: 3, missionCompleted: false },
+    normalQuestCount: 0,
+    allCaughtUp: false,
+    quests: SAMPLE_QUESTS,
+  },
+  {
+    id: 'comeback-7d',
+    title: 'Comeback · return_7d',
+    kind: 'comeback-7d',
+    mood: 'welcome_back',
+    expression: 'big_smile',
+    messageKey: 'mascot.welcome.back',
+    mascotLine: 'Long time no see — welcome back!',
+    adventurePresentation: { kind: 'comeback' },
+    mysteryDrop: null,
+    surge: null,
+    comeback: { tier: 'return_7d', inactivityDays: 7, missionCompleted: false },
+    normalQuestCount: 0,
+    allCaughtUp: false,
+    quests: SAMPLE_QUESTS,
+  },
+  {
+    id: 'seasonal-christmas',
+    title: 'Seasonal · Christmas',
+    kind: 'seasonal-christmas',
+    mood: 'celebrating',
+    expression: 'big_smile',
+    messageKey: 'mascot.seasonal.christmas',
+    mascotLine: 'Happy holidays — Queki is wearing a Santa hat!',
+    adventurePresentation: { kind: 'seasonal' },
+    mysteryDrop: null,
+    surge: null,
+    comeback: null,
+    normalQuestCount: 3,
+    allCaughtUp: false,
+    quests: SAMPLE_QUESTS,
+  },
+  {
+    id: 'seasonal-halloween',
+    title: 'Seasonal · Halloween',
+    kind: 'seasonal-halloween',
+    mood: 'suspicious',
+    expression: 'raised_eyebrow',
+    messageKey: 'mascot.seasonal.halloween',
+    mascotLine: 'Spooky day — Queki is curious!',
+    adventurePresentation: { kind: 'seasonal' },
+    mysteryDrop: null,
+    surge: null,
+    comeback: null,
+    normalQuestCount: 3,
+    allCaughtUp: false,
+    quests: SAMPLE_QUESTS,
+  },
+  {
+    id: 'seasonal-ramadan-eid',
+    title: 'Seasonal · Ramadan / Eid',
+    kind: 'seasonal-ramadan-eid',
+    mood: 'friendly',
+    expression: 'soft_smile',
+    messageKey: 'mascot.seasonal.ramadan',
+    mascotLine: 'A festive season — welcome back to today.',
+    adventurePresentation: { kind: 'seasonal' },
+    mysteryDrop: null,
+    surge: null,
+    comeback: null,
+    normalQuestCount: 3,
+    allCaughtUp: false,
+    quests: SAMPLE_QUESTS,
+  },
+  {
+    id: 'seasonal-neon',
+    title: 'Seasonal · Neon weekly',
+    kind: 'seasonal-neon',
+    mood: 'excited',
+    expression: 'sparkle_burst',
+    messageKey: 'mascot.weekly.neon',
+    mascotLine: 'Neon City week — quests pop with energy!',
+    adventurePresentation: { kind: 'normal' },
+    mysteryDrop: null,
+    surge: null,
+    comeback: null,
+    normalQuestCount: 3,
+    allCaughtUp: false,
+    quests: SAMPLE_QUESTS,
+  },
+  {
+    id: 'xp-pop-mystery',
+    title: 'XP pop · Mystery',
+    kind: 'xp-pop-mystery',
+    mood: 'excited',
+    expression: 'sparkle',
+    messageKey: 'mascot.xp.mystery',
+    mascotLine: '+20 XP from Mystery!',
+    adventurePresentation: { kind: 'normal' },
+    mysteryDrop: null,
+    surge: null,
+    comeback: null,
+    normalQuestCount: 3,
+    allCaughtUp: false,
+    quests: SAMPLE_QUESTS,
+  },
+  {
+    id: 'xp-pop-comeback',
+    title: 'XP pop · Comeback',
+    kind: 'xp-pop-comeback',
+    mood: 'celebrating',
+    expression: 'big_smile',
+    messageKey: 'mascot.xp.comeback',
+    mascotLine: '+25 XP comeback bonus!',
+    adventurePresentation: { kind: 'comeback' },
+    mysteryDrop: null,
+    surge: null,
+    comeback: { tier: 'return_3d', inactivityDays: 3, missionCompleted: true },
+    normalQuestCount: 0,
+    allCaughtUp: false,
+    quests: SAMPLE_QUESTS,
+  },
+  {
+    id: 'reduced-motion',
+    title: 'Reduced motion',
+    kind: 'reduced-motion',
+    mood: 'friendly',
+    expression: 'soft_smile',
+    messageKey: 'mascot.welcome.calm',
+    mascotLine: 'Reduced motion is on — animations collapse to instant.',
+    adventurePresentation: { kind: 'mystery_ready' },
+    mysteryDrop: {
+      id: 'd-rm',
+      rarity: 'rare',
+      messageKey: 'child.adventure.mystery.readyLead',
+      isRevealReady: true,
+    },
+    surge: null,
+    comeback: null,
+    normalQuestCount: 3,
+    allCaughtUp: false,
+    quests: SAMPLE_QUESTS,
+  },
 ]
 
 export function findFixtureById(id: string | null): PreviewFixture | null {

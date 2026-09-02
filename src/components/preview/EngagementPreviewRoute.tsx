@@ -31,6 +31,14 @@
  */
 
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import { I18nextProvider } from 'react-i18next';
+import { MemoryRouter } from 'react-router-dom';
+import i18n from '../../i18n';
+import { ChildExperienceShell } from '../experience/ChildExperienceShell';
+import { MascotScene } from '../experience/MascotScene';
+import { LongTermProgress } from '../experience/LongTermProgress';
+import { QuestTileList } from '../experience/QuestTile';
+import { TodaysAdventureCenterpiece } from '../experience/TodaysAdventureCenterpiece';
 import {
   buildEngagementPreviewUrl,
   isDevPreviewQueryActive,
@@ -269,44 +277,104 @@ function EngagementPreviewSurface() {
 }
 
 function PreviewFixtureCanvas({ fixture }: { fixture: PreviewFixture }) {
-  // The preview canvas is intentionally thin: each fixture exposes a
-  // data attribute that downstream tests can read without depending on
-  // the exact copy. Visual fidelity lives in the same components the
-  // production surface uses.
-  switch (fixture.kind) {
-    case 'normal-quests':
-      return <div data-testid="preview-normal-quests" className="text-meta qk-text-secondary">3 quests waiting</div>
-    case 'normal-all-caught-up':
-      return <div data-testid="preview-normal-all-caught-up" className="text-meta qk-text-secondary">You're all caught up.</div>
-    case 'surge':
-      return <div data-testid="preview-surge" className="text-meta qk-text-secondary">Surge banner fixture</div>
-    case 'mystery-locked':
-      return <div data-testid="preview-mystery-locked" className="text-meta qk-text-secondary">Mystery locked · 0 / 1</div>
-    case 'mystery-ready':
-      return <div data-testid="preview-mystery-ready" className="text-meta qk-text-secondary">Mystery Drop unlocked · Open</div>
-    case 'mystery-reveal':
-      return <div data-testid="preview-mystery-reveal" className="text-meta qk-text-secondary">Mystery Drop reward card</div>
-    case 'comeback-1d':
-      return <div data-testid="preview-comeback-1d" className="text-meta qk-text-secondary">Comeback · return_1d · welcome back</div>
-    case 'comeback-3d':
-      return <div data-testid="preview-comeback-3d" className="text-meta qk-text-secondary">Comeback · return_3d · +25 XP</div>
-    case 'comeback-7d':
-      return <div data-testid="preview-comeback-7d" className="text-meta qk-text-secondary">Comeback · return_7d · +50 XP</div>
-    case 'seasonal-christmas':
-      return <div data-testid="preview-seasonal-christmas" className="text-meta qk-text-secondary">Christmas accent applied</div>
-    case 'seasonal-halloween':
-      return <div data-testid="preview-seasonal-halloween" className="text-meta qk-text-secondary">Halloween accent applied</div>
-    case 'seasonal-ramadan-eid':
-      return <div data-testid="preview-seasonal-ramadan-eid" className="text-meta qk-text-secondary">Ramadan / Eid accent applied</div>
-    case 'seasonal-neon':
-      return <div data-testid="preview-seasonal-neon" className="text-meta qk-text-secondary">Neon weekly accent applied</div>
-    case 'xp-pop-mystery':
-      return <div data-testid="preview-xp-pop-mystery" className="text-meta qk-text-secondary">Mystery +20 XP</div>
-    case 'xp-pop-comeback':
-      return <div data-testid="preview-xp-pop-comeback" className="text-meta qk-text-secondary">Comeback +25 XP</div>
-    case 'reduced-motion':
-      return <div data-testid="preview-reduced-motion" className="text-meta qk-text-secondary">Reduced motion active</div>
+  // Render the SAME productized composition the production surface uses,
+  // wrapped in the experience shell, so QA judges visual hierarchy, theme,
+  // mascot, Adventure, quests and XP relationship — not isolated text rows.
+  // MemoryRouter is included so LongTermProgress can resolve navigation.
+    const world = (
+    <MemoryRouter>
+    <ChildExperienceShell
+      resolvedTheme={fixtureThemeFor(fixture)}
+      mascotPresentation={{
+        characterId: 'queki',
+        mood: fixture.mood,
+        expression: fixture.expression,
+        messageKey: fixture.messageKey,
+      }}
+    >
+      <div className="space-y-5" data-testid={`preview-composition-${fixture.id}`}>
+        <MascotScene
+          presentation={{
+            characterId: 'queki',
+            mood: fixture.mood,
+            expression: fixture.expression,
+            messageKey: fixture.messageKey,
+          }}
+          message={fixture.mascotLine}
+          greeting="Hey, preview"
+        />
+        <TodaysAdventureCenterpiece
+          presentation={fixture.adventurePresentation}
+          mysteryDrop={fixture.mysteryDrop}
+          comeback={fixture.comeback}
+          surge={fixture.surge}
+          normalQuestCount={fixture.normalQuestCount}
+          allCaughtUp={fixture.allCaughtUp}
+          onOpen={() => {}}
+          onSelectSurgeTask={() => {}}
+          onViewQuests={() => {}}
+        />
+        <QuestTileList quests={fixture.quests} onPressQuest={() => {}} onViewAll={() => {}} />
+        <LongTermProgress familyData={{ petBoxEnabled: true }} />
+      </div>
+    </ChildExperienceShell>
+    </MemoryRouter>
+  )
+  return <I18nextProvider i18n={i18n}>{world}</I18nextProvider>
+}
+
+// Resolve the fixture's presentation bundle so the canvas can render real
+// components. All values come from fixture data — never invented at runtime.
+function fixtureThemeFor(fixture: PreviewFixture) {
+  if (fixture.kind === 'seasonal-neon') {
+    return {
+      theme: {
+        tokens: {
+          accent: '#06b6d4',
+          ambientFrom: '#0f172a',
+          ambientTo: '#1e1b4b',
+          patternDensity: 0.6,
+        },
+      },
+    } as any
   }
+  if (fixture.kind === 'seasonal-christmas') {
+    return {
+      theme: {
+        tokens: {
+          accent: '#dc2626',
+          ambientFrom: '#7f1d1d',
+          ambientTo: '#fff7ed',
+          patternDensity: 0.5,
+        },
+      },
+    } as any
+  }
+  if (fixture.kind === 'seasonal-halloween') {
+    return {
+      theme: {
+        tokens: {
+          accent: '#7c3aed',
+          ambientFrom: '#1f2937',
+          ambientTo: '#fde68a',
+          patternDensity: 0.4,
+        },
+      },
+    } as any
+  }
+  if (fixture.kind === 'seasonal-ramadan-eid') {
+    return {
+      theme: {
+        tokens: {
+          accent: '#059669',
+          ambientFrom: '#064e3b',
+          ambientTo: '#ecfdf5',
+          patternDensity: 0.4,
+        },
+      },
+    } as any
+  }
+  return { theme: { tokens: {} } } as any
 }
 
 /**

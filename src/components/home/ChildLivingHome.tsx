@@ -27,11 +27,13 @@ import { XPDisplay } from '../queki/semanticDisplays';
 import { ProgressBar } from '../queki/Progress';
 import { TactileButton } from '../queki/TactileButton';
 import { TodaysAdventure, type MysteryDropDisplay } from '../queki/TodaysAdventure';
-import { QuestPreviewList, type QuestPreviewItem } from '../queki/QuestPreviewRow';
 import { XpPop } from '../queki/XpPop';
 import { MysteryReveal } from '../queki/MysteryReveal';
-import { Mascot as EngineMascot } from '../mascot/Mascot';
-import { MascotMessage } from '../mascot/MascotMessage';
+import { ChildExperienceShell } from '../experience/ChildExperienceShell';
+import { MascotScene } from '../experience/MascotScene';
+import { LongTermProgress } from '../experience/LongTermProgress';
+import { QuestTileList } from '../experience/QuestTile';
+import { TodaysAdventureCenterpiece } from '../experience/TodaysAdventureCenterpiece';
 import { useMascotPresentationFor } from '../../hooks/useMascotPresentation';
 import { useChildAdventure } from '../../hooks/useChildAdventure';
 import { useExperienceTheme } from '../../hooks/useExperienceTheme';
@@ -527,8 +529,12 @@ export function ChildLivingHome() {
   const previewSlot = unstable_DevOnlyPreviewRoute();
 
   return (
-    <div className="space-y-6 pb-8" data-testid="child-living-home" style={surfaceStyle}>
-      {previewSlot}
+    <ChildExperienceShell
+      resolvedTheme={experienceTheme ?? null}
+      mascotPresentation={mascotPresentation.presentation}
+    >
+      <div className="space-y-6 pb-8" data-testid="child-living-home" style={surfaceStyle}>
+        {previewSlot}
 
       {/* ============================================================== */}
       {/* Hero: personal state                                            */}
@@ -598,48 +604,40 @@ export function ChildLivingHome() {
       </Surface>
 
       {/* ============================================================== */}
-      {/* Mascot strip (V1 welcome + mood)                                */}
+      {/* Mascot composition (V1 welcome + mood) — replaces strip row    */}
       {/* ============================================================== */}
-      <div
-        className="flex items-center gap-3 rounded-card qk-bg-card qk-border-subtle qk-shadow-card border p-4"
-        data-testid="mascot-strip"
-      >
-        <EngineMascot
-          presentation={mascotPresentation.presentation}
-          size={56}
-          className="shrink-0"
-        />
-        <MascotMessage
+      <div data-testid="mascot-strip">
+        <MascotScene
           presentation={mascotPresentation.presentation}
           message={mascotPresentation.message}
-          className="qk-text-primary"
+          greeting={t('child.greeting', { name: currentUser?.displayName ?? '' })}
         />
       </div>
 
       {/* ============================================================== */}
-      {/* V1: Today's Adventure                                          */}
+      {/* V1: Today's Adventure — productized centerpiece                */}
       {/* ============================================================== */}
-      <TodaysAdventure
-        surge={adventure.surge ? {
-          surgeId: adventure.surge.surgeId,
-          surge: adventure.surge.surge,
-          window: adventure.surge.window,
-          eligibleTasks: adventure.surge.eligibleTasks,
-        } : null}
-        urgency={adventure.urgency}
-        comeback={adventure.comeback ? {
-          tier: adventure.comeback.tier,
-          inactivityDays: adventure.comeback.inactivityDays,
-          missionCompleted: adventure.comeback.missionCompleted,
-        } : null}
-        mysteryDrop={mysteryDropDisplay}
-        onSelectSurgeTask={handleSelectSurgeTask}
-        onPressMysteryDrop={handlePressMystery}
-        onViewQuests={() => navigate('/tasks')}
-        presentation={adventure.presentation}
-        normalQuestCount={questPreviewItems.filter(q => q.isCompletedToday !== true).length}
-        allCaughtUp={allCaughtUp}
-      />
+      <div data-testid="todays-adventure" data-adventure-kind={adventure.presentation.kind}>
+        <TodaysAdventureCenterpiece
+          presentation={adventure.presentation}
+          mysteryDrop={mysteryDropDisplay}
+          comeback={adventure.comeback ? {
+            tier: adventure.comeback.tier,
+            inactivityDays: adventure.comeback.inactivityDays,
+            missionCompleted: adventure.comeback.missionCompleted,
+          } : null}
+          surge={adventure.surge ? {
+            surgeId: adventure.surge.surgeId,
+            eligibleTasks: adventure.surge.eligibleTasks,
+            endsAt: adventure.surge.window?.endsAt ?? Date.now(),
+          } : null}
+          normalQuestCount={questPreviewItems.filter(q => q.isCompletedToday !== true).length}
+          allCaughtUp={allCaughtUp}
+          onSelectSurgeTask={handleSelectSurgeTask}
+          onPressMysteryDrop={handlePressMystery}
+          onViewQuests={() => navigate('/tasks')}
+        />
+      </div>
 
       {/* ============================================================== */}
       {/* V1: Today's Quests (preview list, max 3)                       */}
@@ -656,8 +654,14 @@ export function ChildLivingHome() {
               {t('child.quests.heading')}
             </h2>
           </header>
-          <QuestPreviewList
-            quests={questPreviewItems}
+          <QuestTileList
+            quests={questPreviewItems.map(q => ({
+              id: q.id,
+              title: q.title,
+              pointsReward: q.pointsReward,
+              isCompletedToday: q.isCompletedToday,
+              onPress: handleSelectSurgeTask,
+            }))}
             onPressQuest={handleSelectSurgeTask}
             onViewAll={() => navigate('/tasks')}
           />
@@ -683,6 +687,11 @@ export function ChildLivingHome() {
       />
 
       {/* ============================================================== */}
+      {/* Long-term progression band — Pet Box + Goals (preserved)        */}
+      {/* ============================================================== */}
+      <LongTermProgress familyData={(store as any).familyData} />
+
+      {/* ============================================================== */}
       {/* Dynamic focus (max 3) — kept from Wave 1 for parent signal    */}
       {/* ============================================================== */}
       <section aria-label={t('child.heroSubtitle')} className="space-y-3">
@@ -705,7 +714,8 @@ export function ChildLivingHome() {
           </TactileCard>
         )}
       </section>
-    </div>
+      </div>
+    </ChildExperienceShell>
   );
 }
 

@@ -24,18 +24,21 @@ import type { MysteryDropReward } from '../../domain/mysteryDrop/types';
  *    does NOT replay on every Child Home remount. Once acknowledged, the
  *    reveal renders the "owned" beat in a calm, non-celebratory form.
  *
- * Lifecycle
- * ---------
+ * Lifecycle (Child Experience V1 productized staged reveal)
+ * ---------------------------------------------------------
  *   1. Parent sets `open` to true with the resolved reward, AFTER the
  *      authoritative claim has landed (or with `acknowledged: true` when
  *      the user has already seen it once and we're rendering the owned
  *      state on subsequent mounts).
- *   2. When `acknowledged === false`, the reveal stages in two beats:
- *        - "Available" beat (closed chest)  →  brief
- *        - "Reveal" beat     (reward card)  →  short celebration
+ *   2. When `acknowledged === false`, the reveal stages in three beats:
+ *        - Anticipation (closed chest)        → ~360ms
+ *        - Open (chest quick rotation + lift) → ~360ms
+ *        - Reward (item emerges + rarity tag) → ~320ms
+ *      Total target ~1.0–1.4s. Faster than the previous 1.4s flat beat;
+ *      visually richer because it has three states.
  *   3. When `acknowledged === true`, the reveal renders the owned beat
  *      directly, with no chest preview and a single static affirmation.
- *   4. Reduced-motion users see the final state at once.
+ *   4. Reduced-motion users see the reward beat directly at t=0.
  */
 
 export type MysteryRevealProps = {
@@ -58,7 +61,13 @@ export type MysteryRevealProps = {
   readonly acknowledged?: boolean;
 };
 
-const REVEAL_MS = 1400;
+/**
+ * Staged beat timings. Total ~1.04s in motion mode. Reduced-motion collapses
+ * every beat to 0 via tokens (animation: ... 0ms).
+ */
+const STAGE_ANTICIPATION_MS = 360;
+const STAGE_OPEN_MS = 360;
+const STAGE_REWARD_MS = 320;
 
 function prefersReducedMotion(): boolean {
   if (typeof window === 'undefined' || typeof window.matchMedia !== 'function') return false;
@@ -102,6 +111,15 @@ function rewardCopy(reward: MysteryDropReward | null, t: (key: string, params?: 
   };
 }
 
+/**
+ * Three-stage reveal state machine.
+ *
+ *   'anticipation' — closed chest
+ *   'opening'      — chest opens
+ *   'reward'       — item emerges
+ */
+type RevealBeat = 'anticipation' | 'opening' | 'reward';
+
 export function MysteryReveal({
   open,
   reward,
@@ -111,20 +129,21 @@ export function MysteryReveal({
   acknowledged = false,
 }: MysteryRevealProps) {
   const { t } = useTranslation('home');
-  const [revealed, setRevealed] = useState(acknowledged);
+  const [beat, setBeat] = useState<RevealBeat>(acknowledged ? 'reward' : 'anticipation');
   const timersRef = useRef<number[]>([]);
   const previouslyFocusedRef = useRef<HTMLElement | null>(null);
   const closeRef = useRef<HTMLButtonElement | null>(null);
 
+  const clearTimers = () => {
+    timersRef.current.forEach(id => window.clearTimeout(id));
+    timersRef.current = [];
+  };
+
   // ---- Lifecycle ---------------------------------------------------------
   useEffect(() => {
     if (!open) {
-      timersRef.current.forEach(id => window.clearTimeout(id));
-      timersRef.current = [];
-      // When acknowledged is true, the next open should land at the
-      // owned beat directly (revealed=true). When acknowledged is false,
-      // the next open starts a fresh celebration beat.
-      setRevealed(acknowledged);
+      clearTimers();
+      setBeat(acknowledged ? 'reward' : 'anticipation');
       return;
     }
 
@@ -132,22 +151,30 @@ export function MysteryReveal({
       (document.activeElement as HTMLElement | null) ?? null;
 
     if (acknowledged || prefersReducedMotion()) {
-      setRevealed(true);
+      setBeat('reward');
       queueMicrotask(() => closeRef.current?.focus());
       return;
     }
 
-    setRevealed(false);
+    // Reset to anticipation beat, then advance through opening and reward.
+    setBeat('anticipation');
+    timersRef.current.push(
+      window.setTimeout(() => setBeat('opening'), STAGE_ANTICIPATION_MS),
+    );
+    timersRef.current.push(
+      window.setTimeout(
+        () => setBeat('reward'),
+        STAGE_ANTICIPATION_MS + STAGE_OPEN_MS,
+      ),
+    );
     timersRef.current.push(
       window.setTimeout(() => {
-        setRevealed(true);
         closeRef.current?.focus();
-      }, REVEAL_MS),
+      }, STAGE_ANTICIPATION_MS + STAGE_OPEN_MS + STAGE_REWARD_MS - 80),
     );
 
     return () => {
-      timersRef.current.forEach(id => window.clearTimeout(id));
-      timersRef.current = [];
+      clearTimers();
     };
   }, [open, acknowledged]);
 
@@ -176,8 +203,8 @@ export function MysteryReveal({
 
   const { title, description } = rewardCopy(reward, t);
   const accent = RARITY_ACCENT[rarity ?? 'common'];
-  const celebration = !acknowledged;
-  const showCelebrationPreview = celebration && !revealed;
+  const showCelebration = !acknowledged;
+  const showReward = !showCelebration || beat === 'reward';
 
   return createPortal(
     <div
@@ -186,14 +213,14 @@ export function MysteryReveal({
       aria-label={ariaLabel ?? t('child.adventure.mystery.revealTitle', { title })}
       data-testid="mystery-reveal"
       data-reveal-state={acknowledged ? 'acknowledged' : 'celebration'}
+      data-reveal-beat={beat}
       className="fixed inset-0 z-50 flex items-center justify-center bg-black/55 px-4"
     >
       <div className="relative w-full max-w-sm">
         <div
           className={cn(
             'qk-bg-card rounded-hero p-6 qk-shadow-card',
-            celebration &&
-              'animate-[mystery-reveal-enter_var(--animate-duration-celebration,700ms)_var(--ease-celebrate,cubic-bezier(0.34,1.56,0.64,1))]',
+            showCelebration && beat === 'anticipation' && 'animate-[mystery-reveal-enter_var(--animate-duration-celebration,700ms)_var(--ease-celebrate,cubic-bezier(0.34,1.56,0.64,1))]',
           )}
         >
           <button
@@ -207,20 +234,39 @@ export function MysteryReveal({
             <X size={18} aria-hidden="true" />
           </button>
 
-          {/* Chest / preview beat — only shown during a fresh celebration */}
-          {showCelebrationPreview && (
+          {/* Chest / anticipation beat — closed */}
+          {showCelebration && beat === 'anticipation' && (
             <div className="flex flex-col items-center text-center">
-              <div className="relative mb-4 flex h-24 w-24 items-center justify-center rounded-2xl bg-gradient-to-br from-xp-200 to-xp-400 shadow-lg">
+              <div
+                data-testid="mystery-reveal-chest-anticipation"
+                className="qk-mystery-stage-chest relative mb-4 flex h-24 w-24 items-center justify-center rounded-2xl bg-gradient-to-br from-xp-200 to-xp-400 shadow-lg"
+              >
+                <Gift size={44} aria-hidden="true" className="text-white drop-shadow" />
+              </div>
+              <p className="text-card-title qk-text-primary">{t('child.adventure.mystery.readyTitle')}</p>
+              <p className="mt-1 text-meta qk-text-secondary">
+                {t('child.adventure.mystery.revealLoading')}
+              </p>
+            </div>
+          )}
+
+          {/* Opening beat — chest shaking/opening */}
+          {showCelebration && beat === 'opening' && (
+            <div className="flex flex-col items-center text-center">
+              <div
+                data-testid="mystery-reveal-chest-opening"
+                className="qk-mystery-stage-chest relative mb-4 flex h-24 w-24 items-center justify-center rounded-2xl bg-gradient-to-br from-xp-300 to-xp-500 shadow-lg"
+              >
                 <Gift size={44} aria-hidden="true" className="text-white drop-shadow" />
                 <Sparkles
-                  size={20}
+                  size={18}
                   aria-hidden="true"
-                  className="absolute -right-2 -top-2 text-xp-500 animate-pulse"
+                  className="absolute -right-2 -top-2 text-xp-500"
                 />
                 <Sparkles
                   size={14}
                   aria-hidden="true"
-                  className="absolute -bottom-1 -left-2 text-xp-500 animate-pulse"
+                  className="absolute -bottom-1 -left-2 text-xp-500"
                 />
               </div>
               <p className="text-card-title qk-text-primary">{t('child.adventure.mystery.readyTitle')}</p>
@@ -230,9 +276,12 @@ export function MysteryReveal({
             </div>
           )}
 
-          {/* Reward card — celebration OR acknowledged owned beat */}
-          {(!celebration || revealed) && (
-            <div className="flex flex-col items-center text-center">
+          {/* Reward beat — final reward card */}
+          {showReward && (
+            <div
+              data-testid="mystery-reveal-reward-beat"
+              className="qk-mystery-stage-reward flex flex-col items-center text-center"
+            >
               <div
                 className={cn(
                   'mb-4 inline-flex items-center gap-2 rounded-full bg-gradient-to-r px-4 py-1.5 text-meta font-bold uppercase tracking-wide shadow-sm',

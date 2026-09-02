@@ -446,22 +446,36 @@ export function Settings() {
               </div>
             </div>
 
-            <div className="mt-4 flex flex-col sm:flex-row gap-3">
-              <Button onClick={() => setEditorOpen(true)} className="flex-1">
-                {t('editProfile')}
-              </Button>
-              <Button variant="secondary" onClick={() => setEditorOpen(true)} className="flex-1">
-                {t('changeAvatar')}
-              </Button>
+            <div className="mt-4 flex flex-col gap-3 sm:flex-row">
+              <div className="flex-1">
+                <Button
+                  onClick={() => setEditorOpen(true)}
+                  className="w-full"
+                  data-testid="settings-edit-profile"
+                >
+                  {t('editProfile')}
+                </Button>
+                <p className="mt-1.5 text-meta text-amber-700">
+                  {t('editProfileHint')}
+                </p>
+              </div>
+              <div className="flex-1">
+                <Button
+                  variant="secondary"
+                  onClick={() => setEditorOpen(true)}
+                  className="w-full"
+                  data-testid="settings-change-avatar"
+                >
+                  {t('changeAvatar')}
+                </Button>
+                <p className="mt-1.5 text-meta text-mint-700">
+                  {t('changeAvatarHint')}
+                </p>
+              </div>
             </div>
             {child && pendingProfileUpdate && (
-              <p className="mt-3 text-xs text-blue-700" role="status">
+              <p className="mt-3 text-meta text-blue-700" role="status">
                 {t('pendingProfileUpdate')}
-              </p>
-            )}
-            {child && !pendingProfileUpdate && (
-              <p className="mt-3 text-xs text-amber-700">
-                {t('profileApprovalNote')}
               </p>
             )}
           </CardContent>

@@ -94,6 +94,24 @@
       "loading": "Getting today's adventure ready…",
       "viewQuests": "View quests",
       "viewQuestsAria": "View today's quests",
+      "surge": {
+        "aria": "Active surge",
+        "title": "Surge active",
+        "bonusMultiplier": "2\u00d7 XP",
+        "minutesLeft_one": "{{count}} min left",
+        "minutesLeft_other": "{{count}} min left",
+        "worthLabel_one": "Worth {{count}} point",
+        "worthLabel_other": "Worth {{count}} points",
+        "startQuest": "Start quest"
+      },
+      "comeback": {
+        "heading": "Welcome back",
+        "warm1d": "Welcome back!",
+        "warm3d": "Glad you're back",
+        "warm7d": "Long time, no see",
+        "body_one": "It's been {{days}} day since you checked in.",
+        "body_other": "It's been {{days}} days since you checked in."
+      },
       "mystery": {
         "title": "Mystery Drop available",
         "lockedTitle": "Mystery Drop",
@@ -102,6 +120,8 @@
         "lockedProgress_other": "Complete {{count}} quests to unlock it.",
         "lockedProgressDone": "Ready to open!",
         "readyTitle": "Mystery Drop unlocked",
+        "readyEyebrow": "Mystery Drop",
+        "readyLead": "Tap to open your {{rarity}} surprise.",
         "readyAria": "Open mystery drop",
         "readyAction": "Open",
         "revealTitle": "Mystery drop reveal: {{title}}",
@@ -124,8 +144,8 @@
       "questCount_one": "{{count}} quest waiting",
       "questCount_other": "{{count}} quests waiting",
       "body": "Complete one to keep moving.",
-      "allCaughtUp": "You're all caught up.",
-      "allCaughtUpBody": "Check back later for something new.",
+      "allCaughtUp": "Today's adventure complete",
+      "allCaughtUpBody": "Nice — check back later for something new.",
       "viewQuests": "View quests"
     },
     "xpPop": {

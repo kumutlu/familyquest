@@ -182,9 +182,15 @@ describe('EngagementPreviewRoute — click navigation preserves the preview mark
     expect(
       await screen.findByTestId('engagement-preview-frame-comeback-7d'),
     ).toBeInTheDocument()
+    // The composition now renders the REAL product surface via the
+    // centerpiece + mascot scene. The comeback beat carries the tier
+    // attribute so QA can assert state without depending on copy.
     expect(
-      screen.getByTestId('preview-comeback-7d'),
-    ).toHaveTextContent('Comeback · return_7d · +50 XP')
+      screen.getByTestId('adventure-centerpiece-comeback'),
+    ).toHaveAttribute('data-comeback-tier', 'return_7d')
+    expect(
+      screen.getByTestId('mascot-scene'),
+    ).toBeInTheDocument()
   })
 })
 

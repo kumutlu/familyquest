@@ -3,48 +3,48 @@
     "greeting": "Merhaba, {{name}}",
     "heroSubtitle": "Şu an önemli olan şeyler.",
     "familyBalanceLabel": "Aile cüzdanı",
-    "mascotCalm": "Her şey yolunda. Harika gidiyorsun!",
-    "mascotBusy": "Bugün ilgileneceğin birkaç şey var.",
+    "mascotCalm": "Her şey yolunda görünüyor. Harika iş!",
+    "mascotBusy": "Bugün ilgilenmen gereken şeyler var.",
     "approvals": {
-      "title_one": "{{count}} onay seni bekliyor",
-      "title_other": "{{count}} onay seni bekliyor",
+      "title_one": "{{count}} tanesi seni bekliyor",
+      "title_other": "{{count}} tanesi seni bekliyor",
       "description": "Görevler, transferler ve istekler karar bekliyor.",
       "action": "İncele"
     },
     "goalMilestone": {
-      "title": "\u201c{{title}}\u201d %{{progress}} tamamlandı",
-      "description": "Neredeyse bitti — yakında kutlayabiliriz."
+      "title": "\u201c{{title}}\u201d %{{progress}} dolu",
+      "description": "Neredeyse oldu — kutlamaya değer."
     },
     "challengeUpdate": {
       "title": "Aile Görevi bitti",
-      "description": "\u201c{{title}}\u201d tamamlanmaya hazır."
+      "description": "\u201c{{title}}\u201d artık kapatılabilir."
     },
     "allCalm": {
-      "title": "Her şey sakin",
-      "description": "Şu anda seni bekleyen bir şey yok."
+      "title": "Hepsi sakin",
+      "description": "Şu an ilgilenmen gereken bir şey yok."
     },
     "familyTools": {
       "heading": "Aile araçları",
       "goalsTitle": "Hedefler",
       "walletTitle": "Cüzdan",
       "walletsTitle": "Cüzdanlar",
-      "petBoxTitle": "Pet Box",
+      "petBoxTitle": "Evcil Kutusu",
       "openGoals": "Hedefleri aç",
       "openWallets": "Cüzdanları aç",
-      "openPetBox": "Pet Box'ı aç",
-      "goalProgress": "%{{percent}} birikti",
+      "openPetBox": "Evcil Kutusunu aç",
+      "goalProgress": "%{{percent}} dolu",
       "closestGoal": "En yakın hedef %{{percent}}",
       "noActiveGoals": "Aktif hedef yok",
       "totalChildBalance": "Toplam çocuk bakiyesi",
       "noChildWallets": "Çocuk cüzdanı yok",
-      "singleWallet": "{{name}} cüzdanı",
+      "singleWallet": "{{name}}'in cüzdanı",
       "walletCount_one": "{{count}} çocuk cüzdanı",
       "walletCount_other": "{{count}} çocuk cüzdanı",
       "noActiveFunds": "Aktif fon yok",
       "saved": "{{amount}} birikti",
       "fundCount_one": "{{count}} aktif fon",
       "fundCount_other": "{{count}} aktif fon",
-      "unavailable": "Kullanılamaz"
+      "unavailable": "Kullanılamıyor"
     },
     "childrenHeading": "Ekibin",
     "childSubtitle": "Seviye {{level}} · {{points}} puan",
@@ -55,15 +55,15 @@
     "greeting": "Selam, {{name}}!",
     "heroSubtitle": "Bugünü harika yapalım.",
     "mascotEncourage": "Başarabilirsin — her gün küçük adımlar!",
-    "mascotCelebrate": "Harika gidiyorsun! Muhteşem iş!",
+    "mascotCelebrate": "Hadi bakalım! Muhteşem iş çıkardın!",
     "approvalWaiting": {
       "title_one": "{{count}} görev onay bekliyor",
       "title_other": "{{count}} görev onay bekliyor",
-      "description": "Bir büyükan/büyükanne yakında bakacak."
+      "description": "Büyüklerden biri yakında bakacak."
     },
     "moneyReceived": {
       "title": "{{amount}} aldın",
-      "description": "Doğrudan cüzdanına eklendi."
+      "description": "Doğruca cüzdanına yollandı."
     },
     "nextQuest": {
       "title": "Sıradaki: {{title}}",
@@ -72,19 +72,19 @@
     },
     "streakKeep": {
       "title": "{{days}} günlük serini koru!",
-      "description": "Alevin sönmesin için bugün bir görev daha yap."
+      "description": "Ateşi canlı tutmak için bugün bir görev daha yap."
     },
     "rewardAvailable": {
-      "title": "\u201c{{title}}\u201d artık yeterli",
-      "description": "Bunu alacak kadar puanın var."
+      "title": "\u201c{{title}}\u201d parmak ucunda",
+      "description": "Onu almaya yetecek puanın var."
     },
     "familyQuest": {
       "title": "Aile Görevi: {{title}}",
-      "description": "Ailen bunu birlikte yapıyor."
+      "description": "Ailen birlikte oynuyor."
     },
     "allDone": {
-      "title": "Her şeyi bitirdin!",
-      "description": "Yeni görevler için sonra tekrar bak."
+      "title": "Bugünlük bu kadar!",
+      "description": "Yeni görevler için sonra tekrar gel."
     },
     "walletHeading": "Cüzdanın",
     "openWallet": "Cüzdanını aç, bakiye {{balance}}",
@@ -94,6 +94,24 @@
       "loading": "Bugünün macerası hazırlanıyor…",
       "viewQuests": "Görevleri gör",
       "viewQuestsAria": "Bugünün görevlerini gör",
+      "surge": {
+        "aria": "Aktif surge",
+        "title": "Surge aktif",
+        "bonusMultiplier": "2\u00d7 XP",
+        "minutesLeft_one": "{{count}} dk kaldı",
+        "minutesLeft_other": "{{count}} dk kaldı",
+        "worthLabel_one": "{{count}} puan değerinde",
+        "worthLabel_other": "{{count}} puan değerinde",
+        "startQuest": "Görevi başlat"
+      },
+      "comeback": {
+        "heading": "Tekrar hoş geldin",
+        "warm1d": "Tekrar hoş geldin!",
+        "warm3d": "Geri döndüğüne sevindim",
+        "warm7d": "Seni çok özledik",
+        "body_one": "Son girişinden bu yana {{days}} gün geçti.",
+        "body_other": "Son girişinden bu yana {{days}} gün geçti."
+      },
       "mystery": {
         "title": "Sürpriz Drop hazır",
         "lockedTitle": "Sürpriz Drop",
@@ -102,6 +120,8 @@
         "lockedProgress_other": "Açmak için {{count}} görev tamamla.",
         "lockedProgressDone": "Açılmaya hazır!",
         "readyTitle": "Sürpriz Drop açıldı",
+        "readyEyebrow": "Sürpriz Drop",
+        "readyLead": "{{rarity}} sürprizini açmak için dokun.",
         "readyAria": "Sürpriz drop'u aç",
         "readyAction": "Aç",
         "revealTitle": "Sürpriz drop açılışı: {{title}}",
@@ -124,8 +144,8 @@
       "questCount_one": "{{count}} görev seni bekliyor",
       "questCount_other": "{{count}} görev seni bekliyor",
       "body": "İlerlemek için birini tamamla.",
-      "allCaughtUp": "Her şeyi bitirdin.",
-      "allCaughtUpBody": "Yeni bir şey için sonra tekrar gel.",
+      "allCaughtUp": "Bugünün macerası tamam",
+      "allCaughtUpBody": "Güzel — yeni bir şey için sonra gel.",
       "viewQuests": "Görevleri gör"
     },
     "xpPop": {
