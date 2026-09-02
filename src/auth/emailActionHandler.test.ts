@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { EMAIL_ACTION_CONTINUE_PATH, parseVerificationAction } from './emailActionHandler';
+import { EMAIL_ACTION_CONTINUE_PATH, parseEmailAction, parseVerificationAction } from './emailActionHandler';
 
 describe('parseVerificationAction', () => {
   it('accepts only a Firebase verifyEmail action with a non-empty code', () => {
@@ -31,5 +31,16 @@ describe('parseVerificationAction', () => {
     );
     expect(parsed).toMatchObject({ kind: 'verifyEmail', oobCode: 'code' });
     expect(EMAIL_ACTION_CONTINUE_PATH).toBe('/verify-email');
+  });
+});
+
+describe('parseEmailAction', () => {
+  it.each(['verifyEmail', 'resetPassword', 'recoverEmail', 'verifyAndChangeEmail', 'revertSecondFactorAddition'])('accepts supported mode %s', mode => {
+    expect(parseEmailAction(`?mode=${mode}&oobCode=code`)).toMatchObject({ kind: mode, oobCode: 'code' });
+  });
+
+  it('fails closed for unsupported modes and missing codes', () => {
+    expect(parseEmailAction('?mode=signIn&oobCode=code')).toEqual({ kind: 'invalid' });
+    expect(parseEmailAction('?mode=verifyEmail')).toEqual({ kind: 'invalid' });
   });
 });

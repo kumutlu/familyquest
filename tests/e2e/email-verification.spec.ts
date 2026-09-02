@@ -38,7 +38,7 @@ test('real verification link preserves and resumes UID-bound family onboarding',
     lang: firebaseAction.searchParams.get('lang') ?? 'en',
   });
   const verificationPage = await context.newPage();
-  await verificationPage.goto(`/auth/verify?${handlerSearch}`);
+  await verificationPage.goto(`/auth/action?${handlerSearch}`);
   await expect(verificationPage.getByRole('heading', { name: /email verified/i })).toBeVisible();
   await verificationPage.getByRole('button', { name: /^continue$/i }).click();
   await expect(verificationPage).toHaveURL(url => url.pathname === '/verify-email');
