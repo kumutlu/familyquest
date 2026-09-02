@@ -46,6 +46,13 @@ export interface ChildExperienceTheme {
     readonly ambientTo?: string;
     /** Pattern density (0..1) — drives subtle decorative motifs. */
     readonly patternDensity?: number;
+    /**
+     * Optional accent-soft tint applied mid-gradient and behind the
+     * mascot. Falls back to ambientTo when omitted so the base world
+     * stays calm. Use this to announce seasonal/weekly world changes
+     * WITHOUT recolouring every component.
+     */
+    readonly accentSoft?: string;
   };
 }
 
@@ -101,8 +108,14 @@ function resolveShellTheme(
     typeof tokens.patternDensity === 'number'
       ? Math.min(1, Math.max(0, tokens.patternDensity))
       : undefined;
+  const accentSoft =
+    typeof tokens.accentSoft === 'string' && tokens.accentSoft.length > 0
+      ? tokens.accentSoft
+      : typeof tokens.accent === 'string'
+        ? tokens.accent
+        : undefined;
   return {
-    tokens: { accent, ambientFrom, ambientTo, patternDensity },
+    tokens: { accent, ambientFrom, ambientTo, patternDensity, accentSoft },
   };
 }
 
@@ -115,7 +128,12 @@ function shellStyle(
   theme: ChildExperienceTheme,
 ): React.CSSProperties | undefined {
   const tokens = theme.tokens;
-  if (!tokens.accent && !tokens.ambientFrom && !tokens.ambientTo) {
+  if (
+    !tokens.accent &&
+    !tokens.ambientFrom &&
+    !tokens.ambientTo &&
+    typeof tokens.patternDensity !== 'number'
+  ) {
     return undefined;
   }
   const style: Record<string, string> = {};
@@ -125,6 +143,7 @@ function shellStyle(
   if (typeof tokens.patternDensity === 'number') {
     style['--qk-theme-pattern-density'] = String(tokens.patternDensity);
   }
+  if (tokens.accentSoft) style['--qk-theme-accent-soft'] = tokens.accentSoft;
   return style as React.CSSProperties;
 }
 

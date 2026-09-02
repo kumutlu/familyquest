@@ -258,3 +258,52 @@ describe('EngagementPreviewRoute — error boundary', () => {
     expect(details?.textContent ?? '').toContain('boom')
   })
 })
+
+describe('EngagementPreviewRoute — chrome separation + theme tokens', () => {
+  it('renders the DEV chrome with explicit separation so it does not overlap the composition', () => {
+    window.history.pushState({}, '', '/?dev-preview=engagement')
+    const { container } = render(<DevPreviewRoot />)
+    const chrome = container.querySelector(
+      '[data-testid="engagement-preview-chrome"]',
+    )
+    expect(chrome).toBeInTheDocument()
+    // Chrome must have a bottom border separator + bounded padding so
+    // it never visually collides with the product composition. We assert
+    // via class name presence (Tailwind utilities) so a layout
+    // regression breaks this test loudly.
+    const cls = chrome?.className ?? ''
+    expect(cls).toMatch(/border-b/)
+    expect(cls).toMatch(/pb-/)
+  })
+
+  it('every seasonal fixture supplies a longTermPreview fixture (Pet Box + Goals visible in preview)', () => {
+    const ids = [
+      'normal-quests',
+      'normal-all-caught-up',
+      'surge',
+      'mystery-locked',
+      'mystery-ready',
+      'mystery-reveal',
+      'comeback-1d',
+      'comeback-3d',
+      'comeback-7d',
+      'seasonal-christmas',
+      'seasonal-halloween',
+      'seasonal-ramadan-eid',
+      'seasonal-neon',
+      'xp-pop-mystery',
+      'xp-pop-comeback',
+      'reduced-motion',
+    ]
+    for (const id of ids) {
+      const f = findFixtureById(id)
+      expect(f).not.toBeNull()
+      // The fixture MUST carry long-term preview data so Pet Box +
+      // Goals render in the DEV preview composition.
+      expect(f?.longTermPreview).toBeDefined()
+      expect(f?.longTermPreview?.petBoxName).toBeTruthy()
+      expect(Number(f?.longTermPreview?.petBoxBalancePence ?? 0)).toBeGreaterThan(0)
+      expect(Number(f?.longTermPreview?.activeGoalCount ?? 0)).toBeGreaterThan(0)
+    }
+  })
+})

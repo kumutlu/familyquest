@@ -31,7 +31,7 @@
  */
 
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { I18nextProvider } from 'react-i18next';
+import { I18nextProvider, useTranslation } from 'react-i18next';
 import { MemoryRouter } from 'react-router-dom';
 import i18n from '../../i18n';
 import { ChildExperienceShell } from '../experience/ChildExperienceShell';
@@ -48,6 +48,7 @@ import {
   PREVIEW_FIXTURES as FIXTURES,
   findFixtureById,
   type PreviewFixture,
+  type PreviewFixtureKind,
 } from './previewFixtures';
 export type { PreviewFixture };
 
@@ -276,48 +277,177 @@ function EngagementPreviewSurface() {
   )
 }
 
+/**
+ * Fixture-only preview hero block. Mirrors the visual hierarchy of the
+ * production Child Home hero so QA can judge the relationship between
+ * XP / Level / Streak / Character + Mascot without an authenticated
+ * session. Numbers are deterministic and have no production authority.
+ */
+function PreviewHeroBlock({ fixture }: { fixture: PreviewFixture }) {
+  const { t } = useTranslation('home')
+  const xp = HERO_XP_FOR[fixture.kind]
+  const level = HERO_LEVEL_FOR[fixture.kind]
+  const streak = HERO_STREAK_FOR[fixture.kind]
+  return (
+    <section
+      data-testid="preview-hero"
+      data-fixture-id={fixture.id}
+      className="relative overflow-hidden rounded-hero py-6 px-5 text-white"
+      style={{
+        background:
+          'linear-gradient(135deg, var(--qk-surface-hero-from), var(--qk-surface-hero-to))',
+      }}
+    >
+      <div className="flex items-center gap-4">
+        <div
+          aria-hidden="true"
+          className="flex h-16 w-16 items-center justify-center rounded-full bg-white/20 text-2xl font-extrabold backdrop-blur-sm"
+        >
+          {String(fixture.title ?? '·').slice(0, 1).toUpperCase()}
+        </div>
+        <div className="min-w-0 flex-1">
+          <h1 className="text-title font-extrabold">
+            {t('child.greeting', { name: 'Preview' })}
+          </h1>
+          <p className="mt-0.5 text-meta opacity-80">
+            {t('child.heroSubtitle')}
+          </p>
+        </div>
+        <span
+          aria-hidden="true"
+          className="hidden max-sm:hidden sm:flex h-14 w-14 items-center justify-center rounded-full bg-white/15 text-2xl font-extrabold"
+        >
+          🐾
+        </span>
+      </div>
+      <div className="mt-5 grid grid-cols-3 gap-2" data-testid="preview-hero-xp">
+        <div className="rounded-card bg-white/10 px-3 py-2 backdrop-blur-sm">
+          <p className="text-meta uppercase tracking-wide opacity-70">XP</p>
+          <p className="text-balance font-extrabold tabular-nums">{xp}</p>
+        </div>
+        <div className="rounded-card bg-white/10 px-3 py-2 backdrop-blur-sm">
+          <p className="text-meta uppercase tracking-wide opacity-70">Level</p>
+          <p className="text-balance font-extrabold tabular-nums">{level}</p>
+        </div>
+        <div className="rounded-card bg-white/10 px-3 py-2 backdrop-blur-sm">
+          <p className="text-meta uppercase tracking-wide opacity-70">Streak</p>
+          <p className="text-balance font-extrabold tabular-nums">{streak}🔥</p>
+        </div>
+      </div>
+    </section>
+  )
+}
+
+// Fixture-only hero numbers. Deterministic per kind so QA can spot
+// regressions easily.
+const HERO_XP_FOR: Record<PreviewFixtureKind, number> = {
+  'normal-quests': 320,
+  'normal-all-caught-up': 540,
+  surge: 410,
+  'mystery-locked': 280,
+  'mystery-ready': 360,
+  'mystery-reveal': 510,
+  'comeback-1d': 200,
+  'comeback-3d': 150,
+  'comeback-7d': 100,
+  'seasonal-christmas': 470,
+  'seasonal-halloween': 460,
+  'seasonal-ramadan-eid': 420,
+  'seasonal-neon': 500,
+  'xp-pop-mystery': 360,
+  'xp-pop-comeback': 220,
+  'reduced-motion': 300,
+}
+const HERO_LEVEL_FOR: Record<PreviewFixtureKind, number> = {
+  'normal-quests': 4,
+  'normal-all-caught-up': 5,
+  surge: 4,
+  'mystery-locked': 3,
+  'mystery-ready': 4,
+  'mystery-reveal': 5,
+  'comeback-1d': 2,
+  'comeback-3d': 2,
+  'comeback-7d': 1,
+  'seasonal-christmas': 5,
+  'seasonal-halloween': 5,
+  'seasonal-ramadan-eid': 4,
+  'seasonal-neon': 5,
+  'xp-pop-mystery': 4,
+  'xp-pop-comeback': 2,
+  'reduced-motion': 3,
+}
+const HERO_STREAK_FOR: Record<PreviewFixtureKind, number> = {
+  'normal-quests': 3,
+  'normal-all-caught-up': 7,
+  surge: 5,
+  'mystery-locked': 2,
+  'mystery-ready': 4,
+  'mystery-reveal': 6,
+  'comeback-1d': 1,
+  'comeback-3d': 0,
+  'comeback-7d': 0,
+  'seasonal-christmas': 6,
+  'seasonal-halloween': 5,
+  'seasonal-ramadan-eid': 4,
+  'seasonal-neon': 7,
+  'xp-pop-mystery': 4,
+  'xp-pop-comeback': 0,
+  'reduced-motion': 2,
+}
+
 function PreviewFixtureCanvas({ fixture }: { fixture: PreviewFixture }) {
   // Render the SAME productized composition the production surface uses,
   // wrapped in the experience shell, so QA judges visual hierarchy, theme,
   // mascot, Adventure, quests and XP relationship — not isolated text rows.
   // MemoryRouter is included so LongTermProgress can resolve navigation.
-    const world = (
+  const world = (
     <MemoryRouter>
-    <ChildExperienceShell
-      resolvedTheme={fixtureThemeFor(fixture)}
-      mascotPresentation={{
-        characterId: 'queki',
-        mood: fixture.mood,
-        expression: fixture.expression,
-        messageKey: fixture.messageKey,
-      }}
-    >
-      <div className="space-y-5" data-testid={`preview-composition-${fixture.id}`}>
-        <MascotScene
-          presentation={{
-            characterId: 'queki',
-            mood: fixture.mood,
-            expression: fixture.expression,
-            messageKey: fixture.messageKey,
-          }}
-          message={fixture.mascotLine}
-          greeting="Hey, preview"
-        />
-        <TodaysAdventureCenterpiece
-          presentation={fixture.adventurePresentation}
-          mysteryDrop={fixture.mysteryDrop}
-          comeback={fixture.comeback}
-          surge={fixture.surge}
-          normalQuestCount={fixture.normalQuestCount}
-          allCaughtUp={fixture.allCaughtUp}
-          onOpen={() => {}}
-          onSelectSurgeTask={() => {}}
-          onViewQuests={() => {}}
-        />
-        <QuestTileList quests={fixture.quests} onPressQuest={() => {}} onViewAll={() => {}} />
-        <LongTermProgress familyData={{ petBoxEnabled: true }} />
-      </div>
-    </ChildExperienceShell>
+      <ChildExperienceShell
+        resolvedTheme={fixtureThemeFor(fixture)}
+        mascotPresentation={{
+          characterId: 'queki',
+          mood: fixture.mood,
+          expression: fixture.expression,
+          messageKey: fixture.messageKey,
+        }}
+      >
+        <div
+          className="space-y-5"
+          data-testid={`preview-composition-${fixture.id}`}
+        >
+          <PreviewHeroBlock fixture={fixture} />
+          <MascotScene
+            presentation={{
+              characterId: 'queki',
+              mood: fixture.mood,
+              expression: fixture.expression,
+              messageKey: fixture.messageKey,
+            }}
+            message={fixture.mascotLine}
+            greeting="Hey, preview"
+          />
+          <TodaysAdventureCenterpiece
+            presentation={fixture.adventurePresentation}
+            mysteryDrop={fixture.mysteryDrop}
+            comeback={fixture.comeback}
+            surge={fixture.surge}
+            normalQuestCount={fixture.normalQuestCount}
+            allCaughtUp={fixture.allCaughtUp}
+            onOpen={() => {}}
+            onSelectSurgeTask={() => {}}
+            onViewQuests={() => {}}
+          />
+          <QuestTileList
+            quests={fixture.quests}
+            onPressQuest={() => {}}
+            onViewAll={() => {}}
+          />
+          <LongTermProgress
+            familyData={{ petBoxEnabled: true }}
+            previewData={fixture.longTermPreview ?? null}
+          />
+        </div>
+      </ChildExperienceShell>
     </MemoryRouter>
   )
   return <I18nextProvider i18n={i18n}>{world}</I18nextProvider>
@@ -325,15 +455,19 @@ function PreviewFixtureCanvas({ fixture }: { fixture: PreviewFixture }) {
 
 // Resolve the fixture's presentation bundle so the canvas can render real
 // components. All values come from fixture data — never invented at runtime.
+// We deliberately raise pattern density + supply an accentSoft so each
+// seasonal world reads as visibly different from the calm base state
+// (≈1 second glance test) without recolouring every component.
 function fixtureThemeFor(fixture: PreviewFixture) {
   if (fixture.kind === 'seasonal-neon') {
     return {
       theme: {
         tokens: {
           accent: '#06b6d4',
+          accentSoft: '#22d3ee',
           ambientFrom: '#0f172a',
           ambientTo: '#1e1b4b',
-          patternDensity: 0.6,
+          patternDensity: 0.85,
         },
       },
     } as any
@@ -343,9 +477,10 @@ function fixtureThemeFor(fixture: PreviewFixture) {
       theme: {
         tokens: {
           accent: '#dc2626',
+          accentSoft: '#f87171',
           ambientFrom: '#7f1d1d',
           ambientTo: '#fff7ed',
-          patternDensity: 0.5,
+          patternDensity: 0.75,
         },
       },
     } as any
@@ -355,9 +490,10 @@ function fixtureThemeFor(fixture: PreviewFixture) {
       theme: {
         tokens: {
           accent: '#7c3aed',
+          accentSoft: '#a78bfa',
           ambientFrom: '#1f2937',
           ambientTo: '#fde68a',
-          patternDensity: 0.4,
+          patternDensity: 0.7,
         },
       },
     } as any
@@ -367,9 +503,10 @@ function fixtureThemeFor(fixture: PreviewFixture) {
       theme: {
         tokens: {
           accent: '#059669',
+          accentSoft: '#34d399',
           ambientFrom: '#064e3b',
           ambientTo: '#ecfdf5',
-          patternDensity: 0.4,
+          patternDensity: 0.7,
         },
       },
     } as any
@@ -486,21 +623,32 @@ function DevPreviewRoot(): React.ReactNode {
   if (isProductionBuild()) return null
   if (typeof window === 'undefined') return null
   if (!isDevPreviewQueryActive(window.location?.search ?? '')) return null
+  // The preview chrome uses generous vertical padding so the DEV
+  // banner and the fixture composition do not visually collide with
+  // the product mascot / hero block. Production mascot positioning is
+  // intentionally untouched — only the dev shell is widened here.
   return (
     <div
       data-testid="engagement-preview-root"
-      className="min-h-screen w-full bg-gray-50 px-4 py-6 text-gray-900 dark:bg-[#0e1116] dark:text-gray-100"
+      className="min-h-screen w-full bg-gray-50 px-4 py-10 text-gray-900 dark:bg-[#0e1116] dark:text-gray-100"
     >
-      <div className="mx-auto max-w-3xl space-y-3">
-        <header className="space-y-1">
-          <p className="text-meta uppercase tracking-wide opacity-70">DEV preview</p>
-          <h1 className="text-page-title font-semibold">Engagement experience preview</h1>
+      <div className="mx-auto max-w-3xl space-y-6">
+        <header
+          data-testid="engagement-preview-chrome"
+          className="space-y-1 border-b border-gray-200 pb-6 dark:border-gray-800"
+        >
+          <p className="text-meta uppercase tracking-wide opacity-70">
+            DEV preview
+          </p>
+          <h1 className="text-page-title font-semibold">
+            Engagement experience preview
+          </h1>
           <p className="text-meta opacity-80">
             Fixture-only visual QA harness. No Firestore reads or writes.
           </p>
         </header>
         <EngagementPreviewSurface />
-        <footer className="pt-2 text-meta opacity-60">
+        <footer className="border-t border-gray-200 pt-4 text-meta opacity-60 dark:border-gray-800">
           <a
             href="/"
             data-testid="engagement-preview-exit"

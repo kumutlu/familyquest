@@ -297,7 +297,9 @@ function ComebackShell({
           {tierCopy}
         </p>
         <p className="mt-0.5 text-meta text-family-800/80">
-          {t('child.adventure.comeback.body', { days: inactivityDays })}
+          {inactivityDays === 1
+            ? t('child.adventure.comeback.bodySingle')
+            : t('child.adventure.comeback.body', { count: inactivityDays })}
         </p>
       </div>
     </TactileCard>
@@ -310,24 +312,37 @@ function ComebackShell({
 
 function SeasonalShell() {
   const { t } = useTranslation('home');
+  // Seasonal context is shown as secondary context — the daily anchor
+  // "Today's Adventure" MUST always remain the dominant heading so the
+  // child never loses the daily-loop orientation. The seasonal event
+  // chip and accent confirm the world theme without replacing it.
   return (
     <div
       data-testid="adventure-centerpiece-seasonal"
-      className="flex items-center gap-3 rounded-2xl border border-family-100 bg-family-50/50 px-4 py-3"
+      className="space-y-3 rounded-2xl border border-family-100 bg-family-50/50 p-4"
     >
-      <span
-        aria-hidden="true"
-        className="flex h-10 w-10 items-center justify-center rounded-xl bg-family-500/15 text-family-700"
-      >
-        <PartyPopper size={18} />
-      </span>
-      <div className="min-w-0 flex-1">
-        <p className="text-card-title font-bold qk-text-primary">
-          {t('child.adventure.seasonal.title')}
-        </p>
-        <p className="mt-0.5 text-meta qk-text-secondary">
-          {t('child.adventure.seasonal.description')}
-        </p>
+      <header className="flex items-center gap-2">
+        <Sparkles size={16} aria-hidden="true" className="text-xp-500" />
+        <h2 className="text-card-title qk-text-primary">
+          {t('child.adventure.heading')}
+        </h2>
+        <span
+          data-testid="adventure-centerpiece-seasonal-chip"
+          className="ml-auto inline-flex items-center gap-1.5 rounded-full bg-family-500/15 px-2.5 py-0.5 text-meta font-extrabold uppercase tracking-wide text-family-700"
+        >
+          <PartyPopper size={12} aria-hidden="true" />
+          {t('child.adventure.seasonal.chip')}
+        </span>
+      </header>
+      <div className="flex items-center gap-3 rounded-xl border border-family-100 bg-family-50 px-3 py-2">
+        <div className="min-w-0 flex-1">
+          <p className="text-card-title font-bold qk-text-primary">
+            {t('child.adventure.seasonal.title')}
+          </p>
+          <p className="mt-0.5 text-meta qk-text-secondary">
+            {t('child.adventure.seasonal.description')}
+          </p>
+        </div>
       </div>
     </div>
   );

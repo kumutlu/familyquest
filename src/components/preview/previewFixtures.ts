@@ -72,6 +72,22 @@ export interface PreviewFixture {
     readonly isCompletedToday?: boolean
     readonly onPress: (id: string) => void
   }>
+  /**
+   * DEV-only deterministic fixture values for the long-term band
+   * (Pet Box + Goals). NEVER a write side: this data is read-only and
+   * must NOT be sourced from, or written to, the canonical Pet Box /
+   * Goals accounting authority.
+   */
+  readonly longTermPreview?: {
+    readonly petBoxEnabled: boolean
+    readonly petBoxName: string
+    /** Pet Box balance in pence. Fixture only. */
+    readonly petBoxBalancePence: number
+    readonly activeGoalCount: number
+    /** Sum of active goal savings, in pence. Fixture only. */
+    readonly activeGoalSavedPence: number
+    readonly primaryGoalTitle: string
+  }
 }
 
 const SAMPLE_QUESTS = [
@@ -79,6 +95,27 @@ const SAMPLE_QUESTS = [
   { id: 'q-2', title: 'Read 15 minutes', pointsReward: 10, onPress: () => {} },
   { id: 'q-3', title: 'Tidy your room', pointsReward: 30, onPress: () => {} },
 ] as const
+
+/**
+ * Shared, fixture-only long-term band values for every preview canvas.
+ * These numbers are deliberately NOT sourced from any real account
+ * and exist solely so QA can see Pet Box + Goals render in the DEV
+ * preview without an authenticated child session. They MUST never
+ * reach the canonical store or Firestore.
+ *
+ *   Pet Box : Nimbus · £57.29
+ *   Goals   : Bike fund · £120 of £250
+ */
+const FIXTURE_LONG_TERM = {
+  petBoxEnabled: true,
+  petBoxName: 'Nimbus',
+  // £57.29 → 5729 pence (deterministic)
+  petBoxBalancePence: 5729,
+  activeGoalCount: 1,
+  // £120 → 12000 pence
+  activeGoalSavedPence: 12000,
+  primaryGoalTitle: 'Bike fund',
+} as const
 
 export const PREVIEW_FIXTURES: readonly PreviewFixture[] = [
   {
@@ -96,6 +133,7 @@ export const PREVIEW_FIXTURES: readonly PreviewFixture[] = [
     normalQuestCount: 3,
     allCaughtUp: false,
     quests: SAMPLE_QUESTS,
+    longTermPreview: FIXTURE_LONG_TERM,
   },
   {
     id: 'normal-all-caught-up',
@@ -112,6 +150,7 @@ export const PREVIEW_FIXTURES: readonly PreviewFixture[] = [
     normalQuestCount: 0,
     allCaughtUp: true,
     quests: SAMPLE_QUESTS.map(q => ({ ...q, isCompletedToday: true })),
+    longTermPreview: FIXTURE_LONG_TERM,
   },
   {
     id: 'surge',
@@ -132,6 +171,7 @@ export const PREVIEW_FIXTURES: readonly PreviewFixture[] = [
     normalQuestCount: 0,
     allCaughtUp: false,
     quests: SAMPLE_QUESTS,
+    longTermPreview: FIXTURE_LONG_TERM,
   },
   {
     id: 'mystery-locked',
@@ -154,6 +194,7 @@ export const PREVIEW_FIXTURES: readonly PreviewFixture[] = [
     normalQuestCount: 3,
     allCaughtUp: false,
     quests: SAMPLE_QUESTS,
+    longTermPreview: FIXTURE_LONG_TERM,
   },
   {
     id: 'mystery-ready',
@@ -175,6 +216,7 @@ export const PREVIEW_FIXTURES: readonly PreviewFixture[] = [
     normalQuestCount: 3,
     allCaughtUp: false,
     quests: SAMPLE_QUESTS,
+    longTermPreview: FIXTURE_LONG_TERM,
   },
   {
     id: 'mystery-reveal',
@@ -196,6 +238,7 @@ export const PREVIEW_FIXTURES: readonly PreviewFixture[] = [
     normalQuestCount: 3,
     allCaughtUp: false,
     quests: SAMPLE_QUESTS,
+    longTermPreview: FIXTURE_LONG_TERM,
   },
   {
     id: 'comeback-1d',
@@ -212,6 +255,7 @@ export const PREVIEW_FIXTURES: readonly PreviewFixture[] = [
     normalQuestCount: 0,
     allCaughtUp: false,
     quests: SAMPLE_QUESTS,
+    longTermPreview: FIXTURE_LONG_TERM,
   },
   {
     id: 'comeback-3d',
@@ -228,6 +272,7 @@ export const PREVIEW_FIXTURES: readonly PreviewFixture[] = [
     normalQuestCount: 0,
     allCaughtUp: false,
     quests: SAMPLE_QUESTS,
+    longTermPreview: FIXTURE_LONG_TERM,
   },
   {
     id: 'comeback-7d',
@@ -244,6 +289,7 @@ export const PREVIEW_FIXTURES: readonly PreviewFixture[] = [
     normalQuestCount: 0,
     allCaughtUp: false,
     quests: SAMPLE_QUESTS,
+    longTermPreview: FIXTURE_LONG_TERM,
   },
   {
     id: 'seasonal-christmas',
@@ -260,6 +306,7 @@ export const PREVIEW_FIXTURES: readonly PreviewFixture[] = [
     normalQuestCount: 3,
     allCaughtUp: false,
     quests: SAMPLE_QUESTS,
+    longTermPreview: FIXTURE_LONG_TERM,
   },
   {
     id: 'seasonal-halloween',
@@ -276,6 +323,7 @@ export const PREVIEW_FIXTURES: readonly PreviewFixture[] = [
     normalQuestCount: 3,
     allCaughtUp: false,
     quests: SAMPLE_QUESTS,
+    longTermPreview: FIXTURE_LONG_TERM,
   },
   {
     id: 'seasonal-ramadan-eid',
@@ -292,6 +340,7 @@ export const PREVIEW_FIXTURES: readonly PreviewFixture[] = [
     normalQuestCount: 3,
     allCaughtUp: false,
     quests: SAMPLE_QUESTS,
+    longTermPreview: FIXTURE_LONG_TERM,
   },
   {
     id: 'seasonal-neon',
@@ -308,6 +357,7 @@ export const PREVIEW_FIXTURES: readonly PreviewFixture[] = [
     normalQuestCount: 3,
     allCaughtUp: false,
     quests: SAMPLE_QUESTS,
+    longTermPreview: FIXTURE_LONG_TERM,
   },
   {
     id: 'xp-pop-mystery',
@@ -324,6 +374,7 @@ export const PREVIEW_FIXTURES: readonly PreviewFixture[] = [
     normalQuestCount: 3,
     allCaughtUp: false,
     quests: SAMPLE_QUESTS,
+    longTermPreview: FIXTURE_LONG_TERM,
   },
   {
     id: 'xp-pop-comeback',
@@ -340,6 +391,7 @@ export const PREVIEW_FIXTURES: readonly PreviewFixture[] = [
     normalQuestCount: 0,
     allCaughtUp: false,
     quests: SAMPLE_QUESTS,
+    longTermPreview: FIXTURE_LONG_TERM,
   },
   {
     id: 'reduced-motion',
@@ -361,6 +413,7 @@ export const PREVIEW_FIXTURES: readonly PreviewFixture[] = [
     normalQuestCount: 3,
     allCaughtUp: false,
     quests: SAMPLE_QUESTS,
+    longTermPreview: FIXTURE_LONG_TERM,
   },
 ]
 

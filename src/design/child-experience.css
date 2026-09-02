@@ -19,6 +19,9 @@
   --qk-theme-ambient-from: #f6f5fb;
   --qk-theme-ambient-to: #ffffff;
   --qk-theme-pattern-density: 0;
+  /* Optional tinted stop for seasonal/weekly worlds — falls through
+     to ambientTo when unset so the base state stays calm. */
+  --qk-theme-accent-soft: transparent;
 }
 
 /* World wrapper — provides a calm background that follows the theme.
@@ -29,24 +32,43 @@
 }
 
 /* Ambient gradient layer — sits behind every surface, hand-off the
-   cascade to whichever two stop colours the theme emitted. */
+   cascade to whichever two stop colours the theme emitted. We use a
+   multi-stop gradient so a seasonal world visibly announces itself
+   (within ~1 second) without recolouring individual components. */
 .qk-child-experience-ambient {
   background: linear-gradient(
     180deg,
     var(--qk-theme-ambient-from) 0%,
+    var(--qk-theme-accent-soft) 55%,
     var(--qk-theme-ambient-to) 100%
   );
 }
 
-/* Pattern layer — extremely subtle decorative motifs. The density
-   token controls opacity so it never overwhelms a calm base state. */
+/* Pattern layer — decorative motifs driven by density token. We
+   raise the opacity ceiling so a seasonal world reads as visibly
+   different from the calm base state. */
 .qk-child-experience-pattern {
-  opacity: calc(0.6 * var(--qk-theme-pattern-density));
+  opacity: calc(0.85 * var(--qk-theme-pattern-density));
   background-image:
-    radial-gradient(circle at 12% 18%, rgba(124, 58, 237, 0.06) 0, transparent 36%),
-    radial-gradient(circle at 88% 32%, rgba(245, 158, 11, 0.05) 0, transparent 30%),
-    radial-gradient(circle at 24% 78%, rgba(59, 130, 246, 0.05) 0, transparent 30%);
+    radial-gradient(circle at 12% 18%, var(--qk-theme-accent) 0 1px, transparent 3px),
+    radial-gradient(circle at 88% 32%, var(--qk-theme-accent) 0 1px, transparent 3px),
+    radial-gradient(circle at 24% 78%, var(--qk-theme-accent) 0 1px, transparent 3px),
+    radial-gradient(circle at 72% 86%, var(--qk-theme-accent) 0 1px, transparent 3px);
+  background-size: 14rem 14rem, 16rem 16rem, 18rem 18rem, 20rem 20rem;
 }
+
+/* Mascot environment halo — a soft accent ring behind the mascot so
+   the world change is readable without recolouring components. */
+.qk-mascot-environment-halo {
+  position: absolute;
+  inset: -12% -8% -8% -8%;
+  background: radial-gradient(circle at 50% 60%, var(--qk-theme-accent) 0%, transparent 65%);
+  opacity: calc(0.25 + 0.35 * var(--qk-theme-pattern-density));
+  pointer-events: none;
+  filter: blur(18px);
+  z-index: 0;
+}
+>>> REPLACE
 
 /* Mascot composition --------------------------------------------------- */
 

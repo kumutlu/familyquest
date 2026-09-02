@@ -1,4 +1,4 @@
-import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect } from 'vitest';
 import { render, screen, fireEvent } from '@testing-library/react';
 import { I18nextProvider } from 'react-i18next';
 import i18n from '../../i18n';
@@ -109,5 +109,96 @@ describe("TodaysAdventureCenterpiece (Today's Adventure V1 productization)", () 
     ));
     // Display: "0 quests waiting"
     expect(screen.getByText(/0 quests waiting/i)).toBeInTheDocument();
+  });
+
+  // ------------------------------------------------------------------
+  // Comeback body i18n leak — pin EN/TR parity, no raw key leak.
+  // ------------------------------------------------------------------
+
+  it('comeback body shows resolved EN copy for return_1d (1 day)', async () => {
+    render(wrap(
+      <TodaysAdventureCenterpiece
+        presentation={{ kind: 'comeback' }}
+        comeback={{ tier: 'return_1d', inactivityDays: 1, missionCompleted: false }}
+      />,
+    ));
+    const card = screen.getByTestId('adventure-centerpiece-comeback');
+    expect(card).toBeInTheDocument();
+    // No raw i18n key may ever be rendered to the child.
+    expect(card.textContent ?? '').not.toMatch(/child\.adventure\.comeback\.body/);
+    // Resolved copy must mention the days count.
+    expect(card.textContent ?? '').toMatch(/day/i);
+  });
+
+  it('comeback body shows resolved EN copy for return_3d', () => {
+    render(wrap(
+      <TodaysAdventureCenterpiece
+        presentation={{ kind: 'comeback' }}
+        comeback={{ tier: 'return_3d', inactivityDays: 3, missionCompleted: false }}
+      />,
+    ));
+    const card = screen.getByTestId('adventure-centerpiece-comeback');
+    expect(card.textContent ?? '').not.toMatch(/child\.adventure\.comeback\.body/);
+    expect(card.textContent ?? '').toMatch(/3\s*days/);
+  });
+
+  it('comeback body shows resolved EN copy for return_7d', () => {
+    render(wrap(
+      <TodaysAdventureCenterpiece
+        presentation={{ kind: 'comeback' }}
+        comeback={{ tier: 'return_7d', inactivityDays: 7, missionCompleted: false }}
+      />,
+    ));
+    const card = screen.getByTestId('adventure-centerpiece-comeback');
+    expect(card.textContent ?? '').not.toMatch(/child\.adventure\.comeback\.body/);
+    expect(card.textContent ?? '').toMatch(/7\s*days/);
+  });
+
+  it('comeback body shows resolved TR copy for return_7d', async () => {
+    await i18n.changeLanguage('tr')
+    render(wrap(
+      <TodaysAdventureCenterpiece
+        presentation={{ kind: 'comeback' }}
+        comeback={{ tier: 'return_7d', inactivityDays: 7, missionCompleted: false }}
+      />,
+    ))
+    const card = screen.getByTestId('adventure-centerpiece-comeback')
+    expect(card.textContent ?? '').not.toMatch(/child\.adventure\.comeback\.body/)
+    // Turkish body resolves to a localised sentence.
+    expect(card.textContent ?? '').toMatch(/g[uü]n/i)
+    await i18n.changeLanguage('en')
+  })
+
+  // ------------------------------------------------------------------
+  // Today's Adventure hierarchy — preserved through seasonal events.
+  // ------------------------------------------------------------------
+
+  it('seasonal shell preserves Today\'s Adventure as the daily anchor', () => {
+    render(wrap(
+      <TodaysAdventureCenterpiece presentation={{ kind: 'seasonal' }} />,
+    ));
+    const shell = screen.getByTestId('adventure-centerpiece-seasonal');
+    expect(shell).toBeInTheDocument();
+    // The dominant heading must read "Today's Adventure" so the child
+    // never loses the daily-loop anchor even when a seasonal event
+    // replaces the inner beat.
+    expect(shell.textContent ?? '').toMatch(/Today's Adventure/i);
+    // The seasonal chip surfaces the seasonal context as secondary
+    // information, NEVER as the heading.
+    expect(screen.getByTestId('adventure-centerpiece-seasonal-chip')).toBeInTheDocument();
+    // The previous leak ("This week's world") is GONE.
+    expect(shell.textContent ?? '').not.toMatch(/This week's world/i);
+  });
+
+  it('seasonal shell preserves Today\'s Adventure under TR locale', async () => {
+    await i18n.changeLanguage('tr');
+    render(wrap(
+      <TodaysAdventureCenterpiece presentation={{ kind: 'seasonal' }} />,
+    ));
+    const shell = screen.getByTestId('adventure-centerpiece-seasonal');
+    expect(shell.textContent ?? '').toMatch(/Bug[uü]n[uü]n Macerası/i);
+    // Previous leak is gone.
+    expect(shell.textContent ?? '').not.toMatch(/Bu haftan[uı]n d[uü]nyas[iı]/i);
+    await i18n.changeLanguage('en');
   });
 });

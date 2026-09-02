@@ -109,8 +109,8 @@
         "warm1d": "Welcome back!",
         "warm3d": "Glad you're back",
         "warm7d": "Long time, no see",
-        "body_one": "It's been {{days}} day since you checked in.",
-        "body_other": "It's been {{days}} days since you checked in."
+        "body": "It's been {{count}} days since you checked in.",
+        "bodySingle": "Welcome back — it's been 1 day since you checked in."
       },
       "mystery": {
         "title": "Mystery Drop available",
@@ -135,7 +135,8 @@
         "acknowledgeAction": "Awesome!"
       },
       "seasonal": {
-        "title": "This week's world",
+        "chip": "Seasonal world",
+        "title": "Today's Adventure",
         "description": "Today's adventure has a special seasonal feel."
       }
     },

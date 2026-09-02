@@ -18,6 +18,15 @@
  *     respectively; we don't introduce a second path.
  *
  * Presentation only. No economic writes. No new Firestore listeners.
+ *
+ * PREVIEW INJECTION BOUNDARY
+ * --------------------------
+ * Production callers MUST omit `previewData` — the canonical Zustand
+ * store is then the only authority. DEV/TEST fixtures MAY pass a
+ * `previewData` object that supplies deterministic Pet Box + Goals
+ * numbers for visual QA; the fixture values are NEVER persisted and
+ * the production economic path remains untouched. There is NO write
+ * path here — only a read-only injection boundary.
  */
 
 import { useNavigate } from 'react-router-dom';
@@ -26,11 +35,39 @@ import { useStore } from '../../store/useStore';
 import { isPetBoxEnabled } from '../../lib/familyFeatures';
 import { formatMoney } from '../../lib/walletPresentation';
 
+/**
+ * Read-only fixture bundle for DEV/TEST visual QA. The production
+ * build never populates this — it is an explicit escape hatch for
+ * the preview surface so QA can see Pet Box + Goals without an
+ * authenticated child session. This object is NEVER a write path and
+ * never reaches Firestore, XP, wallet, or Pet Box accounting.
+ */
+export interface LongTermPreviewData {
+  /** Primary Pet Box display name. */
+  readonly petBoxName?: string;
+  /** Pet Box balance, in pence. */
+  readonly petBoxBalancePence?: number;
+  /** Number of active goals to surface in the Goals card. */
+  readonly activeGoalCount?: number;
+  /** Sum of `currentAmountPence` across active goals, in pence. */
+  readonly activeGoalSavedPence?: number;
+  /** Optional first active goal name (purely decorative). */
+  readonly primaryGoalTitle?: string;
+  /** Pet Box enabled flag override for preview-only contexts. */
+  readonly petBoxEnabled?: boolean;
+}
+
 export interface LongTermProgressProps {
   /** Family data needed to decide whether Pet Box is enabled. */
   readonly familyData: unknown;
   /** Optional override test id prefix (used by preview fixture). */
   readonly testIdPrefix?: string;
+  /**
+   * DEV/TEST-only fixture bundle. When provided, the band renders
+   * from these values instead of the Zustand store. Production
+   * callers MUST leave this undefined.
+   */
+  readonly previewData?: LongTermPreviewData | null;
 }
 
 /**
@@ -42,9 +79,11 @@ export interface LongTermProgressProps {
 export function LongTermProgress({
   familyData,
   testIdPrefix = 'long-term',
+  previewData = null,
 }: LongTermProgressProps) {
   const navigate = useNavigate();
-  const { funds, savingsGoals } = useStore() as {
+  const isPreview = previewData != null;
+  const storeData = useStore() as {
     funds?: Array<{ id?: string; name?: string; balance?: number; emergencyGoal?: number }>;
     savingsGoals?: Array<{
       goalId?: string;
@@ -54,13 +93,35 @@ export function LongTermProgress({
       status?: string;
     }>;
   };
+  // Read-only: pick funds + savingsGoals from the fixture when preview
+  // mode is active, otherwise from the canonical Zustand store. There
+  // is no write side — this is purely a presentation boundary.
+  const funds = isPreview ? [] : storeData.funds;
+  const savingsGoals = isPreview ? [] : storeData.savingsGoals;
 
-  const petBoxEnabled = isPetBoxEnabled(familyData as Parameters<typeof isPetBoxEnabled>[0]);
+  // Pet Box enablement comes from canonical family features when
+  // running for real, OR from the preview fixture when the DEV
+  // preview injected one. No second accounting authority is created
+  // here.
+  const petBoxEnabled = isPreview
+    ? previewData?.petBoxEnabled === true
+    : isPetBoxEnabled(familyData as Parameters<typeof isPetBoxEnabled>[0]);
 
   // Reuse the existing canonical sums. We render the band only when at
   // least one long-term progression surface is visible for the family.
   const petBoxSummary = (() => {
     if (!petBoxEnabled) return null;
+    if (isPreview) {
+      const balancePence = Number(previewData?.petBoxBalancePence ?? 0);
+      const name =
+        typeof previewData?.petBoxName === 'string' && previewData.petBoxName.length > 0
+          ? previewData.petBoxName
+          : null;
+      // A preview must NEVER fabricate real numbers — the fixture
+      // either supplies a value or we render nothing.
+      if (balancePence <= 0 && name === null) return null;
+      return { name, balancePence };
+    }
     const list = Array.isArray(funds) ? funds : [];
     if (list.length === 0) return null;
     const balance = list.reduce((sum, f) => sum + Number(f?.balance ?? 0), 0);
@@ -72,6 +133,14 @@ export function LongTermProgress({
   })();
 
   const goalsSummary = (() => {
+    if (isPreview) {
+      const count = Math.max(0, Math.floor(Number(previewData?.activeGoalCount ?? 0)));
+      const savedPence = Math.max(0, Math.floor(Number(previewData?.activeGoalSavedPence ?? 0)));
+      // Preview must NEVER invent goal numbers — return null when
+      // the fixture omits them so the canonical surface stays empty.
+      if (count <= 0 && savedPence <= 0) return null;
+      return { count, savedPence };
+    }
     const list = Array.isArray(savingsGoals) ? savingsGoals : [];
     const active = list.filter(g => (g?.status ?? 'active') === 'active');
     if (active.length === 0) return null;

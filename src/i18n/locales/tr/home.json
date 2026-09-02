@@ -109,8 +109,8 @@
         "warm1d": "Tekrar hoş geldin!",
         "warm3d": "Geri döndüğüne sevindim",
         "warm7d": "Seni çok özledik",
-        "body_one": "Son girişinden bu yana {{days}} gün geçti.",
-        "body_other": "Son girişinden bu yana {{days}} gün geçti."
+        "body": "Son girişinden bu yana {{count}} gün geçti.",
+        "bodySingle": "Tekrar hoş geldin — son girişinden bu yana 1 gün geçti."
       },
       "mystery": {
         "title": "Sürpriz Drop hazır",
@@ -135,7 +135,8 @@
         "acknowledgeAction": "Harika!"
       },
       "seasonal": {
-        "title": "Bu haftanın dünyası",
+        "chip": "Mevsim dünyası",
+        "title": "Bugünün Macerası",
         "description": "Bugünün macerası özel bir mevsim havası taşıyor."
       }
     },
