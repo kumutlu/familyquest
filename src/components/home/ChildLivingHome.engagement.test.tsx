@@ -82,13 +82,13 @@ describe('ChildLivingHome — Child Experience V1 regression', () => {
   it('renders the Pet Box long-term surface in the child home', async () => {
     const { ChildLivingHome } = await import('./ChildLivingHome');
     render(<MemoryRouter><ChildLivingHome /></MemoryRouter>);
-    expect(screen.getByTestId('long-term-progress-petbox')).toBeInTheDocument();
+    expect(screen.getByTestId('your-journey-petbox')).toBeInTheDocument();
   });
 
   it('renders the Goals long-term surface in the child home', async () => {
     const { ChildLivingHome } = await import('./ChildLivingHome');
     render(<MemoryRouter><ChildLivingHome /></MemoryRouter>);
-    expect(screen.getByTestId('long-term-progress-goals')).toBeInTheDocument();
+    expect(screen.getByTestId('your-journey-goal')).toBeInTheDocument();
   });
 
   it("preserves Today's Adventure as a separate centerpiece", async () => {
@@ -107,7 +107,7 @@ describe('ChildLivingHome — Child Experience V1 regression', () => {
     const { ChildLivingHome } = await import('./ChildLivingHome');
     render(<MemoryRouter><ChildLivingHome /></MemoryRouter>);
     expect(screen.queryByTestId('todays-adventure-petbox')).not.toBeInTheDocument();
-    expect(screen.getByTestId('long-term-progress-petbox')).toBeInTheDocument();
+    expect(screen.getByTestId('your-journey-petbox')).toBeInTheDocument();
   });
 
   it('does not introduce a second quest completion path', async () => {

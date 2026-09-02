@@ -129,33 +129,70 @@
 }
 
 /* ---- Semantic surfaces (runtime-switchable) --------------------------------
-   Light: warm paper, never generic white SaaS. Dark: rich indigo-night. */
+   Light: warm paper, never generic white SaaS. Dark: rich indigo-night with
+   a 5-level luminance ladder so cards never collapse into a stack of near-
+   blacks. Both themes use the same token names; values are tuned
+   independently so Light and Dark are NOT inverses. */
 :root {
-  --qk-surface-page: #f6f5fb;
-  --qk-surface-card: #ffffff;
-  --qk-surface-raised: #ffffff;
-  --qk-surface-inset: #efedf8;
+  /* V2 luminance ladder — Light. Each step is a meaningful visual step so
+     cards on the Child Home stay distinct from the canvas. */
+  --qk-bg-canvas: #f5f3fb;
+  --qk-bg-subtle: #ede9f6;
+  --qk-bg-default: #ffffff;
+  --qk-bg-elevated: #ffffff;
+  --qk-bg-interactive: #faf9fd;
+
+  --qk-surface-page: var(--qk-bg-canvas);
+  --qk-surface-card: var(--qk-bg-default);
+  --qk-surface-raised: var(--qk-bg-elevated);
+  --qk-surface-inset: var(--qk-bg-subtle);
   --qk-surface-hero-from: #4f46e5;
   --qk-surface-hero-to: #7c3aed;
   --qk-text-primary: #17151f;
   --qk-text-secondary: #5b5870;
   --qk-text-onbrand: #ffffff;
+  --qk-text-link: #5a3ce0;
   --qk-border-subtle: rgba(79, 70, 229, 0.10);
+  --qk-border-default: rgba(79, 70, 229, 0.16);
+  --qk-border-strong: rgba(79, 70, 229, 0.28);
   --qk-shadow-card: 0 1px 2px rgba(23, 21, 31, 0.05), 0 8px 24px -12px rgba(79, 70, 229, 0.18);
+  --qk-shadow-elevated: 0 1px 2px rgba(23, 21, 31, 0.06), 0 18px 40px -20px rgba(79, 70, 229, 0.28);
+
+  /* V2 ambient surface tints (semantic, not decorative) */
+  --qk-bg-reward: #fff7ed;
+  --qk-bg-positive: #ecfdf5;
+  --qk-bg-warning: #fff1f0;
 }
 
 .dark {
-  --qk-surface-page: #101019;
-  --qk-surface-card: #1a1926;
-  --qk-surface-raised: #232134;
-  --qk-surface-inset: #14131f;
+  /* V2 luminance ladder — Dark. Each step adds +8–20% luminance so cards
+     read as distinct elevation layers at a glance. */
+  --qk-bg-canvas: #0d0c14;
+  --qk-bg-subtle: #16151f;
+  --qk-bg-default: #1f1d2c;
+  --qk-bg-elevated: #2a2738;
+  --qk-bg-interactive: #34304a;
+
+  --qk-surface-page: var(--qk-bg-canvas);
+  --qk-surface-card: var(--qk-bg-default);
+  --qk-surface-raised: var(--qk-bg-elevated);
+  --qk-surface-inset: var(--qk-bg-subtle);
   --qk-surface-hero-from: #4338ca;
   --qk-surface-hero-to: #6d28d9;
-  --qk-text-primary: #f1f0f7;
-  --qk-text-secondary: #a5a3b8;
+  --qk-text-primary: #f3f1fb;
+  --qk-text-secondary: #a8a3c2;
   --qk-text-onbrand: #ffffff;
+  --qk-text-link: #b8a4ff;
   --qk-border-subtle: rgba(165, 180, 252, 0.14);
+  --qk-border-default: rgba(165, 180, 252, 0.20);
+  --qk-border-strong: rgba(165, 180, 252, 0.32);
   --qk-shadow-card: 0 1px 2px rgba(0, 0, 0, 0.4), 0 12px 32px -16px rgba(0, 0, 0, 0.55);
+  --qk-shadow-elevated: 0 1px 2px rgba(0, 0, 0, 0.5), 0 18px 40px -20px rgba(0, 0, 0, 0.7);
+
+  /* V2 ambient surface tints — dark, hue-preserving */
+  --qk-bg-reward: #2a1d0a;
+  --qk-bg-positive: #0e2419;
+  --qk-bg-warning: #2a1414;
 
   /* Semantic tints become dark, hue-preserving versions of themselves so chips
      and badges keep their meaning without blinding light surfaces. */
@@ -177,15 +214,24 @@
 }
 
 /* Utility hooks for the surface variables (kept as real classes so components
-   can use them alongside Tailwind utilities without arbitrary-value noise). */
-@utility qk-bg-page { background-color: var(--qk-surface-page); }
-@utility qk-bg-card { background-color: var(--qk-surface-card); }
-@utility qk-bg-raised { background-color: var(--qk-surface-raised); }
-@utility qk-bg-inset { background-color: var(--qk-surface-inset); }
+   can use them alongside Tailwind utilities without arbitrary-value noise).
+   V2 surfaces use the new ladder names; legacy qk-bg-card / qk-bg-raised /
+   qk-bg-inset still resolve through --qk-surface-* for older components. */
+@utility qk-bg-page { background-color: var(--qk-bg-canvas); }
+@utility qk-bg-subtle { background-color: var(--qk-bg-subtle); }
+@utility qk-bg-card { background-color: var(--qk-bg-default); }
+@utility qk-bg-elevated { background-color: var(--qk-bg-elevated); }
+@utility qk-bg-interactive { background-color: var(--qk-bg-interactive); }
+@utility qk-bg-raised { background-color: var(--qk-bg-elevated); }
+@utility qk-bg-inset { background-color: var(--qk-bg-subtle); }
 @utility qk-text-primary { color: var(--qk-text-primary); }
 @utility qk-text-secondary { color: var(--qk-text-secondary); }
+@utility qk-text-link { color: var(--qk-text-link); }
 @utility qk-border-subtle { border-color: var(--qk-border-subtle); }
+@utility qk-border-default { border-color: var(--qk-border-default); }
+@utility qk-border-strong { border-color: var(--qk-border-strong); }
 @utility qk-shadow-card { box-shadow: var(--qk-shadow-card); }
+@utility qk-shadow-elevated { box-shadow: var(--qk-shadow-elevated); }
 
 /* Reduced motion: collapse every Queki v2 duration to zero. Component-level
    transitions driven by these variables become instant for users who opt out. */

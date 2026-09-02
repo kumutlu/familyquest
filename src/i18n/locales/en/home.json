@@ -12,12 +12,12 @@
       "action": "Review"
     },
     "goalMilestone": {
-      "title": "\u201c{{title}}\u201d is {{progress}}% funded",
+      "title": "“{{title}}” is {{progress}}% funded",
       "description": "Almost there — worth celebrating soon."
     },
     "challengeUpdate": {
       "title": "Family Quest finished",
-      "description": "\u201c{{title}}\u201d is ready to wrap up."
+      "description": "“{{title}}” is ready to wrap up."
     },
     "allCalm": {
       "title": "All quiet",
@@ -75,7 +75,7 @@
       "description": "Do one more quest today to keep the flame alive."
     },
     "rewardAvailable": {
-      "title": "\u201c{{title}}\u201d is within reach",
+      "title": "“{{title}}” is within reach",
       "description": "You have enough points to claim it."
     },
     "familyQuest": {
@@ -97,7 +97,7 @@
       "surge": {
         "aria": "Active surge",
         "title": "Surge active",
-        "bonusMultiplier": "2\u00d7 XP",
+        "bonusMultiplier": "2× XP",
         "minutesLeft_one": "{{count}} min left",
         "minutesLeft_other": "{{count}} min left",
         "worthLabel_one": "Worth {{count}} point",
@@ -210,7 +210,8 @@
         "completed": "Completed",
         "viewAll": "See all quests",
         "aria": "{{title}}, {{points}} points, {{status}}. Open to start."
-      }
+      },
+      "today": "TODAY'S QUESTS"
     },
     "familyTools": {
       "heading": "Your goals",
@@ -227,6 +228,40 @@
       "openPetBox": "Open Pet Box",
       "petBoxSaved": "saved for your family pets",
       "noPetBox": "Your family's pet fund lives here."
+    },
+    "heroAria": "Your identity and progression",
+    "identityGreeting": "Hello",
+    "levelAria": "Level {{level}}",
+    "levelLabel": "Lv",
+    "streakAria": "{{days}} day streak",
+    "xpAria": "Level progress",
+    "xpToNext": "{{xp}} XP to level {{level}}",
+    "pointsAria": "{{count}} points",
+    "ptsLabel": "pts",
+    "rewardProximityAria": "Reward available: {{title}}",
+    "rewardProximity": "Reward ready: {{title}}",
+    "mascot": {
+      "bridgeAria": "Queki says hello",
+      "greetingPrefix": "Hi"
+    },
+    "journey": {
+      "heading": "YOUR JOURNEY",
+      "open": "Open",
+      "openAria": "Open your journey",
+      "petBoxAria": "Open Pet Box for {{name}}, {{balance}} saved",
+      "petBoxAriaEmpty": "Open Pet Box, {{balance}} saved",
+      "petBox": {
+        "eyebrow": "Pet Box",
+        "family": "Family pet fund"
+      },
+      "goalAria": "Open goal {{title}}, {{current}} of {{target}}",
+      "goalProgressAria": "Goal progress",
+      "goalEmptyAria": "No active goal yet",
+      "goalEmptyTitle": "No goal yet",
+      "goalEmptyBody": "Set a goal in Goals to start tracking it here.",
+      "goal": {
+        "eyebrow": "Current Goal"
+      }
     }
   },
   "loading": "Warming things up…",

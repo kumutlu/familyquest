@@ -12,12 +12,12 @@
       "action": "İncele"
     },
     "goalMilestone": {
-      "title": "\u201c{{title}}\u201d %{{progress}} dolu",
+      "title": "“{{title}}” %{{progress}} dolu",
       "description": "Neredeyse oldu — kutlamaya değer."
     },
     "challengeUpdate": {
       "title": "Aile Görevi bitti",
-      "description": "\u201c{{title}}\u201d artık kapatılabilir."
+      "description": "“{{title}}” artık kapatılabilir."
     },
     "allCalm": {
       "title": "Hepsi sakin",
@@ -75,7 +75,7 @@
       "description": "Ateşi canlı tutmak için bugün bir görev daha yap."
     },
     "rewardAvailable": {
-      "title": "\u201c{{title}}\u201d parmak ucunda",
+      "title": "“{{title}}” parmak ucunda",
       "description": "Onu almaya yetecek puanın var."
     },
     "familyQuest": {
@@ -97,7 +97,7 @@
       "surge": {
         "aria": "Aktif surge",
         "title": "Surge aktif",
-        "bonusMultiplier": "2\u00d7 XP",
+        "bonusMultiplier": "2× XP",
         "minutesLeft_one": "{{count}} dk kaldı",
         "minutesLeft_other": "{{count}} dk kaldı",
         "worthLabel_one": "{{count}} puan değerinde",
@@ -210,7 +210,8 @@
         "completed": "Tamamlandı",
         "viewAll": "Tüm görevleri gör",
         "aria": "{{title}}, {{points}} puan, {{status}}. Başlamak için aç."
-      }
+      },
+      "today": "BUGÜNÜN GÖREVLERİ"
     },
     "familyTools": {
       "heading": "Hedeflerin",
@@ -227,6 +228,40 @@
       "openPetBox": "Pet Box'ı aç",
       "petBoxSaved": "aile evcil hayvanları için birikti",
       "noPetBox": "Ailenizin evcil hayvan fonu burada."
+    },
+    "heroAria": "Kimliğin ve ilerlemen",
+    "identityGreeting": "Merhaba",
+    "levelAria": "Seviye {{level}}",
+    "levelLabel": "Sv",
+    "streakAria": "{{days}} günlük seri",
+    "xpAria": "Seviye ilerlemesi",
+    "xpToNext": "{{level}}. seviyeye {{xp}} XP",
+    "pointsAria": "{{count}} puan",
+    "ptsLabel": "puan",
+    "rewardProximityAria": "Ödül hazır: {{title}}",
+    "rewardProximity": "Ödül hazır: {{title}}",
+    "mascot": {
+      "bridgeAria": "Queki selam veriyor",
+      "greetingPrefix": "Merhaba"
+    },
+    "journey": {
+      "heading": "YOLCULUĞUN",
+      "open": "Aç",
+      "openAria": "Yolculuğunu aç",
+      "petBoxAria": "{{name}} için Pet Box'ı aç, {{balance}} birikti",
+      "petBoxAriaEmpty": "Pet Box'ı aç, {{balance}} birikti",
+      "petBox": {
+        "eyebrow": "Pet Box",
+        "family": "Aile evcil hayvan fonu"
+      },
+      "goalAria": "{{title}} hedefini aç, {{current}} / {{target}}",
+      "goalProgressAria": "Hedef ilerlemesi",
+      "goalEmptyAria": "Henüz aktif bir hedef yok",
+      "goalEmptyTitle": "Henüz hedef yok",
+      "goalEmptyBody": "Burada takip etmek için Hedefler'den bir hedef belirle.",
+      "goal": {
+        "eyebrow": "Mevcut Hedef"
+      }
     }
   },
   "loading": "Hazırlanıyor…",

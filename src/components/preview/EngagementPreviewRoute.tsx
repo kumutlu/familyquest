@@ -36,7 +36,7 @@ import { MemoryRouter } from 'react-router-dom';
 import i18n from '../../i18n';
 import { ChildExperienceShell } from '../experience/ChildExperienceShell';
 import { MascotScene } from '../experience/MascotScene';
-import { LongTermProgress } from '../experience/LongTermProgress';
+import { YourJourney } from '../experience/YourJourney';
 import { QuestTileList } from '../experience/QuestTile';
 import { TodaysAdventureCenterpiece } from '../experience/TodaysAdventureCenterpiece';
 import {
@@ -399,7 +399,7 @@ function PreviewFixtureCanvas({ fixture }: { fixture: PreviewFixture }) {
   // Render the SAME productized composition the production surface uses,
   // wrapped in the experience shell, so QA judges visual hierarchy, theme,
   // mascot, Adventure, quests and XP relationship — not isolated text rows.
-  // MemoryRouter is included so LongTermProgress can resolve navigation.
+  // MemoryRouter is included so YourJourney can resolve navigation.
   const world = (
     <MemoryRouter>
       <ChildExperienceShell
@@ -442,7 +442,7 @@ function PreviewFixtureCanvas({ fixture }: { fixture: PreviewFixture }) {
             onPressQuest={() => {}}
             onViewAll={() => {}}
           />
-          <LongTermProgress
+          <YourJourney
             familyData={{ petBoxEnabled: true }}
             previewData={fixture.longTermPreview ?? null}
           />

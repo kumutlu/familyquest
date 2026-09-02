@@ -24,10 +24,10 @@ vi.mock('../../store/useStore', () => ({
 }));
 
 vi.mock('../../config/navigation', () => ({
+  // V2 child-first navigation: no Goals in primary nav at any width.
   getNavItems: () => [
     { labelKey: 'nav.home', path: '/', icon: () => null },
     { labelKey: 'nav.tasks', path: '/tasks', icon: () => null },
-    { labelKey: 'nav.goals', path: '/goals', icon: () => null },
     { labelKey: 'nav.rewards', path: '/rewards', icon: () => null },
     { labelKey: 'nav.family', path: '/family', icon: () => null },
   ],

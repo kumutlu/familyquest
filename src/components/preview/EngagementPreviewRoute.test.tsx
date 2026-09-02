@@ -303,7 +303,9 @@ describe('EngagementPreviewRoute — chrome separation + theme tokens', () => {
       expect(f?.longTermPreview).toBeDefined()
       expect(f?.longTermPreview?.petBoxName).toBeTruthy()
       expect(Number(f?.longTermPreview?.petBoxBalancePence ?? 0)).toBeGreaterThan(0)
-      expect(Number(f?.longTermPreview?.activeGoalCount ?? 0)).toBeGreaterThan(0)
+      // V2 Goal has its own progress; current and target must be set.
+      expect(Number(f?.longTermPreview?.primaryGoalCurrentPence ?? 0)).toBeGreaterThan(0)
+      expect(Number(f?.longTermPreview?.primaryGoalTargetPence ?? 0)).toBeGreaterThan(0)
     }
   })
 })

@@ -1,20 +1,25 @@
-import { Home, Users, CheckSquare, Gift, Target } from 'lucide-react';
+import { Home, Users, CheckSquare, Gift } from 'lucide-react';
 
 export interface NavItem {
-  labelKey: 'nav.home' | 'nav.tasks' | 'nav.goals' | 'nav.rewards' | 'nav.family';
+  labelKey: 'nav.home' | 'nav.tasks' | 'nav.rewards' | 'nav.family';
   path: string;
   icon: React.ComponentType<{ size?: number; strokeWidth?: number }> | React.FC;
 }
 
 // Single source of truth for the application navigation.
 //
-// Desktop primary navigation exposes recurring product areas directly. Mobile
-// deliberately uses the separate compact list below to preserve its five-slot
-// bottom-navigation hierarchy.
+// V2 (2026-09-02): Goals is no longer a primary child navigation tab at any
+// width. The /goals route, the Goals feature, and the savings-goals data
+// remain fully reachable from:
+//   * the Child Home › Your Journey › Current Goal zone
+//   * the More menu (`MORE_DESTINATIONS` in `src/components/layout/MoreMenu.tsx`)
+//   * the dedicated /goals deep link
+// Per the PO-approved V2 spec, Goals must never reappear as a primary tab at
+// desktop width either, so the desktop primary nav mirrors the mobile
+// four-tab hierarchy.
 const desktopNavItems: NavItem[] = [
   { labelKey: 'nav.home', path: '/', icon: Home },
   { labelKey: 'nav.tasks', path: '/tasks', icon: CheckSquare },
-  { labelKey: 'nav.goals', path: '/goals', icon: Target },
   { labelKey: 'nav.rewards', path: '/rewards', icon: Gift },
   { labelKey: 'nav.family', path: '/family', icon: Users },
 ];

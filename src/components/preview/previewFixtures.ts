@@ -78,15 +78,27 @@ export interface PreviewFixture {
    * must NOT be sourced from, or written to, the canonical Pet Box /
    * Goals accounting authority.
    */
+  /**
+   * DEV-only deterministic fixture values for the Your Journey V2 band
+   * (Pet Box + Current Goal). The V2 contract:
+   *   - Pet Box has a name + balance (no progress bar).
+   *   - Goal has its OWN progress (current / target, never shared with Pet Box).
+   *   - These values are NEVER sourced from, or written to, the canonical
+   *     Pet Box / Goals accounting authority. Preview only.
+   */
   readonly longTermPreview?: {
     readonly petBoxEnabled: boolean
     readonly petBoxName: string
     /** Pet Box balance in pence. Fixture only. */
     readonly petBoxBalancePence: number
-    readonly activeGoalCount: number
-    /** Sum of active goal savings, in pence. Fixture only. */
-    readonly activeGoalSavedPence: number
+    /** Pet Box feeding label, e.g. "Feeding in 7 days". */
+    readonly petBoxFeedingLabel?: string
+    readonly primaryGoalId?: string
     readonly primaryGoalTitle: string
+    /** Goal current saved amount, in pence. */
+    readonly primaryGoalCurrentPence: number
+    /** Goal target amount, in pence. */
+    readonly primaryGoalTargetPence: number
   }
 }
 
@@ -111,10 +123,12 @@ const FIXTURE_LONG_TERM = {
   petBoxName: 'Nimbus',
   // £57.29 → 5729 pence (deterministic)
   petBoxBalancePence: 5729,
-  activeGoalCount: 1,
-  // £120 → 12000 pence
-  activeGoalSavedPence: 12000,
+  petBoxFeedingLabel: 'Feeding in 7 days',
+  primaryGoalId: 'goal-bike-fund',
   primaryGoalTitle: 'Bike fund',
+  // £120 of £250 → 12000 of 25000 pence (deterministic)
+  primaryGoalCurrentPence: 12000,
+  primaryGoalTargetPence: 25000,
 } as const
 
 export const PREVIEW_FIXTURES: readonly PreviewFixture[] = [
