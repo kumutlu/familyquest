@@ -305,3 +305,10 @@ export {
 // Family Challenge claim — trusted server path. The client only invokes this
 // callable; all reward distribution is server-authoritative (Admin SDK).
 export { claimFamilyChallenge } from './challengeClaim';
+
+// One-time QR child device onboarding callables; see childQrOnboarding.ts.
+export {
+  generateChildQrToken,
+  scanChildQrToken,
+} from './childQrOnboarding';
+
