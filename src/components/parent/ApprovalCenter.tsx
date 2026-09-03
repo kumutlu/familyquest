@@ -116,8 +116,9 @@ export function ApprovalCenter() {
     })));
 
     // 8. Child QR Device Join requests
-    items.push(...(childQrJoinRequests || []).map(r => ({
+    items.push(...(childQrJoinRequests || []).map((r: any) => ({
       id: r.id,
+
       category: 'child_qr_join',
       status: r.status,
       sortDate: r.createdAt?.toDate

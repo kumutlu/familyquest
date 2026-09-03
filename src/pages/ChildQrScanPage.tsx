@@ -25,7 +25,8 @@ export function ChildQrScanPage() {
   const [_handle, setHandle] = useState<ChildQrRequestHandle | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
-  const pollingRef = useRef<NodeJS.Timeout | null>(null);
+  const pollingRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
 
   const stopPolling = useCallback(() => {
     if (pollingRef.current) {
