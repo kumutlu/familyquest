@@ -77,7 +77,7 @@ describe("TodaysAdventureCenterpiece (Today's Adventure V1 productization)", () 
     expect(locked).toHaveTextContent('0 / 1');
   });
 
-  it('renders comeback shell without guilt language and never invents XP', () => {
+  it('renders comeback shell without guilt language and surfaces tier XP pill', () => {
     render(wrap(
       <TodaysAdventureCenterpiece
         presentation={{ kind: 'comeback' }}
@@ -87,8 +87,14 @@ describe("TodaysAdventureCenterpiece (Today's Adventure V1 productization)", () 
     const card = screen.getByTestId('adventure-centerpiece-comeback');
     expect(card).toBeInTheDocument();
     expect(card).toHaveAttribute('data-comeback-tier', 'return_3d');
-    // No raw "25 XP" promises — the resolver owns the XP award.
-    expect(card.textContent ?? '').not.toMatch(/\+\s*25\s*XP/);
+    expect(card).toHaveAttribute('data-comeback-state', 'has-xp');
+    // The XP pill surfaces the authoritative tier reward (25 XP for
+    // return_3d). The number is bound to the resolver tier; it is not
+    // invented copy.
+    expect(card.textContent ?? '').toMatch(/\+\s*25\s*XP/);
+    // No guilt language and no "since you checked in" repetition leak.
+    expect(card.textContent ?? '').not.toMatch(/since you checked in/i);
+    expect(card.textContent ?? '').not.toMatch(/Long time, no see/);
   });
 
   it('renders seasonal shell when nothing outranks', () => {
@@ -139,7 +145,10 @@ describe("TodaysAdventureCenterpiece (Today's Adventure V1 productization)", () 
     ));
     const card = screen.getByTestId('adventure-centerpiece-comeback');
     expect(card.textContent ?? '').not.toMatch(/child\.adventure\.comeback\.body/);
-    expect(card.textContent ?? '').toMatch(/3\s*days/);
+    // New PO 2026-09-03 copy: warm welcome + comeback bonus pill instead of
+    // repeating the days-since-checked-in phrasing.
+    expect(card.textContent ?? '').toMatch(/comeback bonus/i);
+    expect(card.textContent ?? '').toMatch(/\+\s*25\s*XP/);
   });
 
   it('comeback body shows resolved EN copy for return_7d', () => {
@@ -151,7 +160,10 @@ describe("TodaysAdventureCenterpiece (Today's Adventure V1 productization)", () 
     ));
     const card = screen.getByTestId('adventure-centerpiece-comeback');
     expect(card.textContent ?? '').not.toMatch(/child\.adventure\.comeback\.body/);
-    expect(card.textContent ?? '').toMatch(/7\s*days/);
+    // New PO 2026-09-03 copy: 'Great to see you again' + comeback bonus +50 XP
+    expect(card.textContent ?? '').toMatch(/Great to see you again/i);
+    expect(card.textContent ?? '').toMatch(/\+\s*50\s*XP/);
+    expect(card.textContent ?? '').toMatch(/comeback bonus/i);
   });
 
   it('comeback body shows resolved TR copy for return_7d', async () => {

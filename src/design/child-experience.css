@@ -50,17 +50,17 @@
     );
 }
 
-/* Pattern layer — decorative motifs driven by density token. We
-   raise the opacity ceiling so a seasonal world reads as visibly
-   different from the calm base state. */
+/* Pattern layer — decorative motifs driven by density token. PO 2026-09-03:
+   the opacity ceiling is restrained so a seasonal theme can shift the world
+   WITHOUT recolouring the entire surface. Think world lighting, not UI skin. */
 .qk-child-experience-pattern {
-  opacity: calc(0.85 * var(--qk-theme-pattern-density));
+  opacity: calc(0.35 * var(--qk-theme-pattern-density));
   background-image:
     radial-gradient(circle at 12% 18%, var(--qk-theme-accent) 0 1px, transparent 3px),
     radial-gradient(circle at 88% 32%, var(--qk-theme-accent) 0 1px, transparent 3px),
     radial-gradient(circle at 24% 78%, var(--qk-theme-accent) 0 1px, transparent 3px),
     radial-gradient(circle at 72% 86%, var(--qk-theme-accent) 0 1px, transparent 3px);
-  background-size: 14rem 14rem, 16rem 16rem, 18rem 18rem, 20rem 20rem;
+  background-size: 18rem 18rem, 20rem 20rem, 22rem 22rem, 24rem 24rem;
 }
 
 /* Mascot environment halo — a soft accent ring behind the mascot so
@@ -312,27 +312,31 @@
    `prefers-reduced-motion: reduce` because durations are token-driven.
    ========================================================================== */
 
-/* --- Hero (Identity / Progression) -------------------------------------- */
+/* Hero (Identity / Progression). PO correction 2026-09-03:
+   the previous giant purple rounded panel read as a wrapper around the
+   whole Child Home. The hero is now a compact identity card that lives
+   inside the ambient world instead of dominating it. The world wrapper
+   is the surface; the hero only carries identity data. */
 
 .qk-hero {
   position: relative;
   overflow: hidden;
   border-radius: 1.5rem;
-  background: linear-gradient(
-    135deg,
-    var(--qk-surface-hero-from) 0%,
-    var(--qk-surface-hero-to) 100%
-  );
-  color: var(--qk-text-onbrand);
-  box-shadow: 0 1px 2px rgba(23, 21, 31, 0.05),
-    0 18px 40px -20px rgba(79, 70, 229, 0.4);
+  background:
+    linear-gradient(
+      135deg,
+      color-mix(in srgb, var(--qk-surface-hero-from) 22%, transparent) 0%,
+      color-mix(in srgb, var(--qk-surface-hero-to) 18%, transparent) 100%
+    );
+  color: var(--qk-text-primary);
+  border: 1px solid var(--qk-border-subtle);
+  box-shadow: var(--qk-shadow-card);
 }
 
 .qk-hero__panel {
   border-radius: 0.875rem;
-  background: rgba(255, 255, 255, 0.12);
-  backdrop-filter: blur(6px);
-  border: 1px solid rgba(255, 255, 255, 0.18);
+  background: var(--qk-bg-subtle);
+  border: 1px solid var(--qk-border-subtle);
 }
 
 /* --- Section header (uppercase, letter-spaced) -------------------------- */
@@ -349,10 +353,13 @@
 /* --- Quest group (ONE coherent surface for today's quests) -------------- */
 
 .qk-quest-group {
+  /* Quest group: ONE coherent surface inside the ambient world. PO 2026-09-03.
+     Slightly softer shadow + a faint default surface so it reads as a unified
+     quest band without becoming another dashboard card. */
   border-radius: 1.25rem;
-  background: var(--qk-bg-default);
+  background: color-mix(in srgb, var(--qk-bg-default) 92%, transparent);
   border: 1px solid var(--qk-border-subtle);
-  box-shadow: var(--qk-shadow-card);
+  box-shadow: 0 1px 2px rgba(8, 6, 22, 0.04), 0 6px 18px -14px rgba(79, 70, 229, 0.10);
   padding: 0.25rem 0.625rem;
   display: flex;
   flex-direction: column;
@@ -387,10 +394,13 @@
    No nested inner card — the journey surface IS the surface. */
 
 .qk-journey {
+  /* Journey: ONE surface inside the ambient world. PO 2026-09-03.
+     Softer shadow + translucent default surface so the world shows
+     around the surface rather than the surface wrapping the world. */
   border-radius: 1.25rem;
-  background: var(--qk-bg-default);
+  background: color-mix(in srgb, var(--qk-bg-default) 92%, transparent);
   border: 1px solid var(--qk-border-subtle);
-  box-shadow: var(--qk-shadow-card);
+  box-shadow: 0 1px 2px rgba(8, 6, 22, 0.04), 0 6px 18px -14px rgba(79, 70, 229, 0.10);
   padding: 0.875rem;
   position: relative;
 }
@@ -668,13 +678,22 @@
   gap: 1rem;
 }
 
+/* Desktop horizontal lower grid: quests | journey side-by-side.
+   PO 2026-09-03: confirm the responsive composition actually flips at
+   md+ (768px) — desktop MUST intentionally use horizontal space and
+   not just stretch the mobile stack. The grid is tuned so the quest
+   band still wins when its content is wider, but the journey column
+   gets enough room for Pet Box + Goal side-by-side. */
 @media (min-width: 768px) {
   .qk-v2-stack {
     padding-bottom: 2rem;
   }
+  .qk-v2-stack__lead {
+    max-width: 56rem;
+  }
   .qk-v2-stack__lower {
     display: grid;
-    grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr);
+    grid-template-columns: minmax(0, 1.55fr) minmax(0, 1fr);
     gap: 1rem;
     align-items: stretch;
   }
@@ -682,7 +701,8 @@
 
 @media (min-width: 1024px) {
   .qk-v2-stack__lower {
-    grid-template-columns: minmax(0, 1.6fr) minmax(0, 1fr);
+    grid-template-columns: minmax(0, 1.7fr) minmax(0, 1fr);
+    gap: 1.25rem;
   }
 }
 

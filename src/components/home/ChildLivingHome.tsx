@@ -392,10 +392,10 @@ export function ChildLivingHome() {
             data-testid="child-identity-hero"
             className="qk-hero"
           >
-            <div className="relative z-10 flex flex-col gap-3 p-4 sm:p-5 text-white">
+            <div className="relative z-10 flex flex-col gap-3 p-4 sm:p-5">
               <header className="flex items-center gap-3">
                 <div className="min-w-0 flex-1">
-                  <p className="qk-section-eyebrow text-white/70">
+                  <p className="qk-section-eyebrow">
                     {t('child.identityGreeting', { defaultValue: 'Hello' })}
                   </p>
                   <h1
@@ -408,7 +408,7 @@ export function ChildLivingHome() {
                 <div className="flex items-center gap-2">
                   {gamification.isAvailable ? (
                     <span
-                      className="inline-flex items-center gap-1 rounded-full bg-white/20 px-2.5 py-0.5 text-meta font-bold tabular-nums"
+                      className="inline-flex items-center gap-1 rounded-full qk-bg-subtle px-2.5 py-0.5 text-meta font-bold tabular-nums qk-text-primary"
                       data-testid="child-level-chip"
                       aria-label={t('child.levelAria', {
                         level: gamification.level,
@@ -440,10 +440,10 @@ export function ChildLivingHome() {
                   total={gamification.xpTotal}
                   level={gamification.level}
                   compact
-                  className="text-white"
+                  className="qk-text-primary"
                 />
                 <ProgressBar
-                  className="mt-2 bg-white/20"
+                  className="mt-2"
                   tone="xp"
                   value={
                     gamification.isAvailable && gamification.xpToNextLevel > 0
@@ -453,7 +453,7 @@ export function ChildLivingHome() {
                   }
                   aria-label={t('child.xpAria', { defaultValue: 'Level progress' })}
                 />
-                <p className="mt-1 text-meta text-white/85">
+                <p className="mt-1 text-meta qk-text-secondary">
                   {gamification.isAvailable
                     ? t('child.xpToNext', {
                         xp: gamification.xpToNextLevel,
@@ -483,7 +483,7 @@ export function ChildLivingHome() {
                   <span className="font-balance tabular-nums">
                     {(currentUser?.rewardPoints ?? 0).toLocaleString()}
                   </span>
-                  <span className="text-meta font-bold uppercase tracking-wide opacity-80">
+                  <span className="text-meta font-bold uppercase tracking-wide qk-text-secondary">
                     {t('child.ptsLabel', { defaultValue: 'pts' })}
                   </span>
                 </span>
@@ -580,7 +580,19 @@ export function ChildLivingHome() {
             >
               <header className="qk-section-eyebrow mb-1.5 flex items-center gap-2 px-1">
                 <ListChecks size={14} aria-hidden="true" />
-                <span>{t('child.quests.today', { defaultValue: "TODAY'S QUESTS" })}</span>
+                <span className="flex-1">{t('child.quests.today', { defaultValue: "TODAY'S QUESTS" })}</span>
+                {/* Canonical "See all" navigation affordance for the
+                    Today's Quests list. PO 2026-09-03: only ONE affordance
+                    per list lives in the heading (no duplicate footer). */}
+                <button
+                  type="button"
+                  onClick={() => navigate('/tasks')}
+                  data-testid="todays-quests-see-all"
+                  aria-label={t('child.quests.todaySeeAllAria', { defaultValue: 'See all quests' })}
+                  className="text-meta font-bold uppercase tracking-wide text-family-600 hover:text-family-700 focus:outline-none focus-visible:underline"
+                >
+                  {t('child.quests.seeAll', { defaultValue: 'See all' })} →
+                </button>
               </header>
               <div className="qk-quest-group">
                 <QuestTileList
@@ -592,7 +604,6 @@ export function ChildLivingHome() {
                     onPress: handleSelectSurgeTask,
                   }))}
                   onPressQuest={handleSelectSurgeTask}
-                  onViewAll={() => navigate('/tasks')}
                 />
               </div>
             </section>

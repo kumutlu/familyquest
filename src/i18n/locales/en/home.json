@@ -108,9 +108,9 @@
         "heading": "Welcome back",
         "warm1d": "Welcome back!",
         "warm3d": "Glad you're back",
-        "warm7d": "Long time, no see",
-        "body": "It's been {{count}} days since you checked in.",
-        "bodySingle": "Welcome back — it's been 1 day since you checked in."
+        "warm7d": "Great to see you again",
+        "body": "Pick today's first quest for a +{{xp}} XP comeback bonus.",
+        "bodySingle": "Pick today's first quest for a +{{xp}} XP comeback bonus."
       },
       "mystery": {
         "title": "Mystery Drop available",
@@ -121,7 +121,7 @@
         "lockedProgressDone": "Ready to open!",
         "readyTitle": "Mystery Drop unlocked",
         "readyEyebrow": "Mystery Drop",
-        "readyLead": "Tap to open your {{rarity}} surprise.",
+        "readyLead": "Tap to reveal your surprise.",
         "readyAria": "Open mystery drop",
         "readyAction": "Open",
         "revealTitle": "Mystery drop reveal: {{title}}",
@@ -211,7 +211,9 @@
         "viewAll": "See all quests",
         "aria": "{{title}}, {{points}} points, {{status}}. Open to start."
       },
-      "today": "TODAY'S QUESTS"
+      "today": "TODAY'S QUESTS",
+      "seeAll": "See all",
+      "todaySeeAllAria": "See all quests"
     },
     "familyTools": {
       "heading": "Your goals",

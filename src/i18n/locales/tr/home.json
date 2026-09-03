@@ -108,9 +108,9 @@
         "heading": "Tekrar hoş geldin",
         "warm1d": "Tekrar hoş geldin!",
         "warm3d": "Geri döndüğüne sevindim",
-        "warm7d": "Seni çok özledik",
-        "body": "Son girişinden bu yana {{count}} gün geçti.",
-        "bodySingle": "Tekrar hoş geldin — son girişinden bu yana 1 gün geçti."
+        "warm7d": "Seni tekrar görmek harika",
+        "body": "Bugünün ilk görevini seç, +{{xp}} XP comeback bonusu kazan.",
+        "bodySingle": "Bugünün ilk görevini seç, +{{xp}} XP comeback bonusu kazan."
       },
       "mystery": {
         "title": "Sürpriz Drop hazır",
@@ -121,7 +121,7 @@
         "lockedProgressDone": "Açılmaya hazır!",
         "readyTitle": "Sürpriz Drop açıldı",
         "readyEyebrow": "Sürpriz Drop",
-        "readyLead": "{{rarity}} sürprizini açmak için dokun.",
+        "readyLead": "Sürprizini ortaya çıkarmak için dokun.",
         "readyAria": "Sürpriz drop'u aç",
         "readyAction": "Aç",
         "revealTitle": "Sürpriz drop açılışı: {{title}}",
@@ -211,7 +211,9 @@
         "viewAll": "Tüm görevleri gör",
         "aria": "{{title}}, {{points}} puan, {{status}}. Başlamak için aç."
       },
-      "today": "BUGÜNÜN GÖREVLERİ"
+      "today": "BUGÜNÜN GÖREVLERİ",
+      "seeAll": "Tümünü gör",
+      "todaySeeAllAria": "Tüm görevleri gör"
     },
     "familyTools": {
       "heading": "Hedeflerin",

@@ -110,6 +110,11 @@ export function QuestTileList({ quests, onPressQuest, onViewAll }: QuestTileList
           <QuestTile {...q} onPress={onPressQuest} />
         </div>
       ))}
+      {/* In-group "see all" footer removed in the PO 2026-09-03 cleanup:
+         the grouped quests already live under a section header that
+         carries the canonical "See all" affordance, so a second
+         in-row link was redundant. The onViewAll prop remains
+         available so callers can opt back in if needed. */}
       {onViewAll ? (
         <div className="qk-quest-group__footer">
           <button
@@ -118,7 +123,7 @@ export function QuestTileList({ quests, onPressQuest, onViewAll }: QuestTileList
             onClick={onViewAll}
             className="text-meta font-bold uppercase tracking-wide text-family-600 hover:text-family-700 focus:outline-none focus-visible:underline"
           >
-            See all quests →
+            See all →
           </button>
         </div>
       ) : null}

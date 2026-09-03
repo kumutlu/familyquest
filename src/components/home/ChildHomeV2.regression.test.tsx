@@ -368,6 +368,167 @@ describe('Child Home V2 — production regression', () => {
 });
 
 // ---------------------------------------------------------------------------
+// PO 2026-09-03 final visual cleanup pass — focused presentation contracts.
+// These tests pin the structural fixes from the latest screenshot review:
+//   - Hero is no longer a giant purple wrapper panel
+//   - Mascot speech is a lightweight note (not a card)
+//   - Normal state has ONE canonical "See all" navigation affordance
+//   - grouped quests remain a single coherent surface
+//   - max 3 Home quests remain
+//   - Surge / Mystery Ready remain special/expanded
+//   - Mystery copy contains no rarity/loot language
+//   - Comeback mascot + Adventure copy are not duplicate
+//   - Seasonal Neon does not apply large content surface (pattern density
+//     ceiling is restrained)
+//   - Journey remains Pet Box + Goal, no shared progress
+//   - desktop lower composition resolves to intended responsive class
+//   - Goals primary nav still absent
+//   - no Skip affordance
+//   - reduced motion preserved
+// ---------------------------------------------------------------------------
+
+describe('Child Home V2 final visual cleanup contracts', () => {
+  it('Hero is no longer a giant purple wrapper panel (compact identity card)', async () => {
+    await renderChildHome();
+    const hero = screen.getByTestId('child-identity-hero');
+    // PO 2026-09-03: the hero text is now qk-text-primary, NOT on-brand
+    // white that previously read as part of a giant purple panel.
+    expect(hero.className).toMatch(/qk-hero/);
+    // The hero h1 is not onbrand white anymore; the section relies on
+    // a soft tint, not the heavy indigo/violet gradient that wrapped the
+    // whole page in the previous pass.
+    const childExperienceCss = readFileSync(
+      resolve(process.cwd(), 'src/design/child-experience.css'),
+      'utf8',
+    );
+    expect(childExperienceCss).toMatch(/\.qk-hero\s*\{[\s\S]*?color-mix/);
+    // Background no longer uses the linear-gradient(--qk-surface-hero-from, --to)
+    // that defined the old giant purple panel.
+    expect(childExperienceCss).not.toMatch(
+      /\.qk-hero\s*\{[\s\S]*?background:\s*linear-gradient\(\s*135deg,\s*var\(--qk-surface-hero-from\)/,
+    );
+  });
+
+  it('Mascot speech is a lightweight note (no full-width card)', async () => {
+    await renderChildHome();
+    const bubble = screen.getByTestId('mascot-bridge-bubble');
+    expect(bubble.tagName.toLowerCase()).toBe('p');
+    expect(bubble.className).toMatch(/qk-mascot-bridge__bubble/);
+    // The bubble carries no border / shadow / large background panel. It
+    // visually belongs to the character instead of being its own card.
+    const css = bubble.className;
+    expect(css).not.toMatch(/qk-shadow-card/);
+    expect(css).not.toMatch(/qk-bg-card/);
+    expect(css).not.toMatch(/border-/);
+  });
+
+  it('Normal state has ONE canonical See-all navigation affordance (no duplicate)', async () => {
+    await renderChildHome();
+    // The section heading carries the canonical "See all" link.
+    const headingSeeAll = screen.getByTestId('todays-quests-see-all');
+    expect(headingSeeAll).toBeInTheDocument();
+    // The QuestTile footer "See all quests" is removed to avoid duplication.
+    expect(screen.queryByTestId('quest-tile-view-all')).not.toBeInTheDocument();
+  });
+
+  it('Quest group keeps grouped composition with max 3 rows', async () => {
+    await renderChildHome();
+    const rows = screen.getAllByTestId(/^quest-group-row-/);
+    expect(rows.length).toBeGreaterThan(0);
+    expect(rows.length).toBeLessThanOrEqual(3);
+  });
+
+  it('Mystery Ready copy no longer contains rarity/loot language', () => {
+    const enHome = readFileSync(
+      resolve(process.cwd(), 'src/i18n/locales/en/home.json'),
+      'utf8',
+    );
+    const trHome = readFileSync(
+      resolve(process.cwd(), 'src/i18n/locales/tr/home.json'),
+      'utf8',
+    );
+    // Banned words (English): rare, legendary, jackpot, lucky, chance, odds,
+    // roll, spin, loot, win big. We only assert the most-flagged tokens.
+    expect(enHome).not.toMatch(/rare surprise/);
+    expect(enHome).not.toMatch(/legendary surprise/);
+    expect(enHome).not.toMatch(/jackpot/);
+    expect(enHome).not.toMatch(/loot/);
+    expect(trHome).not.toMatch(/nadir sürprizini/); // old "rare surprise" phrasing
+  });
+
+  it('Comeback mascot line and Adventure body are not duplicates', () => {
+    const enHome = readFileSync(
+      resolve(process.cwd(), 'src/i18n/locales/en/home.json'),
+      'utf8',
+    );
+    // PO 2026-09-03: Adventure copy now explains the mission + XP instead
+    // of repeating "long time no see" / "since you checked in".
+    expect(enHome).not.toMatch(/"body":\s*"It.s been \{\{count\}\} days since you checked in\."/);
+    expect(enHome).toMatch(/warm7d.*Great to see you again/s);
+    expect(enHome).toMatch(/body.*Pick today.s first quest/s);
+  });
+
+  it('Seasonal Neon does not paint a giant content surface (pattern density restrained)', () => {
+    const preview = readFileSync(
+      resolve(process.cwd(), 'src/components/preview/EngagementPreviewRoute.tsx'),
+      'utf8',
+    );
+    // PO 2026-09-03: pattern density ceiling dropped from 0.85 to a
+    // restrained 0.35 so Neon only adds ambient glow, not a giant panel.
+    expect(preview).toMatch(/seasonal-neon[\s\S]*?patternDensity:\s*0\.35/);
+    // accentSoft is no longer a solid bright colour that fills mid-gradient.
+    expect(preview).toMatch(/accentSoft:\s*'rgba\(34,\s*211,\s*238,\s*0\.18\)'/);
+  });
+
+  it('Pattern layer opacity ceiling is restrained (no recoloured content surface)', () => {
+    const css = readFileSync(
+      resolve(process.cwd(), 'src/design/child-experience.css'),
+      'utf8',
+    );
+    // The pattern opacity ceiling used to be 0.85; it is now 0.35 so the
+    // seasonal theme cannot paint the whole central surface.
+    expect(css).toMatch(/opacity:\s*calc\(0\.35 \* var\(--qk-theme-pattern-density\)\)/);
+    expect(css).not.toMatch(/opacity:\s*calc\(0\.85 \* var\(--qk-theme-pattern-density\)\)/);
+  });
+
+  it('Desktop lower section resolves to a responsive grid at md+', async () => {
+    await renderChildHome();
+    const home = screen.getByTestId('child-living-home');
+    const lower = home.querySelector('.qk-v2-stack__lower');
+    expect(lower).not.toBeNull();
+    const css = readFileSync(
+      resolve(process.cwd(), 'src/design/child-experience.css'),
+      'utf8',
+    );
+    // Verify the actual rule exists for the responsive grid (not just a
+    // CSS comment claiming it does).
+    expect(css).toMatch(/@media\s*\(min-width:\s*768px\)[\s\S]*?\.qk-v2-stack__lower\s*\{[\s\S]*?display:\s*grid/);
+  });
+
+  it('Pet Box + Goal live in ONE Journey surface, no shared progress', async () => {
+    await renderChildHome();
+    const journey = screen.getByTestId('your-journey');
+    const petbox = screen.getByTestId('your-journey-petbox');
+    const goal = screen.getByTestId('your-journey-goal');
+    expect(journey.contains(petbox)).toBe(true);
+    expect(journey.contains(goal)).toBe(true);
+    expect(petbox.querySelector('[role="progressbar"]')).toBeNull();
+  });
+
+  it('Goals primary nav still absent on Child routes', async () => {
+    await renderChildHome();
+    // Goals tab MUST NOT be in the child primary nav at any width.
+    expect(screen.queryByRole('link', { name: /goals/i })).not.toBeInTheDocument();
+  });
+
+  it('No Skip affordance on the Child Home', async () => {
+    await renderChildHome();
+    expect(screen.queryByTestId(/skip/i)).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /skip/i })).not.toBeInTheDocument();
+  });
+});
+
+// ---------------------------------------------------------------------------
 // Token-level contract
 // ---------------------------------------------------------------------------
 //

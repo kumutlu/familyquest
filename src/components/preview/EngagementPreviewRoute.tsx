@@ -292,46 +292,36 @@ function PreviewHeroBlock({ fixture }: { fixture: PreviewFixture }) {
     <section
       data-testid="preview-hero"
       data-fixture-id={fixture.id}
-      className="relative overflow-hidden rounded-hero py-6 px-5 text-white"
-      style={{
-        background:
-          'linear-gradient(135deg, var(--qk-surface-hero-from), var(--qk-surface-hero-to))',
-      }}
+      className="qk-hero relative overflow-hidden py-4 px-4 sm:py-5 sm:px-5"
     >
-      <div className="flex items-center gap-4">
+      <div className="flex items-center gap-3">
         <div
           aria-hidden="true"
-          className="flex h-16 w-16 items-center justify-center rounded-full bg-white/20 text-2xl font-extrabold backdrop-blur-sm"
+          className="flex h-12 w-12 items-center justify-center rounded-2xl bg-primary-50 text-primary-600 text-xl font-extrabold"
         >
           {String(fixture.title ?? '·').slice(0, 1).toUpperCase()}
         </div>
         <div className="min-w-0 flex-1">
-          <h1 className="text-title font-extrabold">
+          <h1 className="text-title font-extrabold qk-text-primary">
             {t('child.greeting', { name: 'Preview' })}
           </h1>
-          <p className="mt-0.5 text-meta opacity-80">
+          <p className="mt-0.5 text-meta qk-text-secondary">
             {t('child.heroSubtitle')}
           </p>
         </div>
-        <span
-          aria-hidden="true"
-          className="hidden max-sm:hidden sm:flex h-14 w-14 items-center justify-center rounded-full bg-white/15 text-2xl font-extrabold"
-        >
-          🐾
-        </span>
       </div>
-      <div className="mt-5 grid grid-cols-3 gap-2" data-testid="preview-hero-xp">
-        <div className="rounded-card bg-white/10 px-3 py-2 backdrop-blur-sm">
-          <p className="text-meta uppercase tracking-wide opacity-70">XP</p>
-          <p className="text-balance font-extrabold tabular-nums">{xp}</p>
+      <div className="mt-3 grid grid-cols-3 gap-2" data-testid="preview-hero-xp">
+        <div className="qk-hero__panel px-3 py-2">
+          <p className="text-meta uppercase tracking-wide qk-text-secondary">XP</p>
+          <p className="text-balance font-extrabold tabular-nums qk-text-primary">{xp}</p>
         </div>
-        <div className="rounded-card bg-white/10 px-3 py-2 backdrop-blur-sm">
-          <p className="text-meta uppercase tracking-wide opacity-70">Level</p>
-          <p className="text-balance font-extrabold tabular-nums">{level}</p>
+        <div className="qk-hero__panel px-3 py-2">
+          <p className="text-meta uppercase tracking-wide qk-text-secondary">Level</p>
+          <p className="text-balance font-extrabold tabular-nums qk-text-primary">{level}</p>
         </div>
-        <div className="rounded-card bg-white/10 px-3 py-2 backdrop-blur-sm">
-          <p className="text-meta uppercase tracking-wide opacity-70">Streak</p>
-          <p className="text-balance font-extrabold tabular-nums">{streak}🔥</p>
+        <div className="qk-hero__panel px-3 py-2">
+          <p className="text-meta uppercase tracking-wide qk-text-secondary">Streak</p>
+          <p className="text-balance font-extrabold tabular-nums qk-text-primary">{streak}🔥</p>
         </div>
       </div>
     </section>
@@ -437,15 +427,17 @@ function PreviewFixtureCanvas({ fixture }: { fixture: PreviewFixture }) {
             onSelectSurgeTask={() => {}}
             onViewQuests={() => {}}
           />
-          <QuestTileList
-            quests={fixture.quests}
-            onPressQuest={() => {}}
-            onViewAll={() => {}}
-          />
-          <YourJourney
-            familyData={{ petBoxEnabled: true }}
-            previewData={fixture.longTermPreview ?? null}
-          />
+          <div className="qk-v2-stack__lower">
+            <QuestTileList
+              quests={fixture.quests}
+              onPressQuest={() => {}}
+              onViewAll={() => {}}
+            />
+            <YourJourney
+              familyData={{ petBoxEnabled: true }}
+              previewData={fixture.longTermPreview ?? null}
+            />
+          </div>
         </div>
       </ChildExperienceShell>
     </MemoryRouter>
@@ -464,10 +456,10 @@ function fixtureThemeFor(fixture: PreviewFixture) {
       theme: {
         tokens: {
           accent: '#06b6d4',
-          accentSoft: '#22d3ee',
+          accentSoft: 'rgba(34, 211, 238, 0.18)',
           ambientFrom: '#0f172a',
           ambientTo: '#1e1b4b',
-          patternDensity: 0.85,
+          patternDensity: 0.35,
         },
       },
     } as any
@@ -477,10 +469,10 @@ function fixtureThemeFor(fixture: PreviewFixture) {
       theme: {
         tokens: {
           accent: '#dc2626',
-          accentSoft: '#f87171',
+          accentSoft: 'rgba(248, 113, 113, 0.18)',
           ambientFrom: '#7f1d1d',
           ambientTo: '#fff7ed',
-          patternDensity: 0.75,
+          patternDensity: 0.32,
         },
       },
     } as any
@@ -490,10 +482,10 @@ function fixtureThemeFor(fixture: PreviewFixture) {
       theme: {
         tokens: {
           accent: '#7c3aed',
-          accentSoft: '#a78bfa',
+          accentSoft: 'rgba(167, 139, 250, 0.18)',
           ambientFrom: '#1f2937',
           ambientTo: '#fde68a',
-          patternDensity: 0.7,
+          patternDensity: 0.30,
         },
       },
     } as any
@@ -503,10 +495,10 @@ function fixtureThemeFor(fixture: PreviewFixture) {
       theme: {
         tokens: {
           accent: '#059669',
-          accentSoft: '#34d399',
+          accentSoft: 'rgba(52, 211, 153, 0.18)',
           ambientFrom: '#064e3b',
           ambientTo: '#ecfdf5',
-          patternDensity: 0.7,
+          patternDensity: 0.30,
         },
       },
     } as any

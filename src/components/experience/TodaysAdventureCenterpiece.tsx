@@ -24,13 +24,26 @@
 
 import { useTranslation } from 'react-i18next';
 import { Sparkles, PartyPopper, Gift, Timer } from 'lucide-react';
-import { TactileCard } from '../queki/TactileCard';
 import { TactileButton } from '../queki/TactileButton';
 import type {
   DailyAdventurePresentation,
 } from '../../domain/adventure/presentation.v1';
 import type { ComebackTier } from '../../domain/comeback/types';
 import type { MysteryDropDisplay } from '../queki/TodaysAdventure';
+
+
+/**
+ * Map a comeback tier to its authored XP reward (matches the
+ * authoritative gamification / Comeback eligibility resolver so the
+ * Adventure band never invents its own number). Kept local so the
+ * component file remains the single owner of presentation copy.
+ */
+function resolveComebackXp(tier: ComebackTier): number {
+  if (tier === 'return_7d') return 50;
+  if (tier === 'return_3d') return 25;
+  if (tier === 'return_1d') return 10;
+  return 0;
+}
 
 export interface TodaysAdventureCenterpieceProps {
   readonly presentation: DailyAdventurePresentation;
@@ -90,6 +103,7 @@ export function TodaysAdventureCenterpiece({
       <ComebackShell
         tier={comeback.tier}
         inactivityDays={comeback.inactivityDays}
+        xpReward={resolveComebackXp(comeback.tier)}
         onPress={onPressComeback}
       />
     );
@@ -262,47 +276,63 @@ function MysteryLockedShell({ drop }: { drop: MysteryDropDisplay }) {
 function ComebackShell({
   tier,
   inactivityDays,
+  xpReward,
   onPress,
 }: {
   tier: ComebackTier;
   inactivityDays: number;
+  xpReward: number;
   onPress?: () => void;
 }) {
   const { t } = useTranslation('home');
-  // Warm, non-guilt copy. The reward tier XP is awarded server-side.
+  // PO 2026-09-03: warm welcome on the mascot, authoritative mission/XP info
+  // here. The mascot already says "Great to see you again" so the Adventure
+  // does NOT repeat the welcome line. We surface the comeback XP + mission
+  // so the child sees the actionable benefit.
   const tierCopy =
     tier === 'return_7d'
       ? t('child.adventure.comeback.warm7d')
       : tier === 'return_3d'
         ? t('child.adventure.comeback.warm3d')
         : t('child.adventure.comeback.warm1d');
+  const xp = Math.max(0, Math.floor(Number.isFinite(xpReward) ? xpReward : 0));
+  const body =
+    inactivityDays === 1
+      ? t('child.adventure.comeback.bodySingle', { xp })
+      : t('child.adventure.comeback.body', { count: inactivityDays, xp });
   return (
-    <TactileCard
-      onClick={onPress}
+    <div
       data-testid="adventure-centerpiece-comeback"
       data-comeback-tier={tier}
-      className="flex items-center gap-4 rounded-2xl border border-family-100 bg-family-50/70 p-4"
+      data-comeback-state={xp > 0 ? 'has-xp' : 'no-xp'}
+      className="flex items-center gap-3 rounded-2xl border border-family-100 bg-family-50/70 p-3"
+      role={onPress ? 'button' : undefined}
+      onClick={onPress}
+      onKeyDown={onPress ? (e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onPress(); } }) : undefined}
+      tabIndex={onPress ? 0 : undefined}
+      aria-label={t('child.adventure.comeback.heading')}
     >
       <span
         aria-hidden="true"
-        className="flex h-12 w-12 items-center justify-center rounded-2xl bg-family-500 text-white shadow"
+        className="flex h-10 w-10 items-center justify-center rounded-xl bg-family-500 text-white"
       >
-        <PartyPopper size={22} />
+        <PartyPopper size={18} />
       </span>
       <div className="min-w-0 flex-1">
         <p className="text-meta font-extrabold uppercase tracking-wide text-family-700">
           {t('child.adventure.comeback.heading')}
         </p>
-        <p className="mt-0.5 text-card-title font-bold text-family-900">
+        <p className="mt-0.5 text-body font-bold text-family-900">
           {tierCopy}
+          {xp > 0 ? (
+            <span className="ml-2 inline-flex items-center rounded-full bg-family-500 px-2 py-0.5 text-meta font-extrabold uppercase tracking-wide text-white">
+              +{xp} XP
+            </span>
+          ) : null}
         </p>
-        <p className="mt-0.5 text-meta text-family-800/80">
-          {inactivityDays === 1
-            ? t('child.adventure.comeback.bodySingle')
-            : t('child.adventure.comeback.body', { count: inactivityDays })}
-        </p>
+        <p className="mt-0.5 text-meta text-family-800/80">{body}</p>
       </div>
-    </TactileCard>
+    </div>
   );
 }
 
