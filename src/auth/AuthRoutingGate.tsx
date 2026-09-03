@@ -57,6 +57,7 @@ const PUBLIC_PASSTHROUGH_PATHS = new Set([
   '/privacy',
   '/terms',
   '/account-deletion',
+  '/join-qr',
 ]);
 
 const isCurrentCreateRoute = (pathname: string, search: string) =>

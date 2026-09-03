@@ -18,7 +18,7 @@ test.describe('Child QR Device Onboarding E2E Flow', () => {
 
     // 1. Parent logs in & opens "Connect Child Device" modal
     await loginAs(parentPage, 'parent@test.com');
-    await parentPage.click('a[href="/family"]');
+    await parentPage.goto('/family');
 
     // Click "Connect Child Device" button
     const connectButton = parentPage.getByRole('button', { name: /Connect Child Device/i }).first();
@@ -41,11 +41,9 @@ test.describe('Child QR Device Onboarding E2E Flow', () => {
     expect(qrTokenText).toBeTruthy();
     const cleanToken = qrTokenText?.trim() || '';
 
-    // 2. Child device opens /join-qr and pastes QR token
-    await childPage.goto('/join-qr');
-    await expect(childPage.getByTestId('qr-token-input')).toBeVisible();
-
-    await childPage.getByTestId('qr-token-input').fill(cleanToken);
+    // 2. Child device opens direct QR URL /join-qr?token=... (simulating camera QR scan on unauthenticated device)
+    await childPage.goto(`/join-qr?token=${cleanToken}`);
+    await expect(childPage.getByTestId('submit-qr-token-button')).toBeVisible();
     await childPage.getByTestId('submit-qr-token-button').click();
 
     // 3. Child enters "Waiting for Parent Approval" state

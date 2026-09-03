@@ -157,6 +157,7 @@ vi.mock('./help/pages/HelpHome', () => ({ HelpHome: () => null }));
 vi.mock('./help/pages/HelpArticlePage', () => ({ HelpArticlePage: () => null }));
 vi.mock('./help/pages/HelpCategoryPage', () => ({ HelpCategoryPage: () => null }));
 vi.mock('./help/pages/HelpSearchResults', () => ({ HelpSearchResults: () => null }));
+vi.mock('./pages/ChildQrScanPage', () => ({ ChildQrScanPage: () => <div data-testid="child-qr-scan-page" /> }));
 
 import App from './App';
 
@@ -488,5 +489,22 @@ describe('App auth routing and onboarding composition', () => {
     });
     expect(await screen.findByTestId('app-layout')).toBeVisible();
     await waitFor(() => expect(window.location.pathname).toBe('/'));
+  });
+
+  it('allows an unauthenticated user to access /join-qr?token=... without redirecting to login', async () => {
+    publishStore({
+      authStatus: 'unauthenticated',
+      authUser: null,
+      currentUser: null,
+      profileServerConfirmed: false,
+      appReady: true,
+    });
+    window.history.pushState({}, '', '/join-qr?token=test-qr-token-12345');
+
+    render(<App />);
+
+    await waitFor(() => expect(screen.getByTestId('child-qr-scan-page')).toBeInTheDocument());
+    expect(window.location.pathname).toBe('/join-qr');
+    expect(window.location.search).toBe('?token=test-qr-token-12345');
   });
 });
