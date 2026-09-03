@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
-import { generateChildQrToken } from '../lib/childQrOnboardingApi';
+import { generateChildQrToken, mapChildQrErrorKey } from '../lib/childQrOnboardingApi';
 import { QRCodeSVG } from 'qrcode.react';
 import { X, RefreshCw, Copy, Check, QrCode, Smartphone, ShieldCheck, Clock } from 'lucide-react';
 
@@ -24,7 +24,12 @@ export function ConnectChildDeviceQrModal({ isOpen, onClose }: ConnectChildDevic
       setRawToken(res.rawToken);
       setExpiresAtMs(res.expiresAtMs);
     } catch (err: any) {
-      setError(err?.message || 'Failed to generate QR token');
+      const key = mapChildQrErrorKey(err);
+      if (key === 'auth:childQr.errors.generic' || err?.message === 'internal' || err?.code === 'functions/internal') {
+        setError("We couldn't create the QR code. Please try again.");
+      } else {
+        setError(err?.message || "We couldn't create the QR code. Please try again.");
+      }
     } finally {
       setLoading(false);
     }

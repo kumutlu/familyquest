@@ -4,6 +4,14 @@ import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 const mockGenerateToken = vi.fn();
 vi.mock('../lib/childQrOnboardingApi', () => ({
   generateChildQrToken: () => mockGenerateToken(),
+  mapChildQrErrorKey: (err: unknown) => {
+    const raw = err as { code?: string; message?: string } | undefined;
+    const msg = raw?.message || '';
+    if (msg === 'internal' || raw?.code === 'functions/internal' || raw?.code === 'functions/not-found') {
+      return 'auth:childQr.errors.generic';
+    }
+    return 'auth:childQr.errors.generic';
+  },
 }));
 
 import { ConnectChildDeviceQrModal } from './ConnectChildDeviceQrModal';
@@ -79,6 +87,26 @@ describe('Task 7: Parent Connect Child Device Modal UI & Standard QR Renderer', 
       (window as any).location = originalLocation;
     }
   });
+
+  it('displays user-friendly error message instead of raw "internal" string on backend failure', async () => {
+    mockGenerateToken.mockRejectedValue({
+      code: 'functions/internal',
+      message: 'internal',
+    });
+
+    render(<ConnectChildDeviceQrModal isOpen={true} onClose={vi.fn()} />);
+
+    await waitFor(() => {
+      expect(screen.queryByText(/loading/i)).not.toBeInTheDocument();
+    });
+
+    // Must NOT show raw internal string to user
+    expect(screen.queryByText(/^internal$/i)).toBeNull();
+
+    // MUST show user-friendly error message
+    expect(screen.getByText("We couldn't create the QR code. Please try again.")).toBeInTheDocument();
+  });
+
 
   it('allows refreshing the QR code', async () => {
     mockGenerateToken.mockResolvedValue({
