@@ -15,8 +15,12 @@ import { Toast, type ToastData } from '../components/ui/Toast';
 import { AddChildModal } from '../components/family/AddChildModal';
 import { InviteMemberCard } from '../components/dashboard/InviteMemberCard';
 import { Button } from '../components/ui/Button';
-import { Plus, UserPlus, ChevronDown, ChevronUp } from 'lucide-react';
+import { Plus, UserPlus, ChevronDown, ChevronUp, QrCode } from 'lucide-react';
+import { ConnectChildDeviceQrModal } from '../components/ConnectChildDeviceQrModal';
+
+
 import { useNavigate } from 'react-router-dom';
+
 
 export function Family() {
   const { t } = useTranslation(['family', 'familyWorld', 'common']);
@@ -47,7 +51,9 @@ export function Family() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isAddChildOpen, setIsAddChildOpen] = useState(false);
   const [isInviteOpen, setIsInviteOpen] = useState(false);
+  const [isQrModalOpen, setIsQrModalOpen] = useState(false);
   const [showAdvancedManagement, setShowAdvancedManagement] = useState(false);
+
 
   const showToast = (message: string, type: 'success' | 'error' | 'info' = 'success') =>
     setToast({ id: Date.now(), message, type });
@@ -148,16 +154,29 @@ export function Family() {
             )}
 
             {isOwner && (
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => setIsAddChildOpen(true)}
-                className="rounded-xl border-slate-300 dark:border-slate-700 text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 text-xs font-semibold"
-              >
-                <UserPlus size={15} className="mr-1 shrink-0" />
-                {t('addChild')}
-              </Button>
+              <>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setIsQrModalOpen(true)}
+                  className="rounded-xl border-indigo-300 dark:border-indigo-700 text-indigo-700 dark:text-indigo-300 hover:bg-indigo-50 dark:hover:bg-indigo-950 text-xs font-semibold"
+                >
+                  <QrCode size={15} className="mr-1 shrink-0" />
+                  <span>Connect Child Device</span>
+                </Button>
+
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setIsAddChildOpen(true)}
+                  className="rounded-xl border-slate-300 dark:border-slate-700 text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 text-xs font-semibold"
+                >
+                  <UserPlus size={15} className="mr-1 shrink-0" />
+                  {t('addChild')}
+                </Button>
+              </>
             )}
+
 
             <Button
               variant="secondary"
@@ -399,7 +418,14 @@ export function Family() {
         </div>
       )}
 
+      {/* Connect Child Device QR Modal */}
+      <ConnectChildDeviceQrModal
+        isOpen={isQrModalOpen}
+        onClose={() => setIsQrModalOpen(false)}
+      />
+
       {/* Toast */}
+
       <Toast toast={toast} onDismiss={() => setToast(null)} />
     </div>
   );

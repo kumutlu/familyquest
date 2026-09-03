@@ -20,7 +20,9 @@ import { JoinInvite } from './pages/JoinInvite';
 import { AdultInvite } from './pages/AdultInvite';
 import { PendingMembership } from './pages/PendingMembership';
 import { NoFamilyChoice } from './pages/NoFamilyChoice';
+import { ChildQrScanPage } from './pages/ChildQrScanPage';
 import { OnboardingFlow } from './onboarding/OnboardingFlow';
+
 import { PrivacyPolicy } from './pages/legal/PrivacyPolicy';
 import { TermsOfService } from './pages/legal/TermsOfService';
 import { AccountDeletion } from './pages/legal/AccountDeletion';
@@ -159,6 +161,8 @@ function App() {
           <Route path="/invite/:token" element={<AdultInvite />} />
           <Route path="/join/pending" element={<PendingMembership />} />
           <Route path="/no-family" element={<NoFamilyChoice />} />
+          <Route path="/join-qr" element={<ChildQrScanPage />} />
+
 
           {/* Public pre-auth onboarding. Rendered OUTSIDE <AppLayout> so it is
               reachable by unauthenticated visitors; it carries its own internal

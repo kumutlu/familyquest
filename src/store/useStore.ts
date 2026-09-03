@@ -90,6 +90,8 @@ const emptyFamilyState = () => ({
   familyMembers: [] as any[],
   joinRequests: [] as any[],
   childJoinRequests: [] as any[],
+  childQrJoinRequests: [] as any[],
+
   tasks: [] as any[],
   taskCompletions: [] as any[],
   rewards: [] as any[],
@@ -152,6 +154,8 @@ interface AppState {
   familyMembers: any[];
   joinRequests: any[];
   childJoinRequests: any[];
+  childQrJoinRequests: any[];
+
   tasks: any[];
   taskCompletions: any[];
   rewards: any[];
