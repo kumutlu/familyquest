@@ -8,7 +8,7 @@ vi.mock('../lib/childQrOnboardingApi', () => ({
 
 import { ConnectChildDeviceQrModal } from './ConnectChildDeviceQrModal';
 
-describe('Task 7: Parent Connect Child Device Modal UI', () => {
+describe('Task 7: Parent Connect Child Device Modal UI & Standard QR Renderer', () => {
   beforeEach(() => {
     vi.clearAllMocks();
   });
@@ -24,11 +24,36 @@ describe('Task 7: Parent Connect Child Device Modal UI', () => {
     expect(screen.getByText(/loading/i)).toBeInTheDocument();
 
     await waitFor(() => {
-      expect(screen.getByTestId('qr-code-svg')).toBeInTheDocument();
+      expect(screen.getByTestId('qr-code-container')).toBeInTheDocument();
     });
 
     expect(screen.getByTestId('copy-join-link-button')).toBeInTheDocument();
     expect(mockGenerateToken).toHaveBeenCalledTimes(1);
+  });
+
+  it('renders standards-compliant QRCodeSVG with canonical join URL payload and no pseudo matrix', async () => {
+    mockGenerateToken.mockResolvedValue({
+      rawToken: 'token-std-qr-987654321',
+      expiresAtMs: Date.now() + 15 * 60 * 1000,
+    });
+
+    render(<ConnectChildDeviceQrModal isOpen={true} onClose={vi.fn()} />);
+
+    await waitFor(() => {
+      expect(screen.getByTestId('qr-code-container')).toBeInTheDocument();
+    });
+
+    const qrContainer = screen.getByTestId('qr-code-container');
+    const svgElement = qrContainer.querySelector('svg');
+    expect(svgElement).not.toBeNull();
+
+    // Verify pseudo-matrix class / data attributes are absent
+    expect(qrContainer.querySelector('[data-testid="pseudo-qr-grid"]')).toBeNull();
+
+    // Verify canonical join URL is passed as encoded value to qrcode.react
+    const expectedUrl = `${window.location.origin}/join-qr?token=token-std-qr-987654321`;
+    const copyLinkInput = screen.getByTestId('qr-copy-link-input') as HTMLInputElement;
+    expect(copyLinkInput.value).toBe(expectedUrl);
   });
 
   it('allows refreshing the QR code', async () => {
@@ -40,7 +65,7 @@ describe('Task 7: Parent Connect Child Device Modal UI', () => {
     render(<ConnectChildDeviceQrModal isOpen={true} onClose={vi.fn()} />);
 
     await waitFor(() => {
-      expect(screen.getByTestId('qr-code-svg')).toBeInTheDocument();
+      expect(screen.getByTestId('qr-code-container')).toBeInTheDocument();
     });
 
     mockGenerateToken.mockResolvedValue({

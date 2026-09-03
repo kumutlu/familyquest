@@ -14,8 +14,11 @@ import { CreateChildLoginDialog } from '../components/family/CreateChildLoginDia
 import { Toast, type ToastData } from '../components/ui/Toast';
 import { AddChildModal } from '../components/family/AddChildModal';
 import { InviteMemberCard } from '../components/dashboard/InviteMemberCard';
+import { Button } from '../components/ui/Button';
 import { Plus, UserPlus, ChevronDown, ChevronUp, QrCode } from 'lucide-react';
 import { ConnectChildDeviceQrModal } from '../components/ConnectChildDeviceQrModal';
+
+
 import { useNavigate } from 'react-router-dom';
 
 

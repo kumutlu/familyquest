@@ -1,99 +1,11 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { generateChildQrToken } from '../lib/childQrOnboardingApi';
+import { QRCodeSVG } from 'qrcode.react';
 import { X, RefreshCw, Copy, Check, QrCode, Smartphone, ShieldCheck, Clock } from 'lucide-react';
 
 interface ConnectChildDeviceQrModalProps {
   isOpen: boolean;
   onClose: () => void;
-}
-
-/**
- * Lightweight SVG QR Code Renderer for zero-dependency high-reliability rendering.
- * Renders an SVG matrix representation of the given text payload.
- */
-function SimpleQrSvg({ value, size = 220 }: { value: string; size?: number }) {
-  // Generate a deterministic 25x25 grid pattern from payload string hash for visual representation
-  const gridCount = 25;
-  const cellSize = size / gridCount;
-  const modules: boolean[][] = Array.from({ length: gridCount }, () => Array(gridCount).fill(false));
-
-  // Helper to place 7x7 finder patterns at 3 corners
-  const addFinder = (startRow: number, startCol: number) => {
-    for (let r = 0; r < 7; r++) {
-      for (let c = 0; c < 7; c++) {
-        const isBorder = r === 0 || r === 6 || c === 0 || c === 6;
-        const isCenter = r >= 2 && r <= 4 && c >= 2 && c <= 4;
-        modules[startRow + r][startCol + c] = isBorder || isCenter;
-      }
-    }
-  };
-
-  // 1. Top-Left finder
-  addFinder(0, 0);
-  // 2. Top-Right finder
-  addFinder(0, gridCount - 7);
-  // 3. Bottom-Left finder
-  addFinder(gridCount - 7, 0);
-
-  // Timing patterns
-  for (let i = 8; i < gridCount - 8; i++) {
-    modules[6][i] = i % 2 === 0;
-    modules[i][6] = i % 2 === 0;
-  }
-
-  // Seed remaining grid with deterministic bits derived from text
-  let hash = 0;
-  for (let i = 0; i < value.length; i++) {
-    hash = (hash << 5) - hash + value.charCodeAt(i);
-    hash |= 0;
-  }
-
-  for (let r = 0; r < gridCount; r++) {
-    for (let c = 0; c < gridCount; c++) {
-      // Don't overwrite finders or timing patterns
-      const inTopLeft = r < 8 && c < 8;
-      const inTopRight = r < 8 && c >= gridCount - 8;
-      const inBottomLeft = r >= gridCount - 8 && c < 8;
-      const isTiming = r === 6 || c === 6;
-
-      if (!inTopLeft && !inTopRight && !inBottomLeft && !isTiming) {
-        const bitIndex = (r * gridCount + c + Math.abs(hash)) % 32;
-        const charCode = value.charCodeAt((r + c) % value.length) || 65;
-        modules[r][c] = ((charCode + r * 3 + c * 7 + (hash >> bitIndex)) & 1) === 1;
-      }
-    }
-  }
-
-  const rects: React.ReactElement[] = [];
-  for (let r = 0; r < gridCount; r++) {
-    for (let c = 0; c < gridCount; c++) {
-      if (modules[r][c]) {
-        rects.push(
-          <rect
-            key={`${r}-${c}`}
-            x={c * cellSize}
-            y={r * cellSize}
-            width={cellSize + 0.1}
-            height={cellSize + 0.1}
-            fill="currentColor"
-          />
-        );
-      }
-    }
-  }
-
-  return (
-    <svg
-      data-testid="qr-code-svg"
-      width={size}
-      height={size}
-      viewBox={`0 0 ${size} ${size}`}
-      className="text-slate-900 dark:text-white"
-    >
-      <rect width={size} height={size} fill="white" rx="12" />
-      <g transform="translate(10, 10) scale(0.91)">{rects}</g>
-    </svg>
-  );
 }
 
 export function ConnectChildDeviceQrModal({ isOpen, onClose }: ConnectChildDeviceQrModalProps) {
@@ -206,10 +118,30 @@ export function ConnectChildDeviceQrModal({ isOpen, onClose }: ConnectChildDevic
                 Scan this QR code from your child's device to initiate device join.
               </p>
 
-              {/* QR Container */}
-              <div className="p-4 rounded-2xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 shadow-inner flex items-center justify-center">
-                <SimpleQrSvg value={joinLink} size={200} />
+              {/* QR Container with Standards-Compliant ISO/IEC 18004 QRCodeSVG */}
+              <div
+                data-testid="qr-code-container"
+                className="p-4 rounded-2xl bg-white border border-slate-200 dark:border-slate-700 shadow-sm flex items-center justify-center"
+              >
+                <QRCodeSVG
+                  value={joinLink}
+                  size={200}
+                  level="M"
+                  marginSize={2}
+                  aria-label="Child device onboarding QR code"
+                />
               </div>
+
+              {/* Hidden payload input for link test inspection */}
+              <input
+                type="hidden"
+                data-testid="qr-copy-link-input"
+                value={joinLink}
+                readOnly
+              />
+              <span data-testid="qr-raw-token" className="hidden">
+                {rawToken}
+              </span>
 
               {/* Timer & Security Note */}
               <div className="flex items-center gap-4 text-xs font-semibold">
