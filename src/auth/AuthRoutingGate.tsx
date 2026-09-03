@@ -52,6 +52,7 @@ const CANONICAL_V2_TOKEN = /^[A-Za-z0-9_-]{43}$/;
 const LEGACY_INVITE_CODE = /^[A-Z0-9]{6}$/;
 const PUBLIC_PASSTHROUGH_PATHS = new Set([
   '/auth/verify',
+  '/auth/action',
   '/join-family',
   '/privacy',
   '/terms',

@@ -39,7 +39,7 @@ test('real verification link preserves and resumes UID-bound family onboarding',
   });
   const verificationPage = await context.newPage();
   await verificationPage.goto(`/auth/action?${handlerSearch}`);
-  await expect(verificationPage.getByRole('heading', { name: /email verified/i })).toBeVisible();
+  await expect(verificationPage.getByText(/your email is verified/i)).toBeVisible();
   await verificationPage.getByRole('button', { name: /^continue$/i }).click();
   await expect(verificationPage).toHaveURL(url => url.pathname === '/verify-email');
   expect(new URL(verificationPage.url()).hostname).not.toBe('evil.example');
