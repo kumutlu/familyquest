@@ -1792,6 +1792,15 @@ service cloud.firestore {
       allow read, write: if false;
     }
 
+    // ONE-TIME QR CHILD ONBOARDING — SERVER-ONLY ROOT LOOKUPS
+    match /childQrTokenLookup/{tokenHash} {
+      allow read, write: if false;
+    }
+    match /childQrRequestLookup/{requestId} {
+      allow read, write: if false;
+    }
+
+
     // ADULT INVITATION V2 — SERVER-ONLY ROOT COLLECTIONS
     // Invitation credentials, idempotency state, and preview abuse counters are
     // owned exclusively by the trusted backend. Clients receive only validated
@@ -2644,6 +2653,22 @@ service cloud.firestore {
       match /childJoinSecrets/{requestId} {
         allow read, write: if false;
       }
+
+      // ONE-TIME QR CHILD ONBOARDING
+      match /child_qr_sessions/{sessionId} {
+        allow read, write: if false;
+      }
+      match /child_qr_join_requests/{requestId} {
+        allow read: if isParent(familyId);
+        allow write: if false;
+      }
+      match /childQrJoinSecrets/{requestId} {
+        allow read, write: if false;
+      }
+      match /qrIdempotency/{operationKey} {
+        allow read, write: if false;
+      }
+
 
       // =========================================================================
       // GAMIFICATION PHASE 1 — SERVER-OWNED COLLECTIONS
