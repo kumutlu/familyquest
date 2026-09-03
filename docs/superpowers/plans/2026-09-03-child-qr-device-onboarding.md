@@ -2,9 +2,10 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Base Commit SHA:** `c9905f8615f7c5f0b250ec99e96e9434ffa8c6e0`  
-**Branch:** `feature/child-qr-onboarding`  
-**Target Path:** `docs/superpowers/plans/2026-09-03-child-qr-device-onboarding.md`  
+**Base Commit SHA:** `c9905f8615f7c5f0b250ec99e96e9434ffa8c6e0`
+**Branch:** `feature/child-qr-onboarding`
+**Target Path:** `docs/superpowers/plans/2026-09-03-child-qr-device-onboarding.md`
+
 
 **Goal:** Securely connect a child device to an **EXISTING managed-child profile** in Queki via a parent-generated, 15-minute, single-use, high-entropy QR code with server-authoritative parent approval and custom token exchange.
 
