@@ -56,6 +56,30 @@ describe('Task 7: Parent Connect Child Device Modal UI & Standard QR Renderer', 
     expect(copyLinkInput.value).toBe(expectedUrl);
   });
 
+  it('resolves production origin https://queki.app when rendered in production environment', async () => {
+    mockGenerateToken.mockResolvedValue({
+      rawToken: 'prod-token-abc-123',
+      expiresAtMs: Date.now() + 15 * 60 * 1000,
+    });
+
+    const originalLocation = window.location;
+    delete (window as any).location;
+    (window as any).location = { origin: 'https://queki.app' };
+
+    try {
+      render(<ConnectChildDeviceQrModal isOpen={true} onClose={vi.fn()} />);
+
+      await waitFor(() => {
+        expect(screen.getByTestId('qr-code-container')).toBeInTheDocument();
+      });
+
+      const copyLinkInput = screen.getByTestId('qr-copy-link-input') as HTMLInputElement;
+      expect(copyLinkInput.value).toBe('https://queki.app/join-qr?token=prod-token-abc-123');
+    } finally {
+      (window as any).location = originalLocation;
+    }
+  });
+
   it('allows refreshing the QR code', async () => {
     mockGenerateToken.mockResolvedValue({
       rawToken: 'test-raw-qr-token-first',
