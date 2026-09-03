@@ -314,7 +314,9 @@ export {
   getChildQrJoinStatus,
   approveChildQrJoinRequest,
   rejectChildQrJoinRequest,
+  exchangeApprovedChildQrRequest,
 } from './childQrOnboarding';
+
 
 
 

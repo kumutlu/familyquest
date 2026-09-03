@@ -457,6 +457,83 @@ export async function rejectChildQrJoinRequestImpl(
   return { requestId, status: 'rejected' };
 }
 
+/**
+ * 7. exchangeApprovedChildQrRequest
+ * Child device exchanges an approved request + valid requestSecret for a Firebase custom token
+ * corresponding to the EXISTING child's authUid and existing custom claims.
+ * Retries are idempotent/recoverable.
+ */
+export async function exchangeApprovedChildQrRequestImpl(
+  input: { requestId?: string; requestSecret?: string },
+  context: ChildQrOnboardingContext,
+): Promise<{ customToken: string; childId: string }> {
+  const requestId = typeof input?.requestId === 'string' ? input.requestId.trim() : '';
+  const requestSecret = typeof input?.requestSecret === 'string' ? input.requestSecret.trim() : '';
+  if (!requestId || !requestSecret) {
+    throw new HttpsError('invalid-argument', 'JOIN_REQUEST_NOT_FOUND');
+  }
+
+  const lookupSnap = await context.db.doc(`childQrRequestLookup/${requestId}`).get();
+  if (!lookupSnap.exists) {
+    throw new HttpsError('not-found', 'JOIN_REQUEST_NOT_FOUND');
+  }
+  const familyId = String(lookupSnap.data()?.familyId ?? '');
+
+  const secretSnap = await context.db.doc(`families/${familyId}/childQrJoinSecrets/${requestId}`).get();
+  if (!secretSnap.exists) {
+    throw new HttpsError('not-found', 'JOIN_REQUEST_NOT_FOUND');
+  }
+  const secretData = secretSnap.data() as Record<string, any>;
+  const computedHash = hashSha256(requestSecret);
+  if (secretData.requestSecretHash !== computedHash) {
+    throw new HttpsError('not-found', 'JOIN_REQUEST_NOT_FOUND');
+  }
+
+  const reqSnap = await context.db.doc(`families/${familyId}/child_qr_join_requests/${requestId}`).get();
+  if (!reqSnap.exists) {
+    throw new HttpsError('not-found', 'JOIN_REQUEST_NOT_FOUND');
+  }
+  const reqData = reqSnap.data() as Record<string, any>;
+  if (reqData.status !== 'approved') {
+    throw new HttpsError('failed-precondition', 'REQUEST_NOT_APPROVED');
+  }
+
+  const selectedManagedChildId = String(reqData.selectedManagedChildId ?? '');
+  if (!selectedManagedChildId) {
+    throw new HttpsError('failed-precondition', 'INVALID_APPROVAL_STATE');
+  }
+
+  // Revalidate target child profile & private login record
+  const childSnap = await context.db.doc(`users/${selectedManagedChildId}`).get();
+  if (!childSnap.exists) {
+    throw new HttpsError('failed-precondition', 'CHILD_INACTIVE');
+  }
+  const child = childSnap.data() as Record<string, any>;
+  if (child.familyId !== familyId || child.role !== 'child' || child.isManaged !== true || child.status === 'deleted') {
+    throw new HttpsError('failed-precondition', 'CHILD_INACTIVE');
+  }
+
+  const loginSnap = await context.db.doc(`families/${familyId}/childLogins/${selectedManagedChildId}`).get();
+  if (!loginSnap.exists || !loginSnap.data()?.authUid) {
+    throw new HttpsError('failed-precondition', 'CHILD_INACTIVE');
+  }
+  const existingAuthUid = String(loginSnap.data()?.authUid ?? child.authUid ?? '');
+  if (!existingAuthUid) {
+    throw new HttpsError('failed-precondition', 'CHILD_INACTIVE');
+  }
+
+  // Mint Firebase custom token for existing child Auth UID with existing claims
+  const authInstance = context.auth ?? getAuth();
+  const customToken = await authInstance.createCustomToken(existingAuthUid, {
+    role: 'child',
+    familyId,
+    childId: selectedManagedChildId,
+    managedChild: true,
+  });
+
+  return { customToken, childId: selectedManagedChildId };
+}
+
 // Callables exported for Firebase deployment
 const prodCtx = (): ChildQrOnboardingContext => ({
   db: getFirestore(),
@@ -491,4 +568,9 @@ export const approveChildQrJoinRequest = onCall(
 export const rejectChildQrJoinRequest = onCall(
   { region: 'europe-west1', enforceAppCheck: false },
   (request) => rejectChildQrJoinRequestImpl(request.data as any, request, prodCtx()),
+);
+
+export const exchangeApprovedChildQrRequest = onCall(
+  { region: 'europe-west1', enforceAppCheck: false },
+  (request) => exchangeApprovedChildQrRequestImpl(request.data as any, prodCtx()),
 );

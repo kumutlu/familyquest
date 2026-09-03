@@ -18,6 +18,7 @@ import {
   getChildQrJoinStatusImpl,
   approveChildQrJoinRequestImpl,
   rejectChildQrJoinRequestImpl,
+  exchangeApprovedChildQrRequestImpl,
   QR_SESSION_TTL_MS,
   type ChildQrOnboardingContext,
 } from './childQrOnboarding';
@@ -79,13 +80,22 @@ function fakeContext() {
     },
   };
 
+  const createdTokens: Array<{ uid: string; claims: Record<string, any> }> = [];
+  const auth: any = {
+    createCustomToken: vi.fn(async (uid: string, claims: Record<string, any>) => {
+      createdTokens.push({ uid, claims });
+      return `custom-token-for-${uid}`;
+    }),
+  };
+
   let mockTime = NOW.getTime();
   const context: ChildQrOnboardingContext = {
     db,
+    auth,
     nowMs: () => mockTime,
   };
 
-  return { context, documents, setMockTime: (t: number) => { mockTime = t; } };
+  return { context, documents, createdTokens, setMockTime: (t: number) => { mockTime = t; } };
 }
 
 describe('Task 1: Backend QR Session & Token Lookup Primitive', () => {
@@ -293,7 +303,6 @@ describe('Task 3: Backend Parent Approval & Rejection', () => {
     fixture.documents.set('families/family-1', { name: 'The Smiths' });
     fixture.documents.set('families/family-2', { name: 'The Other Smiths' });
 
-    // Existing managed child identity in family-1
     fixture.documents.set('users/child-1', {
       uid: 'child-1',
       familyId: 'family-1',
@@ -312,7 +321,6 @@ describe('Task 3: Backend Parent Approval & Rejection', () => {
       status: 'enabled',
     });
 
-    // Existing managed child identity in family-2
     fixture.documents.set('users/child-other-family', {
       uid: 'child-other-family',
       familyId: 'family-2',
@@ -338,7 +346,6 @@ describe('Task 3: Backend Parent Approval & Rejection', () => {
 
   it('Test 16: child cannot select managedChildId during request submission', async () => {
     const { rawToken } = await generateChildQrTokenImpl({ auth: { uid: 'parent-1' } } as any, fixture.context);
-    // submit payload passing selectedManagedChildId should be ignored by request submission
     const res = await submitChildQrJoinRequestImpl({ token: rawToken, clientReqId: 'req-1', selectedManagedChildId: 'child-1' } as any, { auth: { uid: 'device-child-1' } } as any, fixture.context);
     const reqDoc = fixture.documents.get(`families/family-1/child_qr_join_requests/${res.requestId}`);
     expect(reqDoc?.selectedManagedChildId).toBeNull();
@@ -464,6 +471,104 @@ describe('Task 3: Backend Parent Approval & Rejection', () => {
 
     await expect(approve('family-1', requestId, 'child-1')).rejects.toMatchObject({
       message: 'REQUEST_NOT_PENDING',
+    });
+  });
+});
+
+describe('Task 4: Backend Custom Token Exchange Primitive', () => {
+  let fixture: ReturnType<typeof fakeContext>;
+
+  beforeEach(() => {
+    fixture = fakeContext();
+    fixture.documents.set('users/parent-1', { familyId: 'family-1', role: 'parent' });
+    fixture.documents.set('families/family-1', { name: 'The Smiths' });
+
+    fixture.documents.set('users/child-1', {
+      uid: 'child-1',
+      familyId: 'family-1',
+      role: 'child',
+      isManaged: true,
+      authUid: 'existing-synth-auth-uid-1',
+      displayName: 'Ali',
+    });
+    fixture.documents.set('families/family-1/childLogins/child-1', {
+      childId: 'child-1',
+      authUid: 'existing-synth-auth-uid-1',
+      familyId: 'family-1',
+      status: 'enabled',
+    });
+  });
+
+  const setupApprovedRequest = async () => {
+    const { rawToken } = await generateChildQrTokenImpl({ auth: { uid: 'parent-1' } } as any, fixture.context);
+    const subRes = await submitChildQrJoinRequestImpl({ token: rawToken, clientReqId: 'req-1' }, { auth: { uid: 'device-child-1' } } as any, fixture.context);
+    await approveChildQrJoinRequestImpl({ familyId: 'family-1', requestId: subRes.requestId, selectedManagedChildId: 'child-1', clientReqId: 'c-1' }, { auth: { uid: 'parent-1' } } as any, fixture.context);
+    return subRes;
+  };
+
+  const exchange = (requestId: string, requestSecret: string) =>
+    exchangeApprovedChildQrRequestImpl({ requestId, requestSecret }, fixture.context);
+
+  it('Test 32: wrong requestSecret cannot exchange token', async () => {
+    const { requestId } = await setupApprovedRequest();
+    await expect(exchange(requestId, 'wrong-secret')).rejects.toMatchObject({
+      message: 'JOIN_REQUEST_NOT_FOUND',
+    });
+  });
+
+  it('Test 33: approved request exchanges to EXISTING child authUid', async () => {
+    const { requestId, requestSecret } = await setupApprovedRequest();
+    const res = await exchange(requestId, requestSecret);
+
+    expect(res.customToken).toBe('custom-token-for-existing-synth-auth-uid-1');
+    expect(res.childId).toBe('child-1');
+  });
+
+  it('Test 34: custom token claims match existing child identity', async () => {
+    const { requestId, requestSecret } = await setupApprovedRequest();
+    await exchange(requestId, requestSecret);
+
+    expect(fixture.createdTokens[0]).toEqual({
+      uid: 'existing-synth-auth-uid-1',
+      claims: {
+        role: 'child',
+        familyId: 'family-1',
+        childId: 'child-1',
+        managedChild: true,
+      },
+    });
+  });
+
+  it('Test 35: exchange cannot switch selected child', async () => {
+    const { requestId, requestSecret } = await setupApprovedRequest();
+    const res = await exchangeApprovedChildQrRequestImpl({ requestId, requestSecret, selectedManagedChildId: 'hacked-child-id' } as any, fixture.context);
+
+    expect(res.childId).toBe('child-1');
+  });
+
+  it('Test 36: exchange retry is recoverable/idempotent', async () => {
+    const { requestId, requestSecret } = await setupApprovedRequest();
+    const first = await exchange(requestId, requestSecret);
+    const second = await exchange(requestId, requestSecret);
+
+    expect(second).toEqual(first);
+  });
+
+  it('Test 37: target becoming invalid before exchange fails closed', async () => {
+    const { requestId, requestSecret } = await setupApprovedRequest();
+
+    // Soft delete child profile between approval and exchange
+    fixture.documents.set('users/child-1', {
+      uid: 'child-1',
+      familyId: 'family-1',
+      role: 'child',
+      isManaged: true,
+      authUid: 'existing-synth-auth-uid-1',
+      status: 'deleted',
+    });
+
+    await expect(exchange(requestId, requestSecret)).rejects.toMatchObject({
+      message: 'CHILD_INACTIVE',
     });
   });
 });
