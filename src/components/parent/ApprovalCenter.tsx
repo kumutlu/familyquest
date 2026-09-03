@@ -31,11 +31,14 @@ import {
 } from '../../lib/moneyRequestContracts';
 import { isPetBoxEnabled } from '../../lib/familyFeatures';
 import { approveChildJoinRequest, rejectChildJoinRequest } from '../../lib/childJoinApi';
+import { approveChildQrJoinRequest, rejectChildQrJoinRequest as rejectChildQrJoinRequestApi } from '../../lib/childQrOnboardingApi';
+import { ChildQrDeviceJoinApprovalCard } from '../ChildQrDeviceJoinApprovalCard';
 import { resolveAvatarImage } from '../../config/avatarCatalog';
+
 
 export function ApprovalCenter() {
   const { t } = useTranslation('approvals');
-  const { currentUser, tasks, familyMembers, familyData, rewards, taskCompletions, transferRequests, moneyRequests, petboxRequests, profileUpdateRequests, goalRequests, savingsGoals, childJoinRequests } = useStore();
+  const { currentUser, tasks, familyMembers, familyData, rewards, taskCompletions, transferRequests, moneyRequests, petboxRequests, profileUpdateRequests, goalRequests, savingsGoals, childJoinRequests, childQrJoinRequests } = useStore();
   const { openRequest } = useRequestDetail();
 
   const [activeTab, setActiveTab] = useState<'pending' | 'history'>('pending');
@@ -112,9 +115,21 @@ export function ApprovalCenter() {
       isPending: r.status === 'pending',
     })));
 
+    // 8. Child QR Device Join requests
+    items.push(...(childQrJoinRequests || []).map(r => ({
+      id: r.id,
+      category: 'child_qr_join',
+      status: r.status,
+      sortDate: r.createdAt?.toDate
+        ? r.createdAt.toDate()
+        : new Date(typeof r.createdAtMs === 'number' ? r.createdAtMs : Date.now()),
+      isPending: r.status === 'pending',
+    })));
+
     items.sort((a, b) => b.sortDate.getTime() - a.sortDate.getTime());
     return items;
-  }, [taskCompletions, transferRequests, moneyRequests, petboxRequests, profileUpdateRequests, goalRequests, savingsGoals, childJoinRequests, familyData]);
+  }, [taskCompletions, transferRequests, moneyRequests, petboxRequests, profileUpdateRequests, goalRequests, savingsGoals, childJoinRequests, childQrJoinRequests, familyData]);
+
 
   const itemKey = (item: any) => approvalKey(item.category as ApprovalType, item.id);
   const pendingApprovals = timeline.filter(item => item.isPending && !optimisticallyRemovedIds.has(itemKey(item)));
@@ -286,6 +301,46 @@ export function ApprovalCenter() {
         />
       );
     }
+
+    if (item.category === 'child_qr_join') {
+      const managedChildren = familyMembers
+        .filter(m => m.role === 'child' && (m as any).isManaged)
+        .map(c => ({ id: c.id, displayName: c.displayName, avatarUrl: c.avatarUrl }));
+      const key = itemKey(item);
+      return (
+        <ChildQrDeviceJoinApprovalCard
+          key={key}
+          request={item}
+          managedChildren={managedChildren}
+          onApprove={async (selectedChildId) => {
+            if (!currentUser) return;
+            setProcessing(prev => ({ ...prev, [key]: 'approve' }));
+            try {
+              await approveChildQrJoinRequest(currentUser.familyId, item.id, selectedChildId);
+              setOptimisticallyRemovedIds(prev => new Set(prev).add(key));
+            } catch (err) {
+              handleActionError(err, item, key, 'approve');
+            } finally {
+              setProcessing(prev => { const next = { ...prev }; delete next[key]; return next; });
+            }
+          }}
+          onReject={async () => {
+            if (!currentUser) return;
+            setProcessing(prev => ({ ...prev, [key]: 'reject' }));
+            try {
+              await rejectChildQrJoinRequestApi(currentUser.familyId, item.id);
+              setOptimisticallyRemovedIds(prev => new Set(prev).add(key));
+            } catch (err) {
+              handleActionError(err, item, key, 'reject');
+            } finally {
+              setProcessing(prev => { const next = { ...prev }; delete next[key]; return next; });
+            }
+          }}
+          isProcessing={key in processing}
+        />
+      );
+    }
+
 
     let title = '';
     let description = '';

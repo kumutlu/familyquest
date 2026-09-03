@@ -17,7 +17,9 @@ export type BootstrapResource =
   | 'members'
   | 'joinRequests'
   | 'childJoinRequests'
+  | 'childQrJoinRequests'
   | 'tasks'
+
   | 'taskCompletions'
   | 'rewards'
   | 'feed'
@@ -229,6 +231,8 @@ export function createBootstrapQueryPlan(
       // Child join requests are parent-only by rule; the documents contain no
       // credential material (see functions/src/childJoinRequest.ts).
       { resource: 'childJoinRequests', key: 'childJoinRequests', kind: 'query', target: collection(db, `${familyPath}/child_join_requests`) },
+      { resource: 'childQrJoinRequests', key: 'childQrJoinRequests', kind: 'query', target: collection(db, `${familyPath}/child_qr_join_requests`) },
+
       { resource: 'taskCompletions', key: 'taskCompletions', kind: 'query', target: collection(db, `${familyPath}/task_completions`) },
       { resource: 'redemptions', key: 'redemptions', kind: 'query', target: collection(db, `${familyPath}/redemptions`) },
       { resource: 'walletTransactions', key: 'walletTransactions', kind: 'query', target: collection(db, `${familyPath}/wallet_transactions`) },
