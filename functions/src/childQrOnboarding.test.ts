@@ -16,6 +16,8 @@ import {
   scanChildQrTokenImpl,
   submitChildQrJoinRequestImpl,
   getChildQrJoinStatusImpl,
+  approveChildQrJoinRequestImpl,
+  rejectChildQrJoinRequestImpl,
   QR_SESSION_TTL_MS,
   type ChildQrOnboardingContext,
 } from './childQrOnboarding';
@@ -277,6 +279,191 @@ describe('Task 2: Backend Pending Join Request & Secret Status Primitive', () =>
 
     await expect(getStatus(res.requestId, 'wrong-secret')).rejects.toMatchObject({
       message: 'JOIN_REQUEST_NOT_FOUND',
+    });
+  });
+});
+
+describe('Task 3: Backend Parent Approval & Rejection', () => {
+  let fixture: ReturnType<typeof fakeContext>;
+
+  beforeEach(() => {
+    fixture = fakeContext();
+    fixture.documents.set('users/parent-1', { familyId: 'family-1', role: 'parent' });
+    fixture.documents.set('users/parent-2-other', { familyId: 'family-2', role: 'parent' });
+    fixture.documents.set('families/family-1', { name: 'The Smiths' });
+    fixture.documents.set('families/family-2', { name: 'The Other Smiths' });
+
+    // Existing managed child identity in family-1
+    fixture.documents.set('users/child-1', {
+      uid: 'child-1',
+      familyId: 'family-1',
+      role: 'child',
+      isManaged: true,
+      authUid: 'existing-synth-auth-uid-1',
+      rewardPoints: 100,
+      lifetimeXP: 500,
+      displayName: 'Ali',
+    });
+    fixture.documents.set('families/family-1/wallets/child-1', { balance: 2500 });
+    fixture.documents.set('families/family-1/childLogins/child-1', {
+      childId: 'child-1',
+      authUid: 'existing-synth-auth-uid-1',
+      familyId: 'family-1',
+      status: 'enabled',
+    });
+
+    // Existing managed child identity in family-2
+    fixture.documents.set('users/child-other-family', {
+      uid: 'child-other-family',
+      familyId: 'family-2',
+      role: 'child',
+      isManaged: true,
+      authUid: 'existing-synth-auth-uid-2',
+      rewardPoints: 50,
+      lifetimeXP: 200,
+    });
+  });
+
+  const setupPendingRequest = async () => {
+    const { rawToken } = await generateChildQrTokenImpl({ auth: { uid: 'parent-1' } } as any, fixture.context);
+    const subRes = await submitChildQrJoinRequestImpl({ token: rawToken, clientReqId: 'req-1' }, { auth: { uid: 'device-child-1' } } as any, fixture.context);
+    return subRes;
+  };
+
+  const approve = (familyId: string, requestId: string, selectedManagedChildId: string, clientReqId = 'c-req-1', uid = 'parent-1') =>
+    approveChildQrJoinRequestImpl({ familyId, requestId, selectedManagedChildId, clientReqId }, { auth: { uid } } as any, fixture.context);
+
+  const reject = (familyId: string, requestId: string, rejectionReason?: string, clientReqId = 'c-req-1', uid = 'parent-1') =>
+    rejectChildQrJoinRequestImpl({ familyId, requestId, rejectionReason, clientReqId }, { auth: { uid } } as any, fixture.context);
+
+  it('Test 16: child cannot select managedChildId during request submission', async () => {
+    const { rawToken } = await generateChildQrTokenImpl({ auth: { uid: 'parent-1' } } as any, fixture.context);
+    // submit payload passing selectedManagedChildId should be ignored by request submission
+    const res = await submitChildQrJoinRequestImpl({ token: rawToken, clientReqId: 'req-1', selectedManagedChildId: 'child-1' } as any, { auth: { uid: 'device-child-1' } } as any, fixture.context);
+    const reqDoc = fixture.documents.get(`families/family-1/child_qr_join_requests/${res.requestId}`);
+    expect(reqDoc?.selectedManagedChildId).toBeNull();
+  });
+
+  it('Test 17: child cannot self-approve', async () => {
+    const { requestId } = await setupPendingRequest();
+    await expect(approve('family-1', requestId, 'child-1', 'c-1', 'device-child-1')).rejects.toMatchObject({
+      code: 'permission-denied',
+    });
+  });
+
+  it('Test 18: unrelated family parent cannot approve', async () => {
+    const { requestId } = await setupPendingRequest();
+    await expect(approve('family-1', requestId, 'child-1', 'c-1', 'parent-2-other')).rejects.toMatchObject({
+      code: 'permission-denied',
+    });
+  });
+
+  it('Test 19: parent must select existing managed child', async () => {
+    const { requestId } = await setupPendingRequest();
+    await expect(approve('family-1', requestId, 'non-existent-child', 'c-1', 'parent-1')).rejects.toMatchObject({
+      message: 'CHILD_NOT_FOUND',
+    });
+  });
+
+  it('Test 20: wrong-family child cannot be selected', async () => {
+    const { requestId } = await setupPendingRequest();
+    await expect(approve('family-1', requestId, 'child-other-family', 'c-1', 'parent-1')).rejects.toMatchObject({
+      message: 'CHILD_NOT_IN_FAMILY',
+    });
+  });
+
+  it('Test 21: inactive/non-managed child cannot be selected', async () => {
+    const { requestId } = await setupPendingRequest();
+    fixture.documents.set('users/adult-member', { familyId: 'family-1', role: 'parent' });
+    await expect(approve('family-1', requestId, 'adult-member', 'c-1', 'parent-1')).rejects.toMatchObject({
+      message: 'INVALID_TARGET_CHILD',
+    });
+  });
+
+  it('Test 22: approval changes no points', async () => {
+    const { requestId } = await setupPendingRequest();
+    const pointsBefore = fixture.documents.get('users/child-1')?.rewardPoints;
+
+    await approve('family-1', requestId, 'child-1');
+
+    const pointsAfter = fixture.documents.get('users/child-1')?.rewardPoints;
+    expect(pointsAfter).toBe(pointsBefore);
+  });
+
+  it('Test 23: approval changes no XP', async () => {
+    const { requestId } = await setupPendingRequest();
+    const xpBefore = fixture.documents.get('users/child-1')?.lifetimeXP;
+
+    await approve('family-1', requestId, 'child-1');
+
+    const xpAfter = fixture.documents.get('users/child-1')?.lifetimeXP;
+    expect(xpAfter).toBe(xpBefore);
+  });
+
+  it('Test 24: approval changes no wallet balance', async () => {
+    const { requestId } = await setupPendingRequest();
+    const walletBefore = fixture.documents.get('families/family-1/wallets/child-1')?.balance;
+
+    await approve('family-1', requestId, 'child-1');
+
+    const walletAfter = fixture.documents.get('families/family-1/wallets/child-1')?.balance;
+    expect(walletAfter).toBe(walletBefore);
+  });
+
+  it('Test 25: approval does not alter existing authUid', async () => {
+    const { requestId } = await setupPendingRequest();
+    const authUidBefore = fixture.documents.get('users/child-1')?.authUid;
+
+    await approve('family-1', requestId, 'child-1');
+
+    const authUidAfter = fixture.documents.get('users/child-1')?.authUid;
+    expect(authUidAfter).toBe(authUidBefore);
+  });
+
+  it('Test 26: approval does not alter childLogin identity', async () => {
+    const { requestId } = await setupPendingRequest();
+    const loginRecordBefore = fixture.documents.get('families/family-1/childLogins/child-1');
+
+    await approve('family-1', requestId, 'child-1');
+
+    const loginRecordAfter = fixture.documents.get('families/family-1/childLogins/child-1');
+    expect(loginRecordAfter).toEqual(loginRecordBefore);
+  });
+
+  it('Test 27: approval creates no new Firebase child identity', async () => {
+    const { requestId } = await setupPendingRequest();
+    const usersBefore = [...fixture.documents.keys()].filter((k) => k.startsWith('users/')).length;
+
+    await approve('family-1', requestId, 'child-1');
+
+    const usersAfter = [...fixture.documents.keys()].filter((k) => k.startsWith('users/')).length;
+    expect(usersAfter).toBe(usersBefore);
+  });
+
+  it('Test 28: approve replay is idempotent', async () => {
+    const { requestId } = await setupPendingRequest();
+    const first = await approve('family-1', requestId, 'child-1', 'client-req-1');
+    const second = await approve('family-1', requestId, 'child-1', 'client-req-1');
+
+    expect(second).toEqual(first);
+  });
+
+  it('Test 29: approve/reject race has one terminal result', async () => {
+    const { requestId } = await setupPendingRequest();
+    await reject('family-1', requestId, 'Not allowed', 'reject-req-1');
+
+    await expect(approve('family-1', requestId, 'child-1', 'approve-req-1')).rejects.toMatchObject({
+      message: 'REQUEST_NOT_PENDING',
+    });
+  });
+
+  it('Test 30: reject is terminal', async () => {
+    const { requestId } = await setupPendingRequest();
+    const res = await reject('family-1', requestId, 'Denied');
+    expect(res.status).toBe('rejected');
+
+    await expect(approve('family-1', requestId, 'child-1')).rejects.toMatchObject({
+      message: 'REQUEST_NOT_PENDING',
     });
   });
 });

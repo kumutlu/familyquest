@@ -32,6 +32,23 @@ function requireUid(request: CallableRequest<unknown>): string {
   return uid;
 }
 
+async function assertParentOfFamily(
+  ctx: ChildQrOnboardingContext,
+  callerUid: string,
+  familyId: string,
+): Promise<void> {
+  if (!callerUid || !familyId) {
+    throw new HttpsError('permission-denied', 'NOT_AUTHORIZED');
+  }
+  const snap = await ctx.db.doc(`users/${callerUid}`).get();
+  if (!snap.exists) throw new HttpsError('permission-denied', 'NOT_AUTHORIZED');
+  const caller = snap.data() as Record<string, any>;
+  if (caller.familyId !== familyId) throw new HttpsError('permission-denied', 'NOT_AUTHORIZED');
+  if (caller.role !== 'parent' && caller.role !== 'owner') {
+    throw new HttpsError('permission-denied', 'NOT_AUTHORIZED');
+  }
+}
+
 /**
  * 1. generateChildQrToken
  * Generates an opaque 256-bit QR token for a parent/owner.
@@ -308,6 +325,138 @@ export async function getChildQrJoinStatusImpl(
   };
 }
 
+/**
+ * 5. approveChildQrJoinRequest
+ * Server-authoritative parent approval of a pending QR join request.
+ * Parent selects an EXISTING managed child (`selectedManagedChildId`).
+ * Updates ONLY request resolution state. Does NOT alter target child document or Auth identity.
+ */
+export async function approveChildQrJoinRequestImpl(
+  input: { familyId?: string; requestId?: string; selectedManagedChildId?: string; clientReqId?: string },
+  request: CallableRequest<unknown>,
+  context: ChildQrOnboardingContext,
+): Promise<{ requestId: string; selectedManagedChildId: string; status: 'approved' }> {
+  const callerUid = requireUid(request);
+  const familyId = typeof input?.familyId === 'string' ? input.familyId.trim() : '';
+  const requestId = typeof input?.requestId === 'string' ? input.requestId.trim() : '';
+  const selectedManagedChildId = typeof input?.selectedManagedChildId === 'string' ? input.selectedManagedChildId.trim() : '';
+  const clientReqId = typeof input?.clientReqId === 'string' ? input.clientReqId.trim() : '';
+
+  await assertParentOfFamily(context, callerUid, familyId);
+
+  if (!requestId || !selectedManagedChildId) {
+    throw new HttpsError('invalid-argument', 'INVALID_APPROVAL_PAYLOAD');
+  }
+
+  // Idempotency check
+  if (clientReqId) {
+    const idemRef = context.db.doc(`families/${familyId}/qrIdempotency/${clientReqId}`);
+    const idemSnap = await idemRef.get();
+    if (idemSnap.exists && idemSnap.data()?.status === 'completed') {
+      return idemSnap.data()?.result as { requestId: string; selectedManagedChildId: string; status: 'approved' };
+    }
+  }
+
+  // Validate target child profile
+  const childSnap = await context.db.doc(`users/${selectedManagedChildId}`).get();
+  if (!childSnap.exists) {
+    throw new HttpsError('not-found', 'CHILD_NOT_FOUND');
+  }
+  const child = childSnap.data() as Record<string, any>;
+  if (child.familyId !== familyId) {
+    throw new HttpsError('failed-precondition', 'CHILD_NOT_IN_FAMILY');
+  }
+  if (child.role !== 'child' || child.isManaged !== true || child.status === 'deleted') {
+    throw new HttpsError('failed-precondition', 'INVALID_TARGET_CHILD');
+  }
+
+  // Validate private child login record
+  const loginSnap = await context.db.doc(`families/${familyId}/childLogins/${selectedManagedChildId}`).get();
+  if (!loginSnap.exists || !loginSnap.data()?.authUid) {
+    throw new HttpsError('failed-precondition', 'CHILD_LOGIN_INCONSISTENT');
+  }
+
+  const reqRef = context.db.doc(`families/${familyId}/child_qr_join_requests/${requestId}`);
+  const now = getNowMs(context);
+
+  await context.db.runTransaction(async (transaction) => {
+    const liveReq = await transaction.get(reqRef);
+    if (!liveReq.exists) {
+      throw new HttpsError('not-found', 'JOIN_REQUEST_NOT_FOUND');
+    }
+    const data = liveReq.data() as Record<string, any>;
+    if (data.status !== 'pending') {
+      throw new HttpsError('failed-precondition', 'REQUEST_NOT_PENDING');
+    }
+
+    transaction.update(reqRef, {
+      status: 'approved',
+      resolvedAtMs: now,
+      resolvedBy: callerUid,
+      selectedManagedChildId,
+      resolvedAt: FieldValue.serverTimestamp(),
+    });
+
+    if (clientReqId) {
+      const idemRef = context.db.doc(`families/${familyId}/qrIdempotency/${clientReqId}`);
+      transaction.set(idemRef, {
+        clientReqId,
+        operation: 'approveChildQrJoinRequest',
+        status: 'completed',
+        result: { requestId, selectedManagedChildId, status: 'approved' },
+        createdAt: FieldValue.serverTimestamp(),
+      });
+    }
+  });
+
+  return { requestId, selectedManagedChildId, status: 'approved' };
+}
+
+/**
+ * 6. rejectChildQrJoinRequest
+ * Server-authoritative parent rejection of a pending QR join request. Rejection is final.
+ */
+export async function rejectChildQrJoinRequestImpl(
+  input: { familyId?: string; requestId?: string; rejectionReason?: string; clientReqId?: string },
+  request: CallableRequest<unknown>,
+  context: ChildQrOnboardingContext,
+): Promise<{ requestId: string; status: 'rejected' }> {
+  const callerUid = requireUid(request);
+  const familyId = typeof input?.familyId === 'string' ? input.familyId.trim() : '';
+  const requestId = typeof input?.requestId === 'string' ? input.requestId.trim() : '';
+  const rejectionReason = typeof input?.rejectionReason === 'string' ? input.rejectionReason.trim() : null;
+
+  await assertParentOfFamily(context, callerUid, familyId);
+
+  if (!requestId) {
+    throw new HttpsError('invalid-argument', 'INVALID_REJECTION_PAYLOAD');
+  }
+
+  const reqRef = context.db.doc(`families/${familyId}/child_qr_join_requests/${requestId}`);
+  const now = getNowMs(context);
+
+  await context.db.runTransaction(async (transaction) => {
+    const liveReq = await transaction.get(reqRef);
+    if (!liveReq.exists) {
+      throw new HttpsError('not-found', 'JOIN_REQUEST_NOT_FOUND');
+    }
+    const data = liveReq.data() as Record<string, any>;
+    if (data.status !== 'pending') {
+      throw new HttpsError('failed-precondition', 'REQUEST_NOT_PENDING');
+    }
+
+    transaction.update(reqRef, {
+      status: 'rejected',
+      resolvedAtMs: now,
+      resolvedBy: callerUid,
+      rejectionReason,
+      resolvedAt: FieldValue.serverTimestamp(),
+    });
+  });
+
+  return { requestId, status: 'rejected' };
+}
+
 // Callables exported for Firebase deployment
 const prodCtx = (): ChildQrOnboardingContext => ({
   db: getFirestore(),
@@ -332,4 +481,14 @@ export const submitChildQrJoinRequest = onCall(
 export const getChildQrJoinStatus = onCall(
   { region: 'europe-west1', enforceAppCheck: false },
   (request) => getChildQrJoinStatusImpl(request.data as any, prodCtx()),
+);
+
+export const approveChildQrJoinRequest = onCall(
+  { region: 'europe-west1', enforceAppCheck: false },
+  (request) => approveChildQrJoinRequestImpl(request.data as any, request, prodCtx()),
+);
+
+export const rejectChildQrJoinRequest = onCall(
+  { region: 'europe-west1', enforceAppCheck: false },
+  (request) => rejectChildQrJoinRequestImpl(request.data as any, request, prodCtx()),
 );

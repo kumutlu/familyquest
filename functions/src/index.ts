@@ -312,6 +312,9 @@ export {
   scanChildQrToken,
   submitChildQrJoinRequest,
   getChildQrJoinStatus,
+  approveChildQrJoinRequest,
+  rejectChildQrJoinRequest,
 } from './childQrOnboarding';
+
 
 
