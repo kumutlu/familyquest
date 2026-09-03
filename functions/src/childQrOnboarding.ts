@@ -158,6 +158,156 @@ export async function scanChildQrTokenImpl(
   return { valid: true, expiresAtMs: session.expiresAtMs };
 }
 
+/**
+ * 3. submitChildQrJoinRequest
+ * Unauthenticated child device submits join request using scanned QR token.
+ * Consumes QR token atomically (`active -> consumed`).
+ * Generates bearer `requestSecret` (hashed server-side) and creates pending request.
+ */
+export async function submitChildQrJoinRequestImpl(
+  input: { token?: string; clientReqId?: string },
+  request: CallableRequest<unknown>,
+  context: ChildQrOnboardingContext,
+): Promise<{ requestId: string; requestSecret: string; status: 'pending'; expiresAtMs: number }> {
+  const uid = requireUid(request);
+  const token = typeof input?.token === 'string' ? input.token.trim() : '';
+  if (!token) {
+    throw new HttpsError('invalid-argument', 'INVALID_QR_TOKEN');
+  }
+
+  const tokenHash = hashSha256(token);
+  const now = getNowMs(context);
+  const expiresAtMs = now + PENDING_REQUEST_TTL_MS;
+
+  const lookupRef = context.db.doc(`childQrTokenLookup/${tokenHash}`);
+  const lookupSnap = await lookupRef.get();
+  if (!lookupSnap.exists) {
+    throw new HttpsError('not-found', 'INVALID_QR_TOKEN');
+  }
+  const lookup = lookupSnap.data() as Record<string, any>;
+  if (lookup.status === 'revoked') {
+    throw new HttpsError('failed-precondition', 'QR_REVOKED');
+  }
+  if (lookup.status === 'consumed') {
+    throw new HttpsError('failed-precondition', 'QR_ALREADY_USED');
+  }
+  if (typeof lookup.expiresAtMs === 'number' && lookup.expiresAtMs <= now) {
+    throw new HttpsError('failed-precondition', 'QR_EXPIRED');
+  }
+
+  const familyId = String(lookup.familyId);
+  const qrSessionId = String(lookup.qrSessionId);
+  const sessionRef = context.db.doc(`families/${familyId}/child_qr_sessions/${qrSessionId}`);
+
+  const requestId = context.db.collection('x').doc().id;
+  const requestSecret = generateEntropyToken();
+  const requestSecretHash = hashSha256(requestSecret);
+
+  const requestRef = context.db.doc(`families/${familyId}/child_qr_join_requests/${requestId}`);
+  const secretRef = context.db.doc(`families/${familyId}/childQrJoinSecrets/${requestId}`);
+  const requestLookupRef = context.db.doc(`childQrRequestLookup/${requestId}`);
+
+  await context.db.runTransaction(async (transaction) => {
+    const liveLookup = await transaction.get(lookupRef);
+    if (!liveLookup.exists || liveLookup.data()?.status !== 'active') {
+      throw new HttpsError('failed-precondition', 'QR_ALREADY_USED');
+    }
+    const liveSession = await transaction.get(sessionRef);
+    if (!liveSession.exists || liveSession.data()?.status !== 'active') {
+      throw new HttpsError('failed-precondition', 'QR_ALREADY_USED');
+    }
+
+    transaction.update(lookupRef, { status: 'consumed' });
+    transaction.update(sessionRef, {
+      status: 'consumed',
+      consumedAtMs: now,
+      consumedByRequestId: requestId,
+    });
+
+    transaction.set(requestRef, {
+      requestId,
+      qrSessionId,
+      familyId,
+      requesterUid: uid,
+      category: 'join',
+      type: 'child_qr_device_join',
+      status: 'pending',
+      createdAtMs: now,
+      expiresAtMs,
+      resolvedAtMs: null,
+      resolvedBy: null,
+      selectedManagedChildId: null,
+      rejectionReason: null,
+      createdAt: FieldValue.serverTimestamp(),
+    });
+
+    transaction.set(secretRef, {
+      requestId,
+      familyId,
+      requestSecretHash,
+      createdAtMs: now,
+      expiresAtMs,
+      createdAt: FieldValue.serverTimestamp(),
+    });
+
+    transaction.set(requestLookupRef, {
+      familyId,
+      requestId,
+      createdAt: FieldValue.serverTimestamp(),
+    });
+  });
+
+  return {
+    requestId,
+    requestSecret,
+    status: 'pending',
+    expiresAtMs,
+  };
+}
+
+/**
+ * 4. getChildQrJoinStatus
+ * Polling endpoint for scanning child device using requestId & bearer requestSecret.
+ */
+export async function getChildQrJoinStatusImpl(
+  input: { requestId?: string; requestSecret?: string },
+  context: ChildQrOnboardingContext,
+): Promise<{ requestId: string; status: string; expiresAtMs: number }> {
+  const requestId = typeof input?.requestId === 'string' ? input.requestId.trim() : '';
+  const requestSecret = typeof input?.requestSecret === 'string' ? input.requestSecret.trim() : '';
+  if (!requestId || !requestSecret) {
+    throw new HttpsError('invalid-argument', 'JOIN_REQUEST_NOT_FOUND');
+  }
+
+  const lookupSnap = await context.db.doc(`childQrRequestLookup/${requestId}`).get();
+  if (!lookupSnap.exists) {
+    throw new HttpsError('not-found', 'JOIN_REQUEST_NOT_FOUND');
+  }
+  const familyId = String(lookupSnap.data()?.familyId ?? '');
+
+  const secretSnap = await context.db.doc(`families/${familyId}/childQrJoinSecrets/${requestId}`).get();
+  if (!secretSnap.exists) {
+    throw new HttpsError('not-found', 'JOIN_REQUEST_NOT_FOUND');
+  }
+  const secretData = secretSnap.data() as Record<string, any>;
+  const computedHash = hashSha256(requestSecret);
+  if (secretData.requestSecretHash !== computedHash) {
+    throw new HttpsError('not-found', 'JOIN_REQUEST_NOT_FOUND');
+  }
+
+  const reqSnap = await context.db.doc(`families/${familyId}/child_qr_join_requests/${requestId}`).get();
+  if (!reqSnap.exists) {
+    throw new HttpsError('not-found', 'JOIN_REQUEST_NOT_FOUND');
+  }
+  const reqData = reqSnap.data() as Record<string, any>;
+
+  return {
+    requestId,
+    status: String(reqData.status ?? 'pending'),
+    expiresAtMs: Number(reqData.expiresAtMs ?? 0),
+  };
+}
+
 // Callables exported for Firebase deployment
 const prodCtx = (): ChildQrOnboardingContext => ({
   db: getFirestore(),
@@ -172,4 +322,14 @@ export const generateChildQrToken = onCall(
 export const scanChildQrToken = onCall(
   { region: 'europe-west1', enforceAppCheck: false },
   (request) => scanChildQrTokenImpl(request.data as any, prodCtx()),
+);
+
+export const submitChildQrJoinRequest = onCall(
+  { region: 'europe-west1', enforceAppCheck: false },
+  (request) => submitChildQrJoinRequestImpl(request.data as any, request, prodCtx()),
+);
+
+export const getChildQrJoinStatus = onCall(
+  { region: 'europe-west1', enforceAppCheck: false },
+  (request) => getChildQrJoinStatusImpl(request.data as any, prodCtx()),
 );

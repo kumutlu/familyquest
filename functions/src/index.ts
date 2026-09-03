@@ -310,5 +310,8 @@ export { claimFamilyChallenge } from './challengeClaim';
 export {
   generateChildQrToken,
   scanChildQrToken,
+  submitChildQrJoinRequest,
+  getChildQrJoinStatus,
 } from './childQrOnboarding';
+
 

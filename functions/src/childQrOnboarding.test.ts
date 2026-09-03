@@ -14,6 +14,8 @@ vi.mock('firebase-functions/v2/https', () => ({
 import {
   generateChildQrTokenImpl,
   scanChildQrTokenImpl,
+  submitChildQrJoinRequestImpl,
+  getChildQrJoinStatusImpl,
   QR_SESSION_TTL_MS,
   type ChildQrOnboardingContext,
 } from './childQrOnboarding';
@@ -111,7 +113,6 @@ describe('Task 1: Backend QR Session & Token Lookup Primitive', () => {
 
   it('Test 2: QR has >=256-bit entropy', async () => {
     const { rawToken } = await generate();
-    // 32 random bytes in hex is 64 chars, or base64url is 43+ chars
     expect(rawToken.length).toBeGreaterThanOrEqual(43);
   });
 
@@ -157,7 +158,6 @@ describe('Task 1: Backend QR Session & Token Lookup Primitive', () => {
 
   it('Test 10: revoked QR fails', async () => {
     const { rawToken } = await generate();
-    // Manually revoke the session doc
     for (const [path, doc] of fixture.documents.entries()) {
       if (path.includes('qr_sessions')) {
         fixture.documents.set(path, { ...doc, status: 'revoked' });
@@ -180,5 +180,103 @@ describe('Task 1: Backend QR Session & Token Lookup Primitive', () => {
 
     const secondPreview = await scan(second.rawToken);
     expect(secondPreview.valid).toBe(true);
+  });
+});
+
+describe('Task 2: Backend Pending Join Request & Secret Status Primitive', () => {
+  let fixture: ReturnType<typeof fakeContext>;
+
+  beforeEach(() => {
+    fixture = fakeContext();
+    fixture.documents.set('users/parent-1', { familyId: 'family-1', role: 'parent' });
+    fixture.documents.set('families/family-1', { name: 'The Smiths' });
+    fixture.documents.set('users/device-child-uid', { uid: 'device-child-uid' });
+  });
+
+  const generate = (uid = 'parent-1') =>
+    generateChildQrTokenImpl({ auth: { uid } } as any, fixture.context);
+
+  const submit = (token: string, clientReqId = 'req-1', uid = 'device-child-uid') =>
+    submitChildQrJoinRequestImpl({ token, clientReqId }, { auth: { uid } } as any, fixture.context);
+
+  const getStatus = (requestId: string, requestSecret: string) =>
+    getChildQrJoinStatusImpl({ requestId, requestSecret }, fixture.context);
+
+  it('Test 6: first request consumes QR', async () => {
+    const { rawToken } = await generate();
+    const res = await submit(rawToken);
+
+    expect(res.status).toBe('pending');
+    expect(res.requestId).toBeDefined();
+    expect(res.requestSecret).toBeDefined();
+
+    await expect(scanChildQrTokenImpl({ token: rawToken }, fixture.context)).rejects.toMatchObject({
+      message: 'QR_ALREADY_USED',
+    });
+  });
+
+  it('Test 7: second request fails', async () => {
+    const { rawToken } = await generate();
+    await submit(rawToken, 'req-1');
+
+    await expect(submit(rawToken, 'req-2')).rejects.toMatchObject({
+      message: 'QR_ALREADY_USED',
+    });
+  });
+
+  it('Test 12: pending request creates no child', async () => {
+    const { rawToken } = await generate();
+    const usersBefore = [...fixture.documents.keys()].filter((k) => k.startsWith('users/')).length;
+
+    await submit(rawToken);
+
+    const usersAfter = [...fixture.documents.keys()].filter((k) => k.startsWith('users/')).length;
+    expect(usersAfter).toBe(usersBefore);
+  });
+
+  it('Test 13: pending request creates no wallet', async () => {
+    const { rawToken } = await generate();
+    const walletsBefore = [...fixture.documents.keys()].filter((k) => k.includes('/wallets/')).length;
+
+    await submit(rawToken);
+
+    const walletsAfter = [...fixture.documents.keys()].filter((k) => k.includes('/wallets/')).length;
+    expect(walletsAfter).toBe(walletsBefore);
+  });
+
+  it('Test 14: pending request creates no membership', async () => {
+    const { rawToken } = await generate();
+    await submit(rawToken);
+
+    const deviceProfile = fixture.documents.get('users/device-child-uid');
+    expect(deviceProfile?.familyId).toBeUndefined();
+  });
+
+  it('Test 15: request secret is hashed server-side', async () => {
+    const { rawToken } = await generate();
+    const res = await submit(rawToken);
+
+    let foundRawSecretInDocs = false;
+    for (const [path, doc] of fixture.documents.entries()) {
+      if (path.includes('childQrJoinSecrets')) {
+        const json = JSON.stringify(doc);
+        if (json.includes(res.requestSecret)) {
+          foundRawSecretInDocs = true;
+        }
+      }
+    }
+    expect(foundRawSecretInDocs).toBe(false);
+  });
+
+  it('Test 31: wrong requestSecret cannot read request status', async () => {
+    const { rawToken } = await generate();
+    const res = await submit(rawToken);
+
+    const validStatus = await getStatus(res.requestId, res.requestSecret);
+    expect(validStatus.status).toBe('pending');
+
+    await expect(getStatus(res.requestId, 'wrong-secret')).rejects.toMatchObject({
+      message: 'JOIN_REQUEST_NOT_FOUND',
+    });
   });
 });
