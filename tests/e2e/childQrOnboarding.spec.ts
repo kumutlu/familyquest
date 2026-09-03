@@ -40,8 +40,39 @@ test.describe('Child QR Device Onboarding E2E Flow', () => {
     await parentPage.goto('/');
     await parentPage.keyboard.press('Escape'); // Close modal if open
 
+    // Track if old request ID is ever polled
+    let oldRequestPollCalled = false;
+    await childPage.route('**/getChildQrJoinStatus', async (route) => {
+      try {
+        const postData = route.request().postDataJSON?.();
+        if (postData?.data?.requestId === 'old-stale-request-id') {
+          oldRequestPollCalled = true;
+        }
+      } catch {
+        /* ignore parsing error */
+      }
+      await route.continue();
+    });
+
+    // Seed child browser localStorage with an OLD pending QR handle BEFORE scanning new QR
+    await childPage.goto('/login');
+    await childPage.evaluate(() => {
+      localStorage.setItem('queki.childQrJoinRequest', JSON.stringify({
+        requestId: 'old-stale-request-id',
+        requestSecret: 'old-stale-secret',
+      }));
+    });
+
     // 2. Child device opens direct QR URL /join-qr?token=... (simulating camera QR scan on unauthenticated device)
     await childPage.goto(`/join-qr?token=${cleanToken}`);
+
+    // Assert explicitly: OLD_REQUEST_POLL_CALLED=false
+    expect(oldRequestPollCalled).toBe(false);
+
+    // Assert stale handle was cleared from storage upon fresh token scan
+    const storedHandle = await childPage.evaluate(() => localStorage.getItem('queki.childQrJoinRequest'));
+    expect(storedHandle).toBeNull();
+
     await expect(childPage.getByTestId('qr-display-name-input')).toBeVisible();
     await childPage.getByTestId('qr-display-name-input').fill('Ali');
     await expect(childPage.getByTestId('submit-qr-token-button')).toBeVisible();
@@ -49,6 +80,7 @@ test.describe('Child QR Device Onboarding E2E Flow', () => {
 
     // 3. Child enters "Waiting for Parent Approval" state
     await expect(childPage.getByText('Waiting for Parent Approval')).toBeVisible({ timeout: 10000 });
+    await expect(childPage.getByTestId('scan-another-qr-button')).toBeVisible();
 
     // Verify reloading child page restores waiting status from local storage
     await childPage.reload();

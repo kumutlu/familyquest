@@ -122,14 +122,22 @@ export function ChildQrScanPage() {
 
   // Initial check for URL token or saved local handle
   useEffect(() => {
-    const urlToken = searchParams.get('token');
-    if (urlToken) {
-      setTokenInput(urlToken);
-    }
+    const rawUrlToken = searchParams.get('token');
+    const urlToken = typeof rawUrlToken === 'string' ? rawUrlToken.trim() : '';
 
-    const savedHandle = readQrJoinRequestHandle();
-    if (savedHandle) {
-      startPolling(savedHandle);
+    if (urlToken) {
+      // Fresh QR token explicitly provided in URL takes precedence over any stale persisted handle
+      stopPolling();
+      clearQrJoinRequestHandle();
+      setHandle(null);
+      setTokenInput(urlToken);
+      setStep('scan');
+    } else {
+      // Only restore previous pending handle if NO token is present in the URL
+      const savedHandle = readQrJoinRequestHandle();
+      if (savedHandle) {
+        startPolling(savedHandle);
+      }
     }
 
     return () => stopPolling();
@@ -260,6 +268,15 @@ export function ChildQrScanPage() {
               <ShieldCheck className="w-4 h-4 text-emerald-400 shrink-0" />
               <span>Request active. Polling status automatically...</span>
             </div>
+
+            <button
+              type="button"
+              data-testid="scan-another-qr-button"
+              onClick={handleReset}
+              className="w-full py-2.5 px-4 rounded-xl bg-slate-700/80 hover:bg-slate-700 text-slate-200 hover:text-white font-medium text-xs transition-colors border border-slate-600/50"
+            >
+              Scan another QR
+            </button>
           </div>
         )}
 
