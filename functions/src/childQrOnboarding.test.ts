@@ -211,6 +211,15 @@ describe('Task 2: Backend Pending Join Request & Secret Status Primitive', () =>
   const submit = (token: string, clientReqId = 'req-1', uid = 'device-child-uid') =>
     submitChildQrJoinRequestImpl({ token, clientReqId }, { auth: { uid } } as any, fixture.context);
 
+  it('RED TEST: unauthenticated submitChildQrJoinRequest succeeds without auth context', async () => {
+    const { rawToken } = await generate();
+    const unauthRequest = {} as any;
+    const res = await submitChildQrJoinRequestImpl({ token: rawToken, clientReqId: 'req-unauth-1' }, unauthRequest, fixture.context);
+    expect(res.status).toBe('pending');
+    expect(res.requestId).toBeDefined();
+    expect(res.requestSecret).toBeDefined();
+  });
+
   const getStatus = (requestId: string, requestSecret: string) =>
     getChildQrJoinStatusImpl({ requestId, requestSecret }, fixture.context);
 

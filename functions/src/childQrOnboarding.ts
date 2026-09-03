@@ -186,7 +186,6 @@ export async function submitChildQrJoinRequestImpl(
   request: CallableRequest<unknown>,
   context: ChildQrOnboardingContext,
 ): Promise<{ requestId: string; requestSecret: string; status: 'pending'; expiresAtMs: number }> {
-  const uid = requireUid(request);
   const token = typeof input?.token === 'string' ? input.token.trim() : '';
   if (!token) {
     throw new HttpsError('invalid-argument', 'INVALID_QR_TOKEN');
@@ -245,7 +244,7 @@ export async function submitChildQrJoinRequestImpl(
       requestId,
       qrSessionId,
       familyId,
-      requesterUid: uid,
+      requesterUid: request.auth?.uid ?? null,
       category: 'join',
       type: 'child_qr_device_join',
       status: 'pending',
