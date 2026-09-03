@@ -118,9 +118,10 @@ export function ApprovalCenter() {
     // 8. Child QR Device Join requests
     items.push(...(childQrJoinRequests || []).map((r: any) => ({
       id: r.id,
-
       category: 'child_qr_join',
       status: r.status,
+      requesterDisplayName: r.requesterDisplayName,
+      requesterDeviceLabel: r.requesterDeviceLabel,
       sortDate: r.createdAt?.toDate
         ? r.createdAt.toDate()
         : new Date(typeof r.createdAtMs === 'number' ? r.createdAtMs : Date.now()),
@@ -305,7 +306,7 @@ export function ApprovalCenter() {
 
     if (item.category === 'child_qr_join') {
       const managedChildren = familyMembers
-        .filter(m => m.role === 'child' && (m as any).isManaged)
+        .filter(m => m.role === 'child' && (m as any).isManaged !== false)
         .map(c => ({ id: c.id, displayName: c.displayName, avatarUrl: c.avatarUrl }));
       const key = itemKey(item);
       return (

@@ -51,8 +51,12 @@ export async function seedTestFamily() {
   // Parent
   batch.set(db.doc(`users/parent1`), { familyId, role: 'parent', displayName: 'Parent Dad' });
   // Children
-  batch.set(db.doc(`users/child1`), { familyId, role: 'child', displayName: 'Child Leo', rewardPoints: 100, lifetimeXP: 100, walletBalance: 500 });
-  batch.set(db.doc(`users/child2`), { familyId, role: 'child', displayName: 'Child Ava', rewardPoints: 50, lifetimeXP: 50, walletBalance: 200 });
+  batch.set(db.doc(`users/child1`), { familyId, role: 'child', displayName: 'Child Leo', authUid: 'child1', rewardPoints: 100, lifetimeXP: 100, walletBalance: 500, isManaged: true });
+  batch.set(db.doc(`users/child2`), { familyId, role: 'child', displayName: 'Child Ava', authUid: 'child2', rewardPoints: 50, lifetimeXP: 50, walletBalance: 200, isManaged: true });
+
+  // Child Logins
+  batch.set(db.doc(`families/${familyId}/childLogins/child1`), { authUid: 'child1', status: 'enabled', loginEnabled: true });
+  batch.set(db.doc(`families/${familyId}/childLogins/child2`), { authUid: 'child2', status: 'enabled', loginEnabled: true });
 
   // Wallets
   batch.set(db.doc(`families/${familyId}/wallets/child1`), { balance: 500 });

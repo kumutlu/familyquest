@@ -10,7 +10,7 @@ const mockSignInWithCustomToken = vi.fn();
 
 vi.mock('../lib/childQrOnboardingApi', () => ({
   scanChildQrToken: (t: string) => mockScanToken(t),
-  submitChildQrJoinRequest: (t: string) => mockSubmitRequest(t),
+  submitChildQrJoinRequest: (t: string, name: string, dev?: string) => mockSubmitRequest(t, name, dev),
   getChildQrJoinStatus: (h: any) => mockGetStatus(h),
   exchangeApprovedChildQrRequest: (h: any) => mockExchange(h),
   readQrJoinRequestHandle: vi.fn().mockReturnValue(null),
@@ -34,7 +34,7 @@ describe('Task 9: Child Onboarding Scan & Waiting UI Flow', () => {
     vi.clearAllMocks();
   });
 
-  it('Test 47: child onboarding scan page allows entering QR token, submits join request, polls status, and exchanges token on approval', async () => {
+  it('Test 47: child onboarding scan page allows entering name and QR token, submits join request, polls status, and exchanges token on approval', async () => {
     mockScanToken.mockResolvedValue({ valid: true, expiresAtMs: Date.now() + 900000 });
     mockSubmitRequest.mockResolvedValue({
       requestId: 'req-qr-100',
@@ -59,6 +59,9 @@ describe('Task 9: Child Onboarding Scan & Waiting UI Flow', () => {
       </MemoryRouter>
     );
 
+    const nameInput = screen.getByTestId('qr-display-name-input');
+    fireEvent.change(nameInput, { target: { value: 'Ali' } });
+
     const input = screen.getByTestId('qr-token-input');
     fireEvent.change(input, { target: { value: 'valid-scanned-token' } });
 
@@ -67,7 +70,7 @@ describe('Task 9: Child Onboarding Scan & Waiting UI Flow', () => {
 
     await waitFor(() => {
       expect(mockScanToken).toHaveBeenCalledWith('valid-scanned-token');
-      expect(mockSubmitRequest).toHaveBeenCalledWith('valid-scanned-token');
+      expect(mockSubmitRequest).toHaveBeenCalledWith('valid-scanned-token', 'Ali', expect.any(String));
     });
 
     await waitFor(() => {

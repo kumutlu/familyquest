@@ -86,9 +86,11 @@ describe('Notifications page', () => {
     navigate.mockClear();
   });
 
-  it('mounts and shows the title', () => {
+  it('mounts and shows the title', async () => {
     renderPage();
-    expect(screen.getByRole('heading', { name: 'Notifications' })).toBeInTheDocument();
+    await waitFor(() => {
+      expect(screen.getByRole('heading', { name: 'Notifications' })).toBeInTheDocument();
+    });
   });
 
   it('renders All / Unread / Mentions filters', () => {

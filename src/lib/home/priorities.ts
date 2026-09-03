@@ -63,6 +63,7 @@ export interface ParentPrioritiesInput {
   profileUpdateRequests?: any[];
   goalRequests?: any[];
   childJoinRequests?: any[];
+  childQrJoinRequests?: any[];
   savingsGoals?: any[];
   challenges?: any[];
   /** Feature flag mirror — Pet Box requests only count when enabled. */
@@ -120,6 +121,7 @@ export function countPendingApprovals(input: ParentPrioritiesInput): number {
     input.profileUpdateRequests ?? [],
     input.goalRequests ?? [],
     input.childJoinRequests ?? [],
+    input.childQrJoinRequests ?? [],
   ];
   return sources.reduce(
     (sum, source) => sum + source.filter(item => isPendingStatus(item?.status)).length,

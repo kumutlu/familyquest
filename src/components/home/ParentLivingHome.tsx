@@ -58,6 +58,7 @@ export function ParentLivingHome() {
     profileUpdateRequests,
     goalRequests,
     childJoinRequests,
+    childQrJoinRequests,
     savingsGoals,
     challenges,
     gamificationSummaries,
@@ -109,11 +110,12 @@ export function ParentLivingHome() {
         profileUpdateRequests,
         goalRequests,
         childJoinRequests,
+        childQrJoinRequests,
         savingsGoals,
         challenges,
         petBoxEnabled: true,
       }),
-    [taskCompletions, transferRequests, moneyRequests, petboxRequests, profileUpdateRequests, goalRequests, childJoinRequests, savingsGoals, challenges],
+    [taskCompletions, transferRequests, moneyRequests, petboxRequests, profileUpdateRequests, goalRequests, childJoinRequests, childQrJoinRequests, savingsGoals, challenges],
   );
 
   const approvalsCount = priorities.find(p => p.kind === 'approvals')?.count ?? 0;

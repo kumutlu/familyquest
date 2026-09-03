@@ -208,16 +208,88 @@ describe('Task 2: Backend Pending Join Request & Secret Status Primitive', () =>
   const generate = (uid = 'parent-1') =>
     generateChildQrTokenImpl({ auth: { uid } } as any, fixture.context);
 
-  const submit = (token: string, clientReqId = 'req-1', uid = 'device-child-uid') =>
-    submitChildQrJoinRequestImpl({ token, clientReqId }, { auth: { uid } } as any, fixture.context);
+  const submit = (token: string, clientReqId = 'req-1', uid = 'device-child-uid', requesterDisplayName = 'Ali') =>
+    submitChildQrJoinRequestImpl({ token, clientReqId, requesterDisplayName }, { auth: { uid } } as any, fixture.context);
 
   it('RED TEST: unauthenticated submitChildQrJoinRequest succeeds without auth context', async () => {
     const { rawToken } = await generate();
     const unauthRequest = {} as any;
-    const res = await submitChildQrJoinRequestImpl({ token: rawToken, clientReqId: 'req-unauth-1' }, unauthRequest, fixture.context);
+    const res = await submitChildQrJoinRequestImpl({ token: rawToken, requesterDisplayName: 'Ali', clientReqId: 'req-unauth-1' }, unauthRequest, fixture.context);
     expect(res.status).toBe('pending');
     expect(res.requestId).toBeDefined();
     expect(res.requestSecret).toBeDefined();
+  });
+
+  it('RED TEST: missing requesterDisplayName is rejected with REQUESTER_NAME_REQUIRED', async () => {
+    const { rawToken } = await generate();
+    await expect(
+      submitChildQrJoinRequestImpl({ token: rawToken, requesterDisplayName: '   ' }, {} as any, fixture.context),
+    ).rejects.toMatchObject({ message: 'REQUESTER_NAME_REQUIRED' });
+  });
+
+  it('RED TEST: trimmed requesterDisplayName is accepted and stored', async () => {
+    const { rawToken } = await generate();
+    const res = await submitChildQrJoinRequestImpl(
+      { token: rawToken, requesterDisplayName: '  Ali  ', requesterDeviceLabel: 'iPhone' },
+      {} as any,
+      fixture.context,
+    );
+    const doc = fixture.documents.get(`families/family-1/child_qr_join_requests/${res.requestId}`);
+    expect(doc?.requesterDisplayName).toBe('Ali');
+    expect(doc?.requesterDeviceLabel).toBe('iPhone');
+  });
+
+  it('RED TEST: overlong requesterDisplayName (>40 chars) is rejected with REQUESTER_NAME_TOO_LONG', async () => {
+    const { rawToken } = await generate();
+    const longName = 'A'.repeat(41);
+    await expect(
+      submitChildQrJoinRequestImpl({ token: rawToken, requesterDisplayName: longName }, {} as any, fixture.context),
+    ).rejects.toMatchObject({ message: 'REQUESTER_NAME_TOO_LONG' });
+  });
+
+  it('RED TEST: HTML tags in requesterDisplayName are sanitized to plain text', async () => {
+    const { rawToken } = await generate();
+    const res = await submitChildQrJoinRequestImpl(
+      { token: rawToken, requesterDisplayName: '<script>alert("xss")</script>Ali' },
+      {} as any,
+      fixture.context,
+    );
+    const doc = fixture.documents.get(`families/family-1/child_qr_join_requests/${res.requestId}`);
+    expect(doc?.requesterDisplayName).toBe('alert("xss")Ali');
+  });
+
+  it('RED TEST: child cannot use display name to auto-select managedChildId', async () => {
+    const { rawToken } = await generate();
+    // child display name matches an existing child profile name in the family
+    const res = await submitChildQrJoinRequestImpl(
+      { token: rawToken, requesterDisplayName: 'Ali' },
+      {} as any,
+      fixture.context,
+    );
+    const doc = fixture.documents.get(`families/family-1/child_qr_join_requests/${res.requestId}`);
+    expect(doc?.selectedManagedChildId).toBeNull();
+  });
+
+  it('RED TEST: submit creates deterministic in-app notification for parents and replay creates zero duplicates', async () => {
+    const { rawToken } = await generate();
+    const res = await submitChildQrJoinRequestImpl(
+      { token: rawToken, requesterDisplayName: 'Ali', requesterDeviceLabel: 'iPhone' },
+      {} as any,
+      fixture.context,
+    );
+    const notifDoc = fixture.documents.get(`families/family-1/notifications/qr_join_${res.requestId}`);
+    expect(notifDoc).toBeDefined();
+    expect(notifDoc?.title).toBe('Ali wants to connect a device');
+    expect(notifDoc?.type).toBe('child_qr_device_join');
+
+    // Attempt replaying the token
+    await expect(
+      submitChildQrJoinRequestImpl({ token: rawToken, requesterDisplayName: 'Ali' }, {} as any, fixture.context),
+    ).rejects.toMatchObject({ message: 'QR_ALREADY_USED' });
+
+    // Ensure zero duplicate notification docs were created
+    const notifKeys = Array.from(fixture.documents.keys()).filter((k: string) => k.includes('/notifications/'));
+    expect(notifKeys.length).toBe(1);
   });
 
   const getStatus = (requestId: string, requestSecret: string) =>
@@ -343,7 +415,7 @@ describe('Task 3: Backend Parent Approval & Rejection', () => {
 
   const setupPendingRequest = async () => {
     const { rawToken } = await generateChildQrTokenImpl({ auth: { uid: 'parent-1' } } as any, fixture.context);
-    const subRes = await submitChildQrJoinRequestImpl({ token: rawToken, clientReqId: 'req-1' }, { auth: { uid: 'device-child-1' } } as any, fixture.context);
+    const subRes = await submitChildQrJoinRequestImpl({ token: rawToken, requesterDisplayName: 'Ali', clientReqId: 'req-1' }, { auth: { uid: 'device-child-1' } } as any, fixture.context);
     return subRes;
   };
 
@@ -355,7 +427,7 @@ describe('Task 3: Backend Parent Approval & Rejection', () => {
 
   it('Test 16: child cannot select managedChildId during request submission', async () => {
     const { rawToken } = await generateChildQrTokenImpl({ auth: { uid: 'parent-1' } } as any, fixture.context);
-    const res = await submitChildQrJoinRequestImpl({ token: rawToken, clientReqId: 'req-1', selectedManagedChildId: 'child-1' } as any, { auth: { uid: 'device-child-1' } } as any, fixture.context);
+    const res = await submitChildQrJoinRequestImpl({ token: rawToken, requesterDisplayName: 'Ali', clientReqId: 'req-1', selectedManagedChildId: 'child-1' } as any, { auth: { uid: 'device-child-1' } } as any, fixture.context);
     const reqDoc = fixture.documents.get(`families/family-1/child_qr_join_requests/${res.requestId}`);
     expect(reqDoc?.selectedManagedChildId).toBeNull();
   });
@@ -510,7 +582,7 @@ describe('Task 4: Backend Custom Token Exchange Primitive', () => {
 
   const setupApprovedRequest = async () => {
     const { rawToken } = await generateChildQrTokenImpl({ auth: { uid: 'parent-1' } } as any, fixture.context);
-    const subRes = await submitChildQrJoinRequestImpl({ token: rawToken, clientReqId: 'req-1' }, { auth: { uid: 'device-child-1' } } as any, fixture.context);
+    const subRes = await submitChildQrJoinRequestImpl({ token: rawToken, requesterDisplayName: 'Ali', clientReqId: 'req-1' }, { auth: { uid: 'device-child-1' } } as any, fixture.context);
     await approveChildQrJoinRequestImpl({ familyId: 'family-1', requestId: subRes.requestId, selectedManagedChildId: 'child-1', clientReqId: 'c-1' }, { auth: { uid: 'parent-1' } } as any, fixture.context);
     return subRes;
   };

@@ -16,8 +16,8 @@ test.describe('Child QR Device Onboarding E2E Flow', () => {
     const childContext = await browser.newContext();
     const childPage = await childContext.newPage();
 
-    // 1. Parent logs in & opens "Connect Child Device" modal
-    await loginAs(parentPage, 'parent@test.com');
+    // 1. Parent/Owner logs in & opens "Connect Child Device" modal
+    await loginAs(parentPage, 'owner@test.com');
     await parentPage.goto('/family');
 
     // Click "Connect Child Device" button
@@ -25,24 +25,25 @@ test.describe('Child QR Device Onboarding E2E Flow', () => {
     await expect(connectButton).toBeVisible();
     await connectButton.click();
 
-    // Modal opens, click "Generate QR Code"
-    const generateBtn = parentPage.getByTestId('generate-qr-button');
-    await expect(generateBtn).toBeVisible();
-    await generateBtn.click();
-
-    // QR modal displays active QR token / copy link
-    const copyBtn = parentPage.getByTestId('copy-qr-link-button');
+    // Modal opens and auto-generates active QR token / copy link
+    const copyBtn = parentPage.getByTestId('copy-join-link-button');
     await expect(copyBtn).toBeVisible({ timeout: 10000 });
 
     // Read the join URL or raw token
     const tokenDisplay = parentPage.getByTestId('qr-raw-token');
-    await expect(tokenDisplay).toBeVisible();
+    await expect(tokenDisplay).toBeAttached();
     const qrTokenText = await tokenDisplay.textContent();
     expect(qrTokenText).toBeTruthy();
     const cleanToken = qrTokenText?.trim() || '';
 
+    // Navigate parent back to home dashboard BEFORE child submits
+    await parentPage.goto('/');
+    await parentPage.keyboard.press('Escape'); // Close modal if open
+
     // 2. Child device opens direct QR URL /join-qr?token=... (simulating camera QR scan on unauthenticated device)
     await childPage.goto(`/join-qr?token=${cleanToken}`);
+    await expect(childPage.getByTestId('qr-display-name-input')).toBeVisible();
+    await childPage.getByTestId('qr-display-name-input').fill('Ali');
     await expect(childPage.getByTestId('submit-qr-token-button')).toBeVisible();
     await childPage.getByTestId('submit-qr-token-button').click();
 
@@ -53,12 +54,26 @@ test.describe('Child QR Device Onboarding E2E Flow', () => {
     await childPage.reload();
     await expect(childPage.getByText('Waiting for Parent Approval')).toBeVisible({ timeout: 10000 });
 
-    // 4. Parent opens Approval Center and sees Child Device Join Request
-    await parentPage.click('a[href="/"]'); // Navigate to Dashboard / Approval Center
-    const qrRequestCard = parentPage.locator('div', { hasText: 'Child Device Join Request' }).first();
-    await expect(qrRequestCard).toBeVisible({ timeout: 10000 });
+    // 4. Parent device (already open on /) reactively receives pending approval indication WITHOUT reload
+    const pendingPriorityCard = parentPage.getByTestId('priority-approvals');
+    await expect(pendingPriorityCard).toBeVisible({ timeout: 10000 });
 
-    // Select existing managed child profile
+    const reviewCta = parentPage.getByTestId('review-cta').first();
+    await expect(reviewCta).toBeVisible({ timeout: 10000 });
+    await reviewCta.click();
+
+    // Approval Center opens, displays "Ali wants to connect a device"
+    const qrHeadline = parentPage.getByTestId('qr-join-card-headline');
+    await expect(qrHeadline).toBeVisible({ timeout: 10000 });
+    await expect(qrHeadline).toContainText('Ali wants to connect a device');
+
+    const qrDevice = parentPage.getByTestId('qr-join-card-device');
+    await expect(qrDevice).toBeVisible({ timeout: 10000 });
+    await expect(qrDevice).toContainText('Waiting for approval');
+
+    const qrRequestCard = parentPage.locator('div', { hasText: 'Ali wants to connect a device' }).first();
+
+    // Select existing managed child profile "Child Leo"
     const childSelect = qrRequestCard.getByTestId('child-selector-dropdown');
     await expect(childSelect).toBeVisible();
     await childSelect.selectOption({ label: 'Child Leo' });

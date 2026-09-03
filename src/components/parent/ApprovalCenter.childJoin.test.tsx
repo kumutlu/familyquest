@@ -150,4 +150,37 @@ describe('ApprovalCenter — child join requests', () => {
     expect(screen.getByText(i18n.t('approvals:type.childJoinRequest'))).toBeInTheDocument()
     await i18n.changeLanguage('en')
   })
+
+  it('repeated listener updates do not duplicate child QR device join card in UI', () => {
+    state.current.childQrJoinRequests = [
+      {
+        id: 'qr-req-dup-1',
+        category: 'child_qr_join',
+        status: 'pending',
+        requesterDisplayName: 'Ali',
+        requesterDeviceLabel: 'iPhone',
+        createdAtMs: Date.now(),
+      },
+    ]
+    const { rerender } = renderApprovalCenter()
+    expect(screen.getAllByText('Ali wants to connect a device')).toHaveLength(1)
+
+    // Simulate repeated listener snapshot arrival with the same request
+    state.current.childQrJoinRequests = [
+      {
+        id: 'qr-req-dup-1',
+        category: 'child_qr_join',
+        status: 'pending',
+        requesterDisplayName: 'Ali',
+        requesterDeviceLabel: 'iPhone',
+        createdAtMs: Date.now(),
+      },
+    ]
+    rerender(
+      <RequestDetailProvider>
+        <ApprovalCenter />
+      </RequestDetailProvider>,
+    )
+    expect(screen.getAllByText('Ali wants to connect a device')).toHaveLength(1)
+  })
 })

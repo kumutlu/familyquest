@@ -19,6 +19,8 @@ export interface ChildQrDeviceJoinApprovalCardProps {
     sortDate: Date;
     type?: string;
     requesterUid?: string;
+    requesterDisplayName?: string;
+    requesterDeviceLabel?: string;
   };
   managedChildren: ManagedChildOption[];
   onApprove: (selectedChildId: string) => Promise<void>;
@@ -59,14 +61,22 @@ export function ChildQrDeviceJoinApprovalCard({
               </Badge>
             </div>
 
-            <p className="font-semibold text-slate-900 dark:text-white leading-tight mb-2">
-              A new child device scanned your QR code and requests to join your family.
+            <p data-testid="qr-join-card-headline" className="font-semibold text-slate-900 dark:text-white leading-tight mb-1">
+              {request.requesterDisplayName
+                ? `${request.requesterDisplayName} wants to connect a device`
+                : 'A new child device scanned your QR code and requests to join your family.'}
             </p>
+
+            {request.requesterDeviceLabel && (
+              <p data-testid="qr-join-card-device" className="text-xs font-medium text-slate-500 dark:text-slate-400 mb-2">
+                {request.requesterDeviceLabel} • Waiting for approval
+              </p>
+            )}
 
             {isPending && (
               <div className="mt-3 p-3 rounded-xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 space-y-2">
                 <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300">
-                  Select Existing Managed Child:
+                  Select which existing child profile this device belongs to:
                 </label>
                 {managedChildren.length === 0 ? (
                   <div className="flex items-center gap-2 text-xs text-amber-600 dark:text-amber-400 font-medium">

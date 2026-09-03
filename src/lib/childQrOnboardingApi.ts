@@ -77,12 +77,14 @@ export async function scanChildQrToken(token: string): Promise<{ valid: true; ex
 
 export async function submitChildQrJoinRequest(
   token: string,
+  requesterDisplayName: string,
+  requesterDeviceLabel?: string,
   clientReqId?: string,
 ): Promise<{ requestId: string; requestSecret: string; status: 'pending'; expiresAtMs: number }> {
   const result = await callable<
-    { token: string; clientReqId?: string },
+    { token: string; requesterDisplayName: string; requesterDeviceLabel?: string; clientReqId?: string },
     { requestId: string; requestSecret: string; status: 'pending'; expiresAtMs: number }
-  >('submitChildQrJoinRequest')({ token, clientReqId });
+  >('submitChildQrJoinRequest')({ token, requesterDisplayName, requesterDeviceLabel, clientReqId });
   return result.data;
 }
 
@@ -140,6 +142,8 @@ export type ChildQrErrorKey =
   | 'auth:childQr.errors.alreadyUsed'
   | 'auth:childQr.errors.invalidToken'
   | 'auth:childQr.errors.notFound'
+  | 'auth:childQr.errors.nameRequired'
+  | 'auth:childQr.errors.nameTooLong'
   | 'auth:childQr.errors.network'
   | 'auth:childQr.errors.generic';
 
@@ -157,6 +161,8 @@ export function mapChildQrErrorKey(error: unknown): ChildQrErrorKey {
   if (reason === 'QR_ALREADY_USED') return 'auth:childQr.errors.alreadyUsed';
   if (reason === 'INVALID_QR_TOKEN') return 'auth:childQr.errors.invalidToken';
   if (reason === 'JOIN_REQUEST_NOT_FOUND') return 'auth:childQr.errors.notFound';
+  if (reason === 'REQUESTER_NAME_REQUIRED') return 'auth:childQr.errors.nameRequired';
+  if (reason === 'REQUESTER_NAME_TOO_LONG') return 'auth:childQr.errors.nameTooLong';
 
   return 'auth:childQr.errors.generic';
 }

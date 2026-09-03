@@ -16,17 +16,28 @@ import { QrCode, Smartphone, Clock, RefreshCw, CheckCircle2, XCircle, ArrowRight
 
 type Step = 'scan' | 'submitting' | 'waiting' | 'approved' | 'rejected' | 'expired' | 'error';
 
+function getDeviceLabel(): string {
+  if (typeof navigator === 'undefined') return 'Device';
+  const ua = navigator.userAgent;
+  if (/iPhone/i.test(ua)) return 'iPhone';
+  if (/iPad/i.test(ua)) return 'iPad';
+  if (/Android/i.test(ua)) return 'Android';
+  if (/Macintosh|Mac OS X/i.test(ua)) return 'Mac';
+  if (/Windows/i.test(ua)) return 'Windows PC';
+  return 'Web Browser';
+}
+
 export function ChildQrScanPage() {
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
 
   const [step, setStep] = useState<Step>('scan');
   const [tokenInput, setTokenInput] = useState('');
+  const [displayNameInput, setDisplayNameInput] = useState('');
   const [_handle, setHandle] = useState<ChildQrRequestHandle | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
   const pollingRef = useRef<ReturnType<typeof setInterval> | null>(null);
-
 
   const stopPolling = useCallback(() => {
     if (pollingRef.current) {
@@ -79,12 +90,24 @@ export function ChildQrScanPage() {
     pollingRef.current = setInterval(checkStatus, 2500);
   }, [stopPolling, handleApprovedExchange]);
 
-  const processToken = useCallback(async (token: string) => {
+  const processToken = useCallback(async (token: string, name: string) => {
+    const trimmedName = name.trim();
+    if (!trimmedName) {
+      setErrorMessage('Please enter your name.');
+      setStep('error');
+      return;
+    }
+    if (trimmedName.length > 40) {
+      setErrorMessage('Name must be 40 characters or less.');
+      setStep('error');
+      return;
+    }
     setErrorMessage(null);
     setStep('submitting');
     try {
       await scanChildQrToken(token);
-      const subRes = await submitChildQrJoinRequest(token);
+      const deviceLabel = getDeviceLabel();
+      const subRes = await submitChildQrJoinRequest(token, trimmedName, deviceLabel);
       const newHandle: ChildQrRequestHandle = {
         requestId: subRes.requestId,
         requestSecret: subRes.requestSecret,
@@ -101,8 +124,7 @@ export function ChildQrScanPage() {
   useEffect(() => {
     const urlToken = searchParams.get('token');
     if (urlToken) {
-      processToken(urlToken);
-      return;
+      setTokenInput(urlToken);
     }
 
     const savedHandle = readQrJoinRequestHandle();
@@ -111,12 +133,13 @@ export function ChildQrScanPage() {
     }
 
     return () => stopPolling();
-  }, [searchParams, processToken, startPolling, stopPolling]);
+  }, [searchParams, startPolling, stopPolling]);
 
   const handleSubmitInput = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!tokenInput.trim()) return;
-    processToken(tokenInput.trim());
+    const token = searchParams.get('token') || tokenInput.trim();
+    if (!token || !displayNameInput.trim()) return;
+    processToken(token, displayNameInput);
   };
 
   const handleReset = () => {
@@ -124,9 +147,12 @@ export function ChildQrScanPage() {
     clearQrJoinRequestHandle();
     setHandle(null);
     setTokenInput('');
+    setDisplayNameInput('');
     setErrorMessage(null);
     setStep('scan');
   };
+
+  const activeToken = searchParams.get('token') || tokenInput.trim();
 
   return (
     <div className="min-h-screen bg-slate-900 text-white flex items-center justify-center p-4">
@@ -148,34 +174,51 @@ export function ChildQrScanPage() {
         {step === 'scan' && (
           <div className="space-y-6">
             <div className="text-center space-y-2">
-              <h2 className="text-lg font-bold text-slate-100">Scan QR Code</h2>
+              <h2 className="text-lg font-bold text-slate-100">Connect Your Device</h2>
               <p className="text-xs text-slate-400">
-                Ask your parent to open <span className="text-indigo-400 font-medium">Connect Child Device</span> on their phone, then scan or paste the code below.
+                Enter your name below to send a device join request to your parent.
               </p>
             </div>
 
             <form onSubmit={handleSubmitInput} className="space-y-4">
               <div className="space-y-2">
                 <label className="block text-xs font-semibold text-slate-300">
-                  QR Token or Join Code
+                  What's your name?
                 </label>
-                <div className="relative">
-                  <input
-                    data-testid="qr-token-input"
-                    type="text"
-                    value={tokenInput}
-                    onChange={(e) => setTokenInput(e.target.value)}
-                    placeholder="Paste QR token here..."
-                    className="w-full py-3 px-4 rounded-xl bg-slate-900/80 border border-slate-700 text-white placeholder-slate-500 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 font-mono"
-                  />
-                  <QrCode className="absolute right-3.5 top-3.5 w-4 h-4 text-slate-500" />
-                </div>
+                <input
+                  data-testid="qr-display-name-input"
+                  type="text"
+                  value={displayNameInput}
+                  onChange={(e) => setDisplayNameInput(e.target.value)}
+                  placeholder="e.g. Ali"
+                  maxLength={40}
+                  className="w-full py-3 px-4 rounded-xl bg-slate-900/80 border border-slate-700 text-white placeholder-slate-500 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                />
               </div>
+
+              {!searchParams.get('token') && (
+                <div className="space-y-2">
+                  <label className="block text-xs font-semibold text-slate-300">
+                    QR Token or Join Code
+                  </label>
+                  <div className="relative">
+                    <input
+                      data-testid="qr-token-input"
+                      type="text"
+                      value={tokenInput}
+                      onChange={(e) => setTokenInput(e.target.value)}
+                      placeholder="Paste QR token here..."
+                      className="w-full py-3 px-4 rounded-xl bg-slate-900/80 border border-slate-700 text-white placeholder-slate-500 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 font-mono"
+                    />
+                    <QrCode className="absolute right-3.5 top-3.5 w-4 h-4 text-slate-500" />
+                  </div>
+                </div>
+              )}
 
               <button
                 data-testid="submit-qr-token-button"
                 type="submit"
-                disabled={!tokenInput.trim()}
+                disabled={!activeToken || !displayNameInput.trim()}
                 className="w-full py-3 px-4 rounded-xl bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 text-white font-bold text-sm transition-all flex items-center justify-center gap-2 shadow-lg shadow-indigo-600/25"
               >
                 <span>Send Join Request</span>

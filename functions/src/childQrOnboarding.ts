@@ -182,7 +182,7 @@ export async function scanChildQrTokenImpl(
  * Generates bearer `requestSecret` (hashed server-side) and creates pending request.
  */
 export async function submitChildQrJoinRequestImpl(
-  input: { token?: string; clientReqId?: string },
+  input: { token?: string; requesterDisplayName?: string; requesterDeviceLabel?: string; clientReqId?: string },
   request: CallableRequest<unknown>,
   context: ChildQrOnboardingContext,
 ): Promise<{ requestId: string; requestSecret: string; status: 'pending'; expiresAtMs: number }> {
@@ -190,6 +190,22 @@ export async function submitChildQrJoinRequestImpl(
   if (!token) {
     throw new HttpsError('invalid-argument', 'INVALID_QR_TOKEN');
   }
+
+  const rawDisplayName = typeof input?.requesterDisplayName === 'string' ? input.requesterDisplayName : '';
+  const trimmedDisplayName = rawDisplayName.trim();
+  if (!trimmedDisplayName) {
+    throw new HttpsError('invalid-argument', 'REQUESTER_NAME_REQUIRED');
+  }
+  const sanitizedDisplayName = trimmedDisplayName.replace(/<[^>]*>/g, '').trim();
+  if (!sanitizedDisplayName) {
+    throw new HttpsError('invalid-argument', 'REQUESTER_NAME_REQUIRED');
+  }
+  if (sanitizedDisplayName.length > 40) {
+    throw new HttpsError('invalid-argument', 'REQUESTER_NAME_TOO_LONG');
+  }
+
+  const rawDeviceLabel = typeof input?.requesterDeviceLabel === 'string' ? input.requesterDeviceLabel : '';
+  const sanitizedDeviceLabel = rawDeviceLabel.replace(/<[^>]*>/g, '').trim().slice(0, 40) || null;
 
   const tokenHash = hashSha256(token);
   const now = getNowMs(context);
@@ -215,6 +231,16 @@ export async function submitChildQrJoinRequestImpl(
   const qrSessionId = String(lookup.qrSessionId);
   const sessionRef = context.db.doc(`families/${familyId}/child_qr_sessions/${qrSessionId}`);
 
+  const usersSnap = await context.db
+    .collection('users')
+    .where('familyId', '==', familyId)
+    .get();
+  const parentUids = usersSnap.docs
+    .map((docSnap) => docSnap.data() as Record<string, any>)
+    .filter((u) => u.role === 'parent' || u.role === 'owner')
+    .map((u) => u.id || u.uid)
+    .filter(Boolean);
+
   const requestId = context.db.collection('x').doc().id;
   const requestSecret = generateEntropyToken();
   const requestSecretHash = hashSha256(requestSecret);
@@ -222,6 +248,7 @@ export async function submitChildQrJoinRequestImpl(
   const requestRef = context.db.doc(`families/${familyId}/child_qr_join_requests/${requestId}`);
   const secretRef = context.db.doc(`families/${familyId}/childQrJoinSecrets/${requestId}`);
   const requestLookupRef = context.db.doc(`childQrRequestLookup/${requestId}`);
+  const notifRef = context.db.doc(`families/${familyId}/notifications/qr_join_${requestId}`);
 
   await context.db.runTransaction(async (transaction) => {
     const liveLookup = await transaction.get(lookupRef);
@@ -245,6 +272,8 @@ export async function submitChildQrJoinRequestImpl(
       qrSessionId,
       familyId,
       requesterUid: request.auth?.uid ?? null,
+      requesterDisplayName: sanitizedDisplayName,
+      requesterDeviceLabel: sanitizedDeviceLabel,
       category: 'join',
       type: 'child_qr_device_join',
       status: 'pending',
@@ -254,6 +283,23 @@ export async function submitChildQrJoinRequestImpl(
       resolvedBy: null,
       selectedManagedChildId: null,
       rejectionReason: null,
+      createdAt: FieldValue.serverTimestamp(),
+    });
+
+    transaction.set(notifRef, {
+      id: `qr_join_${requestId}`,
+      familyId,
+      type: 'child_qr_device_join',
+      actorId: request.auth?.uid ?? 'unauthenticated_child_device',
+      recipientIds: parentUids,
+      title: `${sanitizedDisplayName} wants to connect a device`,
+      body: sanitizedDeviceLabel
+        ? `${sanitizedDeviceLabel} • Waiting for approval`
+        : 'Select which existing child profile this device belongs to.',
+      actionUrl: '/review',
+      route: '/review',
+      requestId,
+      createdAtMs: now,
       createdAt: FieldValue.serverTimestamp(),
     });
 

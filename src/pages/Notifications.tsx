@@ -17,6 +17,7 @@ import {
   AlertTriangle,
   Trophy,
   Target,
+  Smartphone,
   type LucideIcon,
 } from 'lucide-react';
 import { useStore } from '../store/useStore';
@@ -54,6 +55,7 @@ const ICONS: Record<NotificationType, LucideIcon> = {
   profile_update_rejected: XCircle,
   challenge_completed: Trophy,
   goal_created: Target,
+  child_qr_device_join: Smartphone,
 };
 
 function iconFor(type: NotificationType): LucideIcon {

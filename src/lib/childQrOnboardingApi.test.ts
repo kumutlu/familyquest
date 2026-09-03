@@ -44,7 +44,7 @@ describe('Task 6: Client Callables & Onboarding Service Integration', () => {
     });
     httpsCallable.mockReturnValue(mockCallable);
 
-    const res = await submitChildQrJoinRequest('valid-qr-token');
+    const res = await submitChildQrJoinRequest('valid-qr-token', 'Ali', 'iPhone');
     storeQrJoinRequestHandle({ requestId: res.requestId, requestSecret: res.requestSecret });
 
     const handle = readQrJoinRequestHandle();
@@ -117,6 +117,8 @@ describe('Task 6: Client Callables & Onboarding Service Integration', () => {
     expect(mapChildQrErrorKey({ message: 'QR_REVOKED' })).toBe('auth:childQr.errors.revoked');
     expect(mapChildQrErrorKey({ message: 'QR_ALREADY_USED' })).toBe('auth:childQr.errors.alreadyUsed');
     expect(mapChildQrErrorKey({ message: 'INVALID_QR_TOKEN' })).toBe('auth:childQr.errors.invalidToken');
+    expect(mapChildQrErrorKey({ message: 'REQUESTER_NAME_REQUIRED' })).toBe('auth:childQr.errors.nameRequired');
+    expect(mapChildQrErrorKey({ message: 'REQUESTER_NAME_TOO_LONG' })).toBe('auth:childQr.errors.nameTooLong');
     expect(mapChildQrErrorKey({ code: 'functions/unavailable' })).toBe('auth:childQr.errors.network');
   });
 });

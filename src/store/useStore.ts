@@ -1048,6 +1048,7 @@ export const useStore = create<AppState>((set, get) => ({
         if (currentUser?.role === 'parent' || currentUser?.role === 'owner') {
           subscribePlanned('joinRequests', 'Join requests', snapshot => set({ joinRequests: docs(snapshot) }));
           subscribePlanned('childJoinRequests', 'Child join requests', snapshot => set({ childJoinRequests: docs(snapshot) }));
+          subscribePlanned('childQrJoinRequests', 'Child QR join requests', snapshot => set({ childQrJoinRequests: docs(snapshot) }));
           subscribePlanned('taskCompletions', 'Task completions', snapshot => set({ taskCompletions: docs(snapshot) }));
           subscribePlanned('redemptions', 'Redemptions', snapshot => set({ redemptions: normalizeRedemptions(docs(snapshot)) }));
           subscribePlanned('walletTransactions', 'Wallet transactions', snapshot => set({ walletTransactions: normalizeHistory(docs(snapshot)) }));

@@ -64,4 +64,44 @@ describe('Task 8: Parent Approval Center Binding Card UI', () => {
       expect(onReject).toHaveBeenCalled();
     });
   });
+
+  it('renders requesterDisplayName and device label in headline', () => {
+    render(
+      <ChildQrDeviceJoinApprovalCard
+        request={{
+          id: 'req-qr-1',
+          status: 'pending',
+          sortDate: new Date(),
+          requesterDisplayName: 'Ali',
+          requesterDeviceLabel: 'iPhone',
+        }}
+        managedChildren={mockManagedChildren}
+        onApprove={vi.fn()}
+        onReject={vi.fn()}
+        isProcessing={false}
+      />
+    );
+
+    expect(screen.getByTestId('qr-join-card-headline')).toHaveTextContent('Ali wants to connect a device');
+    expect(screen.getByTestId('qr-join-card-device')).toHaveTextContent('iPhone • Waiting for approval');
+  });
+
+  it('renders HTML in requesterDisplayName safely as plain text node', () => {
+    render(
+      <ChildQrDeviceJoinApprovalCard
+        request={{
+          id: 'req-qr-1',
+          status: 'pending',
+          sortDate: new Date(),
+          requesterDisplayName: '<script>alert("xss")</script>Ali',
+        }}
+        managedChildren={mockManagedChildren}
+        onApprove={vi.fn()}
+        onReject={vi.fn()}
+        isProcessing={false}
+      />
+    );
+
+    expect(screen.getByTestId('qr-join-card-headline')).toHaveTextContent('<script>alert("xss")</script>Ali wants to connect a device');
+  });
 });
