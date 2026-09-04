@@ -70,6 +70,7 @@ describe('ApprovalCenter — child join requests', () => {
       taskCompletions: [], transferRequests: [], moneyRequests: [],
       petboxRequests: [], profileUpdateRequests: [], goalRequests: [], savingsGoals: [],
       childJoinRequests: [pendingJoinRequest()],
+      bootstrapStatus: { childQrJoinRequests: 'ready' },
     }
   })
 

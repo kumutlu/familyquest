@@ -97,7 +97,7 @@ export function SwipeReview() {
 
   const loading =
     !bootstrapStatus ||
-    (['tasks', 'members'] as const).some(
+    (['tasks', 'members', 'childQrJoinRequests'] as const).some(
       resource =>
         bootstrapStatus[resource] === 'loading' || bootstrapStatus[resource] === 'idle',
     );

@@ -79,6 +79,7 @@ describe('ApprovalCenter interaction contract', () => {
       taskCompletions: [{ id: 'same-id', taskId: 'task-1', assigneeId: 'child-1', status: 'pending_approval' }],
       transferRequests: [{ id: 'same-id', fromChildId: 'child-1', toChildId: 'child-2', amountPence: 100, status: 'pending' }],
       moneyRequests: [], petboxRequests: [],
+      bootstrapStatus: { childQrJoinRequests: 'ready' },
     }
   })
 
@@ -196,6 +197,7 @@ describe('ApprovalCenter interaction contract', () => {
       currentUser: { id: 'owner-1', familyId: 'family-1', role: 'owner' },
       tasks: [], familyMembers: [{ id: 'child-1', displayName: 'Muhammed Osman' }],
       taskCompletions: [], transferRequests: [], moneyRequests: [], petboxRequests: [],
+      bootstrapStatus: { childQrJoinRequests: 'ready' },
       profileUpdateRequests: [{
         id: 'pu-1', childId: 'child-1', childName: 'Muhammed Osman',
         requestedDisplayName: 'Muhammed', requestedAvatar: 'https://new',
@@ -224,6 +226,7 @@ describe('ApprovalCenter interaction contract', () => {
       currentUser: { id: 'owner-1', familyId: 'family-1', role: 'owner' },
       tasks: [], familyMembers: [{ id: 'child-1', displayName: 'Muhammed Osman' }],
       taskCompletions: [], transferRequests: [], moneyRequests: [], petboxRequests: [],
+      bootstrapStatus: { childQrJoinRequests: 'ready' },
       profileUpdateRequests: [{
         id: 'pu-2', childId: 'child-1', childName: 'Muhammed Osman',
         requestedDisplayName: 'Muhammed', requestedAvatar: 'https://new',
@@ -263,6 +266,7 @@ describe('pending_acceptance money requests', () => {
     currentUser: { id: 'owner-1', familyId: 'family-1', role: 'owner' },
     tasks: [], familyMembers: [], familyData: { currency: '£' }, rewards: [],
     taskCompletions: [], transferRequests: [], petboxRequests: [], profileUpdateRequests: [],
+    bootstrapStatus: { childQrJoinRequests: 'ready' },
   };
 
   it('appears in Pending with the correct count and never in History', () => {

@@ -18,6 +18,13 @@ export function ReviewPage() {
   const navigate = useNavigate();
   const currentUser = useStore(state => state.currentUser);
   const childQrJoinRequests = useStore(state => state.childQrJoinRequests);
+  const bootstrapStatus = useStore(state => state.bootstrapStatus);
+
+  const isQrLoading =
+    Boolean(bootstrapStatus) &&
+    (bootstrapStatus['childQrJoinRequests'] === 'loading' ||
+      bootstrapStatus['childQrJoinRequests'] === 'idle');
+
   const hasQrRequests = (childQrJoinRequests || []).some((r: any) => r.status === 'pending');
 
   useEffect(() => {
@@ -29,6 +36,15 @@ export function ReviewPage() {
   }, [currentUser, navigate]);
 
   if (!currentUser || !isParentRole(currentUser.role)) return null;
+
+  if (isQrLoading) {
+    return (
+      <div className="max-w-2xl mx-auto py-8 px-4" data-testid="review-page-loading" aria-busy="true">
+        <div className="h-64 animate-pulse rounded-card qk-bg-inset mb-4" aria-hidden="true" />
+        <div className="h-14 animate-pulse rounded-card qk-bg-inset" aria-hidden="true" />
+      </div>
+    );
+  }
 
   if (hasQrRequests) {
     return (

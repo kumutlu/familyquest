@@ -38,8 +38,13 @@ import { resolveAvatarImage } from '../../config/avatarCatalog';
 
 export function ApprovalCenter() {
   const { t } = useTranslation('approvals');
-  const { currentUser, tasks, familyMembers, familyData, rewards, taskCompletions, transferRequests, moneyRequests, petboxRequests, profileUpdateRequests, goalRequests, savingsGoals, childJoinRequests, childQrJoinRequests } = useStore();
+  const { currentUser, tasks, familyMembers, familyData, rewards, taskCompletions, transferRequests, moneyRequests, petboxRequests, profileUpdateRequests, goalRequests, savingsGoals, childJoinRequests, childQrJoinRequests, bootstrapStatus } = useStore();
   const { openRequest } = useRequestDetail();
+
+  const isQrLoading =
+    Boolean(bootstrapStatus) &&
+    (bootstrapStatus['childQrJoinRequests'] === 'loading' ||
+      bootstrapStatus['childQrJoinRequests'] === 'idle');
 
   const [activeTab, setActiveTab] = useState<'pending' | 'history'>('pending');
   const [processing, setProcessing] = useState<Record<string, 'approve' | 'reject' | 'accept'>>({});
@@ -497,7 +502,7 @@ export function ApprovalCenter() {
             onClick={() => setActiveTab('pending')}
             className={`px-3 py-1 text-sm font-medium rounded-md transition-colors ${activeTab === 'pending' ? 'bg-white shadow-sm text-gray-900' : 'text-gray-500'}`}
           >
-            {t('pendingCount', { count: pendingApprovals.length })}
+            {isQrLoading ? t('pendingTab') : t('pendingCount', { count: pendingApprovals.length })}
           </button>
           <button
             onClick={() => setActiveTab('history')}
@@ -515,7 +520,11 @@ export function ApprovalCenter() {
       )}
 
       {activeTab === 'pending' ? (
-        pendingApprovals.length === 0 ? (
+        isQrLoading ? (
+          <div className="space-y-3 py-2" data-testid="approval-center-loading" aria-busy="true">
+            <div className="h-32 animate-pulse rounded-card qk-bg-inset" aria-hidden="true" />
+          </div>
+        ) : pendingApprovals.length === 0 ? (
           <EmptyState title={t('emptyPending')} className="shadow-sm" />
         ) : (
           <div className="space-y-3">
