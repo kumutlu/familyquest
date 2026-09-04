@@ -47,9 +47,9 @@ export async function seedTestFamily() {
   });
 
   // Owner
-  batch.set(db.doc(`users/owner1`), { familyId, role: 'owner', displayName: 'Owner Mom' });
+  batch.set(db.doc(`users/owner1`), { id: 'owner1', familyId, role: 'owner', displayName: 'Owner Mom' });
   // Parent
-  batch.set(db.doc(`users/parent1`), { familyId, role: 'parent', displayName: 'Parent Dad' });
+  batch.set(db.doc(`users/parent1`), { id: 'parent1', familyId, role: 'parent', displayName: 'Parent Dad' });
   // Children
   batch.set(db.doc(`users/child1`), { familyId, role: 'child', displayName: 'Child Leo', authUid: 'child1', rewardPoints: 100, lifetimeXP: 100, walletBalance: 500, isManaged: true });
   batch.set(db.doc(`users/child2`), { familyId, role: 'child', displayName: 'Child Ava', authUid: 'child2', rewardPoints: 50, lifetimeXP: 50, walletBalance: 200, isManaged: true });

@@ -28,6 +28,7 @@ import { triggerHaptic } from '../../lib/interaction/haptics';
 import { playCue } from '../../lib/interaction/sound';
 import { MoneyValue } from '../privacy/MoneyValue';
 import { WalletMoneyText } from '../privacy/WalletMoneyText';
+import { ApprovalCenter } from './ApprovalCenter';
 
 /**
  * SwipeReview — Queki v2 parent fast-review flow (Waves 2 + 3).
@@ -75,6 +76,7 @@ export function SwipeReview() {
     taskCompletions,
     transferRequests,
     moneyRequests,
+    childQrJoinRequests,
     familyMembers,
     familyData,
     bootstrapStatus,
@@ -274,6 +276,15 @@ export function SwipeReview() {
       <div className="space-y-4 pb-8" data-testid="swipe-review-loading" aria-busy="true">
         <div className="h-64 animate-pulse rounded-card qk-bg-inset" aria-hidden="true" />
         <div className="h-14 animate-pulse rounded-card qk-bg-inset" aria-hidden="true" />
+      </div>
+    );
+  }
+
+  const hasPendingQr = (childQrJoinRequests || []).some((r: any) => r.status === 'pending');
+  if (hasPendingQr) {
+    return (
+      <div className="max-w-2xl mx-auto py-4 px-2">
+        <ApprovalCenter />
       </div>
     );
   }

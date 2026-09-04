@@ -160,6 +160,7 @@ export const bootstrapResources: BootstrapResource[] = [
   'members',
   'joinRequests',
   'childJoinRequests',
+  'childQrJoinRequests',
   'tasks',
   'taskCompletions',
   'rewards',

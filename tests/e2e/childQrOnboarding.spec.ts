@@ -69,11 +69,12 @@ test.describe('Child QR Device Onboarding E2E Flow', () => {
     // Assert explicitly: OLD_REQUEST_POLL_CALLED=false
     expect(oldRequestPollCalled).toBe(false);
 
+    await expect(childPage.getByTestId('qr-display-name-input')).toBeVisible();
+
     // Assert stale handle was cleared from storage upon fresh token scan
     const storedHandle = await childPage.evaluate(() => localStorage.getItem('queki.childQrJoinRequest'));
     expect(storedHandle).toBeNull();
 
-    await expect(childPage.getByTestId('qr-display-name-input')).toBeVisible();
     await childPage.getByTestId('qr-display-name-input').fill('Ali');
     await expect(childPage.getByTestId('submit-qr-token-button')).toBeVisible();
     await childPage.getByTestId('submit-qr-token-button').click();
@@ -82,19 +83,31 @@ test.describe('Child QR Device Onboarding E2E Flow', () => {
     await expect(childPage.getByText('Waiting for Parent Approval')).toBeVisible({ timeout: 10000 });
     await expect(childPage.getByTestId('scan-another-qr-button')).toBeVisible();
 
-    // Verify reloading child page restores waiting status from local storage
-    await childPage.reload();
+    // Verify reloading/navigating to child page restores waiting status from local storage
+    await childPage.goto('/join-qr');
     await expect(childPage.getByText('Waiting for Parent Approval')).toBeVisible({ timeout: 10000 });
 
-    // 4. Parent device (already open on /) reactively receives pending approval indication WITHOUT reload
-    const pendingPriorityCard = parentPage.getByTestId('priority-approvals');
-    await expect(pendingPriorityCard).toBeVisible({ timeout: 10000 });
+    // 4. Parent device (already open on /) receives notification & pending approval indication WITHOUT reload
+    // Open NotificationCenter bell
+    const bellButton = parentPage.getByRole('button', { name: /notification/i }).first();
+    await expect(bellButton).toBeVisible({ timeout: 10000 });
+    await bellButton.click();
 
-    const reviewCta = parentPage.getByTestId('review-cta').first();
-    await expect(reviewCta).toBeVisible({ timeout: 10000 });
-    await reviewCta.click();
+    // Click THE notification item "Ali wants to connect a device"
+    const notifRow = parentPage.getByRole('button', { name: /Ali wants to connect a device/i }).first();
+    await expect(notifRow).toBeVisible({ timeout: 10000 });
+    await notifRow.click();
 
-    // Approval Center opens, displays "Ali wants to connect a device"
+    // /review opens
+    await expect(parentPage).toHaveURL(/\/review/);
+
+    // Explicitly assert:
+    // REVIEW_ZERO_COUNT_VISIBLE = false
+    // ALL_CAUGHT_UP_VISIBLE = false
+    await expect(parentPage.getByTestId('review-count')).not.toBeVisible();
+    await expect(parentPage.getByTestId('swipe-review-caught-up')).not.toBeVisible();
+
+    // Approval Center displays "Ali wants to connect a device"
     const qrHeadline = parentPage.getByTestId('qr-join-card-headline');
     await expect(qrHeadline).toBeVisible({ timeout: 10000 });
     await expect(qrHeadline).toContainText('Ali wants to connect a device');
