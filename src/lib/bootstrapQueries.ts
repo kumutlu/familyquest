@@ -193,7 +193,10 @@ export const criticalBootstrapResources: BootstrapResource[] = [
 
 const childBootstrapResources = bootstrapResources.filter(
   resource =>
-    resource !== 'joinRequests' && resource !== 'reversals' && resource !== 'childJoinRequests',
+    resource !== 'joinRequests' &&
+    resource !== 'reversals' &&
+    resource !== 'childJoinRequests' &&
+    resource !== 'childQrJoinRequests',
 )
 
 export const bootstrapResourcesForRole = (role: BootstrapRole | unknown) =>
