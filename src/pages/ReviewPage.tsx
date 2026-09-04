@@ -20,10 +20,11 @@ export function ReviewPage() {
   const childQrJoinRequests = useStore(state => state.childQrJoinRequests);
   const bootstrapStatus = useStore(state => state.bootstrapStatus);
 
+  const qrStatus = bootstrapStatus?.['childQrJoinRequests'];
   const isQrLoading =
     Boolean(bootstrapStatus) &&
-    (bootstrapStatus['childQrJoinRequests'] === 'loading' ||
-      bootstrapStatus['childQrJoinRequests'] === 'idle');
+    (qrStatus === 'loading' || qrStatus === 'idle');
+  const isQrError = qrStatus === 'error';
 
   const hasQrRequests = (childQrJoinRequests || []).some((r: any) => r.status === 'pending');
 
@@ -46,7 +47,7 @@ export function ReviewPage() {
     );
   }
 
-  if (hasQrRequests) {
+  if (hasQrRequests || isQrError) {
     return (
       <div className="max-w-2xl mx-auto py-4 px-2">
         <ApprovalCenter />

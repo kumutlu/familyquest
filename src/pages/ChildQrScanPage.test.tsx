@@ -39,6 +39,15 @@ describe('Task 9: Child Onboarding Scan & Waiting UI Flow', () => {
     mockReadHandle.mockReturnValue(null);
   });
 
+  it('renders generic placeholder "e.g. Alex" without developer/personal names', () => {
+    render(
+      <MemoryRouter initialEntries={['/join-qr']}>
+        <ChildQrScanPage />
+      </MemoryRouter>
+    );
+    expect(screen.getByPlaceholderText('e.g. Alex')).toBeInTheDocument();
+  });
+
   it('Test 47: child onboarding scan page allows entering name and QR token, submits join request, polls status, and exchanges token on approval', async () => {
     mockScanToken.mockResolvedValue({ valid: true, expiresAtMs: Date.now() + 900000 });
     mockSubmitRequest.mockResolvedValue({

@@ -360,4 +360,20 @@ describe('pending_acceptance money requests', () => {
     expect(await screen.findByText(/Mnalium requested/)).toBeInTheDocument();
     expect(screen.getAllByText('Approved').length).toBeGreaterThan(0);
   });
+
+  it('childQrJoinRequests bootstrap error displays error banner and suppresses false Pending (0)', () => {
+    state.current = {
+      ...baseState,
+      childQrJoinRequests: [],
+      bootstrapStatus: { ...baseState.bootstrapStatus, childQrJoinRequests: 'error' },
+      featureErrors: { childQrJoinRequests: 'Missing or insufficient permissions' },
+    };
+    renderApprovalCenter();
+
+    expect(screen.queryByText('Pending (0)')).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Pending' })).toBeInTheDocument();
+    expect(screen.getByRole('alert')).toHaveTextContent('Missing or insufficient permissions');
+    expect(screen.getByTestId('approval-center-error')).toBeInTheDocument();
+    expect(screen.queryByText(/You’re all caught up!/i)).not.toBeInTheDocument();
+  });
 })

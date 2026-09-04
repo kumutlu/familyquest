@@ -80,6 +80,7 @@ export function SwipeReview() {
     familyMembers,
     familyData,
     bootstrapStatus,
+    featureErrors,
   } = useStore();
 
   const [handledKeys, setHandledKeys] = useState<Set<string>>(new Set());
@@ -280,8 +281,10 @@ export function SwipeReview() {
     );
   }
 
+  const qrStatus = bootstrapStatus?.['childQrJoinRequests'];
+  const isQrError = qrStatus === 'error' || Boolean(featureErrors?.['childQrJoinRequests']);
   const hasPendingQr = (childQrJoinRequests || []).some((r: any) => r.status === 'pending');
-  if (hasPendingQr) {
+  if (hasPendingQr || isQrError) {
     return (
       <div className="max-w-2xl mx-auto py-4 px-2">
         <ApprovalCenter />

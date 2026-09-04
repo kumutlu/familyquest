@@ -38,13 +38,14 @@ import { resolveAvatarImage } from '../../config/avatarCatalog';
 
 export function ApprovalCenter() {
   const { t } = useTranslation('approvals');
-  const { currentUser, tasks, familyMembers, familyData, rewards, taskCompletions, transferRequests, moneyRequests, petboxRequests, profileUpdateRequests, goalRequests, savingsGoals, childJoinRequests, childQrJoinRequests, bootstrapStatus } = useStore();
+  const { currentUser, tasks, familyMembers, familyData, rewards, taskCompletions, transferRequests, moneyRequests, petboxRequests, profileUpdateRequests, goalRequests, savingsGoals, childJoinRequests, childQrJoinRequests, bootstrapStatus, featureErrors } = useStore();
   const { openRequest } = useRequestDetail();
 
+  const qrStatus = bootstrapStatus?.['childQrJoinRequests'];
   const isQrLoading =
     Boolean(bootstrapStatus) &&
-    (bootstrapStatus['childQrJoinRequests'] === 'loading' ||
-      bootstrapStatus['childQrJoinRequests'] === 'idle');
+    (qrStatus === 'loading' || qrStatus === 'idle');
+  const isQrError = qrStatus === 'error' || Boolean(featureErrors?.['childQrJoinRequests']);
 
   const [activeTab, setActiveTab] = useState<'pending' | 'history'>('pending');
   const [processing, setProcessing] = useState<Record<string, 'approve' | 'reject' | 'accept'>>({});
@@ -502,7 +503,7 @@ export function ApprovalCenter() {
             onClick={() => setActiveTab('pending')}
             className={`px-3 py-1 text-sm font-medium rounded-md transition-colors ${activeTab === 'pending' ? 'bg-white shadow-sm text-gray-900' : 'text-gray-500'}`}
           >
-            {isQrLoading ? t('pendingTab') : t('pendingCount', { count: pendingApprovals.length })}
+            {isQrLoading || isQrError ? t('pendingTab') : t('pendingCount', { count: pendingApprovals.length })}
           </button>
           <button
             onClick={() => setActiveTab('history')}
@@ -513,9 +514,9 @@ export function ApprovalCenter() {
         </div>
       </div>
 
-      {error && (
-        <div className="mb-4 p-3 bg-danger-50 text-danger-600 rounded-xl text-sm font-medium">
-          {error}
+      {(error || (isQrError && featureErrors?.['childQrJoinRequests'])) && (
+        <div className="mb-4 p-3 bg-danger-50 text-danger-600 rounded-xl text-sm font-medium" role="alert">
+          {error || featureErrors?.['childQrJoinRequests']}
         </div>
       )}
 
@@ -525,7 +526,13 @@ export function ApprovalCenter() {
             <div className="h-32 animate-pulse rounded-card qk-bg-inset" aria-hidden="true" />
           </div>
         ) : pendingApprovals.length === 0 ? (
-          <EmptyState title={t('emptyPending')} className="shadow-sm" />
+          isQrError ? (
+            <div className="text-center py-8 text-gray-500 text-sm" role="status" data-testid="approval-center-error">
+              Unable to load device join requests.
+            </div>
+          ) : (
+            <EmptyState title={t('emptyPending')} className="shadow-sm" />
+          )
         ) : (
           <div className="space-y-3">
             {pendingApprovals.map(renderApprovalCard)}

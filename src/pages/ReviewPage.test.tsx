@@ -231,4 +231,18 @@ describe('ReviewPage & ApprovalCenter Hydration Regression Tests', () => {
     expect(screen.getByText(/Test 1 wants to connect a device/i)).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /Pending \(1\)/i })).toBeInTheDocument();
   });
+
+  it('G. Bootstrap error in childQrJoinRequests does NOT render false caught-up empty state', () => {
+    mockStoreState = makeStore({
+      childQrJoinRequests: [],
+      bootstrapStatus: { tasks: 'ready', members: 'ready', childQrJoinRequests: 'error' },
+      featureErrors: { childQrJoinRequests: 'Missing or insufficient permissions' },
+    });
+
+    renderReviewPage(['/review']);
+
+    // Must NOT say "All caught up" or "0 to review" when QR requests failed to load
+    expect(screen.queryByText(/All caught up/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/0 to review/i)).not.toBeInTheDocument();
+  });
 });

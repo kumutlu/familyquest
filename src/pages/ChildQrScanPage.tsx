@@ -198,7 +198,7 @@ export function ChildQrScanPage() {
                   type="text"
                   value={displayNameInput}
                   onChange={(e) => setDisplayNameInput(e.target.value)}
-                  placeholder="e.g. Ali"
+                  placeholder="e.g. Alex"
                   maxLength={40}
                   className="w-full py-3 px-4 rounded-xl bg-slate-900/80 border border-slate-700 text-white placeholder-slate-500 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
                 />
