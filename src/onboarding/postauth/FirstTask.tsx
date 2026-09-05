@@ -45,7 +45,7 @@ export function FirstTask({ draft, patch, goNext, goBack, deps }: FirstTaskProps
   const [errorTitle, setErrorTitle] = useState<string | null>(null);
   const submittingRef = useRef(false);
 
-  const childName = draft.childFirstName.trim() || 'your child';
+  const childName = draft.childFirstName?.trim() || 'your child';
 
   const handleContinue = async () => {
     // Double-click / refresh guard: never create two tasks.

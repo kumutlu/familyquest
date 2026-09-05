@@ -7,20 +7,18 @@ import { FamilyWorld } from '../components/family/FamilyWorld';
 import { selectFamilyWorldViewModel } from '../lib/familyWorld/selectors';
 import type { MemberSummary } from '../lib/familyWorld/types';
 import { createChallenge, claimChallenge } from '../lib/api';
-import { isParentRole, isOwnerRole } from '../lib/roles';
+import { isParentRole } from '../lib/roles';
 import { EditMemberModal } from '../components/family/EditMemberModal';
-import { ChildLoginSection, type ChildLoginMember } from '../components/family/ChildLoginSection';
+import { type ChildLoginMember } from '../components/family/ChildLoginSection';
 import { CreateChildLoginDialog } from '../components/family/CreateChildLoginDialog';
 import { Toast, type ToastData } from '../components/ui/Toast';
 import { AddChildModal } from '../components/family/AddChildModal';
+import { ManageChildDialog } from '../components/family/ManageChildDialog';
 import { InviteMemberCard } from '../components/dashboard/InviteMemberCard';
 import { Button } from '../components/ui/Button';
-import { Plus, UserPlus, ChevronDown, ChevronUp, QrCode } from 'lucide-react';
-import { ConnectChildDeviceQrModal } from '../components/ConnectChildDeviceQrModal';
-
+import { Plus, UserPlus, Settings } from 'lucide-react';
 
 import { useNavigate } from 'react-router-dom';
-
 
 export function Family() {
   const { t } = useTranslation(['family', 'familyWorld', 'common']);
@@ -41,6 +39,7 @@ export function Family() {
 
   const [editingMember, setEditingMember] = useState<any>(null);
   const [createLoginFor, setCreateLoginFor] = useState<ChildLoginMember | null>(null);
+  const [selectedManageChild, setSelectedManageChild] = useState<any>(null);
   const [toast, setToast] = useState<ToastData | null>(null);
   const [isChallengeModalOpen, setIsChallengeModalOpen] = useState(false);
   const [challengeData, setChallengeData] = useState({
@@ -51,8 +50,6 @@ export function Family() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isAddChildOpen, setIsAddChildOpen] = useState(false);
   const [isInviteOpen, setIsInviteOpen] = useState(false);
-  const [isQrModalOpen, setIsQrModalOpen] = useState(false);
-  const [showAdvancedManagement, setShowAdvancedManagement] = useState(false);
 
 
   const showToast = (message: string, type: 'success' | 'error' | 'info' = 'success') =>
@@ -121,7 +118,6 @@ export function Family() {
   };
 
   const isParent = isParentRole(currentUser?.role);
-  const isOwner = isOwnerRole(currentUser?.role);
 
   return (
     <div className="space-y-6 animate-in fade-in duration-300">
@@ -130,7 +126,7 @@ export function Family() {
         <div className="min-w-0">
           <div className="flex items-center gap-1.5">
             <h1 className="text-2xl font-black text-slate-900 dark:text-white tracking-tight">
-              {t('familyWorld:title', 'Family World')}
+              {t('title')}
             </h1>
             <HelpButton />
           </div>
@@ -153,40 +149,41 @@ export function Family() {
               </Button>
             )}
 
-            {isOwner && (
-              <>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => setIsQrModalOpen(true)}
-                  className="rounded-xl border-indigo-300 dark:border-indigo-700 text-indigo-700 dark:text-indigo-300 hover:bg-indigo-50 dark:hover:bg-indigo-950 text-xs font-semibold"
-                >
-                  <QrCode size={15} className="mr-1 shrink-0" />
-                  <span>Connect Child Device</span>
-                </Button>
-
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => setIsAddChildOpen(true)}
-                  className="rounded-xl border-slate-300 dark:border-slate-700 text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 text-xs font-semibold"
-                >
-                  <UserPlus size={15} className="mr-1 shrink-0" />
-                  {t('addChild')}
-                </Button>
-              </>
+            {isParent && (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setIsAddChildOpen(true)}
+                className="rounded-xl border-slate-300 dark:border-slate-700 text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 text-xs font-semibold"
+              >
+                <UserPlus size={15} className="mr-1 shrink-0" />
+                {t('addChild')}
+              </Button>
             )}
 
+            {isParent && (
+              <Button
+                variant="secondary"
+                size="sm"
+                onClick={() => setIsInviteOpen(true)}
+                className="rounded-xl bg-blue-50 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 hover:bg-blue-100 text-xs font-semibold"
+              >
+                <UserPlus size={15} className="mr-1 shrink-0" />
+                {t('inviteMember')}
+              </Button>
+            )}
 
-            <Button
-              variant="secondary"
-              size="sm"
-              onClick={() => setIsInviteOpen(true)}
-              className="rounded-xl bg-blue-50 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 hover:bg-blue-100 text-xs font-semibold"
-            >
-              <UserPlus size={15} className="mr-1 shrink-0" />
-              {t('inviteMember')}
-            </Button>
+            {isParent && (
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => navigate('/settings/family')}
+                className="rounded-xl text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 text-xs font-semibold flex items-center gap-1.5"
+              >
+                <Settings size={15} className="mr-1 shrink-0" />
+                <span>Family Settings</span>
+              </Button>
+            )}
           </div>
         )}
       </header>
@@ -196,74 +193,15 @@ export function Family() {
         viewModel={viewModel}
         onClaimQuest={handleClaimQuest}
         isClaimingQuest={isSubmitting}
-        onManageFamily={() => setShowAdvancedManagement((prev) => !prev)}
+        onManageFamily={() => navigate('/settings/family')}
         onSendMoney={handleSendMoney}
+        onManageMember={(member) => {
+          const childMember = familyMembers.find((m) => m.id === member.id);
+          if (childMember) {
+            setSelectedManageChild(childMember);
+          }
+        }}
       />
-
-      {/* Progressive Disclosure: Member Management & Child Logins (for Parents/Owners) */}
-      {isParent && (
-        <div className="pt-2">
-          <button
-            onClick={() => setShowAdvancedManagement((prev) => !prev)}
-            className="flex items-center gap-2 text-xs font-bold text-slate-600 dark:text-slate-300 hover:text-slate-800 dark:hover:text-slate-200 transition-colors mx-auto py-2"
-          >
-            <span>
-              {showAdvancedManagement
-                ? t('familyWorld:manage', 'Hide member management')
-                : t('familyWorld:manage', 'Member accounts & settings')}
-            </span>
-            {showAdvancedManagement ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
-          </button>
-
-          {showAdvancedManagement && (
-            <div className="mt-4 p-5 rounded-3xl bg-slate-50 dark:bg-slate-800/40 border border-slate-200/80 dark:border-slate-700/80 space-y-4">
-              <h4 className="text-xs font-black uppercase tracking-wider text-slate-600 dark:text-slate-300">
-                {t('familyWorld:manage', 'Managed Member Accounts')}
-              </h4>
-
-              <div className="space-y-3">
-                {familyMembers.map((member) => (
-                  <div
-                    key={member.id}
-                    className="p-3.5 rounded-2xl bg-white dark:bg-slate-800 border border-slate-200/80 dark:border-slate-700/80 flex items-center justify-between"
-                  >
-                    <div className="flex items-center gap-3">
-                      <div className="w-8 h-8 rounded-full bg-blue-500/10 text-blue-600 font-bold flex items-center justify-center text-xs">
-                        {member.displayName?.[0]?.toUpperCase()}
-                      </div>
-                      <div>
-                        <div className="flex items-center gap-1.5">
-                          <span className="font-bold text-sm text-slate-900 dark:text-white">
-                            {member.displayName}
-                          </span>
-                          <span className="text-[10px] uppercase font-bold px-1.5 py-0.2 rounded bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300">
-                            {member.role}
-                          </span>
-                        </div>
-                        {member.role === 'child' && member.isManaged && (
-                          <ChildLoginSection
-                            member={member}
-                            onRequestCreate={(m) => setCreateLoginFor(m)}
-                          />
-                        )}
-                      </div>
-                    </div>
-
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onClick={() => setEditingMember(member)}
-                      className="text-xs font-semibold text-slate-600 dark:text-slate-300"
-                    >
-                      {t('edit')}
-                    </Button>
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
-        </div>
-      )}
 
       {/* Create Challenge Modal */}
       {isChallengeModalOpen && (
@@ -418,11 +356,20 @@ export function Family() {
         </div>
       )}
 
-      {/* Connect Child Device QR Modal */}
-      <ConnectChildDeviceQrModal
-        isOpen={isQrModalOpen}
-        onClose={() => setIsQrModalOpen(false)}
-      />
+      {/* Canonical Manage Child Dialog */}
+      {selectedManageChild && (
+        <ManageChildDialog
+          member={selectedManageChild}
+          onClose={() => setSelectedManageChild(null)}
+          onChildDeleted={() => {
+            setSelectedManageChild(null);
+            showToast('Child profile removed', 'info');
+          }}
+          onChildUpdated={() => {
+            showToast('Child profile updated', 'success');
+          }}
+        />
+      )}
 
       {/* Toast */}
 

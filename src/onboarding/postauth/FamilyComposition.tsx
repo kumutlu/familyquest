@@ -5,7 +5,7 @@ import { AdultInviteCard } from '../../components/family/AdultInviteCard';
 import { OnboardingCard } from '../components/OnboardingCard';
 import { OnboardingError } from '../components/OnboardingError';
 import { useStore } from '../../store/useStore';
-import { ensureFamily, ensureFirstChild, type SetupDeps } from '../lib/onboardingSetup';
+import { ensureFamily, type SetupDeps } from '../lib/onboardingSetup';
 import {
   classifyOnboardingError,
   withBoundedTimeout,
@@ -21,6 +21,7 @@ interface FamilyCompositionProps {
   patch: (partial: Partial<OnboardingDraft>) => void;
   goNext: () => void;
   deps: SetupDeps;
+  onFinish?: () => void;
 }
 
 /**
@@ -36,7 +37,7 @@ interface FamilyCompositionProps {
  * simulates an unmount, so setup is never left in a permanent disabled state and
  * is never executed twice.
  */
-export function FamilyComposition({ draft, patch, goNext, deps }: FamilyCompositionProps) {
+export function FamilyComposition({ draft, patch, goNext, deps, onFinish }: FamilyCompositionProps) {
   recordE2ETimeline('p1-render');
   const { t } = useTranslation('onboarding');
   const currentUser = useStore(state => state.currentUser);
@@ -98,7 +99,7 @@ export function FamilyComposition({ draft, patch, goNext, deps }: FamilyComposit
     if (!creationAuthorized) return;
     if (phase !== 'ready') return;
     if (completedRef.current) return;
-    if (draft.familyId && draft.childId) {
+    if (draft.familyId) {
       completedRef.current = true;
       return;
     }
@@ -114,26 +115,10 @@ export function FamilyComposition({ draft, patch, goNext, deps }: FamilyComposit
           recordE2ETimeline('ensure-family-start');
           next = await withBoundedTimeout(ensureFamily(next, deps), SETUP_WAIT_MS, t('errors.offline'));
           recordE2ETimeline('ensure-family-end', { familyId: next.familyId });
-          // Checkpoint each authoritative boundary immediately. A production
-          // profile listener or reload can observe family membership before the
-          // slower managed-child write settles; without this checkpoint,
-          // loadDraft(currentFamilyId) treats the still-familyless P1 draft as
-          // stale and routes to Dashboard before P2 can create the first task.
-          saveDraft(next);
-          // Keep the UID-bound intent through P3. It is the durable authorization
-          // that lets a reload resume this idempotent creation journey; completion
-          // or sign-out clears it at the container boundary.
-        }
-        if (!next.childId) {
-          recordE2ETimeline('ensure-first-child-start');
-          next = await withBoundedTimeout(ensureFirstChild(next, deps), SETUP_WAIT_MS, t('errors.offline'));
-          recordE2ETimeline('ensure-first-child-end', { childId: next.childId });
           saveDraft(next);
         }
         completedRef.current = true;
-        // Persist even if StrictMode already "unmounted" this run — the draft is
-        // the source of truth and idempotent, so a remount resumes cleanly.
-        patch({ familyId: next.familyId, childId: next.childId });
+        patch({ familyId: next.familyId });
       } catch (caught: unknown) {
         startedRef.current = false; // allow a retry to re-run setup
         if (!cancelled) {
@@ -161,7 +146,7 @@ export function FamilyComposition({ draft, patch, goNext, deps }: FamilyComposit
   };
 
   const parentName = currentUser?.displayName || draft.parentFirstName.trim() || '—';
-  const firstChild = draft.childFirstName.trim();
+  const firstChild = draft.childFirstName?.trim() || '';
 
   const members = [
     { id: 'parent', name: parentName, role: 'owner' as const },
@@ -187,7 +172,7 @@ export function FamilyComposition({ draft, patch, goNext, deps }: FamilyComposit
 
   const showError = phase === 'error' && Boolean(error);
   const showLoading =
-    phase === 'waiting' || (phase === 'ready' && (!draft.familyId || !draft.childId || creating));
+    phase === 'waiting' || (phase === 'ready' && (!draft.familyId || creating));
 
   if (showError) {
     return (
@@ -269,10 +254,10 @@ export function FamilyComposition({ draft, patch, goNext, deps }: FamilyComposit
       )}
 
       <div className="mt-6 flex flex-col gap-3 min-[400px]:flex-row min-[400px]:items-center">
-        <Button variant="secondary" onClick={goNext} disabled={creating}>
+        <Button variant="secondary" onClick={onFinish ?? goNext} disabled={creating}>
           {t('p1.skip')}
         </Button>
-        <Button size="lg" className="flex-1" onClick={goNext} disabled={creating}>
+        <Button size="lg" className="flex-1" onClick={onFinish ?? goNext} disabled={creating}>
           {t('p1.continue')}
         </Button>
       </div>

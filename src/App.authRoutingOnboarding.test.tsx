@@ -331,11 +331,6 @@ describe('App auth routing and onboarding composition', () => {
     expect(window.location.pathname).toBe('/onboarding');
     expect(window.location.search).toBe('?mode=create');
     await user.click(await screen.findByRole('button', { name: 'Continue' }));
-    expect(await screen.findByRole('heading', { name: /first win/i })).toBeVisible();
-    await user.click(screen.getByRole('button', { name: 'Skip' }));
-    expect(await screen.findByRole('button', { name: 'Go to my dashboard' })).toBeVisible();
-    await user.click(screen.getByRole('button', { name: 'Go to my dashboard' }));
-
     await waitFor(() => expect(window.location.pathname).toBe('/'));
   });
 

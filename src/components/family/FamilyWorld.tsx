@@ -17,6 +17,7 @@ interface FamilyWorldProps {
   isClaimingQuest?: boolean;
   onManageFamily?: () => void;
   onSendMoney?: (member: MemberSummary) => void;
+  onManageMember?: (member: MemberSummary) => void;
 }
 
 export const FamilyWorld: React.FC<FamilyWorldProps> = ({
@@ -25,6 +26,7 @@ export const FamilyWorld: React.FC<FamilyWorldProps> = ({
   isClaimingQuest,
   onManageFamily,
   onSendMoney,
+  onManageMember,
 }) => {
   const { t } = useTranslation('familyWorld');
   const navigate = useNavigate();
@@ -172,6 +174,7 @@ export const FamilyWorld: React.FC<FamilyWorldProps> = ({
         isOpen={!!selectedMember}
         onClose={() => setSelectedMember(null)}
         onSendMoney={onSendMoney}
+        onManageMember={onManageMember}
       />
 
       {/* 8. Shared Celebration Modal */}

@@ -175,7 +175,7 @@ describe('PRIORITY 0 — post-auth "User not found" race', () => {
     expect(readCreateFamilyIntent('other-uid')).toBeNull();
   });
 
-  it('waits for the authoritative profile, then creates family + child exactly once', async () => {
+  it('waits for the authoritative profile, then creates family workspace exactly once', async () => {
     const goNext = vi.fn();
     const deps = makeDeps();
 
@@ -197,7 +197,7 @@ describe('PRIORITY 0 — post-auth "User not found" race', () => {
 
     // 5. setup proceeds exactly once.
     await waitFor(() => expect(api.createFamilyAndParent).toHaveBeenCalledTimes(1));
-    await waitFor(() => expect(api.createManagedMember).toHaveBeenCalledTimes(1));
+    expect(api.createManagedMember).not.toHaveBeenCalled();
 
     // 6. no permanent disabled state — the continue control is reachable.
     await waitFor(() => expect(screen.getByRole('button', { name: /continue/i })).toBeEnabled());
@@ -223,11 +223,7 @@ describe('PRIORITY 0 — post-auth "User not found" race', () => {
 });
 
 describe('PRIORITY 1 — StrictMode / effect idempotency', () => {
-  it('checkpoints family identity before the first-child write can settle', async () => {
-    let resolveChild!: (childId: string) => void;
-    api.createManagedMember.mockImplementationOnce(() => new Promise<string>((resolve) => {
-      resolveChild = resolve;
-    }));
+  it('checkpoints family identity immediately on family creation', async () => {
     const draft = p1Draft();
     saveDraft(draft);
 
@@ -245,12 +241,9 @@ describe('PRIORITY 1 — StrictMode / effect idempotency', () => {
       deps: makeDeps(),
     }));
 
-    await waitFor(() => expect(api.createManagedMember).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(api.createFamilyAndParent).toHaveBeenCalledTimes(1));
     expect(loadDraft('fam-1')).toMatchObject({ step: 'p1', familyId: 'fam-1' });
-    expect(loadDraft('fam-1')?.childId).toBeUndefined();
-
-    resolveChild('child-1');
-    await waitFor(() => expect(loadDraft('fam-1')?.childId).toBe('child-1'));
+    expect(api.createManagedMember).not.toHaveBeenCalled();
   });
 
   it('completes setup exactly once under React.StrictMode (no permanent disabled state)', async () => {
@@ -268,7 +261,7 @@ describe('PRIORITY 1 — StrictMode / effect idempotency', () => {
     );
 
     await waitFor(() => expect(api.createFamilyAndParent).toHaveBeenCalledTimes(1));
-    await waitFor(() => expect(api.createManagedMember).toHaveBeenCalledTimes(1));
+    expect(api.createManagedMember).not.toHaveBeenCalled();
     await waitFor(() => expect(screen.getByRole('button', { name: /continue/i })).toBeEnabled());
   });
 
@@ -289,7 +282,7 @@ describe('PRIORITY 1 — StrictMode / effect idempotency', () => {
     await waitFor(() => expect(api.createFamilyAndParent).toHaveBeenCalledTimes(1));
     // A second authoritative mutation caused by effect replay must not happen.
     expect(api.createFamilyAndParent).toHaveBeenCalledTimes(1);
-    expect(api.createManagedMember).toHaveBeenCalledTimes(1);
+    expect(api.createManagedMember).not.toHaveBeenCalled();
   });
 });
 
@@ -325,13 +318,13 @@ describe('PRIORITY 1 — post-auth progress continuity', () => {
     );
 
     const navBefore = screen.getByRole('navigation', { name: /setting up your family/i });
-    expect(navBefore).toHaveTextContent(/step 1 of 3/i);
+    expect(navBefore).toHaveTextContent(/step 1 of 1/i);
 
     // Family created (simulating refreshCurrentUser after createFamilyAndParent).
     await setStore({ currentUser: { id: 'u1', role: 'owner', familyId: 'fam-1' } });
 
     const navAfter = screen.getByRole('navigation', { name: /setting up your family/i });
-    expect(navAfter).toHaveTextContent(/step 1 of 3/i);
+    expect(navAfter).toHaveTextContent(/step 1 of 1/i);
     expect(navAfter).not.toHaveTextContent(/0 of 7/i);
     expect(navAfter).not.toHaveTextContent(/step 0 of/i);
   });
@@ -363,8 +356,7 @@ describe('PRIORITY 2 — offline / network feedback', () => {
     await user.click(screen.getByRole('button', { name: /retry/i }));
 
     await waitFor(() => expect(api.createFamilyAndParent).toHaveBeenCalledTimes(2));
-    // The child is created exactly once (only after the successful family create).
-    await waitFor(() => expect(api.createManagedMember).toHaveBeenCalledTimes(1));
+    expect(api.createManagedMember).not.toHaveBeenCalled();
     await waitFor(() => expect(screen.getByRole('button', { name: /continue/i })).toBeEnabled());
   });
 
@@ -414,5 +406,123 @@ describe('PRIORITY 2 — offline / network feedback', () => {
     await user.click(screen.getByRole('button', { name: /retry/i }));
     await waitFor(() => expect(api.createFamilyAndParent).toHaveBeenCalledTimes(2));
     expect(readCreateFamilyIntent('u1')).not.toBeNull();
+  });
+});
+
+describe('BLOCKER 3 — Family-Only Onboarding Invariant & Remount Recovery', () => {
+  it('Invariant A: explicit create intent -> in-flight cleanup/remount -> resolves -> exactly 1 family, no permanent spinner', async () => {
+    let resolveCreate!: (result: typeof FAMILY_RESULT) => void;
+    api.createFamilyAndParent.mockImplementationOnce(() => new Promise((resolve) => {
+      resolveCreate = resolve;
+    }));
+
+    await setStore({
+      currentUser: { id: 'u1', role: 'parent' },
+      familyData: null,
+      profileServerConfirmed: true,
+      profileLoading: false,
+    });
+
+    const deps = makeDeps();
+    const goNext = vi.fn();
+
+    // Mount 1
+    const { unmount } = renderP1(p1Draft(), deps, goNext);
+    expect(api.createFamilyAndParent).toHaveBeenCalledTimes(1);
+
+    // Unmount during asynchronous boundary
+    unmount();
+
+    // Remount
+    renderP1(p1Draft(), deps, goNext);
+
+    // Resolve the in-flight creation
+    await act(async () => {
+      resolveCreate(FAMILY_RESULT);
+    });
+
+    // Exactly one family created
+    expect(api.createFamilyAndParent).toHaveBeenCalledTimes(1);
+    // Never permanent spinner — continue button becomes enabled
+    await waitFor(() => expect(screen.getByRole('button', { name: /continue/i })).toBeEnabled());
+  });
+
+  it('Invariant B: transient client error -> retry reconciles existing family without duplicates', async () => {
+    const user = userEvent.setup();
+    api.createFamilyAndParent
+      .mockRejectedValueOnce(new Error('transient network glitch'))
+      .mockResolvedValueOnce(FAMILY_RESULT);
+
+    await setStore({
+      currentUser: { id: 'u1', role: 'parent' },
+      familyData: null,
+      profileServerConfirmed: true,
+      profileLoading: false,
+    });
+
+    const deps = makeDeps();
+    renderP1(p1Draft(), deps, vi.fn());
+
+    // Transient error displayed as recoverable error
+    await waitFor(() => expect(screen.getByRole('alert')).toBeInTheDocument());
+    expect(screen.getByRole('button', { name: /retry/i })).toBeInTheDocument();
+
+    // User clicks Retry
+    await user.click(screen.getByRole('button', { name: /retry/i }));
+
+    // Reconciles and succeeds
+    await waitFor(() => expect(screen.getByRole('button', { name: /continue/i })).toBeEnabled());
+    expect(api.createFamilyAndParent).toHaveBeenCalledTimes(2);
+  });
+
+  it('Invariant C: auth-only without explicit create intent produces ZERO family writes', async () => {
+    clearCreateFamilyIntent();
+    await setStore({
+      currentUser: { id: 'u1', role: 'parent' },
+      familyData: null,
+      profileServerConfirmed: true,
+      profileLoading: false,
+    });
+
+    renderP1(p1Draft(), makeDeps(), vi.fn());
+    await act(async () => undefined);
+
+    expect(api.createFamilyAndParent).not.toHaveBeenCalled();
+    expect(api.createManagedMember).not.toHaveBeenCalled();
+    expect(api.createTask).not.toHaveBeenCalled();
+  });
+
+  it('Invariant D: pending adult invite suppresses family creation (invite wins)', async () => {
+    // When an adult invite exists for the user, createFamilyIntent should not proceed
+    clearCreateFamilyIntent();
+    await setStore({
+      currentUser: { id: 'u1', role: 'parent' },
+      familyData: null,
+      profileServerConfirmed: true,
+      profileLoading: false,
+      pendingMembershipStatus: 'invited',
+    });
+
+    renderP1(p1Draft(), makeDeps(), vi.fn());
+    await act(async () => undefined);
+
+    expect(api.createFamilyAndParent).not.toHaveBeenCalled();
+    expect(api.createManagedMember).not.toHaveBeenCalled();
+  });
+
+  it('Invariant E: family creation succeeds with ZERO child calls and ZERO task calls', async () => {
+    await setStore({
+      currentUser: { id: 'u1', role: 'parent' },
+      familyData: null,
+      profileServerConfirmed: true,
+      profileLoading: false,
+    });
+
+    renderP1(p1Draft(), makeDeps(), vi.fn());
+
+    await waitFor(() => expect(api.createFamilyAndParent).toHaveBeenCalledTimes(1));
+    expect(api.createManagedMember).not.toHaveBeenCalled();
+    expect(api.createTask).not.toHaveBeenCalled();
+    await waitFor(() => expect(screen.getByRole('button', { name: /continue/i })).toBeEnabled());
   });
 });

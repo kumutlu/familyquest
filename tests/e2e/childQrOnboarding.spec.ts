@@ -16,13 +16,23 @@ test.describe('Child QR Device Onboarding E2E Flow', () => {
     const childContext = await browser.newContext();
     const childPage = await childContext.newPage();
 
-    // 1. Parent/Owner logs in & opens "Connect Child Device" modal
+    // 1. Parent/Owner logs in & opens "Connect Child Device" modal via Manage Child
     await loginAs(parentPage, 'owner@test.com');
     await parentPage.goto('/family');
 
-    // Click "Connect Child Device" button
-    const connectButton = parentPage.getByRole('button', { name: /Connect Child Device/i }).first();
-    await expect(connectButton).toBeVisible();
+    // Click Child Leo avatar to open MemberDetailSheet
+    const childLeoBtn = parentPage.getByRole('button', { name: /View Child Leo/i }).first();
+    await expect(childLeoBtn).toBeVisible({ timeout: 15000 });
+    await childLeoBtn.click();
+
+    // Click "Manage Member" in MemberDetailSheet
+    const manageBtn = parentPage.getByRole('button', { name: /Manage Member|Manage child/i }).first();
+    await expect(manageBtn).toBeVisible({ timeout: 10000 });
+    await manageBtn.click();
+
+    // In ManageChildDialog, click "Connect personal device" button
+    const connectButton = parentPage.getByTestId('connect-child-device-button');
+    await expect(connectButton).toBeVisible({ timeout: 10000 });
     await connectButton.click();
 
     // Modal opens and auto-generates active QR token / copy link
@@ -107,24 +117,17 @@ test.describe('Child QR Device Onboarding E2E Flow', () => {
     await expect(parentPage.getByTestId('review-count')).not.toBeVisible();
     await expect(parentPage.getByTestId('swipe-review-caught-up')).not.toBeVisible();
 
-    // Approval Center displays "Ali wants to connect a device"
+    // Approval Center displays "Ali wants to connect a personal device to Child Leo"
     const qrHeadline = parentPage.getByTestId('qr-join-card-headline');
     await expect(qrHeadline).toBeVisible({ timeout: 10000 });
-    await expect(qrHeadline).toContainText('Ali wants to connect a device');
+    await expect(qrHeadline).toContainText('Ali wants to connect a personal device to Child Leo');
 
     const qrDevice = parentPage.getByTestId('qr-join-card-device');
     await expect(qrDevice).toBeVisible({ timeout: 10000 });
     await expect(qrDevice).toContainText('Waiting for approval');
 
-    const qrRequestCard = parentPage.locator('div', { hasText: 'Ali wants to connect a device' }).first();
-
-    // Select existing managed child profile "Child Leo"
-    const childSelect = qrRequestCard.getByTestId('child-selector-dropdown');
-    await expect(childSelect).toBeVisible();
-    await childSelect.selectOption({ label: 'Child Leo' });
-
-    // Click Approve & Bind
-    const approveBtn = qrRequestCard.getByTestId('approve-qr-join-button');
+    // Click Approve
+    const approveBtn = parentPage.getByTestId('approve-qr-join-button');
     await expect(approveBtn).toBeEnabled();
     await approveBtn.click();
 

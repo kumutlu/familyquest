@@ -72,6 +72,28 @@ export async function generateChildQrTokenImpl(
   }
 
   const familyId = String(profile.familyId);
+  const payload = (request.data || {}) as Record<string, any>;
+  const intent = payload.intent ?? (payload.targetChildId ? 'existing_child_device_bind' : undefined);
+  const targetChildId = typeof payload.targetChildId === 'string' ? payload.targetChildId.trim() : null;
+
+  if (intent === 'existing_child_device_bind') {
+    if (!targetChildId) {
+      throw new HttpsError('invalid-argument', 'TARGET_CHILD_REQUIRED');
+    }
+    const targetSnap = await context.db.doc(`users/${targetChildId}`).get();
+    if (!targetSnap.exists) {
+      throw new HttpsError('not-found', 'CHILD_NOT_FOUND');
+    }
+    const targetData = targetSnap.data() as Record<string, any>;
+    if (targetData.familyId !== familyId || targetData.role !== 'child') {
+      throw new HttpsError('failed-precondition', 'INVALID_TARGET_CHILD');
+    }
+  } else if (intent === 'new_child_join') {
+    if (targetChildId) {
+      throw new HttpsError('invalid-argument', 'TARGET_CHILD_NOT_ALLOWED');
+    }
+  }
+
   const rawToken = context.generateToken ? context.generateToken() : generateEntropyToken();
   const tokenHash = hashSha256(rawToken);
   const sessionId = context.db.collection('x').doc().id;
@@ -103,6 +125,8 @@ export async function generateChildQrTokenImpl(
       familyId,
       tokenHash,
       createdBy: uid,
+      ...(intent ? { intent } : {}),
+      targetChildId,
       status: 'active',
       createdAtMs: now,
       expiresAtMs,
@@ -115,6 +139,8 @@ export async function generateChildQrTokenImpl(
     transaction.set(lookupRef, {
       qrSessionId: sessionId,
       familyId,
+      ...(intent ? { intent } : {}),
+      targetChildId,
       status: 'active',
       expiresAtMs,
       createdAt: FieldValue.serverTimestamp(),
@@ -267,10 +293,16 @@ export async function submitChildQrJoinRequestImpl(
       consumedByRequestId: requestId,
     });
 
+    const sessionData = liveSession.data() as Record<string, any>;
+    const intent = sessionData?.intent ?? (sessionData?.targetChildId ? 'existing_child_device_bind' : undefined);
+    const targetChildId = sessionData?.targetChildId ?? null;
+
     transaction.set(requestRef, {
       requestId,
       qrSessionId,
       familyId,
+      ...(intent ? { intent } : {}),
+      targetChildId,
       requesterUid: request.auth?.uid ?? null,
       requesterDisplayName: sanitizedDisplayName,
       requesterDeviceLabel: sanitizedDeviceLabel,
@@ -286,16 +318,22 @@ export async function submitChildQrJoinRequestImpl(
       createdAt: FieldValue.serverTimestamp(),
     });
 
+    const isNewChild = intent === 'new_child_join';
+    const notifTitle = isNewChild
+      ? `${sanitizedDisplayName} wants to join your family`
+      : `${sanitizedDisplayName} wants to connect a device`;
+    const notifBody = isNewChild
+      ? (sanitizedDeviceLabel ? `${sanitizedDeviceLabel} • Waiting for approval` : 'Waiting for approval to join your family')
+      : (sanitizedDeviceLabel ? `${sanitizedDeviceLabel} • Waiting for approval` : 'Waiting for approval');
+
     transaction.set(notifRef, {
       id: `qr_join_${requestId}`,
       familyId,
       type: 'child_qr_device_join',
       actorId: request.auth?.uid ?? 'unauthenticated_child_device',
       recipientIds: parentUids,
-      title: `${sanitizedDisplayName} wants to connect a device`,
-      body: sanitizedDeviceLabel
-        ? `${sanitizedDeviceLabel} • Waiting for approval`
-        : 'Select which existing child profile this device belongs to.',
+      title: notifTitle,
+      body: notifBody,
       actionUrl: '/review',
       route: '/review',
       requestId,
@@ -389,7 +427,7 @@ export async function approveChildQrJoinRequestImpl(
 
   await assertParentOfFamily(context, callerUid, familyId);
 
-  if (!requestId || !selectedManagedChildId) {
+  if (!requestId) {
     throw new HttpsError('invalid-argument', 'INVALID_APPROVAL_PAYLOAD');
   }
 
@@ -402,43 +440,178 @@ export async function approveChildQrJoinRequestImpl(
     }
   }
 
-  // Validate target child profile
-  const childSnap = await context.db.doc(`users/${selectedManagedChildId}`).get();
-  if (!childSnap.exists) {
-    throw new HttpsError('not-found', 'CHILD_NOT_FOUND');
-  }
-  const child = childSnap.data() as Record<string, any>;
-  if (child.familyId !== familyId) {
-    throw new HttpsError('failed-precondition', 'CHILD_NOT_IN_FAMILY');
-  }
-  if (child.role !== 'child' || child.isManaged !== true || child.status === 'deleted') {
-    throw new HttpsError('failed-precondition', 'INVALID_TARGET_CHILD');
-  }
-
-  // Validate private child login record
-  const loginSnap = await context.db.doc(`families/${familyId}/childLogins/${selectedManagedChildId}`).get();
-  if (!loginSnap.exists || !loginSnap.data()?.authUid) {
-    throw new HttpsError('failed-precondition', 'CHILD_LOGIN_INCONSISTENT');
-  }
-
   const reqRef = context.db.doc(`families/${familyId}/child_qr_join_requests/${requestId}`);
   const now = getNowMs(context);
 
-  await context.db.runTransaction(async (transaction) => {
-    const liveReq = await transaction.get(reqRef);
-    if (!liveReq.exists) {
-      throw new HttpsError('not-found', 'JOIN_REQUEST_NOT_FOUND');
-    }
-    const data = liveReq.data() as Record<string, any>;
-    if (data.status !== 'pending') {
-      throw new HttpsError('failed-precondition', 'REQUEST_NOT_PENDING');
+  const reqSnap = await reqRef.get();
+  if (!reqSnap.exists) {
+    throw new HttpsError('not-found', 'JOIN_REQUEST_NOT_FOUND');
+  }
+  const reqData = reqSnap.data() as Record<string, any>;
+  if (reqData.status === 'approved') {
+    const approvedChildId = reqData.selectedManagedChildId || reqData.approvedChildId;
+    return { requestId, selectedManagedChildId: approvedChildId, status: 'approved' };
+  }
+  if (reqData.status !== 'pending') {
+    throw new HttpsError('failed-precondition', 'REQUEST_NOT_PENDING');
+  }
+
+  const intent = reqData.intent === 'new_child_join' ? 'new_child_join' : 'existing_child_device_bind';
+
+  if (intent === 'existing_child_device_bind') {
+    // Legacy fallback or existing bind: strictly require targetChildId or selectedManagedChildId
+    const targetChildId = reqData.targetChildId || selectedManagedChildId;
+    if (!targetChildId) {
+      throw new HttpsError('invalid-argument', 'INVALID_APPROVAL_PAYLOAD');
     }
 
+    const childRef = context.db.doc(`users/${targetChildId}`);
+    const childSnap = await childRef.get();
+    if (!childSnap.exists) {
+      throw new HttpsError('not-found', 'CHILD_NOT_FOUND');
+    }
+    const child = childSnap.data() as Record<string, any>;
+    if (child.familyId !== familyId) {
+      throw new HttpsError('failed-precondition', 'CHILD_NOT_IN_FAMILY');
+    }
+    if (child.role !== 'child' || child.status === 'deleted') {
+      throw new HttpsError('failed-precondition', 'INVALID_TARGET_CHILD');
+    }
+
+    await context.db.runTransaction(async (transaction) => {
+      const liveReq = await transaction.get(reqRef);
+      if (!liveReq.exists) throw new HttpsError('not-found', 'JOIN_REQUEST_NOT_FOUND');
+      const liveData = liveReq.data() as Record<string, any>;
+      if (liveData.status === 'approved') return;
+      if (liveData.status !== 'pending') throw new HttpsError('failed-precondition', 'REQUEST_NOT_PENDING');
+
+      transaction.update(reqRef, {
+        status: 'approved',
+        resolvedAtMs: now,
+        resolvedBy: callerUid,
+        selectedManagedChildId: targetChildId,
+        approvedChildId: targetChildId,
+        resolvedAt: FieldValue.serverTimestamp(),
+      });
+
+      if (clientReqId) {
+        const idemRef = context.db.doc(`families/${familyId}/qrIdempotency/${clientReqId}`);
+        transaction.set(idemRef, {
+          clientReqId,
+          operation: 'approveChildQrJoinRequest',
+          status: 'completed',
+          result: { requestId, selectedManagedChildId: targetChildId, status: 'approved' },
+          createdAt: FieldValue.serverTimestamp(),
+        });
+      }
+    });
+
+    return { requestId, selectedManagedChildId: targetChildId, status: 'approved' };
+  }
+
+  // === NEW CHILD JOIN: 4-PHASE DURABLE STATE MACHINE ===
+  const childId = `child_qr_${requestId}`;
+  const authUid = childId;
+  const childDisplayName = reqData.requesterDisplayName || 'Child';
+
+  // Phase A: Reserve identity transactionally
+  await context.db.runTransaction(async (transaction) => {
+    const liveReq = await transaction.get(reqRef);
+    if (!liveReq.exists) throw new HttpsError('not-found', 'JOIN_REQUEST_NOT_FOUND');
+    const liveData = liveReq.data() as Record<string, any>;
+    if (liveData.status === 'approved') return;
+    if (liveData.status !== 'pending') throw new HttpsError('failed-precondition', 'REQUEST_NOT_PENDING');
+
+    transaction.update(reqRef, {
+      provisioningState: 'reserved',
+      reservedChildId: childId,
+      updatedAtMs: now,
+    });
+  });
+
+  // Phase B: Auth Provisioning Outside Firestore Transaction
+  const authInstance = context.auth ?? getAuth();
+  try {
+    await authInstance.getUser(authUid);
+  } catch (err: any) {
+    const code = err?.code || (err as any)?.errorInfo?.code;
+    if (code === 'auth/user-not-found' || err?.message?.includes('User not found')) {
+      await authInstance.createUser({
+        uid: authUid,
+        displayName: childDisplayName,
+      });
+    } else {
+      throw err;
+    }
+  }
+
+  if (authInstance.setCustomUserClaims) {
+    await authInstance.setCustomUserClaims(authUid, {
+      role: 'child',
+      familyId,
+      childId,
+      managedChild: true,
+    });
+  }
+
+  // Phase C & D: Canonical Managed-Child Firestore Provisioning & Finalize Request (Transaction)
+  const userRef = context.db.doc(`users/${childId}`);
+  const walletRef = context.db.doc(`families/${familyId}/wallets/${childId}`);
+  const loginRef = context.db.doc(`families/${familyId}/childLogins/${childId}`);
+
+  await context.db.runTransaction(async (transaction) => {
+    const liveReq = await transaction.get(reqRef);
+    if (!liveReq.exists) throw new HttpsError('not-found', 'JOIN_REQUEST_NOT_FOUND');
+    const liveData = liveReq.data() as Record<string, any>;
+    if (liveData.status === 'approved') return;
+
+    // Canonical profile matching createManagedMember / Add Child flow
+    transaction.set(userRef, {
+      uid: childId,
+      id: childId,
+      familyId,
+      role: 'child',
+      isManaged: true,
+      displayName: childDisplayName,
+      avatarUrl: `https://api.dicebear.com/7.x/bottts/svg?seed=${encodeURIComponent(childDisplayName)}`,
+      rewardPoints: 0,
+      lifetimeXP: 0,
+      currentStreak: 0,
+      longestStreak: 0,
+      lastActiveDate: FieldValue.serverTimestamp(),
+      authUid,
+      hasLogin: true,
+      username: childDisplayName,
+      loginEnabled: true,
+      createdAtMs: now,
+      createdAt: FieldValue.serverTimestamp(),
+    }, { merge: true });
+
+    // Canonical wallet in families/${familyId}/wallets/${childId} (NEVER root wallets/)
+    transaction.set(walletRef, {
+      balance: 0,
+      createdAtMs: now,
+      createdAt: FieldValue.serverTimestamp(),
+    }, { merge: true });
+
+    // Canonical childLogin in families/${familyId}/childLogins/${childId}
+    transaction.set(loginRef, {
+      childId,
+      authUid,
+      familyId,
+      status: 'enabled',
+      createdAtMs: now,
+      createdAt: FieldValue.serverTimestamp(),
+    }, { merge: true });
+
+    // Phase D: Finalize request
     transaction.update(reqRef, {
       status: 'approved',
+      provisioningState: 'complete',
+      selectedManagedChildId: childId,
+      approvedChildId: childId,
       resolvedAtMs: now,
       resolvedBy: callerUid,
-      selectedManagedChildId,
       resolvedAt: FieldValue.serverTimestamp(),
     });
 
@@ -448,13 +621,13 @@ export async function approveChildQrJoinRequestImpl(
         clientReqId,
         operation: 'approveChildQrJoinRequest',
         status: 'completed',
-        result: { requestId, selectedManagedChildId, status: 'approved' },
+        result: { requestId, selectedManagedChildId: childId, status: 'approved' },
         createdAt: FieldValue.serverTimestamp(),
       });
     }
   });
 
-  return { requestId, selectedManagedChildId, status: 'approved' };
+  return { requestId, selectedManagedChildId: childId, status: 'approved' };
 }
 
 /**

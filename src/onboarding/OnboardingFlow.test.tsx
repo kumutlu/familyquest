@@ -134,9 +134,6 @@ describe('OnboardingFlow — public route & guards', () => {
     await user.click(screen.getByRole('button', { name: /continue/i }));
     await user.click(screen.getByRole('radio', { name: 'Parent' }));
     await user.click(screen.getByRole('button', { name: /continue/i }));
-    await user.type(screen.getByLabelText(/child's first name/i), 'Osman');
-    await user.click(screen.getByRole('button', { name: /continue/i }));
-    await user.click(screen.getByRole('button', { name: /looks good/i }));
     await user.type(screen.getByLabelText(/family name/i), 'Kemal Family');
     await user.click(screen.getByRole('button', { name: /continue/i }));
 
@@ -153,7 +150,7 @@ describe('OnboardingFlow — post-auth idempotent setup', () => {
       step: 'p1',
       parentFirstName: 'Kemal',
       parentRoleDisplay: 'parent',
-      childFirstName: 'Osman',
+      childFirstName: '',
       familyName: 'Accidental',
       updatedAt: Date.now(),
     });
@@ -171,7 +168,7 @@ describe('OnboardingFlow — post-auth idempotent setup', () => {
     expect(api.createManagedMember).not.toHaveBeenCalled();
   });
 
-  it('creates the family, first child and first task exactly once, then finishes', async () => {
+  it('creates the family workspace exactly once, then finishes', async () => {
     const user = userEvent.setup();
     renderFlow('/onboarding?mode=create');
 
@@ -181,9 +178,6 @@ describe('OnboardingFlow — post-auth idempotent setup', () => {
     await user.click(screen.getByRole('button', { name: /continue/i }));
     await user.click(screen.getByRole('radio', { name: 'Parent' }));
     await user.click(screen.getByRole('button', { name: /continue/i }));
-    await user.type(screen.getByLabelText(/child's first name/i), 'Osman');
-    await user.click(screen.getByRole('button', { name: /continue/i }));
-    await user.click(screen.getByRole('button', { name: /looks good/i }));
     await user.type(screen.getByLabelText(/family name/i), 'Kemal Family');
     await user.click(screen.getByRole('button', { name: /continue/i }));
 
@@ -199,27 +193,15 @@ describe('OnboardingFlow — post-auth idempotent setup', () => {
       profileServerConfirmed: true,
     });
 
-    // P1 auto-creates the family + first child.
+    // P1 auto-creates the family (and NO child or task).
     await waitFor(() => expect(api.createFamilyAndParent).toHaveBeenCalledTimes(1));
     expect(api.createFamilyAndParent).toHaveBeenCalledWith('auth-uid-1', 'Kemal', 'Kemal Family');
-    await waitFor(() => expect(api.createManagedMember).toHaveBeenCalledTimes(1));
+    expect(api.createManagedMember).not.toHaveBeenCalled();
+    expect(api.createTask).not.toHaveBeenCalled();
     expect(readCreateFamilyIntent('auth-uid-1')).not.toBeNull();
 
-    // Continue to P2.
+    // Click continue to finish onboarding directly into Home.
     await user.click(screen.getByRole('button', { name: /continue/i }));
-    await user.click(screen.getByRole('radio', { name: /tidy bedroom/i }));
-    await user.click(screen.getByRole('button', { name: /add task & continue/i }));
-
-    await waitFor(() => expect(api.createTask).toHaveBeenCalledTimes(1));
-    expect(api.createTask).toHaveBeenCalledWith(
-      'family-1',
-      expect.objectContaining({ title: 'Tidy bedroom', assigneeId: 'child-1' }),
-      expect.objectContaining({ clientReqId: expect.any(String) }),
-    );
-
-    // P3 → dashboard.
-    await waitFor(() => expect(screen.getByRole('button', { name: /go to my dashboard/i })).toBeInTheDocument());
-    await user.click(screen.getByRole('button', { name: /go to my dashboard/i }));
     await waitFor(() => expect(navigate).toHaveBeenCalledWith('/', { replace: true }));
     expect(readCreateFamilyIntent('auth-uid-1')).toBeNull();
     // Draft cleared on completion.

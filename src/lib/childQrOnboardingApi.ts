@@ -65,13 +65,24 @@ function callable<TIn, TOut>(name: string, instance: Functions = functions) {
   return httpsCallable<TIn, TOut>(instance, name);
 }
 
-export async function generateChildQrToken(): Promise<{ rawToken: string; expiresAtMs: number }> {
-  const result = await callable<void, { rawToken: string; expiresAtMs: number }>('generateChildQrToken')();
+export async function generateChildQrToken(payload?: {
+  intent?: 'new_child_join' | 'existing_child_device_bind';
+  targetChildId?: string;
+}): Promise<{ rawToken: string; expiresAtMs: number }> {
+  const result = await callable<
+    { intent?: 'new_child_join' | 'existing_child_device_bind'; targetChildId?: string } | void,
+    { rawToken: string; expiresAtMs: number }
+  >('generateChildQrToken')(payload);
   return result.data;
 }
 
-export async function scanChildQrToken(token: string): Promise<{ valid: true; expiresAtMs: number }> {
-  const result = await callable<{ token: string }, { valid: true; expiresAtMs: number }>('scanChildQrToken')({ token });
+export async function scanChildQrToken(
+  token: string,
+): Promise<{ valid: true; expiresAtMs: number; familyName?: string; intent?: string; targetChildName?: string }> {
+  const result = await callable<
+    { token: string },
+    { valid: true; expiresAtMs: number; familyName?: string; intent?: string; targetChildName?: string }
+  >('scanChildQrToken')({ token });
   return result.data;
 }
 
@@ -101,12 +112,12 @@ export async function getChildQrJoinStatus(
 export async function approveChildQrJoinRequest(
   familyId: string,
   requestId: string,
-  selectedManagedChildId: string,
+  selectedManagedChildId?: string,
   clientReqId?: string,
-): Promise<{ requestId: string; selectedManagedChildId: string; status: 'approved' }> {
+): Promise<{ requestId: string; selectedManagedChildId?: string; status: 'approved' }> {
   const result = await callable<
-    { familyId: string; requestId: string; selectedManagedChildId: string; clientReqId?: string },
-    { requestId: string; selectedManagedChildId: string; status: 'approved' }
+    { familyId: string; requestId: string; selectedManagedChildId?: string; clientReqId?: string },
+    { requestId: string; selectedManagedChildId?: string; status: 'approved' }
   >('approveChildQrJoinRequest')({ familyId, requestId, selectedManagedChildId, clientReqId });
   return result.data;
 }

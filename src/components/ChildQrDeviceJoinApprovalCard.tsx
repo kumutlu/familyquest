@@ -18,12 +18,15 @@ export interface ChildQrDeviceJoinApprovalCardProps {
     status: string;
     sortDate: Date;
     type?: string;
+    intent?: 'new_child_join' | 'existing_child_device_bind' | string;
+    targetChildId?: string;
+    targetChildName?: string;
     requesterUid?: string;
     requesterDisplayName?: string;
     requesterDeviceLabel?: string;
   };
   managedChildren: ManagedChildOption[];
-  onApprove: (selectedChildId: string) => Promise<void>;
+  onApprove: (selectedChildId?: string) => Promise<void>;
   onReject: () => Promise<void>;
   isProcessing: boolean;
 }
@@ -35,13 +38,22 @@ export function ChildQrDeviceJoinApprovalCard({
   onReject,
   isProcessing,
 }: ChildQrDeviceJoinApprovalCardProps) {
-  const [selectedChildId, setSelectedChildId] = useState<string>('');
+  const [selectedChildId, setSelectedChildId] = useState<string>(request.targetChildId || '');
 
   const isPending = request.status === 'pending';
+  const isNewChild = request.intent === 'new_child_join';
+  const hasTargetChild = Boolean(request.targetChildId);
 
   const handleApprove = () => {
-    if (!selectedChildId || isProcessing) return;
-    onApprove(selectedChildId);
+    if (isProcessing) return;
+    if (isNewChild) {
+      onApprove(undefined);
+    } else if (hasTargetChild) {
+      onApprove(request.targetChildId);
+    } else {
+      if (!selectedChildId) return;
+      onApprove(selectedChildId);
+    }
   };
 
   return (
@@ -54,7 +66,7 @@ export function ChildQrDeviceJoinApprovalCard({
           <div>
             <div className="flex items-center gap-2 mb-1">
               <h4 className="text-xs font-bold text-indigo-600 dark:text-indigo-400 uppercase tracking-wider">
-                Child Device Join Request
+                {isNewChild ? 'New Child Joining' : 'Child Device Join Request'}
               </h4>
               <Badge variant="primary" className="text-[10px] bg-indigo-100 text-indigo-700 dark:bg-indigo-950 dark:text-indigo-300">
                 <QrCode className="w-3 h-3 inline mr-1" /> QR Scan
@@ -62,10 +74,22 @@ export function ChildQrDeviceJoinApprovalCard({
             </div>
 
             <p data-testid="qr-join-card-headline" className="font-semibold text-slate-900 dark:text-white leading-tight mb-1">
-              {request.requesterDisplayName
-                ? `${request.requesterDisplayName} wants to connect a device`
-                : 'A new child device scanned your QR code and requests to join your family.'}
+              {isNewChild
+                ? (request.requesterDisplayName
+                    ? `${request.requesterDisplayName} wants to join your family`
+                    : 'A new child wants to join your family')
+                : (request.requesterDisplayName
+                    ? (request.targetChildName
+                        ? `${request.requesterDisplayName} wants to connect a personal device to ${request.targetChildName}`
+                        : `${request.requesterDisplayName} wants to connect a device`)
+                    : 'A child device requests to connect')}
             </p>
+
+            {isNewChild && (
+              <p className="text-xs text-indigo-600 dark:text-indigo-400 font-medium mb-1">
+                Approving will create a new child profile and wallet.
+              </p>
+            )}
 
             {request.requesterDeviceLabel && (
               <p data-testid="qr-join-card-device" className="text-xs font-medium text-slate-500 dark:text-slate-400 mb-2">
@@ -73,7 +97,7 @@ export function ChildQrDeviceJoinApprovalCard({
               </p>
             )}
 
-            {isPending && (
+            {isPending && !isNewChild && !hasTargetChild && (
               <div className="mt-3 p-3 rounded-xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 space-y-2">
                 <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300">
                   Select which existing child profile this device belongs to:
@@ -88,7 +112,7 @@ export function ChildQrDeviceJoinApprovalCard({
                     data-testid="child-selector-dropdown"
                     value={selectedChildId}
                     onChange={(e) => setSelectedChildId(e.target.value)}
-                    className="w-full text-sm py-2 px-3 rounded-lg border border-slate-300 dark:border-slate-600 bg-slate-50 dark:bg-slate-900 text-slate-900 dark:text-white font-medium focus:ring-2 focus:ring-indigo-500 focus:outline-none"
+                    className="w-full text-sm py-2 px-3 rounded-lg border border-gray-200 bg-white text-gray-900 font-medium focus:ring-2 focus:ring-indigo-500 focus:outline-none"
                   >
                     <option value="">-- Choose Managed Child --</option>
                     {managedChildren.map((child) => (
@@ -121,11 +145,11 @@ export function ChildQrDeviceJoinApprovalCard({
                 data-testid="approve-qr-join-button"
                 size="sm"
                 className="bg-indigo-600 hover:bg-indigo-700 text-white font-semibold flex items-center gap-1.5"
-                disabled={!selectedChildId || isProcessing}
+                disabled={isProcessing || (!isNewChild && !hasTargetChild && !selectedChildId)}
                 onClick={handleApprove}
               >
                 <UserCheck className="w-4 h-4" />
-                Approve & Bind
+                {isNewChild ? 'Approve' : hasTargetChild ? 'Approve' : 'Approve & Bind'}
               </Button>
             </>
           ) : (

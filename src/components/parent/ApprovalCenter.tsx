@@ -122,17 +122,24 @@ export function ApprovalCenter() {
     })));
 
     // 8. Child QR Device Join requests
-    items.push(...(childQrJoinRequests || []).map((r: any) => ({
-      id: r.id || r.requestId,
-      category: 'child_qr_join',
-      status: r.status,
-      requesterDisplayName: r.requesterDisplayName,
-      requesterDeviceLabel: r.requesterDeviceLabel,
-      sortDate: r.createdAt?.toDate
-        ? r.createdAt.toDate()
-        : new Date(typeof r.createdAtMs === 'number' ? r.createdAtMs : Date.now()),
-      isPending: r.status === 'pending',
-    })));
+    items.push(...(childQrJoinRequests || []).map((r: any) => {
+      const intent = r.intent === 'new_child_join' ? 'new_child_join' : 'existing_child_device_bind';
+      const targetChild = r.targetChildId ? familyMembers.find(m => m.id === r.targetChildId) : undefined;
+      return {
+        id: r.id || r.requestId,
+        category: 'child_qr_join',
+        status: r.status,
+        intent,
+        targetChildId: r.targetChildId,
+        targetChildName: r.targetChildName || targetChild?.displayName,
+        requesterDisplayName: r.requesterDisplayName,
+        requesterDeviceLabel: r.requesterDeviceLabel,
+        sortDate: r.createdAt?.toDate
+          ? r.createdAt.toDate()
+          : new Date(typeof r.createdAtMs === 'number' ? r.createdAtMs : Date.now()),
+        isPending: r.status === 'pending',
+      };
+    }));
 
     items.sort((a, b) => b.sortDate.getTime() - a.sortDate.getTime());
     return items;

@@ -4,6 +4,7 @@ import { MemoryRouter } from 'react-router-dom';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { useStore } from '../../store/useStore';
+import i18n from '../../i18n/config';
 import { AddChildModal } from './AddChildModal';
 import { EditMemberModal } from './EditMemberModal';
 
@@ -36,8 +37,10 @@ function renderFromTrigger(ui: React.ReactNode) {
   return { ...result, trigger };
 }
 
-beforeEach(() => {
+beforeEach(async () => {
   cleanup();
+  await i18n.loadNamespaces(['auth', 'common', 'family']);
+  await i18n.changeLanguage('en');
   document.querySelectorAll('body > button').forEach(element => element.remove());
   createManagedMember.mockReset();
   createManagedMember.mockResolvedValue('new-child');
@@ -62,14 +65,14 @@ describe('AddChildModal', () => {
   it('is labelled, traps focus, closes on Escape, and restores trigger focus', async () => {
     const onClose = vi.fn();
     const { trigger, unmount } = renderFromTrigger(
-      <AddChildModal familyId="family-1" onClose={onClose} />,
+      <AddChildModal familyId="family-1" onClose={onClose} startAtForm />,
     );
-    const dialog = screen.getByRole('dialog', { name: /childOnboarding\.createTitle/i });
+    const dialog = screen.getByRole('dialog', { name: /childOnboarding\.createTitle|Add your child/i });
     expect(dialog).toHaveAttribute('aria-modal', 'true');
     expect(dialog).toHaveFocus();
 
-    const last = screen.getByRole('button', { name: /childOnboarding\.createChild/i });
-    const first = screen.getByRole('textbox', { name: /childOnboarding\.displayNameLabel/i });
+    const last = screen.getByRole('button', { name: /childOnboarding\.createChild|Create child/i });
+    const first = screen.getByRole('textbox', { name: /childOnboarding\.displayNameLabel|Display name/i });
     last.focus();
     fireEvent.keyDown(document, { key: 'Tab' });
     expect(first).toHaveFocus();
@@ -84,7 +87,7 @@ describe('AddChildModal', () => {
   it('keeps the wizard open when Escape closes the nested child-login dialog', async () => {
     const user = userEvent.setup();
     const onClose = vi.fn();
-    render(<MemoryRouter><AddChildModal familyId="family-1" onClose={onClose} /></MemoryRouter>);
+    render(<MemoryRouter><AddChildModal familyId="family-1" onClose={onClose} startAtForm /></MemoryRouter>);
 
     let wizard = screen.getByRole('dialog');
     await user.click(within(wizard).getAllByRole('button')[0]);

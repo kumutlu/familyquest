@@ -42,20 +42,33 @@ export interface SetupDeps {
 
 /**
  * Creates the family exactly once. If `draft.familyId` is already set (refresh,
- * retry, remount, or a second call) the server call is skipped entirely. The
- * authoritative family state is published to the store via `refreshCurrentUser`
- * using the authoritative uid — never a denormalised profile field.
+ * retry, remount, or a second call) the server call is skipped entirely. In-flight
+ * creations are deduplicated by uid so an async remount awaits the same promise
+ * without duplicate writes. The authoritative family state is published to the
+ * store via `refreshCurrentUser` using the authoritative uid — never a denormalised profile field.
  */
+const inFlightFamilyCreation = new Map<string, Promise<FamilyCreationResult>>();
+
 export async function ensureFamily(draft: OnboardingDraft, deps: SetupDeps): Promise<OnboardingDraft> {
   if (draft.familyId) return draft;
 
-  const result = await deps.createFamilyAndParent(deps.uid, draft.parentFirstName, draft.familyName);
-  const familyId = result.user.familyId ?? result.familyId;
-  deps.refreshCurrentUser(deps.uid, {
-    familyId,
-    role: result.user.role ?? 'owner',
-  });
-  return { ...draft, familyId };
+  let inFlight = inFlightFamilyCreation.get(deps.uid);
+  if (!inFlight) {
+    inFlight = deps.createFamilyAndParent(deps.uid, draft.parentFirstName, draft.familyName);
+    inFlightFamilyCreation.set(deps.uid, inFlight);
+  }
+
+  try {
+    const result = await inFlight;
+    const familyId = result.user.familyId ?? result.familyId;
+    deps.refreshCurrentUser(deps.uid, {
+      familyId,
+      role: result.user.role ?? 'owner',
+    });
+    return { ...draft, familyId };
+  } finally {
+    inFlightFamilyCreation.delete(deps.uid);
+  }
 }
 
 /**
@@ -66,7 +79,7 @@ export async function ensureFamily(draft: OnboardingDraft, deps: SetupDeps): Pro
 export async function ensureFirstChild(draft: OnboardingDraft, deps: SetupDeps): Promise<OnboardingDraft> {
   if (draft.childId) return draft;
   if (!draft.familyId) throw new Error('Family must be created before the first child');
-  const childName = draft.childFirstName.trim();
+  const childName = draft.childFirstName?.trim() || '';
   if (!childName) return draft;
   if (!draft.firstChildRequestId) throw new Error('Onboarding child request identity is missing');
 

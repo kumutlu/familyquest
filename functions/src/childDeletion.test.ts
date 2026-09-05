@@ -60,6 +60,17 @@ function makeFakeDb() {
     },
   });
 
+  const queryDocs = (collectionPath: string, field: string, value: unknown) => {
+    const out: any[] = [];
+    for (const [path, data] of store.entries()) {
+      const parent = path.slice(0, path.lastIndexOf('/'));
+      if (parent !== collectionPath) continue;
+      if ((data as Record<string, unknown>)[field] !== value) continue;
+      out.push({ id: path.split('/').pop(), data: () => data, ref: makeRef(path) });
+    }
+    return out;
+  };
+
   const db: any = {
     store,
     doc: makeRef,
@@ -68,14 +79,25 @@ function makeFakeDb() {
         const realId = id || Math.random().toString(36).slice(2);
         return makeRef(`${path}/${realId}`);
       },
-      where: (_field: string, _op: string, _value: unknown) => ({
-        limit: () => ({
-          get: async () => ({
-            empty: true,
-            docs: [],
-            size: 0,
-          }),
+      where: (field: string, _op: string, value: unknown) => ({
+        limit: (n: number) => ({
+          get: async () => {
+            const docs = queryDocs(path, field, value).slice(0, n);
+            return {
+              empty: docs.length === 0,
+              docs,
+              size: docs.length,
+            };
+          },
         }),
+        get: async () => {
+          const docs = queryDocs(path, field, value);
+          return {
+            empty: docs.length === 0,
+            docs,
+            size: docs.length,
+          };
+        },
       }),
       add: async (data: Record<string, unknown>) => {
         const ref = db.collection(path).doc();
@@ -110,10 +132,27 @@ function makeFakeDb() {
       }
       return result;
     },
-    batch: () => ({
-      delete: (_ref: FakeRef) => {},
-      commit: async () => {},
-    }),
+    batch: () => {
+      const ops: Array<{ type: 'delete' | 'update'; ref: FakeRef; data?: Record<string, unknown> }> = [];
+      return {
+        delete: (ref: FakeRef) => {
+          ops.push({ type: 'delete', ref });
+        },
+        update: (ref: FakeRef, data: Record<string, unknown>) => {
+          ops.push({ type: 'update', ref, data });
+        },
+        commit: async () => {
+          for (const op of ops.splice(0)) {
+            if (op.type === 'delete') {
+              store.delete(op.ref.path);
+            } else if (op.type === 'update') {
+              const existing = store.get(op.ref.path) ?? {};
+              store.set(op.ref.path, { ...existing, ...op.data });
+            }
+          }
+        },
+      };
+    },
   };
   return db as any;
 }
@@ -598,5 +637,92 @@ describe('deleteChild — INTEGRITY', () => {
       clientReqId: 'del-family-preserve',
     });
     expect(db.store.has(`families/${FAMILY_ID}`)).toBe(true);
+  });
+
+  it('unassigns active tasks assigned to the deleted child', async () => {
+    const ctx = makeCtx(db, auth);
+    // Seed task assigned to child1 and task assigned to child2
+    db.store.set(`families/${FAMILY_ID}/tasks/task1`, {
+      id: 'task1',
+      title: 'Wash dishes',
+      assigneeId: 'child1',
+    });
+    db.store.set(`families/${FAMILY_ID}/tasks/task2`, {
+      id: 'task2',
+      title: 'Walk dog',
+      assigneeId: 'child2',
+    });
+
+    await deleteChildImpl(ctx, 'owner1', {
+      childId: 'child1',
+      displayNameConfirmation: 'Test',
+      clientReqId: 'del-tasks',
+    });
+
+    const task1 = db.store.get(`families/${FAMILY_ID}/tasks/task1`);
+    expect(task1).toBeDefined();
+    expect(task1.assigneeId).toBeNull();
+
+    const task2 = db.store.get(`families/${FAMILY_ID}/tasks/task2`);
+    expect(task2).toBeDefined();
+    expect(task2.assigneeId).toBe('child2');
+  });
+
+  it('cancels pending child QR join requests targeting the deleted child', async () => {
+    const ctx = makeCtx(db, auth);
+    db.store.set(`families/${FAMILY_ID}/child_qr_join_requests/req1`, {
+      requestId: 'req1',
+      targetChildId: 'child1',
+      status: 'pending',
+    });
+    db.store.set(`families/${FAMILY_ID}/child_qr_join_requests/req2`, {
+      requestId: 'req2',
+      targetChildId: 'child2',
+      status: 'pending',
+    });
+
+    await deleteChildImpl(ctx, 'owner1', {
+      childId: 'child1',
+      displayNameConfirmation: 'Test',
+      clientReqId: 'del-qr-reqs',
+    });
+
+    const req1 = db.store.get(`families/${FAMILY_ID}/child_qr_join_requests/req1`);
+    expect(req1).toBeDefined();
+    expect(req1.status).toBe('cancelled');
+    expect(req1.cancellationReason).toBe('child_deleted');
+
+    const req2 = db.store.get(`families/${FAMILY_ID}/child_qr_join_requests/req2`);
+    expect(req2).toBeDefined();
+    expect(req2.status).toBe('pending');
+  });
+
+  it('revokes active child QR sessions targeting the deleted child', async () => {
+    const ctx = makeCtx(db, auth);
+    db.store.set(`families/${FAMILY_ID}/child_qr_sessions/sess1`, {
+      qrSessionId: 'sess1',
+      targetChildId: 'child1',
+      status: 'active',
+    });
+    db.store.set(`families/${FAMILY_ID}/child_qr_sessions/sess2`, {
+      qrSessionId: 'sess2',
+      targetChildId: 'child2',
+      status: 'active',
+    });
+
+    await deleteChildImpl(ctx, 'owner1', {
+      childId: 'child1',
+      displayNameConfirmation: 'Test',
+      clientReqId: 'del-qr-sess',
+    });
+
+    const sess1 = db.store.get(`families/${FAMILY_ID}/child_qr_sessions/sess1`);
+    expect(sess1).toBeDefined();
+    expect(sess1.status).toBe('revoked');
+    expect(sess1.revokedReason).toBe('child_deleted');
+
+    const sess2 = db.store.get(`families/${FAMILY_ID}/child_qr_sessions/sess2`);
+    expect(sess2).toBeDefined();
+    expect(sess2.status).toBe('active');
   });
 });

@@ -1,4 +1,4 @@
-import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
+import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import { AppLayout } from './components/layout/AppLayout';
 import { Dashboard } from './pages/Dashboard';
 import { Family } from './pages/Family';
@@ -188,6 +188,7 @@ function App() {
             <Route index element={<Dashboard />} />
             <Route path="family" element={<Family />} />
             <Route path="family/:id" element={<MemberProfile />} />
+            <Route path="family/members/:id" element={<Navigate to="/family" replace />} />
             <Route path="tasks" element={<Tasks />} />
             {/* Queki v2 Wave 2: parent fast review (swipe) flow. */}
             <Route path="review" element={<ReviewPage />} />

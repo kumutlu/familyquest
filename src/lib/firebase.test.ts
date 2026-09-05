@@ -37,6 +37,7 @@ beforeEach(() => {
   vi.stubEnv('VITE_FIREBASE_STORAGE_BUCKET', 'bucket');
   vi.stubEnv('VITE_FIREBASE_MESSAGING_SENDER_ID', 'sender');
   vi.stubEnv('VITE_FIREBASE_APP_ID', 'app-id');
+  vi.stubEnv('VITE_USE_FIREBASE_EMULATOR', 'false');
 });
 
 describe('Firebase Functions configuration', () => {

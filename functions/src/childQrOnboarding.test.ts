@@ -81,7 +81,32 @@ function fakeContext() {
   };
 
   const createdTokens: Array<{ uid: string; claims: Record<string, any> }> = [];
+  const authUsers = new Map<string, any>();
   const auth: any = {
+    authUsers,
+    getUser: vi.fn(async (uid: string) => {
+      const u = authUsers.get(uid);
+      if (!u) {
+        const err: any = new Error('User not found');
+        err.code = 'auth/user-not-found';
+        throw err;
+      }
+      return u;
+    }),
+    createUser: vi.fn(async (data: any) => {
+      if (authUsers.has(data.uid)) {
+        const err: any = new Error('User already exists');
+        err.code = 'auth/uid-already-exists';
+        throw err;
+      }
+      const record = { uid: data.uid, ...data };
+      authUsers.set(data.uid, record);
+      return record;
+    }),
+    setCustomUserClaims: vi.fn(async (uid: string, claims: Record<string, any>) => {
+      const u = authUsers.get(uid);
+      if (u) u.customClaims = claims;
+    }),
     createCustomToken: vi.fn(async (uid: string, claims: Record<string, any>) => {
       createdTokens.push({ uid, claims });
       return `custom-token-for-${uid}`;
@@ -95,7 +120,7 @@ function fakeContext() {
     nowMs: () => mockTime,
   };
 
-  return { context, documents, createdTokens, setMockTime: (t: number) => { mockTime = t; } };
+  return { context, documents, createdTokens, authUsers, setMockTime: (t: number) => { mockTime = t; } };
 }
 
 describe('Task 1: Backend QR Session & Token Lookup Primitive', () => {
@@ -651,5 +676,522 @@ describe('Task 4: Backend Custom Token Exchange Primitive', () => {
     await expect(exchange(requestId, requestSecret)).rejects.toMatchObject({
       message: 'CHILD_INACTIVE',
     });
+  });
+
+  it('Test 37b: target child deleted completely before exchange fails closed', async () => {
+    const { requestId, requestSecret } = await setupApprovedRequest();
+
+    // Hard delete child user document between approval and exchange
+    fixture.documents.delete('users/child-1');
+
+    await expect(exchange(requestId, requestSecret)).rejects.toMatchObject({
+      message: 'CHILD_INACTIVE',
+    });
+  });
+});
+
+describe('childQrOnboarding — Explicit Intent Architecture & New Child Creation', () => {
+  let fixture: ReturnType<typeof fakeContext>;
+
+  beforeEach(() => {
+    fixture = fakeContext();
+    fixture.documents.set('users/parent-1', {
+      uid: 'parent-1',
+      familyId: 'family-1',
+      role: 'owner',
+    });
+    fixture.documents.set('users/child-1', {
+      uid: 'child-1',
+      familyId: 'family-1',
+      role: 'child',
+      isManaged: true,
+      status: 'active',
+    });
+    fixture.documents.set('families/family-1/childLogins/child-1', {
+      authUid: 'existing-synth-auth-uid-1',
+    });
+  });
+
+  const parentReq = (data: any = {}) => ({ auth: { uid: 'parent-1' }, data } as any);
+
+  it('Test 38: generateChildQrToken stores explicit intent new_child_join', async () => {
+    const res = await generateChildQrTokenImpl(parentReq({ intent: 'new_child_join' }), fixture.context);
+    expect(res.rawToken).toBeTruthy();
+
+    const sessions = [...fixture.documents]
+      .filter(([k]) => k.startsWith('families/family-1/child_qr_sessions/'))
+      .map(([_, v]) => v);
+    expect(sessions[0].intent).toBe('new_child_join');
+    expect(sessions[0].targetChildId).toBeNull();
+  });
+
+  it('Test 39: generateChildQrToken stores explicit intent existing_child_device_bind with pinned targetChildId', async () => {
+    const res = await generateChildQrTokenImpl(
+      parentReq({ intent: 'existing_child_device_bind', targetChildId: 'child-1' }),
+      fixture.context,
+    );
+    expect(res.rawToken).toBeTruthy();
+
+    const sessions = [...fixture.documents]
+      .filter(([k]) => k.startsWith('families/family-1/child_qr_sessions/'))
+      .map(([_, v]) => v);
+    expect(sessions[0].intent).toBe('existing_child_device_bind');
+    expect(sessions[0].targetChildId).toBe('child-1');
+  });
+
+  it('Test 40: generateChildQrToken validates targetChildId requirements', async () => {
+    // Missing targetChildId for existing_child_device_bind
+    await expect(
+      generateChildQrTokenImpl(parentReq({ intent: 'existing_child_device_bind' }), fixture.context),
+    ).rejects.toMatchObject({ message: 'TARGET_CHILD_REQUIRED' });
+
+    // Non-existent targetChildId
+    await expect(
+      generateChildQrTokenImpl(
+        parentReq({ intent: 'existing_child_device_bind', targetChildId: 'non-existent' }),
+        fixture.context,
+      ),
+    ).rejects.toMatchObject({ message: 'CHILD_NOT_FOUND' });
+
+    // Target child provided for new_child_join
+    await expect(
+      generateChildQrTokenImpl(
+        parentReq({ intent: 'new_child_join', targetChildId: 'child-1' }),
+        fixture.context,
+      ),
+    ).rejects.toMatchObject({ message: 'TARGET_CHILD_NOT_ALLOWED' });
+  });
+
+  it('Test 41: submitChildQrJoinRequest creates tailored notifications based on intent', async () => {
+    // 1. new_child_join
+    const { rawToken: newChildToken } = await generateChildQrTokenImpl(
+      parentReq({ intent: 'new_child_join' }),
+      fixture.context,
+    );
+    const newChildReq = await submitChildQrJoinRequestImpl(
+      { token: newChildToken, requesterDisplayName: 'Jamie', requesterDeviceLabel: 'iPad' },
+      { auth: null } as any,
+      fixture.context,
+    );
+    expect(newChildReq.requestId).toBeTruthy();
+
+    const notifNew = fixture.documents.get(`families/family-1/notifications/qr_join_${newChildReq.requestId}`);
+    expect(notifNew?.title).toBe('Jamie wants to join your family');
+
+    // 2. existing_child_device_bind
+    const { rawToken: bindToken } = await generateChildQrTokenImpl(
+      parentReq({ intent: 'existing_child_device_bind', targetChildId: 'child-1' }),
+      fixture.context,
+    );
+    const bindReq = await submitChildQrJoinRequestImpl(
+      { token: bindToken, requesterDisplayName: 'Child Device', requesterDeviceLabel: 'iPhone' },
+      { auth: null } as any,
+      fixture.context,
+    );
+
+    const notifBind = fixture.documents.get(`families/family-1/notifications/qr_join_${bindReq.requestId}`);
+    expect(notifBind?.title).toBe('Child Device wants to connect a device');
+  });
+
+  it('Test 42: approveChildQrJoinRequest atomically provisions new child and wallet for new_child_join', async () => {
+    const { rawToken } = await generateChildQrTokenImpl(
+      parentReq({ intent: 'new_child_join' }),
+      fixture.context,
+    );
+    const subRes = await submitChildQrJoinRequestImpl(
+      { token: rawToken, requesterDisplayName: 'Jamie' },
+      { auth: null } as any,
+      fixture.context,
+    );
+
+    const appRes = await approveChildQrJoinRequestImpl(
+      { familyId: 'family-1', requestId: subRes.requestId },
+      parentReq(),
+      fixture.context,
+    );
+
+    expect(appRes.status).toBe('approved');
+    expect(appRes.selectedManagedChildId).toBeTruthy();
+
+    const childId = appRes.selectedManagedChildId;
+    const userDoc = fixture.documents.get(`users/${childId}`);
+    expect(userDoc).toBeDefined();
+    expect(userDoc?.displayName).toBe('Jamie');
+    expect(userDoc?.role).toBe('child');
+    expect(userDoc?.isManaged).toBe(true);
+
+    const walletDoc = fixture.documents.get(`families/family-1/wallets/${childId}`);
+    expect(walletDoc).toBeDefined();
+    expect(walletDoc?.balance).toBe(0);
+
+    const loginDoc = fixture.documents.get(`families/family-1/childLogins/${childId}`);
+    expect(loginDoc).toBeDefined();
+
+    // Replay approval must be idempotent
+    const replayRes = await approveChildQrJoinRequestImpl(
+      { familyId: 'family-1', requestId: subRes.requestId },
+      parentReq(),
+      fixture.context,
+    );
+    expect(replayRes.selectedManagedChildId).toBe(childId);
+  });
+
+  it('Test 43: approveChildQrJoinRequest binds to existing child without creating new records for existing_child_device_bind', async () => {
+    const { rawToken } = await generateChildQrTokenImpl(
+      parentReq({ intent: 'existing_child_device_bind', targetChildId: 'child-1' }),
+      fixture.context,
+    );
+    const subRes = await submitChildQrJoinRequestImpl(
+      { token: rawToken, requesterDisplayName: 'Phone' },
+      { auth: null } as any,
+      fixture.context,
+    );
+
+    const usersBeforeCount = [...fixture.documents.keys()].filter(k => k.startsWith('users/')).length;
+    const walletsBeforeCount = [...fixture.documents.keys()].filter(k => k.startsWith('wallets/')).length;
+
+    const appRes = await approveChildQrJoinRequestImpl(
+      { familyId: 'family-1', requestId: subRes.requestId },
+      parentReq(),
+      fixture.context,
+    );
+
+    expect(appRes.status).toBe('approved');
+    expect(appRes.selectedManagedChildId).toBe('child-1');
+
+    const usersAfterCount = [...fixture.documents.keys()].filter(k => k.startsWith('users/')).length;
+    const walletsAfterCount = [...fixture.documents.keys()].filter(k => k.startsWith('wallets/')).length;
+
+    expect(usersAfterCount).toBe(usersBeforeCount);
+    expect(walletsAfterCount).toBe(walletsBeforeCount);
+  });
+
+  it('Test 44: approved new_child_join request exchanges to newly provisioned child custom token and claims', async () => {
+    const { rawToken } = await generateChildQrTokenImpl(
+      parentReq({ intent: 'new_child_join' }),
+      fixture.context,
+    );
+    const subRes = await submitChildQrJoinRequestImpl(
+      { token: rawToken, requesterDisplayName: 'Sam' },
+      { auth: null } as any,
+      fixture.context,
+    );
+    const appRes = await approveChildQrJoinRequestImpl(
+      { familyId: 'family-1', requestId: subRes.requestId },
+      parentReq(),
+      fixture.context,
+    );
+
+    const exchangeRes = await exchangeApprovedChildQrRequestImpl(
+      { requestId: subRes.requestId, requestSecret: subRes.requestSecret },
+      fixture.context,
+    );
+
+    expect(exchangeRes.childId).toBe(appRes.selectedManagedChildId);
+    expect(exchangeRes.customToken).toBe(`custom-token-for-${appRes.selectedManagedChildId}`);
+    expect(fixture.createdTokens[0]).toEqual({
+      uid: appRes.selectedManagedChildId,
+      claims: {
+        role: 'child',
+        familyId: 'family-1',
+        childId: appRes.selectedManagedChildId,
+        managedChild: true,
+      },
+    });
+  });
+
+  it('Test 45 (RED): new_child_join writes wallet ONLY to canonical families/{familyId}/wallets/{childId} and NEVER root wallets/', async () => {
+    const { rawToken } = await generateChildQrTokenImpl(
+      parentReq({ intent: 'new_child_join' }),
+      fixture.context,
+    );
+    const subRes = await submitChildQrJoinRequestImpl(
+      { token: rawToken, requesterDisplayName: 'Robin' },
+      { auth: null } as any,
+      fixture.context,
+    );
+    const appRes = await approveChildQrJoinRequestImpl(
+      { familyId: 'family-1', requestId: subRes.requestId },
+      parentReq(),
+      fixture.context,
+    );
+
+    const childId = appRes.selectedManagedChildId;
+    // Canonical wallet path MUST exist
+    const canonicalWallet = fixture.documents.get(`families/family-1/wallets/${childId}`);
+    expect(canonicalWallet).toBeDefined();
+    expect(canonicalWallet?.balance).toBe(0);
+
+    // Root-level wallet MUST NOT exist
+    const rootWallet = fixture.documents.get(`wallets/${childId}`);
+    expect(rootWallet).toBeUndefined();
+  });
+
+  it('Test 46 (RED): deterministic identity — repeated or concurrent approval uses same childId and same authUid', async () => {
+    const { rawToken } = await generateChildQrTokenImpl(
+      parentReq({ intent: 'new_child_join' }),
+      fixture.context,
+    );
+    const subRes = await submitChildQrJoinRequestImpl(
+      { token: rawToken, requesterDisplayName: 'Sam' },
+      { auth: null } as any,
+      fixture.context,
+    );
+
+    const first = await approveChildQrJoinRequestImpl(
+      { familyId: 'family-1', requestId: subRes.requestId },
+      parentReq(),
+      fixture.context,
+    );
+    const second = await approveChildQrJoinRequestImpl(
+      { familyId: 'family-1', requestId: subRes.requestId },
+      parentReq(),
+      fixture.context,
+    );
+
+    expect(first.selectedManagedChildId).toBe(`child_qr_${subRes.requestId}`);
+    expect(second.selectedManagedChildId).toBe(first.selectedManagedChildId);
+    expect(fixture.authUsers.size).toBe(1);
+    expect(fixture.authUsers.get(first.selectedManagedChildId)).toBeDefined();
+  });
+
+  it('Test 47 (RED): Auth create retry — resumes after Auth creation failure before Firestore finalization', async () => {
+    const { rawToken } = await generateChildQrTokenImpl(
+      parentReq({ intent: 'new_child_join' }),
+      fixture.context,
+    );
+    const subRes = await submitChildQrJoinRequestImpl(
+      { token: rawToken, requesterDisplayName: 'Alex' },
+      { auth: null } as any,
+      fixture.context,
+    );
+
+    // Pre-create Auth user to simulate partial crash after Auth creation
+    const expectedChildId = `child_qr_${subRes.requestId}`;
+    await fixture.context.auth?.createUser({
+      uid: expectedChildId,
+      displayName: 'Alex',
+    });
+    expect(fixture.authUsers.size).toBe(1);
+
+    // Approval must not fail with auth/uid-already-exists; it must idempotently resume
+    const appRes = await approveChildQrJoinRequestImpl(
+      { familyId: 'family-1', requestId: subRes.requestId },
+      parentReq(),
+      fixture.context,
+    );
+
+    expect(appRes.status).toBe('approved');
+    expect(appRes.selectedManagedChildId).toBe(expectedChildId);
+    expect(fixture.authUsers.size).toBe(1); // exactly one Auth user
+    expect(fixture.documents.get(`users/${expectedChildId}`)).toBeDefined();
+    expect(fixture.documents.get(`families/family-1/wallets/${expectedChildId}`)).toBeDefined();
+  });
+
+  it('Test 48 (RED): Firestore-before-finalize retry — reconciles existing child and finalizes request', async () => {
+    const { rawToken } = await generateChildQrTokenImpl(
+      parentReq({ intent: 'new_child_join' }),
+      fixture.context,
+    );
+    const subRes = await submitChildQrJoinRequestImpl(
+      { token: rawToken, requesterDisplayName: 'Taylor' },
+      { auth: null } as any,
+      fixture.context,
+    );
+
+    const expectedChildId = `child_qr_${subRes.requestId}`;
+    // Pre-seed profile and wallet as if earlier run wrote them but request update failed
+    fixture.documents.set(`users/${expectedChildId}`, {
+      uid: expectedChildId,
+      id: expectedChildId,
+      familyId: 'family-1',
+      role: 'child',
+      isManaged: true,
+      displayName: 'Taylor',
+    });
+    fixture.documents.set(`families/family-1/wallets/${expectedChildId}`, {
+      balance: 0,
+    });
+
+    const appRes = await approveChildQrJoinRequestImpl(
+      { familyId: 'family-1', requestId: subRes.requestId },
+      parentReq(),
+      fixture.context,
+    );
+
+    expect(appRes.status).toBe('approved');
+    expect(appRes.selectedManagedChildId).toBe(expectedChildId);
+    const reqDoc = fixture.documents.get(`families/family-1/child_qr_join_requests/${subRes.requestId}`);
+    expect(reqDoc?.status).toBe('approved');
+    expect(reqDoc?.provisioningState).toBe('complete');
+  });
+
+  it('Test 49 (RED): request is NOT status=approved before Auth user exists and canonical state confirmed', async () => {
+    const { rawToken } = await generateChildQrTokenImpl(
+      parentReq({ intent: 'new_child_join' }),
+      fixture.context,
+    );
+    const subRes = await submitChildQrJoinRequestImpl(
+      { token: rawToken, requesterDisplayName: 'Casey' },
+      { auth: null } as any,
+      fixture.context,
+    );
+
+    // If Auth user creation throws an unexpected error, request must NOT become approved
+    (fixture.context.auth?.createUser as any).mockRejectedValueOnce(new Error('Auth service temporarily down'));
+
+    await expect(
+      approveChildQrJoinRequestImpl(
+        { familyId: 'family-1', requestId: subRes.requestId },
+        parentReq(),
+        fixture.context,
+      ),
+    ).rejects.toThrow('Auth service temporarily down');
+
+    const reqDoc = fixture.documents.get(`families/family-1/child_qr_join_requests/${subRes.requestId}`);
+    expect(reqDoc?.status).not.toBe('approved');
+  });
+
+  it('Test 50 (RED): canonical managed-child fields match existing direct Add Child flow', async () => {
+    const { rawToken } = await generateChildQrTokenImpl(
+      parentReq({ intent: 'new_child_join' }),
+      fixture.context,
+    );
+    const subRes = await submitChildQrJoinRequestImpl(
+      { token: rawToken, requesterDisplayName: 'Jordan' },
+      { auth: null } as any,
+      fixture.context,
+    );
+    const appRes = await approveChildQrJoinRequestImpl(
+      { familyId: 'family-1', requestId: subRes.requestId },
+      parentReq(),
+      fixture.context,
+    );
+
+    const childId = appRes.selectedManagedChildId;
+    const user = fixture.documents.get(`users/${childId}`);
+    expect(user).toMatchObject({
+      uid: childId,
+      id: childId,
+      familyId: 'family-1',
+      role: 'child',
+      isManaged: true,
+      displayName: 'Jordan',
+      rewardPoints: 0,
+      lifetimeXP: 0,
+      currentStreak: 0,
+      longestStreak: 0,
+      hasLogin: true,
+      loginEnabled: true,
+    });
+    expect(user?.avatarUrl).toBeTruthy();
+
+    const login = fixture.documents.get(`families/family-1/childLogins/${childId}`);
+    expect(login).toMatchObject({
+      childId,
+      authUid: childId,
+      familyId: 'family-1',
+      status: 'enabled',
+    });
+  });
+
+  it('Test 51 (RED): same display name on two distinct requestIds creates two distinct children', async () => {
+    const gen1 = await generateChildQrTokenImpl(parentReq({ intent: 'new_child_join' }), fixture.context);
+    const sub1 = await submitChildQrJoinRequestImpl({ token: gen1.rawToken, requesterDisplayName: 'Sam' }, {} as any, fixture.context);
+
+    const gen2 = await generateChildQrTokenImpl(parentReq({ intent: 'new_child_join' }), fixture.context);
+    const sub2 = await submitChildQrJoinRequestImpl({ token: gen2.rawToken, requesterDisplayName: 'Sam' }, {} as any, fixture.context);
+
+    const app1 = await approveChildQrJoinRequestImpl({ familyId: 'family-1', requestId: sub1.requestId }, parentReq(), fixture.context);
+    const app2 = await approveChildQrJoinRequestImpl({ familyId: 'family-1', requestId: sub2.requestId }, parentReq(), fixture.context);
+
+    expect(app1.selectedManagedChildId).not.toBe(app2.selectedManagedChildId);
+    expect(fixture.documents.get(`users/${app1.selectedManagedChildId}`)).toBeDefined();
+    expect(fixture.documents.get(`users/${app2.selectedManagedChildId}`)).toBeDefined();
+    expect(fixture.documents.get(`families/family-1/wallets/${app1.selectedManagedChildId}`)).toBeDefined();
+    expect(fixture.documents.get(`families/family-1/wallets/${app2.selectedManagedChildId}`)).toBeDefined();
+  });
+
+  it('Test 52 (RED): legacy request (no intent) with NO selectedManagedChildId is rejected', async () => {
+    const legacyRequestId = 'legacy-req-1';
+    fixture.documents.set(`families/family-1/child_qr_join_requests/${legacyRequestId}`, {
+      requestId: legacyRequestId,
+      familyId: 'family-1',
+      status: 'pending',
+      requesterDisplayName: 'Old Request',
+      // NO intent property
+    });
+
+    const usersBeforeCount = [...fixture.documents.keys()].filter(k => k.startsWith('users/')).length;
+    const walletsBeforeCount = [...fixture.documents.keys()].filter(k => k.includes('/wallets/')).length;
+
+    await expect(
+      approveChildQrJoinRequestImpl(
+        { familyId: 'family-1', requestId: legacyRequestId },
+        parentReq(),
+        fixture.context,
+      ),
+    ).rejects.toMatchObject({ message: 'INVALID_APPROVAL_PAYLOAD' });
+
+    const usersAfterCount = [...fixture.documents.keys()].filter(k => k.startsWith('users/')).length;
+    const walletsAfterCount = [...fixture.documents.keys()].filter(k => k.includes('/wallets/')).length;
+
+    expect(usersAfterCount).toBe(usersBeforeCount);
+    expect(walletsAfterCount).toBe(walletsBeforeCount);
+  });
+
+  it('Test 53 (RED): legacy request (no intent) with selectedManagedChildId binds ONLY to existing child', async () => {
+    const legacyRequestId = 'legacy-req-2';
+    fixture.documents.set(`families/family-1/child_qr_join_requests/${legacyRequestId}`, {
+      requestId: legacyRequestId,
+      familyId: 'family-1',
+      status: 'pending',
+      requesterDisplayName: 'Old Request',
+      // NO intent property
+    });
+
+    const usersBeforeCount = [...fixture.documents.keys()].filter(k => k.startsWith('users/')).length;
+    const walletsBeforeCount = [...fixture.documents.keys()].filter(k => k.includes('/wallets/')).length;
+
+    const res = await approveChildQrJoinRequestImpl(
+      { familyId: 'family-1', requestId: legacyRequestId, selectedManagedChildId: 'child-1' },
+      parentReq(),
+      fixture.context,
+    );
+
+    expect(res.status).toBe('approved');
+    expect(res.selectedManagedChildId).toBe('child-1');
+
+    const usersAfterCount = [...fixture.documents.keys()].filter(k => k.startsWith('users/')).length;
+    const walletsAfterCount = [...fixture.documents.keys()].filter(k => k.includes('/wallets/')).length;
+
+    expect(usersAfterCount).toBe(usersBeforeCount);
+    expect(walletsAfterCount).toBe(walletsBeforeCount);
+
+    const loginDoc = fixture.documents.get('families/family-1/childLogins/child-1');
+    expect(loginDoc?.authUid).toBe('existing-synth-auth-uid-1');
+  });
+
+  it('Test 54 (RED): legacy request NEVER enters new_child_join provisioning even with requesterDisplayName', async () => {
+    const legacyRequestId = 'legacy-req-3';
+    fixture.documents.set(`families/family-1/child_qr_join_requests/${legacyRequestId}`, {
+      requestId: legacyRequestId,
+      familyId: 'family-1',
+      status: 'pending',
+      requesterDisplayName: 'Sneaky New Child',
+      // NO intent property
+    });
+
+    // Calling approve without targetChildId must fail and NEVER create child_qr_legacy-req-3
+    await expect(
+      approveChildQrJoinRequestImpl(
+        { familyId: 'family-1', requestId: legacyRequestId },
+        parentReq(),
+        fixture.context,
+      ),
+    ).rejects.toThrow();
+
+    expect(fixture.documents.get(`users/child_qr_${legacyRequestId}`)).toBeUndefined();
+    expect(fixture.documents.get(`families/family-1/wallets/child_qr_${legacyRequestId}`)).toBeUndefined();
   });
 });

@@ -22,7 +22,7 @@ export function Step7Account({ draft, onGoogle, onEmail, authError, onStartOver,
   const relationshipLabel = draft.parentRoleDisplay
     ? t(`s3.options.${draft.parentRoleDisplay as 'mum' | 'dad' | 'parent' | 'carer' | 'grandparent' | 'other'}`)
     : t('s3.options.parent');
-  const child = draft.childFirstName.trim() || '—';
+  const child = draft.childFirstName?.trim() || '—';
   const family = draft.familyName.trim() || '—';
 
   if (authError) {

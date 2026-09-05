@@ -106,6 +106,9 @@ const CHILD_LOGIN_INDEX = 'childLoginIndex';
 const CHILD_LOGIN_AUDIT = 'childLoginAudit';
 const WALLETS = 'wallets';
 const CHILD_LOGIN_IDEMPOTENCY = 'childLoginIdempotency';
+const TASKS = 'tasks';
+const CHILD_QR_JOIN_REQUESTS = 'child_qr_join_requests';
+const CHILD_QR_SESSIONS = 'child_qr_sessions';
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -115,12 +118,6 @@ function computePayloadHash(childId: string, displayNameConfirmation: string): s
   return createHash('sha256')
     .update(`${childId}|${displayNameConfirmation}`)
     .digest('hex');
-}
-
-function requireUid(request: CallableRequest<unknown>): string {
-  const uid = request.auth?.uid;
-  if (!uid) throw new HttpsError('unauthenticated', 'AUTH_REQUIRED');
-  return uid;
 }
 
 function validateDeleteChildInput(input: unknown): DeleteChildInput {
@@ -162,7 +159,6 @@ function assertCallerIsParentOrOwner(
 function assertTargetIsManagedChild(
   childDoc: Record<string, unknown>,
   familyId: string,
-  callerUid: string,
 ): void {
   if (!childDoc || typeof childDoc !== 'object') {
     throw new HttpsError('not-found', 'CHILD_NOT_FOUND');
@@ -240,7 +236,7 @@ export async function deleteChildImpl(
   assertCallerIsParentOrOwner(caller, familyId);
 
   // --- Authorize target -------------------------------------------
-  assertTargetIsManagedChild(child, familyId, callerUid);
+  assertTargetIsManagedChild(child, familyId);
 
   // --- Caller must not be the target ------------------------------
   if (callerUid === childId) {
@@ -479,6 +475,77 @@ export async function deleteChildImpl(
       if (batchCount >= BATCH_LIMIT) {
         await batch.commit();
         batchCount = 0;
+      }
+    }
+  } catch {
+    /* best-effort */
+  }
+
+  // Unassign any active tasks assigned to this child so tasks do not have dangling assignees
+  try {
+    const assignedTasks = await db
+      .collection(`${FAMILIES}/${familyId}/${TASKS}`)
+      .where('assigneeId', '==', childId)
+      .limit(BATCH_LIMIT)
+      .get();
+    for (const doc of assignedTasks.docs) {
+      batch.update(doc.ref, { assigneeId: null });
+      batchCount += 1;
+      if (batchCount >= BATCH_LIMIT) {
+        await batch.commit();
+        batchCount = 0;
+      }
+    }
+  } catch {
+    /* best-effort */
+  }
+
+  // Cancel any pending child QR join requests targeting this child
+  try {
+    const pendingRequests = await db
+      .collection(`${FAMILIES}/${familyId}/${CHILD_QR_JOIN_REQUESTS}`)
+      .where('targetChildId', '==', childId)
+      .limit(BATCH_LIMIT)
+      .get();
+    for (const doc of pendingRequests.docs) {
+      const data = doc.data() as Record<string, any>;
+      if (data.status === 'pending') {
+        batch.update(doc.ref, {
+          status: 'cancelled',
+          cancellationReason: 'child_deleted',
+          resolvedAtMs: Date.now(),
+        });
+        batchCount += 1;
+        if (batchCount >= BATCH_LIMIT) {
+          await batch.commit();
+          batchCount = 0;
+        }
+      }
+    }
+  } catch {
+    /* best-effort */
+  }
+
+  // Revoke any active QR sessions targeting this child
+  try {
+    const activeSessions = await db
+      .collection(`${FAMILIES}/${familyId}/${CHILD_QR_SESSIONS}`)
+      .where('targetChildId', '==', childId)
+      .limit(BATCH_LIMIT)
+      .get();
+    for (const doc of activeSessions.docs) {
+      const data = doc.data() as Record<string, any>;
+      if (data.status === 'active') {
+        batch.update(doc.ref, {
+          status: 'revoked',
+          revokedReason: 'child_deleted',
+          revokedAtMs: Date.now(),
+        });
+        batchCount += 1;
+        if (batchCount >= BATCH_LIMIT) {
+          await batch.commit();
+          batchCount = 0;
+        }
       }
     }
   } catch {

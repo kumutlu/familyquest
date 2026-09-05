@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { generateChildQrToken, mapChildQrErrorKey } from '../lib/childQrOnboardingApi';
 import { QRCodeSVG } from 'qrcode.react';
 import { X, RefreshCw, Copy, Check, QrCode, Smartphone, ShieldCheck, Clock } from 'lucide-react';
@@ -6,21 +6,31 @@ import { X, RefreshCw, Copy, Check, QrCode, Smartphone, ShieldCheck, Clock } fro
 interface ConnectChildDeviceQrModalProps {
   isOpen: boolean;
   onClose: () => void;
+  intent?: 'new_child_join' | 'existing_child_device_bind';
+  targetChildId?: string;
+  targetChildName?: string;
 }
 
-export function ConnectChildDeviceQrModal({ isOpen, onClose }: ConnectChildDeviceQrModalProps) {
+export function ConnectChildDeviceQrModal({
+  isOpen,
+  onClose,
+  intent,
+  targetChildId,
+  targetChildName,
+}: ConnectChildDeviceQrModalProps) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [rawToken, setRawToken] = useState<string | null>(null);
   const [expiresAtMs, setExpiresAtMs] = useState<number | null>(null);
   const [remainingSeconds, setRemainingSeconds] = useState<number>(900);
   const [copied, setCopied] = useState(false);
+  const fetchedRef = useRef(false);
 
   const fetchToken = useCallback(async () => {
     setLoading(true);
     setError(null);
     try {
-      const res = await generateChildQrToken();
+      const res = await generateChildQrToken(intent ? { intent, targetChildId } : undefined);
       setRawToken(res.rawToken);
       setExpiresAtMs(res.expiresAtMs);
     } catch (err: any) {
@@ -33,12 +43,16 @@ export function ConnectChildDeviceQrModal({ isOpen, onClose }: ConnectChildDevic
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [intent, targetChildId]);
 
   useEffect(() => {
     if (isOpen) {
-      fetchToken();
+      if (!fetchedRef.current) {
+        fetchedRef.current = true;
+        fetchToken();
+      }
     } else {
+      fetchedRef.current = false;
       setRawToken(null);
       setExpiresAtMs(null);
       setCopied(false);
@@ -76,6 +90,25 @@ export function ConnectChildDeviceQrModal({ isOpen, onClose }: ConnectChildDevic
   const seconds = remainingSeconds % 60;
   const timeFormatted = `${minutes}:${seconds < 10 ? '0' : ''}${seconds}`;
 
+  const isNewChild = intent === 'new_child_join';
+  const title = isNewChild
+    ? 'Add Child via QR Code'
+    : targetChildName
+    ? `Connect Device for ${targetChildName}`
+    : 'Connect Child Device';
+
+  const description = isNewChild
+    ? "Scan this QR code from your child's device to join your family."
+    : targetChildName
+    ? `Scan this QR code from ${targetChildName}'s device to connect.`
+    : "Scan this QR code from your child's device to initiate device join.";
+
+  const step3 = isNewChild
+    ? 'Approve to add your child to the family'
+    : targetChildName
+    ? `Approve to connect device for ${targetChildName}`
+    : 'Select existing child profile & approve';
+
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-fade-in">
       <div className="relative w-full max-w-md bg-white dark:bg-slate-900 rounded-3xl shadow-2xl border border-slate-100 dark:border-slate-800 overflow-hidden">
@@ -86,12 +119,12 @@ export function ConnectChildDeviceQrModal({ isOpen, onClose }: ConnectChildDevic
               <QrCode className="w-5 h-5" />
             </div>
             <h3 className="font-bold text-lg text-slate-900 dark:text-white">
-              Connect Child Device
+              {title}
             </h3>
           </div>
           <button
             onClick={onClose}
-            className="p-2 rounded-xl text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
+            className="p-2 rounded-xl text-gray-400 hover:text-gray-600 hover:bg-gray-100 transition-colors"
           >
             <X className="w-5 h-5" />
           </button>
@@ -120,7 +153,7 @@ export function ConnectChildDeviceQrModal({ isOpen, onClose }: ConnectChildDevic
           ) : rawToken ? (
             <div className="flex flex-col items-center gap-4">
               <p className="text-sm text-slate-600 dark:text-slate-300">
-                Scan this QR code from your child's device to initiate device join.
+                {description}
               </p>
 
               {/* QR Container with Standards-Compliant ISO/IEC 18004 QRCodeSVG */}
@@ -199,7 +232,7 @@ export function ConnectChildDeviceQrModal({ isOpen, onClose }: ConnectChildDevic
                 <ol className="list-decimal list-inside space-y-1 text-slate-500 dark:text-slate-400 pl-1">
                   <li>Child scans QR code on their device</li>
                   <li>Join request appears in your Approval Center</li>
-                  <li>Select existing child profile & approve</li>
+                  <li>{step3}</li>
                 </ol>
               </div>
             </div>

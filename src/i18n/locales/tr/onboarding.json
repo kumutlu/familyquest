@@ -79,7 +79,7 @@
   "s6": {
     "title": "Her ailenin bir adı olmalı.",
     "label": "Aile adı",
-    "placeholder": "ör. Umutlu Ailesi",
+    "placeholder": "ör. Yılmaz Ailesi",
     "defaultFamilyName": "Ailem",
     "suggestion": "\"{{family}}\" nasıl olur?",
     "continue": "Devam et",

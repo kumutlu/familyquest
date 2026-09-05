@@ -43,7 +43,7 @@ function baseState(overrides: Record<string, unknown> = {}) {
     tasks: [], feed: [], rewards: [], childWallets: [], walletTransactions: [],
     joinRequests: [], taskCompletions: [],
     loading: false, appReady: true, familyLoading: false,
-    bootstrapStatus: { family: 'ready', members: 'ready', wallets: 'ready' },
+    bootstrapStatus: { family: 'ready', members: 'ready', wallets: 'ready', tasks: 'ready', rewards: 'ready' },
     ...overrides,
   } as any;
 }

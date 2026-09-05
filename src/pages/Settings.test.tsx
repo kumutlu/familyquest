@@ -140,7 +140,9 @@ function renderSettings(role: string) {
   );
 }
 
-beforeEach(() => {
+beforeEach(async () => {
+  await i18n.loadNamespaces(['settings', 'notifications', 'common', 'family', 'help']);
+  await i18n.changeLanguage('en');
   clipboardWriteText.mockClear();
   if (navigator.clipboard && typeof navigator.clipboard.writeText === 'function') {
     vi.spyOn(navigator.clipboard, 'writeText').mockImplementation(clipboardWriteText);

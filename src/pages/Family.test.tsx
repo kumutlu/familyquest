@@ -101,6 +101,8 @@ describe('Family Page (Wave 4 Queki v2 Living Family World)', () => {
     expect(screen.getAllByText('Little Explorer').length).toBeGreaterThan(0);
     expect(screen.getByRole('button', { name: /Add child/i })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /Invite/i })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /Family Settings/i })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /Connect Child Device/i })).not.toBeInTheDocument();
   });
 
   it('renders child view without parent management controls', async () => {

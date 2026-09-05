@@ -19,7 +19,7 @@ export function Step4ChildName({ draft, patch, onNext, onBack }: Step4Props) {
     inputRef.current?.focus();
   }, []);
 
-  const value = draft.childFirstName;
+  const value = draft.childFirstName || '';
   const canContinue = value.trim().length > 0;
 
   return (

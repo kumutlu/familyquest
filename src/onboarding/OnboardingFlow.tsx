@@ -352,7 +352,7 @@ export function OnboardingFlow({
           />
         );
       case 'p1':
-        return <FamilyComposition draft={draft} patch={patch} goNext={goNext} deps={deps} />;
+        return <FamilyComposition draft={draft} patch={patch} goNext={handleFinish} deps={deps} onFinish={handleFinish} />;
       case 'p2':
         return <FirstTask draft={draft} patch={patch} goNext={goNext} goBack={goBack} deps={deps} />;
       case 'p3':

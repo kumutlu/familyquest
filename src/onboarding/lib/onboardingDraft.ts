@@ -19,8 +19,8 @@ export type Step =
   | 's1' | 's2' | 's3' | 's4' | 's5' | 's6' | 's7'
   | 'p1' | 'p2' | 'p3';
 
-export const PRE_AUTH_STEPS: Step[] = ['s1', 's2', 's3', 's4', 's5', 's6', 's7'];
-export const POST_AUTH_STEPS: Step[] = ['p1', 'p2', 'p3'];
+export const PRE_AUTH_STEPS: Step[] = ['s1', 's2', 's3', 's6', 's7'];
+export const POST_AUTH_STEPS: Step[] = ['p1'];
 
 export const ONBOARDING_DRAFT_KEY = 'queki.onboardingDraft';
 export const DRAFT_VERSION = 1 as const;
@@ -31,7 +31,7 @@ export interface OnboardingDraft {
   parentFirstName: string;
   /** Display-only relationship (Mum/Dad/…). Never a security role. */
   parentRoleDisplay: string;
-  childFirstName: string;
+  childFirstName?: string;
   /** Stable identity for the first onboarding child across retries/reloads. */
   firstChildRequestId?: string;
   /** Stable identity for the first onboarding task across retries/reloads. */
@@ -143,6 +143,11 @@ export function loadDraft(currentFamilyId?: string | null): OnboardingDraft | nu
   // journey already created. Any other draft belongs to an established-family
   // session and must never drive another creation.
   const parsedDraft = parsed as OnboardingDraft;
+  if ((parsedDraft.step as string) === 's4' || (parsedDraft.step as string) === 's5') {
+    parsedDraft.step = 's6';
+  } else if ((parsedDraft.step as string) === 'p2' || (parsedDraft.step as string) === 'p3') {
+    parsedDraft.step = 'p1';
+  }
   const draft: OnboardingDraft = parsedDraft.firstChildRequestId && parsedDraft.firstTaskRequestId
     ? parsedDraft
     : {
