@@ -7,6 +7,7 @@ const mockDeleteChild = vi.fn();
 const mockUpdateDoc = vi.fn();
 
 vi.mock('../../lib/childLoginApi', () => ({
+  getChildCredentialStatus: vi.fn().mockResolvedValue({ state: 'available', identityConnected: true, credentialsExist: true, username: 'leo.smith', loginEnabled: true }),
   deleteChild: (...args: unknown[]) => mockDeleteChild(...args),
   mapChildLoginError: (err: any) => err?.message || 'Delete failed',
   disableChildLogin: vi.fn(),
@@ -66,7 +67,7 @@ describe('ManageChildDialog canonical surface', () => {
     await i18n.changeLanguage('en');
   });
 
-  it('renders all canonical management sections: Profile, Devices, Wallet, Settings, and Danger Zone', () => {
+  it('renders all canonical management sections: Profile, Devices, Wallet, Settings, and Danger Zone', async () => {
     render(<ManageChildDialog member={testChild} onClose={vi.fn()} />);
 
     // Section 1: Profile
@@ -81,7 +82,7 @@ describe('ManageChildDialog canonical surface', () => {
     expect(screen.getByText('Current Balance')).toBeInTheDocument();
 
     // Section 4: Child Settings / Login
-    expect(screen.getByText('leo.smith')).toBeInTheDocument();
+    expect(await screen.findByText('leo.smith')).toBeInTheDocument();
 
     // Section 5: Danger Zone
     expect(screen.getByTestId('remove-child-button')).toBeInTheDocument();

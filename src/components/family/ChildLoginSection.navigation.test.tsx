@@ -15,6 +15,7 @@ vi.mock('../../lib/childLoginApi', async importOriginal => {
   const actual = await importOriginal<typeof import('../../lib/childLoginApi')>();
   return {
     ...actual,
+    getChildCredentialStatus: vi.fn().mockResolvedValue({ state: 'available', identityConnected: true, credentialsExist: true, username: 'alisya', loginEnabled: true }),
     resetChildPassword: lifecycle.reset,
     disableChildLogin: lifecycle.disable,
     enableChildLogin: lifecycle.enable,
@@ -66,7 +67,7 @@ describe('managed child actions nested inside the member link', () => {
   it('does not navigate when Reset password is clicked, and opens the reset flow', async () => {
     const user = userEvent.setup();
     renderInsideMemberLink();
-    await user.click(screen.getByTestId('reset-password-button'));
+    await user.click((await screen.findByTestId('reset-password-button')));
     expect(screen.queryByText('MEMBER PROFILE PAGE')).not.toBeInTheDocument();
     expect(screen.getByLabelText('Temporary password')).toBeInTheDocument();
   });
@@ -74,7 +75,7 @@ describe('managed child actions nested inside the member link', () => {
   it('does not navigate when Delete child is clicked, and opens the confirmation dialog', async () => {
     const user = userEvent.setup();
     renderInsideMemberLink();
-    await user.click(screen.getByTestId('delete-child-button'));
+    await user.click((await screen.findByTestId('delete-child-button')));
     expect(screen.queryByText('MEMBER PROFILE PAGE')).not.toBeInTheDocument();
     expect(screen.getByRole('dialog')).toBeInTheDocument();
   });
@@ -82,7 +83,7 @@ describe('managed child actions nested inside the member link', () => {
   it('keyboard activation of Reset password does not navigate', async () => {
     const user = userEvent.setup();
     renderInsideMemberLink();
-    screen.getByTestId('reset-password-button').focus();
+    (await screen.findByTestId('reset-password-button')).focus();
     await user.keyboard('{Enter}');
     expect(screen.queryByText('MEMBER PROFILE PAGE')).not.toBeInTheDocument();
     expect(screen.getByLabelText('Temporary password')).toBeInTheDocument();
@@ -95,7 +96,7 @@ describe('managed child actions nested inside the member link', () => {
     );
     const user = userEvent.setup();
     renderInsideMemberLink();
-    await user.click(screen.getByTestId('delete-child-button'));
+    await user.click((await screen.findByTestId('delete-child-button')));
     await user.type(screen.getByLabelText(/name/i), 'Alisya');
 
     const dialog = screen.getByRole('dialog');
@@ -109,7 +110,7 @@ describe('managed child actions nested inside the member link', () => {
   it('renders the delete dialog in a portal on document.body', async () => {
     const user = userEvent.setup();
     const { container } = renderInsideMemberLink();
-    await user.click(screen.getByTestId('delete-child-button'));
+    await user.click((await screen.findByTestId('delete-child-button')));
     const dialog = screen.getByRole('dialog');
     expect(container.contains(dialog)).toBe(false);
     expect(document.body.contains(dialog)).toBe(true);

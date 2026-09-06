@@ -10,6 +10,12 @@ vi.mock('firebase-admin/auth', () => ({
 
 import {
   createChildLoginImpl,
+  getChildCredentialStatusImpl,
+  resetChildPasswordImpl,
+  disableChildLoginImpl,
+  enableChildLoginImpl,
+  changeChildUsernameImpl,
+  completeChildPasswordChangeImpl,
   signInChildImpl,
   generateSyntheticEmail,
   type ChildLoginContext,
@@ -226,6 +232,66 @@ describe('QR Child Login Upgrade & Re-Login Contract', () => {
     seedQrChildEnvironment(db, auth);
   });
 
+  it('ignores legacy public credential claims in the authoritative read model', async () => {
+    Object.assign(db.store.get(`users/${QR_CHILD_ID}`), { hasLogin: true, loginEnabled: true, username: 'Alex' });
+    expect(await getChildCredentialStatusImpl(ctx, PARENT_UID, { childId: QR_CHILD_ID }))
+      .toEqual({ state: 'available', identityConnected: true, credentialsExist: false });
+  });
+
+  it('returns profile-only state and rejects unauthorized status readers', async () => {
+    db.store.delete(`families/${FAMILY_ID}/childLogins/${QR_CHILD_ID}`);
+    delete db.store.get(`users/${QR_CHILD_ID}`).authUid;
+    expect(await getChildCredentialStatusImpl(ctx, PARENT_UID, { childId: QR_CHILD_ID })).toEqual({ state: 'available', identityConnected: false, credentialsExist: false });
+    await expect(getChildCredentialStatusImpl(ctx, '', { childId: QR_CHILD_ID })).rejects.toMatchObject({ code: 'unauthenticated' });
+    await expect(getChildCredentialStatusImpl(ctx, QR_AUTH_UID, { childId: QR_CHILD_ID })).rejects.toMatchObject({ code: 'permission-denied' });
+    db.store.set('users/foreign-parent', { role: 'parent', familyId: 'other' });
+    await expect(getChildCredentialStatusImpl(ctx, 'foreign-parent', { childId: QR_CHILD_ID })).rejects.toMatchObject({ code: 'permission-denied' });
+  });
+
+  it.each([resetChildPasswordImpl, disableChildLoginImpl, enableChildLoginImpl, changeChildUsernameImpl])('rejects QR-only state in credential operation %s', async operation => {
+    await expect(operation(ctx, PARENT_UID, { childId: QR_CHILD_ID, clientReqId: 'guard-test', newPassword: GOOD_PW, newUsername: 'new_alex' } as any))
+      .rejects.toMatchObject({ code: 'failed-precondition', message: 'CREDENTIALS_UNAVAILABLE' });
+  });
+
+  it('fails closed on partial private credentials and mismatched identity', async () => {
+    const record = db.store.get(`families/${FAMILY_ID}/childLogins/${QR_CHILD_ID}`);
+    record.normalizedUsername = 'alex';
+    expect((await getChildCredentialStatusImpl(ctx, PARENT_UID, { childId: QR_CHILD_ID })).state).toBe('unavailable');
+    delete record.normalizedUsername;
+    record.authUid = 'other-child';
+    expect((await getChildCredentialStatusImpl(ctx, PARENT_UID, { childId: QR_CHILD_ID })).state).toBe('unavailable');
+  });
+
+  it('does not let Create Login overwrite a mismatched QR identity', async () => {
+    db.store.get(`families/${FAMILY_ID}/childLogins/${QR_CHILD_ID}`).authUid = 'other-child';
+    await expect(createChildLoginImpl(ctx, PARENT_UID, { childId: QR_CHILD_ID, username: 'alex', password: GOOD_PW, clientReqId: 'bad-link' }))
+      .rejects.toMatchObject({ code: 'failed-precondition', message: 'CREDENTIALS_UNAVAILABLE' });
+    expect(auth.users.get(QR_AUTH_UID)).not.toHaveProperty('email');
+  });
+
+
+  it('rejects password completion on QR-only identity even with a stale change-required flag', async () => {
+    db.store.get(`families/${FAMILY_ID}/childLogins/${QR_CHILD_ID}`).requiresPasswordChange = true;
+    await expect(completeChildPasswordChangeImpl(ctx, QR_AUTH_UID, { role: 'child', managedChild: true, childId: QR_CHILD_ID, familyId: FAMILY_ID, auth_time: Math.floor(Date.now() / 1000) }, { newPassword: GOOD_PW, clientReqId: 'qr-change' }))
+      .rejects.toMatchObject({ code: 'failed-precondition', message: 'CREDENTIALS_UNAVAILABLE' });
+  });
+
+  it('rejects sign-in when the username index metadata disagrees with private credentials', async () => {
+    await createChildLoginImpl(ctx, PARENT_UID, { childId: QR_CHILD_ID, username: 'alex', password: GOOD_PW, clientReqId: 'signin-index' });
+    db.store.get(`families/${FAMILY_ID}/childLoginIndex/alex`).normalizedUsername = 'wrong';
+    await expect(signInChildImpl(ctx, { familyCode: FAMILY_CODE, username: 'alex', password: GOOD_PW }))
+      .rejects.toMatchObject({ message: 'INVALID_CREDENTIALS' });
+  });
+
+  it('requires coherent private credentials and matching index, without exposing email', async () => {
+    await createChildLoginImpl(ctx, PARENT_UID, { childId: QR_CHILD_ID, username: 'alex_quest', password: GOOD_PW, clientReqId: 'status-create' });
+    const status = await getChildCredentialStatusImpl(ctx, PARENT_UID, { childId: QR_CHILD_ID });
+    expect(status).toMatchObject({ state: 'available', credentialsExist: true, username: 'alex_quest', loginEnabled: true });
+    expect(status).not.toHaveProperty('syntheticEmail');
+    db.store.get(`families/${FAMILY_ID}/childLoginIndex/alex_quest`).childId = 'other';
+    expect((await getChildCredentialStatusImpl(ctx, PARENT_UID, { childId: QR_CHILD_ID })).state).toBe('unavailable');
+  });
+
   it('upgrades QR-created child with username/password without rejecting and without creating a 2nd Auth user', async () => {
     const authCountBefore = auth.getUserCount();
     const childDocsBefore = [...db.store.keys()].filter(k => k.startsWith('users/')).length;
@@ -280,6 +346,26 @@ describe('QR Child Login Upgrade & Re-Login Contract', () => {
       childId: QR_CHILD_ID,
       normalizedUsername: 'alex_quest',
     });
+  });
+
+  it('upgrades the legacy QR-only Alex structure despite stale public credential flags, retaining the same authUid', async () => {
+    // Production inspection: no private username/normalizedUsername/syntheticEmail,
+    // no username index and no Auth email/password; public flags are stale.
+    Object.assign(db.store.get(`users/${QR_CHILD_ID}`), {
+      hasLogin: true, loginEnabled: true, username: 'Alex',
+    });
+    const walletBefore = { ...db.store.get(`families/${FAMILY_ID}/wallets/${QR_CHILD_ID}`) };
+    const result = await createChildLoginImpl(ctx, PARENT_UID, {
+      childId: QR_CHILD_ID, username: 'alex_quest', password: GOOD_PW,
+      clientReqId: 'legacy-qr-upgrade',
+    });
+    expect(result.username).toBe('alex_quest');
+    expect([...auth.users.keys()]).toEqual([QR_AUTH_UID]);
+    expect(auth.users.get(QR_AUTH_UID).email).toBe(generateSyntheticEmail(FAMILY_ID, 'alex_quest'));
+    expect(auth.users.get(QR_AUTH_UID).password).toBe(GOOD_PW);
+    expect(db.store.get(`users/${QR_CHILD_ID}`).authUid).toBe(QR_AUTH_UID);
+    expect(db.store.get(`families/${FAMILY_ID}/childLogins/${QR_CHILD_ID}`).authUid).toBe(QR_AUTH_UID);
+    expect(db.store.get(`families/${FAMILY_ID}/wallets/${QR_CHILD_ID}`)).toEqual(walletBefore);
   });
 
   it('child can sign in via Child Login screen after explicit logout and receives the EXACT SAME Auth UID', async () => {

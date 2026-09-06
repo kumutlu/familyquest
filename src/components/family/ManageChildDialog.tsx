@@ -68,6 +68,7 @@ export function ManageChildDialog({
 
   // Section 4: Login Creation Modal State
   const [createLoginFor, setCreateLoginFor] = useState<any>(null);
+  const [credentialRevision, setCredentialRevision] = useState(0);
 
   // Section 5: Danger Zone Delete State
   const [isConfirmingDelete, setIsConfirmingDelete] = useState(false);
@@ -261,6 +262,7 @@ export function ManageChildDialog({
                 <span>Account Credentials</span>
               </div>
               <ChildLoginSection
+                refreshKey={credentialRevision}
                 member={member as any}
                 onRequestCreate={(m) => setCreateLoginFor(m)}
               />
@@ -307,6 +309,7 @@ export function ManageChildDialog({
           member={createLoginFor}
           onClose={() => setCreateLoginFor(null)}
           onSuccess={() => {
+            setCredentialRevision(value => value + 1);
             setCreateLoginFor(null);
             onChildUpdated?.();
           }}

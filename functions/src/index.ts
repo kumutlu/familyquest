@@ -236,6 +236,7 @@ export const onUserWritten = onDocumentWritten(
 // Trusted callables; see childLogin.ts.
 export {
   createChildLogin,
+  getChildCredentialStatus,
   signInChild,
   resetChildPassword,
   disableChildLogin,

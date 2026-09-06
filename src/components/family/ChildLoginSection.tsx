@@ -1,4 +1,4 @@
-import { useRef, useState, type KeyboardEvent as ReactKeyboardEvent, type MouseEvent as ReactMouseEvent } from 'react';
+import { useEffect, useRef, useState, type KeyboardEvent as ReactKeyboardEvent, type MouseEvent as ReactMouseEvent } from 'react';
 import { createPortal } from 'react-dom';
 import { useTranslation } from 'react-i18next';
 import { Loader2 } from 'lucide-react';
@@ -11,6 +11,8 @@ import {
   resetChildPassword,
   validatePasswordClient,
   deleteChild,
+  getChildCredentialStatus,
+  type ChildCredentialStatus,
 } from '../../lib/childLoginApi';
 
 export interface ChildLoginMember {
@@ -31,6 +33,33 @@ export interface ChildLoginMember {
 interface ChildLoginSectionProps {
   member: ChildLoginMember;
   onRequestCreate: (member: ChildLoginMember) => void;
+  refreshKey?: number;
+}
+
+/** Never fall back to public profile flags while authority is loading/unavailable. */
+export function ChildLoginSection({ member, onRequestCreate, refreshKey = 0 }: ChildLoginSectionProps) {
+  const [result, setResult] = useState<{ id: string; key: number; status: ChildCredentialStatus } | null>(null);
+  const [revision, setRevision] = useState(0);
+  const [notice, setNotice] = useState('');
+  useEffect(() => {
+    let current = true;
+    setResult(null);
+    getChildCredentialStatus(member.id).then(status => {
+      if (current) setResult({ id: member.id, key: refreshKey, status });
+    }).catch(() => {
+      if (current) setResult({ id: member.id, key: refreshKey, status: { state: 'unavailable', identityConnected: false, credentialsExist: false } });
+    });
+    return () => { current = false; };
+  }, [member.id, refreshKey, revision]);
+  if (!result || result.id !== member.id || result.key !== refreshKey) return <p role="status">Loading credential status…</p>;
+  const status = result.status;
+  if (status.state !== 'available') return <p role="status">Credential status unavailable. Please try again later.</p>;
+  return <>{notice && <p role="status">{notice}</p>}<CredentialDetails member={{
+    id: member.id, displayName: member.displayName, isManaged: member.isManaged,
+    hasLogin: status.credentialsExist, authUid: status.identityConnected ? 'connected' : undefined,
+    username: status.username, loginEnabled: status.loginEnabled,
+    requiresPasswordChange: status.requiresPasswordChange, lastLogin: status.lastLoginAt,
+  }} onRequestCreate={() => onRequestCreate(member)} onChanged={(message = '') => { setNotice(message); setResult(null); setRevision(v => v + 1); }} /></>;
 }
 
 /** Best-effort, safe formatting of an optional last-login timestamp. */
@@ -58,7 +87,7 @@ function formatLastLogin(value: unknown, neverLabel: string): string {
  * Compact "Login" block for a managed child card. Never renders authUid,
  * synthetic email, internal IDs, or server-only fields.
  */
-export function ChildLoginSection({ member, onRequestCreate }: ChildLoginSectionProps) {
+function CredentialDetails({ member, onRequestCreate, onChanged }: ChildLoginSectionProps & { onChanged: (message?: string) => void }) {
   const { t } = useTranslation(['family', 'common']);
   const [resetOpen, setResetOpen] = useState(false);
   const [temporaryPassword, setTemporaryPassword] = useState('');
@@ -100,6 +129,7 @@ export function ChildLoginSection({ member, onRequestCreate }: ChildLoginSection
     try {
       if (member.loginEnabled) await disableChildLogin(member.id);
       else await enableChildLogin(member.id);
+      onChanged();
     } catch (error) {
       setFeedback(mapChildLoginError(error));
     } finally {
@@ -117,6 +147,7 @@ export function ChildLoginSection({ member, onRequestCreate }: ChildLoginSection
     setFeedback('');
     try {
       await resetChildPassword(member.id, temporaryPassword);
+      onChanged('Temporary password set. The child has been signed out and must create a new private password.');
       setTemporaryPassword('');
       setResetOpen(false);
       setFeedback('Temporary password set. The child has been signed out and must create a new private password.');
