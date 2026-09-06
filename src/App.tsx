@@ -201,6 +201,7 @@ function App() {
             <Route path="notifications" element={<Notifications />} />
             <Route path="history" element={<TransactionHistoryScreen />} />
             <Route path="settings" element={<Settings />} />
+            <Route path="settings/family" element={<Navigate to="/settings#family-section" replace />} />
             <Route path="continue-setup" element={<ContinueSetup />} />
 
             {/* Help Center. `search` and `category/:id` are declared before the

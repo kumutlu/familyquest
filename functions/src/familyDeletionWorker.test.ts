@@ -33,6 +33,8 @@ vi.mock('firebase-admin/functions', () => ({
 import {
   processFamilyDeletionImpl,
   recoverFamilyDeletionJobsImpl,
+  verifyManagedChild,
+  LinkageError,
   type FamilyDeletionContext,
   type FamilyDeletionJob,
 } from './familyDeletion';
@@ -706,5 +708,237 @@ describe('recoverFamilyDeletionJobsImpl', () => {
   it('returns zero when there are no jobs', async () => {
     db.store.clear();
     expect(await recoverFamilyDeletionJobsImpl(ctx)).toBe(0);
+  });
+});
+
+describe('QR child family deletion integration', () => {
+  it('GREEN: succeeds when family contains a QR-provisioned child without password credentials', async () => {
+    db.store.set('users/child-qr', {
+      familyId: FAMILY_ID,
+      role: 'child',
+      isManaged: true,
+      hasLogin: false,
+      loginEnabled: false,
+      authUid: 'auth-qr-1',
+    });
+    db.store.set(`families/${FAMILY_ID}/childLogins/child-qr`, {
+      childId: 'child-qr',
+      authUid: 'auth-qr-1',
+      familyId: FAMILY_ID,
+      status: 'enabled',
+    });
+    auth.users.set('auth-qr-1', {
+      customClaims: { managedChild: true, childId: 'child-qr', familyId: FAMILY_ID, role: 'child' },
+    });
+
+    const result = await processFamilyDeletionImpl(ctx, FAMILY_ID);
+    expect(result.done).toBe(true);
+    expect(auth.deleted).toContain('auth-qr-1');
+  });
+
+  it('GREEN: succeeds when family contains a QR-created child that was upgraded to username/password', async () => {
+    db.store.set('users/child-qr-upgraded', {
+      familyId: FAMILY_ID,
+      role: 'child',
+      isManaged: true,
+      hasLogin: true,
+      loginEnabled: true,
+      authUid: 'auth-qr-upgraded-1',
+      username: 'alex_upgraded',
+    });
+    db.store.set(`families/${FAMILY_ID}/childLogins/child-qr-upgraded`, {
+      childId: 'child-qr-upgraded',
+      authUid: 'auth-qr-upgraded-1',
+      familyId: FAMILY_ID,
+      status: 'enabled',
+      username: 'alex_upgraded',
+      normalizedUsername: 'alex_upgraded',
+      syntheticEmail: 'child-fam-delete-1-alex_upgraded@managed.familyquest.app',
+    });
+    auth.users.set('auth-qr-upgraded-1', {
+      customClaims: { managedChild: true, childId: 'child-qr-upgraded', familyId: FAMILY_ID, role: 'child' },
+    });
+
+    const result = await processFamilyDeletionImpl(ctx, FAMILY_ID);
+    expect(result.done).toBe(true);
+    expect(auth.deleted).toContain('auth-qr-upgraded-1');
+  });
+});
+
+describe('verifyManagedChild — integrity test matrix', () => {
+  const CHILD_ID = 'test-matrix-child';
+
+  // Case A: profile-only child
+  it('Case A: profile-only child with no authUid and no childLogin succeeds and returns null authUid', async () => {
+    const profile = {
+      role: 'child',
+      isManaged: true,
+      familyId: FAMILY_ID,
+      hasLogin: false,
+    };
+    const res = await verifyManagedChild(ctx, FAMILY_ID, CHILD_ID, profile);
+    expect(res).toEqual({ authUid: null });
+  });
+
+  // Case B: QR child without username/password
+  it('Case B: QR child without username/password (hasLogin=false, matching childLogin) succeeds with Auth identity', async () => {
+    const authUid = 'matrix-auth-qr';
+    const profile = {
+      role: 'child',
+      isManaged: true,
+      familyId: FAMILY_ID,
+      hasLogin: false,
+      loginEnabled: false,
+      authUid,
+    };
+    db.store.set(`families/${FAMILY_ID}/childLogins/${CHILD_ID}`, {
+      childId: CHILD_ID,
+      authUid,
+      familyId: FAMILY_ID,
+      status: 'enabled',
+    });
+    auth.users.set(authUid, {
+      customClaims: { managedChild: true, childId: CHILD_ID, familyId: FAMILY_ID, role: 'child' },
+    });
+
+    const res = await verifyManagedChild(ctx, FAMILY_ID, CHILD_ID, profile);
+    expect(res).toEqual({ authUid });
+  });
+
+  // Case C: credentialed child
+  it('Case C: credentialed child (hasLogin=true, matching childLogin) succeeds with Auth identity', async () => {
+    const authUid = 'matrix-auth-credentialed';
+    const profile = {
+      role: 'child',
+      isManaged: true,
+      familyId: FAMILY_ID,
+      hasLogin: true,
+      loginEnabled: true,
+      authUid,
+    };
+    db.store.set(`families/${FAMILY_ID}/childLogins/${CHILD_ID}`, {
+      childId: CHILD_ID,
+      authUid,
+      familyId: FAMILY_ID,
+      status: 'enabled',
+    });
+    auth.users.set(authUid, {
+      customClaims: { managedChild: true, childId: CHILD_ID, familyId: FAMILY_ID, role: 'child' },
+    });
+
+    const res = await verifyManagedChild(ctx, FAMILY_ID, CHILD_ID, profile);
+    expect(res).toEqual({ authUid });
+  });
+
+  // Case D: authUid present / childLogin missing -> FAIL CLOSED
+  it('Case D: authUid present but childLogin missing fails closed with LinkageError', async () => {
+    const profile = {
+      role: 'child',
+      isManaged: true,
+      familyId: FAMILY_ID,
+      authUid: 'matrix-auth-only',
+    };
+    db.store.delete(`families/${FAMILY_ID}/childLogins/${CHILD_ID}`);
+
+    await expect(verifyManagedChild(ctx, FAMILY_ID, CHILD_ID, profile))
+      .rejects.toThrow(LinkageError);
+  });
+
+  // Case E: childLogin present / authUid missing -> FAIL CLOSED
+  it('Case E: childLogin present but profile authUid missing fails closed with LinkageError', async () => {
+    const profile = {
+      role: 'child',
+      isManaged: true,
+      familyId: FAMILY_ID,
+      hasLogin: false,
+    };
+    db.store.set(`families/${FAMILY_ID}/childLogins/${CHILD_ID}`, {
+      childId: CHILD_ID,
+      authUid: 'some-orphan-uid',
+      familyId: FAMILY_ID,
+    });
+
+    await expect(verifyManagedChild(ctx, FAMILY_ID, CHILD_ID, profile))
+      .rejects.toThrow(LinkageError);
+  });
+
+  // Case F: childLogin authUid mismatch -> FAIL CLOSED
+  it('Case F: childLogin authUid mismatch fails closed with LinkageError', async () => {
+    const profile = {
+      role: 'child',
+      isManaged: true,
+      familyId: FAMILY_ID,
+      authUid: 'auth-user-A',
+    };
+    db.store.set(`families/${FAMILY_ID}/childLogins/${CHILD_ID}`, {
+      childId: CHILD_ID,
+      authUid: 'auth-user-B',
+      familyId: FAMILY_ID,
+    });
+
+    await expect(verifyManagedChild(ctx, FAMILY_ID, CHILD_ID, profile))
+      .rejects.toThrow(LinkageError);
+  });
+
+  // Case G: childLogin familyId mismatch -> FAIL CLOSED
+  it('Case G: childLogin familyId mismatch fails closed with LinkageError', async () => {
+    const authUid = 'auth-fam-mismatch';
+    const profile = {
+      role: 'child',
+      isManaged: true,
+      familyId: FAMILY_ID,
+      authUid,
+    };
+    db.store.set(`families/${FAMILY_ID}/childLogins/${CHILD_ID}`, {
+      childId: CHILD_ID,
+      authUid,
+      familyId: 'other-family-id',
+    });
+
+    await expect(verifyManagedChild(ctx, FAMILY_ID, CHILD_ID, profile))
+      .rejects.toThrow(LinkageError);
+  });
+
+  // Case H: childLogin childId mismatch -> FAIL CLOSED
+  it('Case H: childLogin childId mismatch fails closed with LinkageError', async () => {
+    const authUid = 'auth-child-mismatch';
+    const profile = {
+      role: 'child',
+      isManaged: true,
+      familyId: FAMILY_ID,
+      authUid,
+    };
+    db.store.set(`families/${FAMILY_ID}/childLogins/${CHILD_ID}`, {
+      childId: 'wrong-child-id',
+      authUid,
+      familyId: FAMILY_ID,
+    });
+
+    await expect(verifyManagedChild(ctx, FAMILY_ID, CHILD_ID, profile))
+      .rejects.toThrow(LinkageError);
+  });
+
+  // Case I: hasLogin=true but required linkage inconsistent -> FAIL CLOSED
+  it('Case I: hasLogin=true but required linkage inconsistent fails closed with LinkageError', async () => {
+    // 1. hasLogin=true but both authUid and childLogin missing
+    const missingBoth = {
+      role: 'child',
+      isManaged: true,
+      familyId: FAMILY_ID,
+      hasLogin: true,
+    };
+    await expect(verifyManagedChild(ctx, FAMILY_ID, CHILD_ID, missingBoth))
+      .rejects.toThrow(LinkageError);
+
+    // 2. hasLogin=true but authUid present with childLogin missing
+    const missingLogin = {
+      role: 'child',
+      isManaged: true,
+      familyId: FAMILY_ID,
+      hasLogin: true,
+      authUid: 'matrix-auth-inconsistent',
+    };
+    await expect(verifyManagedChild(ctx, FAMILY_ID, CHILD_ID, missingLogin))
+      .rejects.toThrow(LinkageError);
   });
 });

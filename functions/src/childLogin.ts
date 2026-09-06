@@ -408,9 +408,28 @@ export async function createChildLoginImpl(
     if (child.role !== 'child' || child.isManaged !== true) {
       throw httpError('failed-precondition', 'CHILD_NOT_MANAGED');
     }
-    if (child.hasLogin === true || child.authUid) {
+
+    const privateRef = db.doc(`${FAMILIES}/${familyId}/${CHILD_LOGINS}/${data.childId}`);
+    const privateSnap = await t.get(privateRef);
+    const privateData = privateSnap.exists ? (privateSnap.data() as Record<string, unknown>) : null;
+
+    // CASE 3: Child already has username/login credentials.
+    // The conflict condition is actual existing credentials (syntheticEmail or normalizedUsername),
+    // not merely the presence of an authUid (which QR/personal device onboarding creates).
+    const isAlreadyCredentialed =
+      Boolean(privateData?.syntheticEmail) ||
+      Boolean(privateData?.normalizedUsername) ||
+      (child.hasLogin === true && Boolean(privateData?.syntheticEmail));
+
+    if (isAlreadyCredentialed) {
       throw httpError('already-exists', 'LOGIN_ALREADY_EXISTS');
     }
+
+    // CASE 2 vs CASE 1:
+    // If child already has an authoritative authUid (e.g. from QR onboarding or device bind),
+    // we upgrade that existing Auth user instead of creating a second user.
+    const existingAuthUid = (child.authUid || privateData?.authUid) as string | undefined;
+    const isUpgrade = Boolean(existingAuthUid);
 
     const indexRef = db.doc(
       `${FAMILIES}/${familyId}/${CHILD_LOGIN_INDEX}/${normalizedUsername}`,
@@ -435,7 +454,7 @@ export async function createChildLoginImpl(
       });
     }
 
-    return { kind: 'proceed' as const, familyId };
+    return { kind: 'proceed' as const, familyId, isUpgrade, existingAuthUid };
   });
 
   if (pre.kind === 'done') return pre.result;
@@ -443,29 +462,52 @@ export async function createChildLoginImpl(
     throw httpError('already-exists', 'CLIENT_REQ_ID_REPLAY_MISMATCH');
   }
   const familyId = pre.familyId;
+  const isUpgrade = pre.isUpgrade;
+  const existingAuthUid = pre.existingAuthUid;
 
-  // --- Create the Firebase Auth user (synthetic) --------------------------
+  // --- Attach or Create the Firebase Auth user (synthetic) -----------------
   const syntheticEmail = generateSyntheticEmail(familyId, normalizedUsername);
-  const childDisplayName = await getChildDisplayName(ctx, data.childId);
   let authUid: string;
-  try {
-    const userRecord = await auth.createUser({
-      email: syntheticEmail,
-      password: data.password,
-      displayName: childDisplayName,
-      disabled: false,
-    });
-    authUid = userRecord.uid;
-  } catch (err) {
-    // Creation failed before/at user creation. Leave idempotency as processing
-    // so a same-payload retry is permitted. Best-effort cleanup.
+
+  if (isUpgrade && existingAuthUid) {
+    // CASE 2: Upgrade existing Auth user (SAME UID preserved)
+    authUid = existingAuthUid;
     try {
-      const partial = (err as { uid?: string })?.uid;
-      if (partial) await auth.deleteUser(partial);
-    } catch {
-      /* ignore */
+      const updated = await auth.updateUser(authUid, {
+        email: syntheticEmail,
+        password: data.password,
+      });
+      if (updated && updated.uid && updated.uid !== authUid) {
+        throw httpError('internal', 'AUTH_UID_MISMATCH');
+      }
+    } catch (err: any) {
+      if (err?.code === 'auth/email-already-exists') {
+        throw httpError('already-exists', 'USERNAME_TAKEN');
+      }
+      throw httpError('internal', 'AUTH_UPDATE_FAILED');
     }
-    throw httpError('internal', 'AUTH_CREATE_FAILED');
+  } else {
+    // CASE 1: Brand new synthetic Auth user
+    const childDisplayName = await getChildDisplayName(ctx, data.childId);
+    try {
+      const userRecord = await auth.createUser({
+        email: syntheticEmail,
+        password: data.password,
+        displayName: childDisplayName,
+        disabled: false,
+      });
+      authUid = userRecord.uid;
+    } catch (err) {
+      // Creation failed before/at user creation. Leave idempotency as processing
+      // so a same-payload retry is permitted. Best-effort cleanup.
+      try {
+        const partial = (err as { uid?: string })?.uid;
+        if (partial) await auth.deleteUser(partial);
+      } catch {
+        /* ignore */
+      }
+      throw httpError('internal', 'AUTH_CREATE_FAILED');
+    }
   }
 
   // --- Set custom claims (identity link back to the managed child) --------
@@ -477,10 +519,12 @@ export async function createChildLoginImpl(
       managedChild: true,
     });
   } catch (claimErr) {
-    try {
-      await auth.deleteUser(authUid);
-    } catch {
-      /* ignore */
+    if (!isUpgrade) {
+      try {
+        await auth.deleteUser(authUid);
+      } catch {
+        /* ignore */
+      }
     }
     throw httpError('internal', 'CLAIMS_FAILED');
   }
@@ -501,9 +545,18 @@ export async function createChildLoginImpl(
     await db.runTransaction(async (t: Transaction) => {
       const childSnap = await t.get(childRef);
       const child = childSnap.data() as Record<string, unknown>;
-      if (child.hasLogin === true || child.authUid) {
+      const privateSnap = await t.get(privateRef);
+      const privData = privateSnap.exists ? (privateSnap.data() as Record<string, unknown>) : null;
+
+      const isAlreadyCredentialed =
+        Boolean(privData?.syntheticEmail) ||
+        Boolean(privData?.normalizedUsername) ||
+        (child.hasLogin === true && Boolean(privData?.syntheticEmail));
+
+      if (isAlreadyCredentialed) {
         throw httpError('already-exists', 'LOGIN_ALREADY_EXISTS');
       }
+
       const indexSnap = await t.get(indexRef);
       if (indexSnap.exists) throw httpError('already-exists', 'USERNAME_TAKEN');
 
@@ -521,9 +574,10 @@ export async function createChildLoginImpl(
         familyId,
         status: 'enabled',
         requiresPasswordChange,
-        createdAt: FieldValue.serverTimestamp(),
+        createdAt: privData?.createdAt ?? FieldValue.serverTimestamp(),
+        updatedAt: FieldValue.serverTimestamp(),
         createdBy: callerUid,
-      });
+      }, { merge: true });
       t.update(childRef, {
         authUid,
         hasLogin: true,
@@ -532,7 +586,7 @@ export async function createChildLoginImpl(
         requiresPasswordChange,
       });
       t.set(auditRef, {
-        type: 'login_created',
+        type: isUpgrade ? 'login_upgraded' : 'login_created',
         childId: data.childId,
         username: data.username,
         normalizedUsername,
@@ -549,19 +603,20 @@ export async function createChildLoginImpl(
       });
     });
   } catch (linkErr) {
-    // COMPENSATION: Auth user was created but Firestore linking failed. Delete
-    // the Auth user so no orphaned usable account remains, and record the
-    // compensation in the audit log.
-    try {
-      await auth.deleteUser(authUid);
-    } catch {
-      /* ignore */
+    if (!isUpgrade) {
+      // COMPENSATION ONLY FOR CASE 1: Delete newly created Auth user.
+      // FOR CASE 2: DO NOT delete pre-existing child Auth identity.
+      try {
+        await auth.deleteUser(authUid);
+      } catch {
+        /* ignore */
+      }
     }
     try {
       await db
         .collection(`${FAMILIES}/${familyId}/${CHILD_LOGIN_AUDIT}`)
         .add({
-          type: 'login_compensation',
+          type: isUpgrade ? 'login_upgrade_failed' : 'login_compensation',
           childId: data.childId,
           username: data.username,
           normalizedUsername,

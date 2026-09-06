@@ -177,7 +177,7 @@ export function Family() {
               <Button
                 variant="ghost"
                 size="sm"
-                onClick={() => navigate('/settings/family')}
+                onClick={() => navigate('/settings#family-section')}
                 className="rounded-xl text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 text-xs font-semibold flex items-center gap-1.5"
               >
                 <Settings size={15} className="mr-1 shrink-0" />
@@ -193,7 +193,7 @@ export function Family() {
         viewModel={viewModel}
         onClaimQuest={handleClaimQuest}
         isClaimingQuest={isSubmitting}
-        onManageFamily={() => navigate('/settings/family')}
+        onManageFamily={() => navigate('/settings#family-section')}
         onSendMoney={handleSendMoney}
         onManageMember={(member) => {
           const childMember = familyMembers.find((m) => m.id === member.id);

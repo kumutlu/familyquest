@@ -1081,8 +1081,8 @@ describe('childQrOnboarding — Explicit Intent Architecture & New Child Creatio
       lifetimeXP: 0,
       currentStreak: 0,
       longestStreak: 0,
-      hasLogin: true,
-      loginEnabled: true,
+      hasLogin: false,
+      loginEnabled: false,
     });
     expect(user?.avatarUrl).toBeTruthy();
 

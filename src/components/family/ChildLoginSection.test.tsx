@@ -44,6 +44,24 @@ describe('ChildLoginSection', () => {
     expect(onRequestCreate).toHaveBeenCalledWith(member);
   });
 
+  it('renders Connected via personal device with guidance for QR child without username/password', () => {
+    const member: ChildLoginMember = {
+      id: 'c1',
+      displayName: 'Alex',
+      hasLogin: false,
+      authUid: 'child_qr_req1',
+    };
+    const onRequestCreate = vi.fn();
+    render(<ChildLoginSection member={member} onRequestCreate={onRequestCreate} />);
+
+    expect(screen.getByText('Login')).toBeInTheDocument();
+    expect(screen.getByText('Connected via personal device')).toBeInTheDocument();
+    expect(
+      screen.getByText('Create a username and password so they can sign in again after signing out.')
+    ).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Create Login' })).toBeInTheDocument();
+  });
+
   it('renders login details for a managed child with a login', () => {
     const member: ChildLoginMember = {
       id: 'c1',

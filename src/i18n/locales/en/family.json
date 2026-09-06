@@ -66,6 +66,8 @@
   "login": {
     "label": "Login",
     "noLogin": "No login created",
+    "connectedViaDevice": "Connected via personal device",
+    "connectedViaDeviceHelper": "Create a username and password so they can sign in again after signing out.",
     "create": "Create Login",
     "username": "Username:",
     "status": "Status:",

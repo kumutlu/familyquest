@@ -145,7 +145,7 @@ export const FamilyWorld: React.FC<FamilyWorldProps> = ({
               if (onManageFamily) {
                 onManageFamily();
               } else {
-                navigate('/settings/family');
+                navigate('/settings#family-section');
               }
             }}
             className="w-full flex items-center justify-between p-4 rounded-2xl bg-slate-50 dark:bg-slate-800/40 border border-slate-200/80 dark:border-slate-700/80 text-left hover:bg-slate-100 dark:hover:bg-slate-800/80 transition-all group"

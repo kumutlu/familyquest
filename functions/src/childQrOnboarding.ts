@@ -580,9 +580,8 @@ export async function approveChildQrJoinRequestImpl(
       longestStreak: 0,
       lastActiveDate: FieldValue.serverTimestamp(),
       authUid,
-      hasLogin: true,
-      username: childDisplayName,
-      loginEnabled: true,
+      hasLogin: false,
+      loginEnabled: false,
       createdAtMs: now,
       createdAt: FieldValue.serverTimestamp(),
     }, { merge: true });

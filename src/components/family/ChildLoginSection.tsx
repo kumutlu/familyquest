@@ -24,6 +24,8 @@ export interface ChildLoginMember {
   lastLogin?: unknown;
   /** Whether this child is a managed child (parent-created). */
   isManaged?: boolean;
+  /** Optional linked Firebase Auth UID (e.g. from QR / personal device onboarding). */
+  authUid?: string;
 }
 
 interface ChildLoginSectionProps {
@@ -162,12 +164,24 @@ export function ChildLoginSection({ member, onRequestCreate }: ChildLoginSection
   };
 
   if (!member.hasLogin) {
+    const isDeviceConnected = Boolean(member.authUid);
     return (
       <div className="mt-3 pt-3 border-t border-gray-100" onClick={isolatePointer} onKeyDown={isolateKeyboard}>
-        <div className="flex items-center justify-between gap-3">
+        <div className="flex items-start justify-between gap-3">
           <div className="min-w-0">
             <p className="text-xs font-semibold uppercase tracking-wider text-gray-400">{t('login.label')}</p>
-            <p className="text-sm text-gray-500">{t('login.noLogin')}</p>
+            {isDeviceConnected ? (
+              <div className="space-y-1">
+                <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-blue-50 text-blue-700 dark:bg-blue-900/30 dark:text-blue-300">
+                  {t('login.connectedViaDevice', { defaultValue: 'Connected via personal device' })}
+                </span>
+                <p className="text-xs text-gray-500">
+                  {t('login.connectedViaDeviceHelper', { defaultValue: 'Create a username and password so they can sign in again after signing out.' })}
+                </p>
+              </div>
+            ) : (
+              <p className="text-sm text-gray-500">{t('login.noLogin')}</p>
+            )}
           </div>
           <Button
             type="button"
