@@ -255,7 +255,12 @@ export function AuthRoutingGate({
     creationContinuation,
     pathname: location.pathname,
     search: location.search,
-    emailVerificationRequired: requiresPasswordEmailVerification(authUser, authSignInProvider),
+    emailVerificationRequired: requiresPasswordEmailVerification(
+      authUser,
+      authSignInProvider,
+      profileServerConfirmed ? currentUser : null,
+      profileServerConfirmed ? authUser?.uid : null,
+    ),
   };
   const missingHarnessState = authStatus === undefined;
   const decision = missingHarnessState ? 'app' : deriveAuthRouteDecision(input);
