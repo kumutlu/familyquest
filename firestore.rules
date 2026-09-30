@@ -1076,6 +1076,11 @@ service cloud.firestore {
         && !('familyId' in data);
     }
 
+    function hasFamilyAuthority() {
+      return request.auth.token.get('firebase', {}).get('sign_in_provider', 'custom') != 'password'
+        || request.auth.token.get('email_verified', false) == true;
+    }
+
     function isValidManagedMemberCreate(uid) {
       let data = request.resource.data;
       return data.uid == uid
@@ -1091,6 +1096,7 @@ service cloud.firestore {
       let familyPath = /databases/$(database)/documents/families/$(familyId);
 
       return authProfileId() == uid
+        && hasFamilyAuthority()
         && !('familyId' in resource.data) // Must not have a family yet
         && resource.data.get('role', 'null') == 'parent'
         && data.get('uid', 'null') == uid
@@ -2072,6 +2078,15 @@ service cloud.firestore {
       allow read, write: if false;
     }
 
+    // ONE-TIME QR CHILD ONBOARDING — SERVER-ONLY ROOT LOOKUPS
+    match /childQrTokenLookup/{tokenHash} {
+      allow read, write: if false;
+    }
+    match /childQrRequestLookup/{requestId} {
+      allow read, write: if false;
+    }
+
+
     // ADULT INVITATION V2 — SERVER-ONLY ROOT COLLECTIONS
     // Invitation credentials, idempotency state, and preview abuse counters are
     // owned exclusively by the trusted backend. Clients receive only validated
@@ -2160,7 +2175,7 @@ service cloud.firestore {
     // FAMILIES
     match /families/{familyId} {
       allow read: if isFamilyMember(familyId);
-      allow create: if isAuthenticated();
+      allow create: if isAuthenticated() && hasFamilyAuthority();
       // Server-only membership + historical-identity projection. Written
       // exclusively by Cloud Functions (join, lifecycle, deletion). Clients
       // must never read or write it, so archived/removed history cannot be
@@ -3104,6 +3119,22 @@ service cloud.firestore {
       match /childJoinSecrets/{requestId} {
         allow read, write: if false;
       }
+
+      // ONE-TIME QR CHILD ONBOARDING
+      match /child_qr_sessions/{sessionId} {
+        allow read, write: if false;
+      }
+      match /child_qr_join_requests/{requestId} {
+        allow read: if isParent(familyId);
+        allow write: if false;
+      }
+      match /childQrJoinSecrets/{requestId} {
+        allow read, write: if false;
+      }
+      match /qrIdempotency/{operationKey} {
+        allow read, write: if false;
+      }
+
 
       // =========================================================================
       // GAMIFICATION PHASE 1 — SERVER-OWNED COLLECTIONS

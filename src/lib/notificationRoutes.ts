@@ -33,6 +33,7 @@ export const NOTIFICATION_ROUTES: Partial<Record<NotificationType, string>> = {
   profile_update_requested: '/',
   profile_update_approved: '/',
   profile_update_rejected: '/',
+  child_qr_device_join: '/review',
   // A newly created goal lands on the Goals page (the app also supports the
   // deep-link destination /goals/:goalId, but the central route keeps the
   // navigation stable and always valid).

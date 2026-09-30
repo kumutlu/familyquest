@@ -67,6 +67,7 @@ export interface ParentPrioritiesInput {
   profileUpdateRequests?: any[];
   goalRequests?: any[];
   childJoinRequests?: any[];
+  childQrJoinRequests?: any[];
   savingsGoals?: any[];
   challenges?: any[];
   /** Recent wallet activity surfaces as a low-priority wallet_event card. */
@@ -128,6 +129,7 @@ export function countPendingApprovals(input: ParentPrioritiesInput): number {
     input.profileUpdateRequests ?? [],
     input.goalRequests ?? [],
     input.childJoinRequests ?? [],
+    input.childQrJoinRequests ?? [],
   ];
   return sources.reduce(
     (sum, source) => sum + source.filter(item => isPendingStatus(item?.status)).length,

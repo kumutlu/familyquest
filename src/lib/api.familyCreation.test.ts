@@ -13,7 +13,11 @@ const firestore = vi.hoisted(() => {
     query: vi.fn(), where: vi.fn(), orderBy: vi.fn(), getDocs: vi.fn(), getDoc: vi.fn(), reset: () => { id = 0 },
   }
 })
-const authState = vi.hoisted(() => ({ currentUser: { uid: 'owner-1', displayName: 'Kemal' } as any }))
+const authState = vi.hoisted(() => ({ currentUser: {
+  uid: 'owner-1', displayName: 'Kemal', emailVerified: true,
+  reload: vi.fn(async () => {}),
+  getIdTokenResult: vi.fn(async () => ({ claims: { email_verified: true, firebase: { sign_in_provider: 'password' } } })),
+} as any }))
 
 vi.mock('firebase/firestore', () => ({
   ...firestore, setDoc: vi.fn(), addDoc: vi.fn(), deleteDoc: vi.fn(), updateDoc: vi.fn(), writeBatch: vi.fn(),

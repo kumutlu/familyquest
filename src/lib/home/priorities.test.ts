@@ -37,6 +37,13 @@ describe('countPendingApprovals', () => {
     };
     expect(countPendingApprovals(input)).toBe(1);
   });
+
+  it('RED TEST: includes childQrJoinRequests in pending approvals count', () => {
+    const input: ParentPrioritiesInput = {
+      childQrJoinRequests: [{ id: 'qr1', status: 'pending' }],
+    };
+    expect(countPendingApprovals(input)).toBe(1);
+  });
 });
 
 describe('selectParentPriorities', () => {

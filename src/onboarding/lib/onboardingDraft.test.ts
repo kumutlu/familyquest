@@ -92,4 +92,87 @@ describe('onboardingDraft', () => {
     expect(loaded?.familyId).toBe('family-1');
     expect(loaded?.childId).toBe('child-1');
   });
+
+  it('preserves child and task request identities across a reload during finalization', () => {
+    const draft = sampleDraft({
+      step: 'p1',
+      firstChildRequestId: 'onboarding-child-request-1',
+      firstTaskRequestId: 'onboarding-task-request-1',
+    });
+    saveDraft(draft);
+
+    const loaded = loadDraft();
+
+    expect(loaded?.firstChildRequestId).toBe('onboarding-child-request-1');
+    expect(loaded?.firstTaskRequestId).toBe('onboarding-task-request-1');
+  });
+
+  it('migrates an in-flight legacy draft to stable request identities once', () => {
+    const legacy = sampleDraft() as Partial<OnboardingDraft>;
+    delete legacy.firstChildRequestId;
+    delete legacy.firstTaskRequestId;
+    sessionStorage.setItem(ONBOARDING_DRAFT_KEY, JSON.stringify(legacy));
+
+    const firstLoad = loadDraft();
+    const secondLoad = loadDraft();
+
+    expect(firstLoad?.firstChildRequestId).toBeTruthy();
+    expect(firstLoad?.firstTaskRequestId).toBeTruthy();
+    expect(secondLoad?.firstChildRequestId).toBe(firstLoad?.firstChildRequestId);
+    expect(secondLoad?.firstTaskRequestId).toBe(firstLoad?.firstTaskRequestId);
+  });
+
+  it('loads a family-only draft without childFirstName cleanly', () => {
+    const draft: OnboardingDraft = {
+      version: 1,
+      step: 's6',
+      parentFirstName: 'Sarah',
+      parentRoleDisplay: 'mother',
+      familyName: 'The Smiths',
+      updatedAt: Date.now(),
+    };
+    saveDraft(draft);
+
+    const loaded = loadDraft();
+    expect(loaded).not.toBeNull();
+    expect(loaded?.parentFirstName).toBe('Sarah');
+    expect(loaded?.childFirstName).toBeUndefined();
+    expect(loaded?.step).toBe('s6');
+  });
+
+  it('normalizes legacy pre-auth step s4 to s6 on load', () => {
+    sessionStorage.setItem(
+      ONBOARDING_DRAFT_KEY,
+      JSON.stringify({
+        version: 1,
+        step: 's4',
+        parentFirstName: 'Sarah',
+        parentRoleDisplay: 'mother',
+        childFirstName: 'OldChild',
+        familyName: '',
+        updatedAt: Date.now(),
+      }),
+    );
+
+    const loaded = loadDraft();
+    expect(loaded?.step).toBe('s6');
+  });
+
+  it('normalizes legacy post-auth step p2 to p1 on load', () => {
+    sessionStorage.setItem(
+      ONBOARDING_DRAFT_KEY,
+      JSON.stringify({
+        version: 1,
+        step: 'p2',
+        parentFirstName: 'Sarah',
+        parentRoleDisplay: 'mother',
+        familyName: 'Smiths',
+        familyId: 'fam-1',
+        updatedAt: Date.now(),
+      }),
+    );
+
+    const loaded = loadDraft('fam-1');
+    expect(loaded?.step).toBe('p1');
+  });
 });

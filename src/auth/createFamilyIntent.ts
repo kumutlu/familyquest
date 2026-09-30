@@ -10,6 +10,12 @@ export type CreateFamilyIntent = {
   createdAt: number;
 };
 
+type PreAuthCreateFamilySelection = {
+  version: 1;
+  kind: 'pre-auth-create-family';
+  createdAt: number;
+};
+
 function sessionStore(): Storage | null {
   try {
     return typeof sessionStorage === 'undefined' ? null : sessionStorage;
@@ -32,6 +38,18 @@ function validIntent(value: unknown): value is CreateFamilyIntent {
   return candidate.version === 1
     && candidate.kind === 'create-family'
     && validUid(candidate.authUid)
+    && Number.isSafeInteger(candidate.createdAt)
+    && (candidate.createdAt as number) >= 0;
+}
+
+function validPreAuthSelection(value: unknown): value is PreAuthCreateFamilySelection {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return false;
+  const candidate = value as Record<string, unknown>;
+  const keys = Object.keys(candidate);
+  return keys.length === 3
+    && keys.every(key => ['version', 'kind', 'createdAt'].includes(key))
+    && candidate.version === 1
+    && candidate.kind === 'pre-auth-create-family'
     && Number.isSafeInteger(candidate.createdAt)
     && (candidate.createdAt as number) >= 0;
 }
@@ -73,6 +91,44 @@ export function startCreateFamilyIntent(uid: string, now = Date.now()): CreateFa
   return intent;
 }
 
+function bindPreAuthSelection(uid: string, createdAt: number): CreateFamilyIntent {
+  const intent: CreateFamilyIntent = {
+    version: 1,
+    kind: 'create-family',
+    authUid: uid,
+    createdAt,
+  };
+  const storage = sessionStore();
+  if (storage) {
+    try {
+      storage.setItem(CREATE_FAMILY_INTENT_KEY, JSON.stringify(intent));
+    } catch {
+      // The caller's current read may proceed, but future reads still fail closed.
+    }
+  }
+  return intent;
+}
+
+/** Records the explicit public CTA until Firebase Auth supplies the account UID. */
+export function capturePreAuthCreateFamilySelection(now = Date.now()): PreAuthCreateFamilySelection {
+  if (!Number.isSafeInteger(now) || now < 0) throw new Error('INVALID_CREATE_FAMILY_TIME');
+  const selection: PreAuthCreateFamilySelection = {
+    version: 1,
+    kind: 'pre-auth-create-family',
+    createdAt: now,
+  };
+  const storage = sessionStore();
+  if (storage) {
+    try {
+      storage.setItem(CREATE_FAMILY_INTENT_KEY, JSON.stringify(selection));
+    } catch {
+      // No fallback: blocked persistence must never authorize family creation.
+    }
+  }
+  notifySubscribers();
+  return selection;
+}
+
 /** Reads only a fresh exact envelope for the current account and self-heals all invalid state. */
 export function readCreateFamilyIntent(uid: string, now = Date.now()): CreateFamilyIntent | null {
   if (!validUid(uid) || !Number.isSafeInteger(now) || now < 0) {
@@ -99,6 +155,15 @@ export function readCreateFamilyIntent(uid: string, now = Date.now()): CreateFam
     return null;
   }
 
+  if (validPreAuthSelection(parsed)) {
+    const age = now - parsed.createdAt;
+    if (age < 0 || age >= CREATE_FAMILY_INTENT_TTL_MS) {
+      removeStoredIntent();
+      return null;
+    }
+    return bindPreAuthSelection(uid, parsed.createdAt);
+  }
+
   if (!validIntent(parsed)) {
     removeStoredIntent();
     return null;
@@ -113,6 +178,26 @@ export function readCreateFamilyIntent(uid: string, now = Date.now()): CreateFam
 }
 
 export function clearCreateFamilyIntent(): void {
+  removeStoredIntent();
+  notifySubscribers();
+}
+
+/** Signed-out cleanup clears account-bound authority without erasing a fresh public CTA selection. */
+export function clearBoundCreateFamilyIntent(): void {
+  const storage = sessionStore();
+  if (!storage) return;
+  let raw: string | null;
+  try {
+    raw = storage.getItem(CREATE_FAMILY_INTENT_KEY);
+  } catch {
+    return;
+  }
+  if (raw === null) return;
+  try {
+    if (validPreAuthSelection(JSON.parse(raw))) return;
+  } catch {
+    // Invalid state is removed below.
+  }
   removeStoredIntent();
   notifySubscribers();
 }

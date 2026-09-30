@@ -2,11 +2,13 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const httpsCallable = vi.fn();
 const callable = vi.fn();
+const requireCurrentFamilyAuthority = vi.hoisted(() => vi.fn(async () => {}));
 
 vi.mock('firebase/functions', () => ({
   httpsCallable: (...args: unknown[]) => httpsCallable(...args),
 }));
 vi.mock('./firebase', () => ({ functions: { region: 'europe-west1' } }));
+vi.mock('../auth/clientFamilyAuthority', () => ({ requireCurrentFamilyAuthority }));
 
 import { acceptInvitation, createFamilyInvitation, previewInvitation } from './familyInvitationApi';
 
@@ -16,6 +18,12 @@ beforeEach(() => {
 });
 
 describe('familyInvitationApi', () => {
+  it('does not invoke legacy invitation acceptance before refreshed family authority is confirmed', async () => {
+    requireCurrentFamilyAuthority.mockRejectedValueOnce(new Error('EMAIL_VERIFICATION_REQUIRED'));
+    await expect(acceptInvitation('ABC123', 'request-12345678')).rejects.toThrow('EMAIL_VERIFICATION_REQUIRED');
+    expect(httpsCallable).not.toHaveBeenCalled();
+  });
+
   it('creates a parent invitation through the trusted callable', async () => {
     callable.mockResolvedValue({ data: { code: '7ZXWRZ', intendedRole: 'parent', expiresAtMs: 1 } });
 

@@ -408,9 +408,30 @@ export async function createChildLoginImpl(
     if (child.role !== 'child' || child.isManaged !== true) {
       throw httpError('failed-precondition', 'CHILD_NOT_MANAGED');
     }
-    if (child.hasLogin === true || child.authUid) {
+
+    const privateRef = db.doc(`${FAMILIES}/${familyId}/${CHILD_LOGINS}/${data.childId}`);
+    const privateSnap = await t.get(privateRef);
+    const privateData = privateSnap.exists ? (privateSnap.data() as Record<string, unknown>) : null;
+
+    // CASE 3: Child already has username/login credentials.
+    // The conflict condition is actual existing credentials (syntheticEmail or normalizedUsername),
+    // not merely the presence of an authUid (which QR/personal device onboarding creates).
+    const isAlreadyCredentialed =
+      Boolean(privateData?.syntheticEmail) ||
+      Boolean(privateData?.normalizedUsername) ||
+      (child.hasLogin === true && Boolean(privateData?.syntheticEmail));
+
+    if (isAlreadyCredentialed) {
       throw httpError('already-exists', 'LOGIN_ALREADY_EXISTS');
     }
+
+    assertCreateIdentity(child, privateData, familyId, data.childId);
+
+    // CASE 2 vs CASE 1:
+    // If child already has an authoritative authUid (e.g. from QR onboarding or device bind),
+    // we upgrade that existing Auth user instead of creating a second user.
+    const existingAuthUid = (child.authUid || privateData?.authUid) as string | undefined;
+    const isUpgrade = Boolean(existingAuthUid);
 
     const indexRef = db.doc(
       `${FAMILIES}/${familyId}/${CHILD_LOGIN_INDEX}/${normalizedUsername}`,
@@ -435,7 +456,7 @@ export async function createChildLoginImpl(
       });
     }
 
-    return { kind: 'proceed' as const, familyId };
+    return { kind: 'proceed' as const, familyId, isUpgrade, existingAuthUid };
   });
 
   if (pre.kind === 'done') return pre.result;
@@ -443,29 +464,52 @@ export async function createChildLoginImpl(
     throw httpError('already-exists', 'CLIENT_REQ_ID_REPLAY_MISMATCH');
   }
   const familyId = pre.familyId;
+  const isUpgrade = pre.isUpgrade;
+  const existingAuthUid = pre.existingAuthUid;
 
-  // --- Create the Firebase Auth user (synthetic) --------------------------
+  // --- Attach or Create the Firebase Auth user (synthetic) -----------------
   const syntheticEmail = generateSyntheticEmail(familyId, normalizedUsername);
-  const childDisplayName = await getChildDisplayName(ctx, data.childId);
   let authUid: string;
-  try {
-    const userRecord = await auth.createUser({
-      email: syntheticEmail,
-      password: data.password,
-      displayName: childDisplayName,
-      disabled: false,
-    });
-    authUid = userRecord.uid;
-  } catch (err) {
-    // Creation failed before/at user creation. Leave idempotency as processing
-    // so a same-payload retry is permitted. Best-effort cleanup.
+
+  if (isUpgrade && existingAuthUid) {
+    // CASE 2: Upgrade existing Auth user (SAME UID preserved)
+    authUid = existingAuthUid;
     try {
-      const partial = (err as { uid?: string })?.uid;
-      if (partial) await auth.deleteUser(partial);
-    } catch {
-      /* ignore */
+      const updated = await auth.updateUser(authUid, {
+        email: syntheticEmail,
+        password: data.password,
+      });
+      if (updated && updated.uid && updated.uid !== authUid) {
+        throw httpError('internal', 'AUTH_UID_MISMATCH');
+      }
+    } catch (err: any) {
+      if (err?.code === 'auth/email-already-exists') {
+        throw httpError('already-exists', 'USERNAME_TAKEN');
+      }
+      throw httpError('internal', 'AUTH_UPDATE_FAILED');
     }
-    throw httpError('internal', 'AUTH_CREATE_FAILED');
+  } else {
+    // CASE 1: Brand new synthetic Auth user
+    const childDisplayName = await getChildDisplayName(ctx, data.childId);
+    try {
+      const userRecord = await auth.createUser({
+        email: syntheticEmail,
+        password: data.password,
+        displayName: childDisplayName,
+        disabled: false,
+      });
+      authUid = userRecord.uid;
+    } catch (err) {
+      // Creation failed before/at user creation. Leave idempotency as processing
+      // so a same-payload retry is permitted. Best-effort cleanup.
+      try {
+        const partial = (err as { uid?: string })?.uid;
+        if (partial) await auth.deleteUser(partial);
+      } catch {
+        /* ignore */
+      }
+      throw httpError('internal', 'AUTH_CREATE_FAILED');
+    }
   }
 
   // --- Set custom claims (identity link back to the managed child) --------
@@ -477,10 +521,12 @@ export async function createChildLoginImpl(
       managedChild: true,
     });
   } catch (claimErr) {
-    try {
-      await auth.deleteUser(authUid);
-    } catch {
-      /* ignore */
+    if (!isUpgrade) {
+      try {
+        await auth.deleteUser(authUid);
+      } catch {
+        /* ignore */
+      }
     }
     throw httpError('internal', 'CLAIMS_FAILED');
   }
@@ -501,9 +547,20 @@ export async function createChildLoginImpl(
     await db.runTransaction(async (t: Transaction) => {
       const childSnap = await t.get(childRef);
       const child = childSnap.data() as Record<string, unknown>;
-      if (child.hasLogin === true || child.authUid) {
+      const privateSnap = await t.get(privateRef);
+      const privData = privateSnap.exists ? (privateSnap.data() as Record<string, unknown>) : null;
+
+      const isAlreadyCredentialed =
+        Boolean(privData?.syntheticEmail) ||
+        Boolean(privData?.normalizedUsername) ||
+        (child.hasLogin === true && Boolean(privData?.syntheticEmail));
+
+      if (isAlreadyCredentialed) {
         throw httpError('already-exists', 'LOGIN_ALREADY_EXISTS');
       }
+
+      assertCreateIdentity(child, privData, familyId, data.childId);
+
       const indexSnap = await t.get(indexRef);
       if (indexSnap.exists) throw httpError('already-exists', 'USERNAME_TAKEN');
 
@@ -521,9 +578,10 @@ export async function createChildLoginImpl(
         familyId,
         status: 'enabled',
         requiresPasswordChange,
-        createdAt: FieldValue.serverTimestamp(),
+        createdAt: privData?.createdAt ?? FieldValue.serverTimestamp(),
+        updatedAt: FieldValue.serverTimestamp(),
         createdBy: callerUid,
-      });
+      }, { merge: true });
       t.update(childRef, {
         authUid,
         hasLogin: true,
@@ -532,7 +590,7 @@ export async function createChildLoginImpl(
         requiresPasswordChange,
       });
       t.set(auditRef, {
-        type: 'login_created',
+        type: isUpgrade ? 'login_upgraded' : 'login_created',
         childId: data.childId,
         username: data.username,
         normalizedUsername,
@@ -549,19 +607,20 @@ export async function createChildLoginImpl(
       });
     });
   } catch (linkErr) {
-    // COMPENSATION: Auth user was created but Firestore linking failed. Delete
-    // the Auth user so no orphaned usable account remains, and record the
-    // compensation in the audit log.
-    try {
-      await auth.deleteUser(authUid);
-    } catch {
-      /* ignore */
+    if (!isUpgrade) {
+      // COMPENSATION ONLY FOR CASE 1: Delete newly created Auth user.
+      // FOR CASE 2: DO NOT delete pre-existing child Auth identity.
+      try {
+        await auth.deleteUser(authUid);
+      } catch {
+        /* ignore */
+      }
     }
     try {
       await db
         .collection(`${FAMILIES}/${familyId}/${CHILD_LOGIN_AUDIT}`)
         .add({
-          type: 'login_compensation',
+          type: isUpgrade ? 'login_upgrade_failed' : 'login_compensation',
           childId: data.childId,
           username: data.username,
           normalizedUsername,
@@ -681,6 +740,8 @@ export async function signInChildImpl(
     throwGenericLoginFailure();
   }
   let authUser;
+  const credentialStatus = await readChildCredentialStatus(db, familyId, childId);
+  if (credentialStatus.state !== 'available' || !credentialStatus.credentialsExist) throwGenericLoginFailure();
   try {
     authUser = await auth.getUser(authUid);
   } catch {
@@ -892,6 +953,74 @@ async function requireParentOrOwner(
   return { familyId, role: role as string };
 }
 
+export interface ChildCredentialStatus {
+  state: 'available' | 'unavailable';
+  identityConnected: boolean;
+  credentialsExist: boolean;
+  username?: string;
+  loginEnabled?: boolean;
+  requiresPasswordChange?: boolean;
+  lastLoginAt?: number | null;
+}
+
+function assertCreateIdentity(child: Record<string, unknown>, priv: Record<string, unknown> | null, familyId: string, childId: string): void {
+  if (priv && ['username', 'normalizedUsername', 'syntheticEmail'].some(key => Object.hasOwn(priv, key))) throw httpError('failed-precondition', 'CREDENTIALS_UNAVAILABLE');
+  if (!child.authUid && !priv) return;
+  if (typeof child.authUid !== 'string' || !child.authUid || !priv || priv.authUid !== child.authUid || priv.childId !== childId || priv.familyId !== familyId || !['enabled', 'disabled'].includes(String(priv.status))) throw httpError('failed-precondition', 'CREDENTIALS_UNAVAILABLE');
+}
+
+/** Private metadata is authority; public display flags are deliberately ignored. */
+export async function readChildCredentialStatus(
+  db: Firestore, familyId: string, childId: string,
+): Promise<ChildCredentialStatus> {
+  const unavailable: ChildCredentialStatus = { state: 'unavailable', identityConnected: false, credentialsExist: false };
+  const [profile, linkage, indexes] = await Promise.all([
+    db.doc(`users/${childId}`).get(),
+    db.doc(`families/${familyId}/childLogins/${childId}`).get(),
+    db.collection(`families/${familyId}/childLoginIndex`).where('childId', '==', childId).get(),
+  ]);
+  const child = profile.data();
+  const priv = linkage.data();
+  if (!child || child.familyId !== familyId || child.role !== 'child' || child.isManaged !== true || child.disabled === true || child.status === 'deleted') return unavailable;
+  if (!child.authUid && !priv && indexes.empty) return { state: 'available', identityConnected: false, credentialsExist: false };
+  if (!priv || typeof priv.authUid !== 'string' || !priv.authUid || (child.authUid && child.authUid !== priv.authUid) || priv.childId !== childId || priv.familyId !== familyId) return unavailable;
+  if (!['enabled', 'disabled'].includes(priv.status)) return unavailable;
+  if (!['normalizedUsername', 'syntheticEmail', 'username'].some(key => Object.hasOwn(priv, key)) && indexes.empty) {
+    return { state: 'available', identityConnected: true, credentialsExist: false };
+  }
+  const name = priv.normalizedUsername;
+  if (typeof name !== 'string' || name.length < 3 || name.length > 32 || !/^[a-z0-9_ ]+$/.test(name) || typeof priv.username !== 'string' || priv.username.trim().toLowerCase().replace(/\s+/g, ' ') !== name || priv.syntheticEmail !== generateSyntheticEmail(familyId, name) || indexes.docs.length !== 1) return unavailable;
+  const index = indexes.docs[0];
+  if (index.id !== name || index.data().normalizedUsername !== name || index.data().childId !== childId || !['enabled', 'disabled'].includes(priv.status)) return unavailable;
+  return {
+    state: 'available', identityConnected: true, credentialsExist: true,
+    username: priv.username, loginEnabled: priv.status === 'enabled',
+    requiresPasswordChange: priv.requiresPasswordChange === true,
+    lastLoginAt: typeof priv.lastLogin?.toMillis === 'function' ? priv.lastLogin.toMillis() : null,
+  };
+}
+
+export async function getChildCredentialStatusImpl(
+  ctx: ChildLoginContext, callerUid: string, data: { childId: string },
+): Promise<ChildCredentialStatus> {
+  if (!callerUid) throw httpError('unauthenticated', 'AUTH_REQUIRED');
+  if (!data || typeof data.childId !== 'string' || !data.childId || data.childId.includes('/')) throw httpError('invalid-argument', 'CHILD_ID_REQUIRED');
+  const { familyId } = await requireParentOrOwner(ctx, callerUid);
+  const child = await ctx.db.doc(`users/${data.childId}`).get();
+  if (!child.exists || child.data()?.familyId !== familyId) throw httpError('permission-denied', 'CHILD_NOT_IN_FAMILY');
+  return readChildCredentialStatus(ctx.db, familyId, data.childId);
+}
+
+async function requireCredentials(ctx: ChildLoginContext, familyId: string, childId: string): Promise<void> {
+  const status = await readChildCredentialStatus(ctx.db, familyId, childId);
+  if (status.state !== 'available' || !status.credentialsExist) throw httpError('failed-precondition', 'CREDENTIALS_UNAVAILABLE');
+}
+
+export const getChildCredentialStatus = onCall(async (request: CallableRequest<{ childId: string }>) => {
+  if (!request.auth) throw httpError('unauthenticated', 'AUTH_REQUIRED');
+  return getChildCredentialStatusImpl(makeContext(), request.auth.uid, request.data);
+});
+
 function assertChildActive(child: Record<string, unknown>): void {
   if (child.role !== 'child' || child.isManaged !== true) {
     throw httpError('failed-precondition', 'CHILD_NOT_MANAGED');
@@ -1019,6 +1148,7 @@ export async function resetChildPasswordImpl(
 
   const { familyId } = await requireParentOrOwner(ctx, callerUid);
   const { priv, authUid } = await resolveManagedChildWithLogin(ctx, familyId, data.childId);
+  await requireCredentials(ctx, familyId, data.childId);
 
   const normalizedUsername = priv.normalizedUsername as string;
   const pw = validatePasswordStrength(data.newPassword, normalizedUsername);
@@ -1137,6 +1267,7 @@ export async function disableChildLoginImpl(
 
   const { familyId } = await requireParentOrOwner(ctx, callerUid);
   const { authUid } = await resolveManagedChildWithLogin(ctx, familyId, data.childId);
+  await requireCredentials(ctx, familyId, data.childId);
 
   const payloadHash = computeLifecyclePayloadHash('disableChildLogin', [data.childId]);
   const pre = await lifecycleIdempotencyPrecheck(
@@ -1201,6 +1332,7 @@ export async function enableChildLoginImpl(
 
   const { familyId } = await requireParentOrOwner(ctx, callerUid);
   const { child, authUid } = await resolveManagedChildWithLogin(ctx, familyId, data.childId);
+  await requireCredentials(ctx, familyId, data.childId);
   assertChildActive(child);
 
   const payloadHash = computeLifecyclePayloadHash('enableChildLogin', [data.childId]);
@@ -1311,6 +1443,7 @@ export async function changeChildUsernameImpl(
 
   const { familyId } = await requireParentOrOwner(ctx, callerUid);
   const { priv, authUid } = await resolveManagedChildWithLogin(ctx, familyId, data.childId);
+  await requireCredentials(ctx, familyId, data.childId);
 
   const normalizedNewUsername = normalizeUsername(data.newUsername);
   const oldNormalized = priv.normalizedUsername as string;
@@ -1522,6 +1655,8 @@ export async function completeChildPasswordChangeImpl(
   if (pre.kind === 'replayMismatch') {
     throw httpError('already-exists', 'CLIENT_REQ_ID_REPLAY_MISMATCH');
   }
+
+  await requireCredentials(ctx, familyId, childId);
 
   // requiresPasswordChange must currently be true.
   if (priv.requiresPasswordChange !== true) {

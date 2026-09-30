@@ -19,8 +19,8 @@ export type Step =
   | 's1' | 's2' | 's3' | 's4' | 's5' | 's6' | 's7'
   | 'p1' | 'p2' | 'p3';
 
-export const PRE_AUTH_STEPS: Step[] = ['s1', 's2', 's3', 's4', 's5', 's6', 's7'];
-export const POST_AUTH_STEPS: Step[] = ['p1', 'p2', 'p3'];
+export const PRE_AUTH_STEPS: Step[] = ['s1', 's2', 's3', 's6', 's7'];
+export const POST_AUTH_STEPS: Step[] = ['p1'];
 
 export const ONBOARDING_DRAFT_KEY = 'queki.onboardingDraft';
 export const DRAFT_VERSION = 1 as const;
@@ -31,7 +31,11 @@ export interface OnboardingDraft {
   parentFirstName: string;
   /** Display-only relationship (Mum/Dad/…). Never a security role. */
   parentRoleDisplay: string;
-  childFirstName: string;
+  childFirstName?: string;
+  /** Stable identity for the first onboarding child across retries/reloads. */
+  firstChildRequestId?: string;
+  /** Stable identity for the first onboarding task across retries/reloads. */
+  firstTaskRequestId?: string;
   familyName: string;
   // Post-auth reconciliation ids. Persisted so refresh/retry is idempotent.
   familyId?: string;
@@ -41,6 +45,12 @@ export interface OnboardingDraft {
   updatedAt: number;
 }
 
+function createOnboardingRequestId(): string {
+  const randomUUID = globalThis.crypto?.randomUUID?.bind(globalThis.crypto);
+  if (randomUUID) return randomUUID();
+  return `${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}-${Math.random().toString(36).slice(2)}`;
+}
+
 export function createEmptyDraft(step: Step = 's1'): OnboardingDraft {
   return {
     version: DRAFT_VERSION,
@@ -48,6 +58,8 @@ export function createEmptyDraft(step: Step = 's1'): OnboardingDraft {
     parentFirstName: '',
     parentRoleDisplay: '',
     childFirstName: '',
+    firstChildRequestId: createOnboardingRequestId(),
+    firstTaskRequestId: createOnboardingRequestId(),
     familyName: '',
     updatedAt: Date.now(),
   };
@@ -130,8 +142,22 @@ export function loadDraft(currentFamilyId?: string | null): OnboardingDraft | nu
   // A matching post-auth draft is the durable continuation for a family this
   // journey already created. Any other draft belongs to an established-family
   // session and must never drive another creation.
+  const parsedDraft = parsed as OnboardingDraft;
+  if ((parsedDraft.step as string) === 's4' || (parsedDraft.step as string) === 's5') {
+    parsedDraft.step = 's6';
+  } else if ((parsedDraft.step as string) === 'p2' || (parsedDraft.step as string) === 'p3') {
+    parsedDraft.step = 'p1';
+  }
+  const draft: OnboardingDraft = parsedDraft.firstChildRequestId && parsedDraft.firstTaskRequestId
+    ? parsedDraft
+    : {
+        ...parsedDraft,
+        firstChildRequestId: parsedDraft.firstChildRequestId || createOnboardingRequestId(),
+        firstTaskRequestId: parsedDraft.firstTaskRequestId || createOnboardingRequestId(),
+      };
+  if (draft !== parsedDraft) saveDraft(draft);
+
   if (currentFamilyId) {
-    const draft = parsed as OnboardingDraft;
     if (POST_AUTH_STEPS.includes(draft.step) && draft.familyId === currentFamilyId) {
       return draft;
     }
@@ -139,7 +165,7 @@ export function loadDraft(currentFamilyId?: string | null): OnboardingDraft | nu
     return null;
   }
 
-  return parsed as OnboardingDraft;
+  return draft;
 }
 
 /** Removes the draft from both storages. */

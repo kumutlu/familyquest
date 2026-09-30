@@ -237,6 +237,14 @@ describe('adult invitation v2 callables', () => {
   const revoke = (invitationId: string, uid = 'owner-1', clientReqId = 'req-revoke-001') =>
     revokeAdultInvitationImpl({ invitationId, clientReqId }, auth(uid), fixture.context);
 
+  it('rejects an unverified password identity before accepting an adult invitation', async () => {
+    await expect(acceptAdultInvitationImpl(
+      { token: TOKEN, clientReqId: 'req-accept-001' },
+      { auth: { uid: 'joiner-1', token: { firebase: { sign_in_provider: 'password' }, email_verified: false } } } as any,
+      fixture.context,
+    )).rejects.toMatchObject({ message: 'EMAIL_VERIFICATION_REQUIRED' });
+  });
+
   it('allows only an active family owner to create parent or adult invitations', async () => {
     const result = await create({ intendedRole: 'parent', clientReqId: 'req-create-0001' }, 'owner-1');
 

@@ -1,4 +1,5 @@
 import { expect, test } from '@playwright/test';
+import { execSync } from 'node:child_process';
 
 import {
   countFamiliesForE2E,
@@ -72,6 +73,12 @@ test.describe('adult invitation authentication journey', () => {
     await page.locator('input[type="email"]').fill(email);
     await page.locator('input[type="password"]').fill('password123');
     await page.getByRole('button', { name: /^sign up$/i }).click();
+
+    await expect(page).toHaveURL(/\/verify-email$/);
+    execSync('npx tsx tests/e2e/utils/verifyEmail.ts', {
+      stdio: 'ignore', env: { ...process.env, ONBOARDING_EMAIL: email },
+    });
+    await page.getByRole('button', { name: /i've verified my email/i }).click();
 
     await expect(page.getByRole('button', { name: /join family/i })).toBeVisible({ timeout: 20000 });
     await page.getByRole('button', { name: /join family/i }).click();

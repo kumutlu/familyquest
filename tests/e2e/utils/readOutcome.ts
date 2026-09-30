@@ -11,7 +11,7 @@ import { getAuth } from 'firebase-admin/auth';
  * Mirrors the pattern already used by `seed.ts`.
  *
  * Reads the email from ONBOARDING_EMAIL and prints a single JSON line to
- * stdout: { familyId, familyCount, childCount, taskCount }.
+ * stdout: { familyId, familyCount, childCount, walletCount, taskCount, feedCount }.
  */
 
 process.env.FIRESTORE_EMULATOR_HOST ||= '127.0.0.1:8080';
@@ -28,7 +28,9 @@ interface Outcome {
   familyId: string | null;
   familyCount: number;
   childCount: number;
+  walletCount: number;
   taskCount: number;
+  feedCount: number;
 }
 
 async function main(): Promise<void> {
@@ -50,7 +52,14 @@ async function main(): Promise<void> {
   }
 
   const expected = JSON.parse(process.env.ONBOARDING_EXPECTED_OUTCOME || '{}') as Partial<Outcome>;
-  const empty = (): Outcome => ({ familyId: null, familyCount: 0, childCount: 0, taskCount: 0 });
+  const empty = (): Outcome => ({
+    familyId: null,
+    familyCount: 0,
+    childCount: 0,
+    walletCount: 0,
+    taskCount: 0,
+    feedCount: 0,
+  });
   if (!uid) {
     process.stdout.write(JSON.stringify(empty()));
     return;
@@ -64,7 +73,9 @@ async function main(): Promise<void> {
     if (familyId) {
       if ((await db.doc(`families/${familyId}`).get()).exists) outcome.familyCount = 1;
       outcome.childCount = (await db.collection('users').where('familyId', '==', familyId).where('role', '==', 'child').get()).size;
+      outcome.walletCount = (await db.collection(`families/${familyId}/wallets`).get()).size;
       outcome.taskCount = (await db.collection(`families/${familyId}/tasks`).where('isActive', '==', true).get()).size;
+      outcome.feedCount = (await db.collection(`families/${familyId}/feed`).get()).size;
     }
     const matched = Object.entries(expected).every(([key, value]) => outcome[key as keyof Outcome] === value);
     if (matched) break;

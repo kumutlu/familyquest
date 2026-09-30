@@ -16,6 +16,7 @@ const TOKEN_B = 'BwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwc';
 const storeState = vi.hoisted(() => ({
   authStatus: 'authenticated' as 'initializing' | 'authenticated' | 'unauthenticated',
   authUser: { uid: 'u1' } as any,
+  authSignInProvider: null as string | null,
   currentUser: { id: 'u1', familyId: undefined, role: 'parent' } as any,
   familyData: null as any,
   profileServerConfirmed: true,
@@ -46,6 +47,7 @@ const readyInput: AuthRouteDecisionInput = {
   hasExplicitCreateIntent: false,
   pathname: '/',
   search: '',
+  emailVerificationRequired: false,
 };
 
 function CurrentPath() {
@@ -70,6 +72,7 @@ beforeEach(() => {
   localStorage.clear();
   storeState.authStatus = 'authenticated';
   storeState.authUser = { uid: 'u1' };
+  storeState.authSignInProvider = null;
   storeState.currentUser = { id: 'u1', familyId: undefined, role: 'parent' };
   storeState.familyData = null;
   storeState.profileServerConfirmed = true;
@@ -80,6 +83,40 @@ beforeEach(() => {
 });
 
 describe('deriveAuthRouteDecision', () => {
+  it('leaves the Queki email action handler public before and after authentication', () => {
+    expect(deriveAuthRouteDecision({
+      ...readyInput,
+      authStatus: 'unauthenticated',
+      authUser: null,
+      currentUser: null,
+      profileServerConfirmed: false,
+      appReady: false,
+      pathname: '/auth/verify',
+      emailVerificationRequired: false,
+    })).toBe('app');
+    expect(deriveAuthRouteDecision({
+      ...readyInput,
+      pathname: '/auth/verify',
+      emailVerificationRequired: true,
+    })).toBe('app');
+  });
+
+  it('blocks an unverified password identity before create, join, or invitation authority', () => {
+    expect(deriveAuthRouteDecision({
+      ...readyInput,
+      emailVerificationRequired: true,
+      hasExplicitCreateIntent: true,
+      pathname: '/onboarding',
+      search: '?mode=create',
+    })).toBe('verifyEmail');
+    expect(deriveAuthRouteDecision({
+      ...readyInput,
+      emailVerificationRequired: true,
+      pendingInviteToken: TOKEN,
+      pathname: `/invite/${TOKEN}`,
+    })).toBe('verifyEmail');
+  });
+
   it('prioritizes a pending v2 invitation over no-family and explicit creation state', () => {
     expect(deriveAuthRouteDecision({
       ...readyInput,
@@ -233,6 +270,15 @@ describe('deriveAuthRouteDecision', () => {
     })).toBe('noFamily');
   });
 
+  it('canonicalizes the authenticated S1 create journey before Signup can be pre-empted', () => {
+    expect(deriveAuthRouteDecision({
+      ...readyInput,
+      hasExplicitCreateIntent: true,
+      pathname: '/signup',
+      search: '?next=%2Fonboarding',
+    })).toBe('createOnboarding');
+  });
+
   it('sends signed-out root traffic to public onboarding and protected traffic to login', () => {
     const signedOut = {
       ...readyInput,
@@ -260,6 +306,37 @@ describe('deriveAuthRouteDecision', () => {
 });
 
 describe('AuthRoutingGate navigation', () => {
+  it('keeps a newly verified no-family user on /verify-email so the page can refresh and resume', () => {
+    storeState.authUser = { uid: 'u1', emailVerified: true };
+    storeState.authSignInProvider = 'password';
+    renderGate('/verify-email', true);
+    expect(screen.getByTestId('current-path')).toHaveTextContent('/verify-email');
+  });
+
+  // Managed-child email-verification exemption (reconciled live fix from 75f275e):
+  // a server-confirmed child profile bound to the current Auth identity must reach
+  // the child app despite an unverified synthetic password identity, while the
+  // ordinary-account verification gate stays in force for adults.
+  it('does not wall a managed child whose unverified password identity matches the server-confirmed profile', () => {
+    storeState.authUser = { uid: 'u1', emailVerified: false };
+    storeState.authSignInProvider = 'password';
+    storeState.currentUser = { id: 'child-1', familyId: 'family-1', role: 'child', authUid: 'u1' } as any;
+
+    renderGate('/');
+
+    expect(screen.getByTestId('current-path')).toHaveTextContent('/');
+  });
+
+  it('still walls an unverified ordinary password account behind the verification gate', () => {
+    storeState.authUser = { uid: 'u1', emailVerified: false };
+    storeState.authSignInProvider = 'password';
+    storeState.currentUser = { id: 'u1', familyId: 'family-1', role: 'parent' };
+
+    renderGate('/');
+
+    expect(screen.getByTestId('current-path')).toHaveTextContent('/verify-email');
+  });
+
   it('routes an authenticated no-family invite recipient to the invite, never onboarding', () => {
     capturePendingInvite(TOKEN);
     renderGate('/');

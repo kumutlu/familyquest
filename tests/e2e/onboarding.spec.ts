@@ -19,8 +19,8 @@ import { collectE2ETimeline, isFirestoreTransportError } from './utils/timeline'
  * They replace the legacy "Create family" / "Welcome to Queki" / "Step 2 of 3"
  * assertions that belonged to the deleted legacy onboarding. The tests are
  * strengthened (not weakened): they assert the authoritative Firestore outcome
- * — exactly one family, exactly one first managed child, exactly one first
- * task — and exercise refresh/recovery at meaningful boundaries.
+ * — exactly one family, managed child + wallet, first task + setup feed record
+ * — and exercise refresh/recovery at meaningful boundaries.
  */
 
 function uniqueEmail(prefix: string) {
@@ -84,7 +84,39 @@ test.describe('Refined Queki onboarding', () => {
     expect(outcome.familyId, 'familyId should be set').toBeTruthy();
     expect(outcome.familyCount, 'exactly one family').toBe(1);
     expect(outcome.childCount, 'exactly one first managed child').toBe(1);
+    expect(outcome.walletCount, 'exactly one first managed-child wallet').toBe(1);
     expect(outcome.taskCount, 'exactly one first task').toBe(1);
+    expect(outcome.feedCount, 'exactly one first-task setup feed record').toBe(1);
+  });
+
+  test('A legitimate second child remains distinct while initial setup effects stay singular', async ({ page }) => {
+    const data = persona({ email: uniqueEmail('onboard-two-children') });
+    await page.goto('/');
+    await driveToStep(page, data, 's7');
+    await signUpFromS7(page, data);
+
+    await expect(page.getByRole('button', { name: 'Continue' })).toBeEnabled({ timeout: 20_000 });
+    await page.getByRole('button', { name: 'Add another child' }).click();
+    const addChildForm = page.locator('form').filter({ has: page.getByRole('button', { name: 'Add another child' }) });
+    await addChildForm.locator('input').fill('Second Child');
+    await addChildForm.getByRole('button', { name: 'Add another child' }).click();
+    await expect(page.getByText('Second Child')).toBeVisible();
+
+    await completePostAuth(page, data);
+    const outcome = await getOnboardingOutcome(data.email, {
+      familyCount: 1,
+      childCount: 2,
+      walletCount: 2,
+      taskCount: 1,
+      feedCount: 1,
+    });
+    expect(outcome).toMatchObject({
+      familyCount: 1,
+      childCount: 2,
+      walletCount: 2,
+      taskCount: 1,
+      feedCount: 1,
+    });
   });
 
   test('Refresh during pre-auth preserves the draft and resumes at the same step', async ({ page }) => {

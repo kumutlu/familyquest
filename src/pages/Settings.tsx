@@ -20,7 +20,7 @@ import {
   MessageSquarePlus,
   HelpCircle,
 } from 'lucide-react';
-import { Link } from 'react-router-dom';
+import { Link, useLocation } from 'react-router-dom';
 import i18n, {
   applyLanguage,
   isSupportedLanguage,
@@ -68,9 +68,9 @@ interface SectionProps {
 
 function Section({ id, icon: Icon, title, description, children }: SectionProps) {
   return (
-    <section aria-labelledby={id} className="space-y-3">
+    <section id={id} aria-labelledby={`${id}-title`} className="space-y-3">
       <div className="px-1">
-        <h2 id={id} className="text-lg font-bold text-gray-900 flex items-center gap-2">
+        <h2 id={`${id}-title`} className="text-lg font-bold text-gray-900 flex items-center gap-2">
           <Icon size={18} className="text-primary-500" aria-hidden="true" />
           {title}
         </h2>
@@ -288,6 +288,17 @@ export function Settings() {
   const currentUser = useStore(state => state.currentUser);
   const authUser = useStore(state => state.authUser);
   const familyData = useStore(state => state.familyData);
+  const location = useLocation();
+
+  useEffect(() => {
+    if (location.hash) {
+      const id = location.hash.replace(/^#/, '');
+      const element = document.getElementById(id);
+      if (typeof element?.scrollIntoView === 'function') {
+        element.scrollIntoView({ behavior: 'smooth' });
+      }
+    }
+  }, [location.hash]);
 
   const [editorOpen, setEditorOpen] = useState(false);
   const [deleteAccountOpen, setDeleteAccountOpen] = useState(false);

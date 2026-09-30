@@ -253,4 +253,185 @@ describeWithEmulators('family deletion — Firestore + Auth emulator integration
 
     await db.doc(`familyDeletionReceipts/${FAMILY_ID}`).delete();
   }, 30_000);
+
+  it('deletes a family containing an un-upgraded QR-created child end to end', async () => {
+    const QR_FAM = 'qr-family-unupgraded';
+    const QR_OWNER = 'qr-owner-1';
+    const QR_CHILD = 'qr-child-unupgraded';
+    const QR_AUTH = 'qr-child-auth-unupgraded';
+    const UNRELATED_FAM = 'unrelated-family-survivor';
+
+    // Clean up any stale state
+    await deleteAuthUserIfPresent(QR_OWNER);
+    await deleteAuthUserIfPresent(QR_AUTH);
+    for (const path of [
+      `families/${QR_FAM}`,
+      `families/${UNRELATED_FAM}`,
+      `familyDeletionJobs/${QR_FAM}`,
+      `familyDeletionReceipts/${QR_FAM}`,
+      `users/${QR_OWNER}`,
+      `users/${QR_CHILD}`,
+      `users/unrelated-owner`,
+    ]) {
+      await db.doc(path).delete();
+    }
+
+    // Seed unrelated family that must survive
+    await db.doc(`families/${UNRELATED_FAM}`).set({ name: 'Survivor Family', inviteCode: 'SURV01' });
+    await db.doc('users/unrelated-owner').set({ uid: 'unrelated-owner', familyId: UNRELATED_FAM, role: 'owner' });
+
+    // Seed QR family & owner
+    await db.doc(`families/${QR_FAM}`).set({ name: 'QR Test Family', inviteCode: 'QRFAM1' });
+    await auth.createUser({ uid: QR_OWNER, email: 'qr_owner@test.com', password: 'Passw0rd123!' });
+    await auth.setCustomUserClaims(QR_OWNER, { familyId: QR_FAM, role: 'owner' });
+    await db.doc(`users/${QR_OWNER}`).set({
+      uid: QR_OWNER,
+      displayName: 'QR Owner',
+      familyId: QR_FAM,
+      role: 'owner',
+    });
+
+    // Seed real Auth user for QR child
+    await auth.createUser({ uid: QR_AUTH, displayName: 'QR Alex' });
+    await auth.setCustomUserClaims(QR_AUTH, {
+      managedChild: true,
+      childId: QR_CHILD,
+      familyId: QR_FAM,
+      role: 'child',
+    });
+
+    // Seed QR child profile (hasLogin: false, loginEnabled: false)
+    await db.doc(`users/${QR_CHILD}`).set({
+      uid: QR_CHILD,
+      displayName: 'QR Alex',
+      familyId: QR_FAM,
+      role: 'child',
+      isManaged: true,
+      authUid: QR_AUTH,
+      hasLogin: false,
+      loginEnabled: false,
+    });
+
+    // Seed canonical wallet & childLogins
+    await db.doc(`families/${QR_FAM}/wallets/${QR_CHILD}`).set({ balance: 100 });
+    await db.doc(`families/${QR_FAM}/childLogins/${QR_CHILD}`).set({
+      childId: QR_CHILD,
+      authUid: QR_AUTH,
+      familyId: QR_FAM,
+      status: 'enabled',
+    });
+
+    const qrCtx = makeCtx();
+
+    // 1. Authoritative family deletion request
+    const queued = await deleteFamilyImpl(qrCtx, QR_OWNER, {
+      familyId: QR_FAM,
+      familyNameConfirmation: 'QR Test Family',
+      clientReqId: 'qr-family-del-1',
+    });
+    expect(queued).toMatchObject({ familyId: QR_FAM, state: 'queued' });
+
+    // 2. Worker execution
+    const outcome = await processFamilyDeletionImpl(qrCtx, QR_FAM);
+    expect(outcome).toEqual({ done: true, state: 'completed' });
+
+    // 3. Assertions: family, profile, wallet, childLogin all removed
+    expect((await db.doc(`families/${QR_FAM}`).get()).exists).toBe(false);
+    expect((await db.doc(`users/${QR_CHILD}`).get()).exists).toBe(false);
+    expect((await db.doc(`families/${QR_FAM}/wallets/${QR_CHILD}`).get()).exists).toBe(false);
+    expect((await db.doc(`families/${QR_FAM}/childLogins/${QR_CHILD}`).get()).exists).toBe(false);
+
+    // 4. Assert Auth user deleted
+    await expect(auth.getUser(QR_AUTH)).rejects.toThrow();
+
+    // 5. Assert unrelated family is untouched
+    expect((await db.doc(`families/${UNRELATED_FAM}`).get()).exists).toBe(true);
+    expect((await db.doc('users/unrelated-owner').get()).exists).toBe(true);
+  }, 30_000);
+
+  it('deletes a family containing a QR-created child upgraded to username/password end to end', async () => {
+    const QR_FAM = 'qr-family-upgraded';
+    const QR_OWNER = 'qr-owner-2';
+    const QR_CHILD = 'qr-child-upgraded';
+    const QR_AUTH = 'qr-child-auth-upgraded';
+
+    await deleteAuthUserIfPresent(QR_OWNER);
+    await deleteAuthUserIfPresent(QR_AUTH);
+    for (const path of [
+      `families/${QR_FAM}`,
+      `familyDeletionJobs/${QR_FAM}`,
+      `familyDeletionReceipts/${QR_FAM}`,
+      `users/${QR_OWNER}`,
+      `users/${QR_CHILD}`,
+    ]) {
+      await db.doc(path).delete();
+    }
+
+    await db.doc(`families/${QR_FAM}`).set({ name: 'QR Upgraded Family', inviteCode: 'QRUPG1' });
+    await auth.createUser({ uid: QR_OWNER, email: 'qr_owner2@test.com', password: 'Passw0rd123!' });
+    await auth.setCustomUserClaims(QR_OWNER, { familyId: QR_FAM, role: 'owner' });
+    await db.doc(`users/${QR_OWNER}`).set({
+      uid: QR_OWNER,
+      displayName: 'QR Owner 2',
+      familyId: QR_FAM,
+      role: 'owner',
+    });
+
+    await auth.createUser({
+      uid: QR_AUTH,
+      email: `child-${QR_FAM}-alex@managed.familyquest.app`,
+      password: 'ChildPass123!',
+      displayName: 'QR Alex Upgraded',
+    });
+    await auth.setCustomUserClaims(QR_AUTH, {
+      managedChild: true,
+      childId: QR_CHILD,
+      familyId: QR_FAM,
+      role: 'child',
+    });
+
+    await db.doc(`users/${QR_CHILD}`).set({
+      uid: QR_CHILD,
+      displayName: 'QR Alex Upgraded',
+      familyId: QR_FAM,
+      role: 'child',
+      isManaged: true,
+      authUid: QR_AUTH,
+      hasLogin: true,
+      loginEnabled: true,
+      username: 'alex',
+    });
+
+    await db.doc(`families/${QR_FAM}/wallets/${QR_CHILD}`).set({ balance: 250 });
+    await db.doc(`families/${QR_FAM}/childLogins/${QR_CHILD}`).set({
+      childId: QR_CHILD,
+      authUid: QR_AUTH,
+      familyId: QR_FAM,
+      status: 'enabled',
+      username: 'alex',
+      normalizedUsername: 'alex',
+      syntheticEmail: `child-${QR_FAM}-alex@managed.familyquest.app`,
+    });
+    await db.doc(`families/${QR_FAM}/childLoginIndex/alex`).set({ childId: QR_CHILD });
+
+    const qrCtx = makeCtx();
+
+    const queued = await deleteFamilyImpl(qrCtx, QR_OWNER, {
+      familyId: QR_FAM,
+      familyNameConfirmation: 'QR Upgraded Family',
+      clientReqId: 'qr-family-del-2',
+    });
+    expect(queued).toMatchObject({ familyId: QR_FAM, state: 'queued' });
+
+    const outcome = await processFamilyDeletionImpl(qrCtx, QR_FAM);
+    expect(outcome).toEqual({ done: true, state: 'completed' });
+
+    expect((await db.doc(`families/${QR_FAM}`).get()).exists).toBe(false);
+    expect((await db.doc(`users/${QR_CHILD}`).get()).exists).toBe(false);
+    expect((await db.doc(`families/${QR_FAM}/wallets/${QR_CHILD}`).get()).exists).toBe(false);
+    expect((await db.doc(`families/${QR_FAM}/childLogins/${QR_CHILD}`).get()).exists).toBe(false);
+    expect((await db.doc(`families/${QR_FAM}/childLoginIndex/alex`).get()).exists).toBe(false);
+
+    await expect(auth.getUser(QR_AUTH)).rejects.toThrow();
+  }, 30_000);
 });

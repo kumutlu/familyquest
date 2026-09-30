@@ -122,20 +122,9 @@
       "note": "Phase 0 baseline violation. Removed when this file moves to the single reader/writer."
     },
     {
-      "path": "src/pages/Dashboard.tsx",
-      "violations": [
-        "user-balance-read"
-      ],
-      "inventory": "docs/gamification-v3/05-current-state-inventory.md#4-summary-table--all-direct-firestore-gamification-reads-from-the-ui-layer",
-      "removalPhase": "Phase 4",
-      "note": "Phase 0 baseline violation. Removed when this file moves to the single reader/writer."
-    },
-    {
       "path": "src/pages/Family.tsx",
       "violations": [
-        "gamification-arithmetic",
-        "user-balance-read",
-        "weekly-from-completions"
+        "user-balance-read"
       ],
       "inventory": "docs/gamification-v3/05-current-state-inventory.md#7-summary-table--independent-leaderboard-calculations",
       "removalPhase": "Phase 4",

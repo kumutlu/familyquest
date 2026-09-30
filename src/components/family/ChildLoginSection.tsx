@@ -1,4 +1,4 @@
-import { useRef, useState, type KeyboardEvent as ReactKeyboardEvent, type MouseEvent as ReactMouseEvent } from 'react';
+import { useEffect, useRef, useState, type KeyboardEvent as ReactKeyboardEvent, type MouseEvent as ReactMouseEvent } from 'react';
 import { createPortal } from 'react-dom';
 import { useTranslation } from 'react-i18next';
 import { Loader2 } from 'lucide-react';
@@ -11,6 +11,8 @@ import {
   resetChildPassword,
   validatePasswordClient,
   deleteChild,
+  getChildCredentialStatus,
+  type ChildCredentialStatus,
 } from '../../lib/childLoginApi';
 
 export interface ChildLoginMember {
@@ -24,11 +26,40 @@ export interface ChildLoginMember {
   lastLogin?: unknown;
   /** Whether this child is a managed child (parent-created). */
   isManaged?: boolean;
+  /** Optional linked Firebase Auth UID (e.g. from QR / personal device onboarding). */
+  authUid?: string;
 }
 
 interface ChildLoginSectionProps {
   member: ChildLoginMember;
   onRequestCreate: (member: ChildLoginMember) => void;
+  refreshKey?: number;
+}
+
+/** Never fall back to public profile flags while authority is loading/unavailable. */
+export function ChildLoginSection({ member, onRequestCreate, refreshKey = 0 }: ChildLoginSectionProps) {
+  const [result, setResult] = useState<{ id: string; key: number; status: ChildCredentialStatus } | null>(null);
+  const [revision, setRevision] = useState(0);
+  const [notice, setNotice] = useState('');
+  useEffect(() => {
+    let current = true;
+    setResult(null);
+    getChildCredentialStatus(member.id).then(status => {
+      if (current) setResult({ id: member.id, key: refreshKey, status });
+    }).catch(() => {
+      if (current) setResult({ id: member.id, key: refreshKey, status: { state: 'unavailable', identityConnected: false, credentialsExist: false } });
+    });
+    return () => { current = false; };
+  }, [member.id, refreshKey, revision]);
+  if (!result || result.id !== member.id || result.key !== refreshKey) return <p role="status">Loading credential status…</p>;
+  const status = result.status;
+  if (status.state !== 'available') return <p role="status">Credential status unavailable. Please try again later.</p>;
+  return <>{notice && <p role="status">{notice}</p>}<CredentialDetails member={{
+    id: member.id, displayName: member.displayName, isManaged: member.isManaged,
+    hasLogin: status.credentialsExist, authUid: status.identityConnected ? 'connected' : undefined,
+    username: status.username, loginEnabled: status.loginEnabled,
+    requiresPasswordChange: status.requiresPasswordChange, lastLogin: status.lastLoginAt,
+  }} onRequestCreate={() => onRequestCreate(member)} onChanged={(message = '') => { setNotice(message); setResult(null); setRevision(v => v + 1); }} /></>;
 }
 
 /** Best-effort, safe formatting of an optional last-login timestamp. */
@@ -56,7 +87,7 @@ function formatLastLogin(value: unknown, neverLabel: string): string {
  * Compact "Login" block for a managed child card. Never renders authUid,
  * synthetic email, internal IDs, or server-only fields.
  */
-export function ChildLoginSection({ member, onRequestCreate }: ChildLoginSectionProps) {
+function CredentialDetails({ member, onRequestCreate, onChanged }: ChildLoginSectionProps & { onChanged: (message?: string) => void }) {
   const { t } = useTranslation(['family', 'common']);
   const [resetOpen, setResetOpen] = useState(false);
   const [temporaryPassword, setTemporaryPassword] = useState('');
@@ -98,6 +129,7 @@ export function ChildLoginSection({ member, onRequestCreate }: ChildLoginSection
     try {
       if (member.loginEnabled) await disableChildLogin(member.id);
       else await enableChildLogin(member.id);
+      onChanged();
     } catch (error) {
       setFeedback(mapChildLoginError(error));
     } finally {
@@ -115,6 +147,7 @@ export function ChildLoginSection({ member, onRequestCreate }: ChildLoginSection
     setFeedback('');
     try {
       await resetChildPassword(member.id, temporaryPassword);
+      onChanged('Temporary password set. The child has been signed out and must create a new private password.');
       setTemporaryPassword('');
       setResetOpen(false);
       setFeedback('Temporary password set. The child has been signed out and must create a new private password.');
@@ -162,12 +195,24 @@ export function ChildLoginSection({ member, onRequestCreate }: ChildLoginSection
   };
 
   if (!member.hasLogin) {
+    const isDeviceConnected = Boolean(member.authUid);
     return (
       <div className="mt-3 pt-3 border-t border-gray-100" onClick={isolatePointer} onKeyDown={isolateKeyboard}>
-        <div className="flex items-center justify-between gap-3">
+        <div className="flex items-start justify-between gap-3">
           <div className="min-w-0">
             <p className="text-xs font-semibold uppercase tracking-wider text-gray-400">{t('login.label')}</p>
-            <p className="text-sm text-gray-500">{t('login.noLogin')}</p>
+            {isDeviceConnected ? (
+              <div className="space-y-1">
+                <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-blue-50 text-blue-700 dark:bg-blue-900/30 dark:text-blue-300">
+                  {t('login.connectedViaDevice', { defaultValue: 'Connected via personal device' })}
+                </span>
+                <p className="text-xs text-gray-500">
+                  {t('login.connectedViaDeviceHelper', { defaultValue: 'Create a username and password so they can sign in again after signing out.' })}
+                </p>
+              </div>
+            ) : (
+              <p className="text-sm text-gray-500">{t('login.noLogin')}</p>
+            )}
           </div>
           <Button
             type="button"

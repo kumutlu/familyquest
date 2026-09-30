@@ -1,6 +1,7 @@
 import { randomInt } from 'crypto';
 import { getFirestore, FieldValue, type Firestore } from 'firebase-admin/firestore';
 import { HttpsError, onCall, type CallableRequest } from 'firebase-functions/v2/https';
+import { requireFamilyAuthority } from './emailVerificationAuthority';
 
 const CODE_ALPHABET = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
 const REQUEST_ID = /^[A-Za-z0-9_-]{8,128}$/;
@@ -86,6 +87,7 @@ export async function requestFamilyJoinImpl(
   context: FamilyMembershipContext,
 ): Promise<{ familyId: string; status: 'pending' }> {
   const uid = requireUid(request);
+  requireFamilyAuthority(request);
   const clientReqId = validateRequestId(input?.clientReqId);
   const familyCode = typeof input?.familyCode === 'string'
     ? input.familyCode.trim().toUpperCase()

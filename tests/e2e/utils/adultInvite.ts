@@ -108,7 +108,16 @@ async function createEmulatorUser(email: string, password: string): Promise<Emul
   );
   const body = await readJson(response) as EmulatorAuthResponse;
   if (!body.idToken || !body.localId) throw new Error('EMULATOR_USER_INVALID');
-  return { email, password, uid: body.localId, idToken: body.idToken };
+  runFixture('verify-user', { uid: body.localId });
+  const verified = await fetch(
+    `http://${AUTH_EMULATOR_HOST}/identitytoolkit.googleapis.com/v1/accounts:signInWithPassword?key=demo`,
+    {
+      method: 'POST', headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ email, password, returnSecureToken: true }),
+    },
+  );
+  const verifiedBody = await readJson(verified) as EmulatorAuthResponse;
+  return { email, password, uid: body.localId, idToken: verifiedBody.idToken };
 }
 
 /**

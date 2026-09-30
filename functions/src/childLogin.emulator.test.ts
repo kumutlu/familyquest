@@ -160,4 +160,137 @@ describeWithFirestoreAndAuth('managed child sign-in emulator integration', () =>
     expect(profile.data()?.lastLogin).toBeTruthy();
     expect(authUsers.users.filter(user => user.uid === provisionedAuthUid)).toHaveLength(1);
   });
+
+  it('upgrades a QR-created child preserving Auth UID, claims, wallet, and enabling re-login', async () => {
+    const auth = getAuth(app);
+    const context = { db, auth };
+
+    // 1. Seed family & owner
+    await Promise.all([
+      db.doc('families/firestore-qr-family').set({
+        name: 'QR Family',
+        inviteCode: 'QR1234',
+      }),
+      db.doc('users/owner-qr').set({
+        uid: 'owner-qr',
+        familyId: 'firestore-qr-family',
+        role: 'owner',
+        displayName: 'QR Owner',
+      }),
+    ]);
+
+    // 2. Create real Firebase Auth user as created during QR onboarding
+    const initialAuthUser = await auth.createUser({
+      displayName: 'Alex',
+    });
+    const qrAuthUid = initialAuthUser.uid;
+
+    await auth.setCustomUserClaims(qrAuthUid, {
+      familyId: 'firestore-qr-family',
+      role: 'child',
+      childId: 'qr-child-1',
+      managedChild: true,
+    });
+
+    // 3. Seed exact QR onboarding Firestore state
+    await Promise.all([
+      db.doc('users/qr-child-1').set({
+        uid: 'qr-child-1',
+        id: 'qr-child-1',
+        familyId: 'firestore-qr-family',
+        role: 'child',
+        isManaged: true,
+        displayName: 'Alex',
+        authUid: qrAuthUid,
+        hasLogin: false,
+        loginEnabled: false,
+      }),
+      db.doc('families/firestore-qr-family/wallets/qr-child-1').set({
+        balance: 100,
+      }),
+      db.doc('families/firestore-qr-family/childLogins/qr-child-1').set({
+        childId: 'qr-child-1',
+        authUid: qrAuthUid,
+        familyId: 'firestore-qr-family',
+        status: 'enabled',
+      }),
+    ]);
+
+    const usersBeforeUpgrade = (await auth.listUsers()).users;
+    const initialCount = usersBeforeUpgrade.length;
+
+    // 4. Call createChildLogin to upgrade child to username/password
+    const upgradeResult = await createChildLoginImpl(context, 'owner-qr', {
+      childId: 'qr-child-1',
+      username: 'alex_the_great',
+      password: 'NewPassword123!',
+      clientReqId: 'qr-upgrade-req-1',
+    });
+
+    expect(upgradeResult).toEqual({
+      childId: 'qr-child-1',
+      username: 'alex_the_great',
+      loginEnabled: true,
+    });
+
+    // 5. Verify NO new Auth user was created (count unchanged, UID unchanged)
+    const usersAfterUpgrade = (await auth.listUsers()).users;
+    expect(usersAfterUpgrade.length).toBe(initialCount);
+
+    const updatedAuthUser = await auth.getUser(qrAuthUid);
+    expect(updatedAuthUser.uid).toBe(qrAuthUid);
+    expect(updatedAuthUser.email).toBe('child-firestore-qr-family-alex_the_great@managed.familyquest.app');
+    expect(updatedAuthUser.customClaims).toMatchObject({
+      familyId: 'firestore-qr-family',
+      role: 'child',
+      childId: 'qr-child-1',
+      managedChild: true,
+    });
+
+    // 6. Verify wallet preserved
+    const walletSnap = await db.doc('families/firestore-qr-family/wallets/qr-child-1').get();
+    expect(walletSnap.data()?.balance).toBe(100);
+
+    // 7. Verify profile and indexes updated
+    const [profileSnap, indexSnap, privateSnap] = await Promise.all([
+      db.doc('users/qr-child-1').get(),
+      db.doc('families/firestore-qr-family/childLoginIndex/alex_the_great').get(),
+      db.doc('families/firestore-qr-family/childLogins/qr-child-1').get(),
+    ]);
+
+    expect(profileSnap.data()).toMatchObject({
+      hasLogin: true,
+      loginEnabled: true,
+      authUid: qrAuthUid,
+      username: 'alex_the_great',
+    });
+    expect(indexSnap.data()?.childId).toBe('qr-child-1');
+    expect(privateSnap.data()).toMatchObject({
+      authUid: qrAuthUid,
+      normalizedUsername: 'alex_the_great',
+      syntheticEmail: 'child-firestore-qr-family-alex_the_great@managed.familyquest.app',
+      status: 'enabled',
+    });
+
+    // 8. Re-login test with username and password
+    const signinResult = await signInChildImpl(context, {
+      familyCode: ' qr1234 ',
+      username: ' ALEX_THE_GREAT ',
+      password: 'NewPassword123!',
+    });
+    expect(signinResult).toMatchObject({ customToken: expect.any(String) });
+
+    // 9. Verify subsequent creation throws LOGIN_ALREADY_EXISTS
+    await expect(
+      createChildLoginImpl(context, 'owner-qr', {
+        childId: 'qr-child-1',
+        username: 'alex_different',
+        password: 'AnotherPassword123!',
+        clientReqId: 'qr-upgrade-req-2',
+      }),
+    ).rejects.toMatchObject({
+      code: 'already-exists',
+      message: 'LOGIN_ALREADY_EXISTS',
+    });
+  });
 });

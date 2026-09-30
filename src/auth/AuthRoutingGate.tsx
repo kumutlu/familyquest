@@ -8,6 +8,7 @@ import { StartupScreen } from '../components/layout/StartupScreen';
 import { useStore } from '../store/useStore';
 import { readPendingInvite } from './pendingInviteIntent';
 import { clearCreateFamilyIntent } from './createFamilyIntent';
+import { requiresPasswordEmailVerification } from './emailVerification';
 
 export type AuthRouteDecision =
   | 'startup'
@@ -17,7 +18,8 @@ export type AuthRouteDecision =
   | 'noFamily'
   | 'createOnboarding'
   | 'publicOnboarding'
-  | 'login';
+  | 'login'
+  | 'verifyEmail';
 
 export type PendingMembershipStatus = 'idle' | 'loading' | 'settling' | 'none' | 'pending' | 'recovery';
 
@@ -42,20 +44,32 @@ export interface AuthRouteDecisionInput {
   creationContinuation?: { authUid: string; familyId?: string } | null;
   pathname: string;
   search: string;
+  emailVerificationRequired: boolean;
 }
 
 const CURRENT_V2_INVITE = /^\/invite\/([^/]+)\/?$/;
 const CANONICAL_V2_TOKEN = /^[A-Za-z0-9_-]{43}$/;
 const LEGACY_INVITE_CODE = /^[A-Z0-9]{6}$/;
 const PUBLIC_PASSTHROUGH_PATHS = new Set([
+  '/auth/verify',
+  '/auth/action',
   '/join-family',
   '/privacy',
   '/terms',
   '/account-deletion',
+  '/join-qr',
 ]);
 
 const isCurrentCreateRoute = (pathname: string, search: string) =>
   pathname === '/onboarding' && new URLSearchParams(search).get('mode') === 'create';
+
+const isCreateRouteOrCanonicalizableOnboarding = (pathname: string, search: string) =>
+  isCurrentCreateRoute(pathname, search)
+  || (pathname === '/onboarding' && new URLSearchParams(search).get('mode') === null)
+  || (
+    isInviteAuthEntryRoute(pathname)
+    && new URLSearchParams(search).get('next') === '/onboarding'
+  );
 
 const isInviteAuthEntryRoute = (pathname: string) =>
   pathname === '/login' || pathname === '/signup';
@@ -92,7 +106,7 @@ export function deriveAuthRouteDecision(input: AuthRouteDecisionInput): AuthRout
 
   // Recipient routes own preview and terminal error UX even before Firebase Auth
   // resolves. URL and stored invitation intent outrank generic auth routing.
-  if (
+  const inviteJourney = (
     suppliedInviteJourney(input.pathname, input.search) ||
     validCurrentV2Invite ||
     validCurrentLegacyInvite ||
@@ -100,7 +114,8 @@ export function deriveAuthRouteDecision(input: AuthRouteDecisionInput): AuthRout
     input.legacyInviteCode ||
     CURRENT_V2_INVITE.test(input.pathname) ||
     input.pathname === '/join'
-  ) {
+  );
+  if (inviteJourney && input.authStatus !== 'authenticated') {
     return 'invite';
   }
 
@@ -122,6 +137,14 @@ export function deriveAuthRouteDecision(input: AuthRouteDecisionInput): AuthRout
     if (input.pathname === '/' || input.pathname === '/onboarding') return 'publicOnboarding';
     return 'login';
   }
+
+  // This route owns the authoritative reload + forced token refresh and must
+  // not be pre-empted after the Auth user record flips to verified.
+  if (input.pathname === '/verify-email') return 'verifyEmail';
+
+  if (input.emailVerificationRequired) return 'verifyEmail';
+
+  if (inviteJourney) return 'invite';
 
   // No authenticated redirect is safe until the server has confirmed the
   // profile. Cached identity can render startup context, but cannot choose a
@@ -165,7 +188,10 @@ export function deriveAuthRouteDecision(input: AuthRouteDecisionInput): AuthRout
   // The generic no-family choice outranks stale creation state. Creation is a
   // narrower exception only after the user explicitly requested mode=create
   // and Task 8 supplies a current UID-bound intent.
-  if (!input.hasExplicitCreateIntent || !isCurrentCreateRoute(input.pathname, input.search)) {
+  if (
+    !input.hasExplicitCreateIntent
+    || !isCreateRouteOrCanonicalizableOnboarding(input.pathname, input.search)
+  ) {
     return 'noFamily';
   }
   return 'createOnboarding';
@@ -202,6 +228,7 @@ export function AuthRoutingGate({
   const navigate = useNavigate();
   const authStatus = useStore(state => state.authStatus);
   const authUser = useStore(state => state.authUser);
+  const authSignInProvider = useStore(state => state.authSignInProvider);
   const currentUser = useStore(state => state.currentUser);
   const familyData = useStore(state => state.familyData);
   const profileServerConfirmed = useStore(state => state.profileServerConfirmed);
@@ -228,6 +255,12 @@ export function AuthRoutingGate({
     creationContinuation,
     pathname: location.pathname,
     search: location.search,
+    emailVerificationRequired: requiresPasswordEmailVerification(
+      authUser,
+      authSignInProvider,
+      profileServerConfirmed ? currentUser : null,
+      profileServerConfirmed ? authUser?.uid : null,
+    ),
   };
   const missingHarnessState = authStatus === undefined;
   const decision = missingHarnessState ? 'app' : deriveAuthRouteDecision(input);
@@ -286,6 +319,12 @@ export function AuthRoutingGate({
       return <Navigate to={`/join?code=${encodeURIComponent(legacyInviteCode)}`} replace />;
     }
     return children;
+  }
+
+  if (decision === 'verifyEmail') {
+    return location.pathname === '/verify-email'
+      ? children
+      : <Navigate to="/verify-email" replace />;
   }
 
   if (decision === 'pendingMembership') {

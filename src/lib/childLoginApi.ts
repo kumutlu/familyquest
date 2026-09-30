@@ -141,6 +141,21 @@ export const resetChildPassword = (childId: string, newPassword: string) =>
     { childId, newPassword },
   );
 
+export interface ChildCredentialStatus {
+  state: 'available' | 'unavailable';
+  identityConnected: boolean;
+  credentialsExist: boolean;
+  username?: string;
+  loginEnabled?: boolean;
+  requiresPasswordChange?: boolean;
+  lastLoginAt?: number | null;
+}
+
+export async function getChildCredentialStatus(childId: string): Promise<ChildCredentialStatus> {
+  const call = httpsCallable<{ childId: string }, ChildCredentialStatus>(functions, 'getChildCredentialStatus');
+  return (await call({ childId })).data;
+}
+
 export const disableChildLogin = (childId: string) =>
   invokeLifecycle<{ childId: string }, ChildLoginLifecycleResult>('disableChildLogin', { childId });
 

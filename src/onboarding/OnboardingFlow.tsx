@@ -12,7 +12,11 @@ import {
 import { useOnboardingMachine } from './useOnboardingMachine';
 import { PRE_AUTH_STEPS, POST_AUTH_STEPS } from './lib/onboardingDraft';
 import { recordOnboardingEvent } from './lib/onboardingAnalytics';
-import { clearCreateFamilyIntent, readCreateFamilyIntent } from '../auth/createFamilyIntent';
+import {
+  capturePreAuthCreateFamilySelection,
+  clearCreateFamilyIntent,
+  readCreateFamilyIntent,
+} from '../auth/createFamilyIntent';
 import { recordInviteEvent } from '../auth/inviteAnalytics';
 import type { SetupDeps } from './lib/onboardingSetup';
 import { OnboardingShell } from './components/OnboardingShell';
@@ -111,24 +115,21 @@ export function OnboardingFlow({
       createFamilyAndParent: async (...args: Parameters<typeof createFamilyAndParent>) => {
         familyCreationAttemptedRef.current = true;
         onFamilyCreationStarted?.({ authUid: args[0] });
-        try {
-          const result = await createFamilyAndParent(...args);
-          onFamilyCreationConfirmed?.({
-            authUid: args[0],
-            familyId: result.user.familyId ?? result.familyId,
-          });
-          return result;
-        } catch (error) {
-          onCreationJourneyEnded?.();
-          throw error;
-        }
+        // A denied/offline bootstrap is retryable. Nothing is cleared until a
+        // successful response confirms the authoritative family.
+        const result = await createFamilyAndParent(...args);
+        onFamilyCreationConfirmed?.({
+          authUid: args[0],
+          familyId: result.user.familyId ?? result.familyId,
+        });
+        return result;
       },
       createManagedMember,
       createTask,
       refreshCurrentUser,
       getFamilyMembers: () => useStore.getState().familyMembers ?? [],
     }),
-    [authUser?.uid, currentUser?.id, onCreationJourneyEnded, onFamilyCreationConfirmed, onFamilyCreationStarted, refreshCurrentUser],
+    [authUser?.uid, currentUser?.id, onFamilyCreationConfirmed, onFamilyCreationStarted, refreshCurrentUser],
   );
 
   // Funnel: started (once, pre-auth).
@@ -270,6 +271,21 @@ export function OnboardingFlow({
     navigate('/signup?next=/onboarding');
   };
 
+  const handleCreateJourneySelected = () => {
+    capturePreAuthCreateFamilySelection();
+    goNext();
+  };
+
+  const leaveCreateJourney = (destination: string) => {
+    clearCreateFamilyIntent();
+    navigate(destination);
+  };
+
+  const startOver = () => {
+    clearCreateFamilyIntent();
+    reset();
+  };
+
   // Canonical sign-out for the authenticated onboarding screen (Step 2).
   // We must navigate away afterwards: calling `signOut()` alone signs the
   // Firebase session out, but the onboarding draft step (e.g. S2) stays put and
@@ -311,7 +327,7 @@ export function OnboardingFlow({
   const renderStep = () => {
     switch (draft.step) {
       case 's1':
-        return <Step1ValueProposition onNext={goNext} onLogin={() => navigate('/login')} onJoin={() => navigate('/join-family')} />;
+        return <Step1ValueProposition onNext={handleCreateJourneySelected} onLogin={() => leaveCreateJourney('/login')} onJoin={() => leaveCreateJourney('/join-family')} />;
       case 's2':
         return (
           <Step2ParentName draft={draft} patch={patch} onNext={goNext} onSignOut={handleSignOut} />
@@ -331,12 +347,12 @@ export function OnboardingFlow({
             onGoogle={handleGoogle}
             onEmail={handleEmail}
             authError={authError}
-            onStartOver={reset}
+            onStartOver={startOver}
             onBack={goBack}
           />
         );
       case 'p1':
-        return <FamilyComposition draft={draft} patch={patch} goNext={goNext} deps={deps} />;
+        return <FamilyComposition draft={draft} patch={patch} goNext={handleFinish} deps={deps} onFinish={handleFinish} />;
       case 'p2':
         return <FirstTask draft={draft} patch={patch} goNext={goNext} goBack={goBack} deps={deps} />;
       case 'p3':

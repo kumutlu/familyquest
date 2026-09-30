@@ -201,7 +201,7 @@ export const MemberDetailSheet: React.FC<MemberDetailSheetProps> = ({
                 if (onManageMember) {
                   onManageMember(member);
                 } else {
-                  navigate(`/family/members/${member.id}`);
+                  navigate('/family');
                 }
               }}
               variant="secondary"

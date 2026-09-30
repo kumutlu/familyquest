@@ -30,6 +30,13 @@ vi.mock('./CreateChildLoginDialog', () => ({
     </div>
   ) : null,
 }));
+vi.mock('../ConnectChildDeviceQrModal', () => ({
+  ConnectChildDeviceQrModal: ({ isOpen, intent, onClose }: any) => isOpen ? (
+    <div data-testid="qr-invite-modal" data-intent={intent}>
+      <button onClick={onClose}>Close QR</button>
+    </div>
+  ) : null,
+}));
 
 import { AddChildModal } from './AddChildModal';
 
@@ -115,5 +122,46 @@ describe('unified managed-child flow', () => {
     expect(screen.queryByText(/colour/i)).not.toBeInTheDocument();
     expect(screen.queryByText(/task/i)).not.toBeInTheDocument();
     expect(screen.queryByText(/reward/i)).not.toBeInTheDocument();
+  });
+});
+
+describe('two-path child setup chooser', () => {
+  it('renders path choices by default when startAtForm is not specified', () => {
+    render(
+      <MemoryRouter>
+        <AddChildModal familyId="family-1" onClose={vi.fn()} />
+      </MemoryRouter>
+    );
+
+    expect(screen.getByTestId('add-child-path-device')).toBeInTheDocument();
+    expect(screen.getByTestId('add-child-path-no-device')).toBeInTheDocument();
+    expect(screen.getByText('On their own device')).toBeInTheDocument();
+    expect(screen.getByText('Set up without a device')).toBeInTheDocument();
+  });
+
+  it('selecting "On their own device" opens QR modal with intent new_child_join', async () => {
+    const user = userEvent.setup();
+    render(
+      <MemoryRouter>
+        <AddChildModal familyId="family-1" onClose={vi.fn()} />
+      </MemoryRouter>
+    );
+
+    await user.click(screen.getByTestId('add-child-path-device'));
+    const modal = screen.getByTestId('qr-invite-modal');
+    expect(modal).toBeInTheDocument();
+    expect(modal).toHaveAttribute('data-intent', 'new_child_join');
+  });
+
+  it('selecting "Set up without a device" transitions to profile form', async () => {
+    const user = userEvent.setup();
+    render(
+      <MemoryRouter>
+        <AddChildModal familyId="family-1" onClose={vi.fn()} />
+      </MemoryRouter>
+    );
+
+    await user.click(screen.getByTestId('add-child-path-no-device'));
+    expect(screen.getByRole('textbox', { name: /display name/i })).toBeInTheDocument();
   });
 });

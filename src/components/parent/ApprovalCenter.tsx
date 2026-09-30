@@ -31,12 +31,21 @@ import {
 } from '../../lib/moneyRequestContracts';
 import { isPetBoxEnabled } from '../../lib/familyFeatures';
 import { approveChildJoinRequest, rejectChildJoinRequest } from '../../lib/childJoinApi';
+import { approveChildQrJoinRequest, rejectChildQrJoinRequest as rejectChildQrJoinRequestApi } from '../../lib/childQrOnboardingApi';
+import { ChildQrDeviceJoinApprovalCard } from '../ChildQrDeviceJoinApprovalCard';
 import { resolveAvatarImage } from '../../config/avatarCatalog';
+
 
 export function ApprovalCenter() {
   const { t } = useTranslation('approvals');
-  const { currentUser, tasks, familyMembers, familyData, rewards, taskCompletions, transferRequests, moneyRequests, petboxRequests, profileUpdateRequests, goalRequests, savingsGoals, childJoinRequests } = useStore();
+  const { currentUser, tasks, familyMembers, familyData, rewards, taskCompletions, transferRequests, moneyRequests, petboxRequests, profileUpdateRequests, goalRequests, savingsGoals, childJoinRequests, childQrJoinRequests, bootstrapStatus, featureErrors } = useStore();
   const { openRequest } = useRequestDetail();
+
+  const qrStatus = bootstrapStatus?.['childQrJoinRequests'];
+  const isQrLoading =
+    Boolean(bootstrapStatus) &&
+    (qrStatus === 'loading' || qrStatus === 'idle');
+  const isQrError = qrStatus === 'error' || Boolean(featureErrors?.['childQrJoinRequests']);
 
   const [activeTab, setActiveTab] = useState<'pending' | 'history'>('pending');
   const [processing, setProcessing] = useState<Record<string, 'approve' | 'reject' | 'accept'>>({});
@@ -112,9 +121,30 @@ export function ApprovalCenter() {
       isPending: r.status === 'pending',
     })));
 
+    // 8. Child QR Device Join requests
+    items.push(...(childQrJoinRequests || []).map((r: any) => {
+      const intent = r.intent === 'new_child_join' ? 'new_child_join' : 'existing_child_device_bind';
+      const targetChild = r.targetChildId ? familyMembers.find(m => m.id === r.targetChildId) : undefined;
+      return {
+        id: r.id || r.requestId,
+        category: 'child_qr_join',
+        status: r.status,
+        intent,
+        targetChildId: r.targetChildId,
+        targetChildName: r.targetChildName || targetChild?.displayName,
+        requesterDisplayName: r.requesterDisplayName,
+        requesterDeviceLabel: r.requesterDeviceLabel,
+        sortDate: r.createdAt?.toDate
+          ? r.createdAt.toDate()
+          : new Date(typeof r.createdAtMs === 'number' ? r.createdAtMs : Date.now()),
+        isPending: r.status === 'pending',
+      };
+    }));
+
     items.sort((a, b) => b.sortDate.getTime() - a.sortDate.getTime());
     return items;
-  }, [taskCompletions, transferRequests, moneyRequests, petboxRequests, profileUpdateRequests, goalRequests, savingsGoals, childJoinRequests, familyData]);
+  }, [taskCompletions, transferRequests, moneyRequests, petboxRequests, profileUpdateRequests, goalRequests, savingsGoals, childJoinRequests, childQrJoinRequests, familyData]);
+
 
   const itemKey = (item: any) => approvalKey(item.category as ApprovalType, item.id);
   const pendingApprovals = timeline.filter(item => item.isPending && !optimisticallyRemovedIds.has(itemKey(item)));
@@ -287,6 +317,46 @@ export function ApprovalCenter() {
       );
     }
 
+    if (item.category === 'child_qr_join') {
+      const managedChildren = familyMembers
+        .filter(m => m.role === 'child' && (m as any).isManaged !== false)
+        .map(c => ({ id: c.id, displayName: c.displayName, avatarUrl: c.avatarUrl }));
+      const key = itemKey(item);
+      return (
+        <ChildQrDeviceJoinApprovalCard
+          key={key}
+          request={item}
+          managedChildren={managedChildren}
+          onApprove={async (selectedChildId) => {
+            if (!currentUser) return;
+            setProcessing(prev => ({ ...prev, [key]: 'approve' }));
+            try {
+              await approveChildQrJoinRequest(currentUser.familyId, item.id, selectedChildId);
+              setOptimisticallyRemovedIds(prev => new Set(prev).add(key));
+            } catch (err) {
+              handleActionError(err, item, key, 'approve');
+            } finally {
+              setProcessing(prev => { const next = { ...prev }; delete next[key]; return next; });
+            }
+          }}
+          onReject={async () => {
+            if (!currentUser) return;
+            setProcessing(prev => ({ ...prev, [key]: 'reject' }));
+            try {
+              await rejectChildQrJoinRequestApi(currentUser.familyId, item.id);
+              setOptimisticallyRemovedIds(prev => new Set(prev).add(key));
+            } catch (err) {
+              handleActionError(err, item, key, 'reject');
+            } finally {
+              setProcessing(prev => { const next = { ...prev }; delete next[key]; return next; });
+            }
+          }}
+          isProcessing={key in processing}
+        />
+      );
+    }
+
+
     let title = '';
     let description = '';
     let amount = 0;
@@ -440,7 +510,7 @@ export function ApprovalCenter() {
             onClick={() => setActiveTab('pending')}
             className={`px-3 py-1 text-sm font-medium rounded-md transition-colors ${activeTab === 'pending' ? 'bg-white shadow-sm text-gray-900' : 'text-gray-500'}`}
           >
-            {t('pendingCount', { count: pendingApprovals.length })}
+            {isQrLoading || isQrError ? t('pendingTab') : t('pendingCount', { count: pendingApprovals.length })}
           </button>
           <button
             onClick={() => setActiveTab('history')}
@@ -451,15 +521,25 @@ export function ApprovalCenter() {
         </div>
       </div>
 
-      {error && (
-        <div className="mb-4 p-3 bg-danger-50 text-danger-600 rounded-xl text-sm font-medium">
-          {error}
+      {(error || (isQrError && featureErrors?.['childQrJoinRequests'])) && (
+        <div className="mb-4 p-3 bg-danger-50 text-danger-600 rounded-xl text-sm font-medium" role="alert">
+          {error || featureErrors?.['childQrJoinRequests']}
         </div>
       )}
 
       {activeTab === 'pending' ? (
-        pendingApprovals.length === 0 ? (
-          <EmptyState title={t('emptyPending')} className="shadow-sm" />
+        isQrLoading ? (
+          <div className="space-y-3 py-2" data-testid="approval-center-loading" aria-busy="true">
+            <div className="h-32 animate-pulse rounded-card qk-bg-inset" aria-hidden="true" />
+          </div>
+        ) : pendingApprovals.length === 0 ? (
+          isQrError ? (
+            <div className="text-center py-8 text-gray-500 text-sm" role="status" data-testid="approval-center-error">
+              Unable to load device join requests.
+            </div>
+          ) : (
+            <EmptyState title={t('emptyPending')} className="shadow-sm" />
+          )
         ) : (
           <div className="space-y-3">
             {pendingApprovals.map(renderApprovalCard)}

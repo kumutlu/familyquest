@@ -90,6 +90,8 @@ const emptyFamilyState = () => ({
   familyMembers: [] as any[],
   joinRequests: [] as any[],
   childJoinRequests: [] as any[],
+  childQrJoinRequests: [] as any[],
+
   tasks: [] as any[],
   taskCompletions: [] as any[],
   rewards: [] as any[],
@@ -148,11 +150,14 @@ interface AppState {
   pendingMembershipStatus: 'idle' | 'loading' | 'settling' | 'none' | 'pending' | 'recovery';
 
   authUser: any | null | undefined;
+  authSignInProvider: string | null;
   currentUser: any | null;
   familyData: any | null;
   familyMembers: any[];
   joinRequests: any[];
   childJoinRequests: any[];
+  childQrJoinRequests: any[];
+
   tasks: any[];
   taskCompletions: any[];
   rewards: any[];
@@ -283,6 +288,7 @@ export const useStore = create<AppState>((set, get) => ({
   pendingMembershipStatus: 'idle',
 
   authUser: undefined,
+  authSignInProvider: null,
   currentUser: null,
   ...emptyFamilyState(),
   error: null,
@@ -305,6 +311,7 @@ export const useStore = create<AppState>((set, get) => ({
         set({
           authStatus: 'unauthenticated',
           authUser: null,
+          authSignInProvider: null,
           authInitialized: true,
           authLoading: false,
           profileLoading: false,
@@ -352,7 +359,8 @@ export const useStore = create<AppState>((set, get) => ({
 
         const tokenResult = typeof user.getIdTokenResult === 'function'
           ? await user.getIdTokenResult()
-          : { claims: {} };
+          : { claims: {}, signInProvider: null };
+        set({ authSignInProvider: tokenResult.signInProvider ?? null });
         const claims = tokenResult.claims as Record<string, unknown>;
         const managedChildId =
           claims.managedChild === true && typeof claims.childId === 'string'
@@ -1044,6 +1052,7 @@ export const useStore = create<AppState>((set, get) => ({
         if (currentUser?.role === 'parent' || currentUser?.role === 'owner') {
           subscribePlanned('joinRequests', 'Join requests', snapshot => set({ joinRequests: docs(snapshot) }));
           subscribePlanned('childJoinRequests', 'Child join requests', snapshot => set({ childJoinRequests: docs(snapshot) }));
+          subscribePlanned('childQrJoinRequests', 'Child QR join requests', snapshot => set({ childQrJoinRequests: docs(snapshot) }));
           subscribePlanned('taskCompletions', 'Task completions', snapshot => set({ taskCompletions: docs(snapshot) }));
           subscribePlanned('redemptions', 'Redemptions', snapshot => set({ redemptions: normalizeRedemptions(docs(snapshot)) }));
           subscribePlanned('walletTransactions', 'Wallet transactions', snapshot => set({ walletTransactions: normalizeHistory(docs(snapshot)) }));
@@ -1295,6 +1304,7 @@ export const useStore = create<AppState>((set, get) => ({
       authLoading: true,
       profileLoading: false,
       authUser: undefined,
+      authSignInProvider: null,
       currentUser: null,
       pendingMembershipStatus: 'idle',
       bootstrapError: null,
@@ -1321,6 +1331,7 @@ export const useStore = create<AppState>((set, get) => ({
       profileServerConfirmed: false,
       familyLoading: false,
       authUser: undefined,
+      authSignInProvider: null,
       currentUser: null,
       ...emptyFamilyState(),
       bootstrapStatus: createBootstrapStatus('idle'),

@@ -79,6 +79,7 @@ describe('ApprovalCenter interaction contract', () => {
       taskCompletions: [{ id: 'same-id', taskId: 'task-1', assigneeId: 'child-1', status: 'pending_approval' }],
       transferRequests: [{ id: 'same-id', fromChildId: 'child-1', toChildId: 'child-2', amountPence: 100, status: 'pending' }],
       moneyRequests: [], petboxRequests: [],
+      bootstrapStatus: { childQrJoinRequests: 'ready' },
     }
   })
 
@@ -196,6 +197,7 @@ describe('ApprovalCenter interaction contract', () => {
       currentUser: { id: 'owner-1', familyId: 'family-1', role: 'owner' },
       tasks: [], familyMembers: [{ id: 'child-1', displayName: 'Muhammed Osman' }],
       taskCompletions: [], transferRequests: [], moneyRequests: [], petboxRequests: [],
+      bootstrapStatus: { childQrJoinRequests: 'ready' },
       profileUpdateRequests: [{
         id: 'pu-1', childId: 'child-1', childName: 'Muhammed Osman',
         requestedDisplayName: 'Muhammed', requestedAvatar: 'https://new',
@@ -224,6 +226,7 @@ describe('ApprovalCenter interaction contract', () => {
       currentUser: { id: 'owner-1', familyId: 'family-1', role: 'owner' },
       tasks: [], familyMembers: [{ id: 'child-1', displayName: 'Muhammed Osman' }],
       taskCompletions: [], transferRequests: [], moneyRequests: [], petboxRequests: [],
+      bootstrapStatus: { childQrJoinRequests: 'ready' },
       profileUpdateRequests: [{
         id: 'pu-2', childId: 'child-1', childName: 'Muhammed Osman',
         requestedDisplayName: 'Muhammed', requestedAvatar: 'https://new',
@@ -263,6 +266,7 @@ describe('pending_acceptance money requests', () => {
     currentUser: { id: 'owner-1', familyId: 'family-1', role: 'owner' },
     tasks: [], familyMembers: [], familyData: { currency: '£' }, rewards: [],
     taskCompletions: [], transferRequests: [], petboxRequests: [], profileUpdateRequests: [],
+    bootstrapStatus: { childQrJoinRequests: 'ready' },
   };
 
   it('appears in Pending with the correct count and never in History', () => {
@@ -355,5 +359,21 @@ describe('pending_acceptance money requests', () => {
     fireEvent.click(screen.getByRole('button', { name: 'History' }));
     expect(await screen.findByText(/Mnalium requested/)).toBeInTheDocument();
     expect(screen.getAllByText('Approved').length).toBeGreaterThan(0);
+  });
+
+  it('childQrJoinRequests bootstrap error displays error banner and suppresses false Pending (0)', () => {
+    state.current = {
+      ...baseState,
+      childQrJoinRequests: [],
+      bootstrapStatus: { ...baseState.bootstrapStatus, childQrJoinRequests: 'error' },
+      featureErrors: { childQrJoinRequests: 'Missing or insufficient permissions' },
+    };
+    renderApprovalCenter();
+
+    expect(screen.queryByText('Pending (0)')).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Pending' })).toBeInTheDocument();
+    expect(screen.getByRole('alert')).toHaveTextContent('Missing or insufficient permissions');
+    expect(screen.getByTestId('approval-center-error')).toBeInTheDocument();
+    expect(screen.queryByText(/You’re all caught up!/i)).not.toBeInTheDocument();
   });
 })

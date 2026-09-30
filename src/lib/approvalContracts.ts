@@ -5,6 +5,7 @@ export type ApprovalType =
   | 'petbox'
   | 'join'
   | 'child_join'
+  | 'child_qr_join'
   | 'profile_update'
   | 'goal'
 

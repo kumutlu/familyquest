@@ -14,21 +14,21 @@ function draft(step: OnboardingDraft['step']): OnboardingDraft {
 describe('useOnboardingMachine (pure reducer)', () => {
   it('advances forward within the pre-auth phase only', () => {
     expect(nextStep('s1')).toBe('s2');
+    expect(nextStep('s2')).toBe('s3');
+    expect(nextStep('s3')).toBe('s6');
     expect(nextStep('s6')).toBe('s7');
     // never crosses into post-auth
     expect(nextStep('s7')).toBe('s7');
   });
 
   it('advances forward within the post-auth phase only', () => {
-    expect(nextStep('p1')).toBe('p2');
-    expect(nextStep('p2')).toBe('p3');
-    expect(nextStep('p3')).toBe('p3');
+    expect(nextStep('p1')).toBe('p1');
   });
 
   it('goes back within the same phase only', () => {
+    expect(prevStep('s6')).toBe('s3');
     expect(prevStep('s3')).toBe('s2');
     expect(prevStep('s1')).toBe('s1');
-    expect(prevStep('p2')).toBe('p1');
     expect(prevStep('p1')).toBe('p1');
   });
 

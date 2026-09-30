@@ -132,7 +132,7 @@ import { Notifications } from '../pages/Notifications';
 import { Settings } from '../pages/Settings';
 import { ErrorState } from '../components/wallet/WalletStates';
 
-const NAMESPACES = ['common', 'behaviour', 'funds', 'profile', 'notifications', 'settings', 'wallet'];
+const NAMESPACES = ['common', 'behaviour', 'funds', 'profile', 'notifications', 'settings', 'wallet', 'help', 'family'];
 
 const withRouter = (ui: React.ReactNode) => <MemoryRouter>{ui}</MemoryRouter>;
 

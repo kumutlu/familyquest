@@ -53,6 +53,7 @@ export type NotificationType =
   | 'profile_update_requested'
   | 'profile_update_approved'
   | 'profile_update_rejected'
+  | 'child_qr_device_join'
   // Presentation-only marker for the one-time child Family Challenge
  // celebration. It carries NO reward semantics: the reward is distributed by
   // the authoritative claimChallenge transaction, and this row's per-user read

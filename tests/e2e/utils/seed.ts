@@ -30,10 +30,10 @@ export async function seedTestFamily() {
   const familyId = 'test-fam';
 
   // Auth Users
-  await adminAuth.createUser({ uid: 'owner1', email: 'owner@test.com', password: 'password123', displayName: 'Owner Mom' });
-  await adminAuth.createUser({ uid: 'parent1', email: 'parent@test.com', password: 'password123', displayName: 'Parent Dad' });
-  await adminAuth.createUser({ uid: 'child1', email: 'child@test.com', password: 'password123', displayName: 'Child Leo' });
-  await adminAuth.createUser({ uid: 'child2', email: 'child2@test.com', password: 'password123', displayName: 'Child Ava' });
+  await adminAuth.createUser({ uid: 'owner1', email: 'owner@test.com', emailVerified: true, password: 'password123', displayName: 'Owner Mom' });
+  await adminAuth.createUser({ uid: 'parent1', email: 'parent@test.com', emailVerified: true, password: 'password123', displayName: 'Parent Dad' });
+  await adminAuth.createUser({ uid: 'child1', email: 'child@test.com', emailVerified: true, password: 'password123', displayName: 'Child Leo' });
+  await adminAuth.createUser({ uid: 'child2', email: 'child2@test.com', emailVerified: true, password: 'password123', displayName: 'Child Ava' });
 
   const batch = db.batch();
 
@@ -47,12 +47,16 @@ export async function seedTestFamily() {
   });
 
   // Owner
-  batch.set(db.doc(`users/owner1`), { familyId, role: 'owner', displayName: 'Owner Mom' });
+  batch.set(db.doc(`users/owner1`), { id: 'owner1', familyId, role: 'owner', displayName: 'Owner Mom' });
   // Parent
-  batch.set(db.doc(`users/parent1`), { familyId, role: 'parent', displayName: 'Parent Dad' });
+  batch.set(db.doc(`users/parent1`), { id: 'parent1', familyId, role: 'parent', displayName: 'Parent Dad' });
   // Children
-  batch.set(db.doc(`users/child1`), { familyId, role: 'child', displayName: 'Child Leo', rewardPoints: 100, lifetimeXP: 100, walletBalance: 500 });
-  batch.set(db.doc(`users/child2`), { familyId, role: 'child', displayName: 'Child Ava', rewardPoints: 50, lifetimeXP: 50, walletBalance: 200 });
+  batch.set(db.doc(`users/child1`), { familyId, role: 'child', displayName: 'Child Leo', authUid: 'child1', rewardPoints: 100, lifetimeXP: 100, walletBalance: 500, isManaged: true });
+  batch.set(db.doc(`users/child2`), { familyId, role: 'child', displayName: 'Child Ava', authUid: 'child2', rewardPoints: 50, lifetimeXP: 50, walletBalance: 200, isManaged: true });
+
+  // Child Logins
+  batch.set(db.doc(`families/${familyId}/childLogins/child1`), { authUid: 'child1', status: 'enabled', loginEnabled: true });
+  batch.set(db.doc(`families/${familyId}/childLogins/child2`), { authUid: 'child2', status: 'enabled', loginEnabled: true });
 
   // Theme shop: one published catalog row (space, 500 pts) with a live
   // Theme of the Week window for the theme E2E. Defaults cover every other

@@ -20,15 +20,20 @@ const joinApi = vi.hoisted(() => ({
   getChildJoinRequestStatus: vi.fn(),
   cancelChildJoinRequest: vi.fn(),
   storeJoinRequestHandle: vi.fn(),
-  readJoinRequestHandle: vi.fn(() => null),
   clearJoinRequestHandle: vi.fn(),
   mapChildJoinErrorKey: vi.fn(() => 'auth:childJoin.errors.generic'),
+}))
+
+const qrApi = vi.hoisted(() => ({
+  approveChildQrJoinRequest: vi.fn(async () => ({ requestId: 'qr-req-1', status: 'approved' })),
+  rejectChildQrJoinRequest: vi.fn(async () => ({ requestId: 'qr-req-1', status: 'rejected' })),
 }))
 
 const state = vi.hoisted(() => ({ current: {} as any }))
 
 vi.mock('../../lib/api', () => api)
 vi.mock('../../lib/childJoinApi', () => joinApi)
+vi.mock('../../lib/childQrOnboardingApi', () => qrApi)
 vi.mock('../../store/useStore', () => ({
   useStore: (selector?: any) => (typeof selector === 'function' ? selector(state.current) : state.current),
 }))
@@ -70,6 +75,7 @@ describe('ApprovalCenter — child join requests', () => {
       taskCompletions: [], transferRequests: [], moneyRequests: [],
       petboxRequests: [], profileUpdateRequests: [], goalRequests: [], savingsGoals: [],
       childJoinRequests: [pendingJoinRequest()],
+      bootstrapStatus: { childQrJoinRequests: 'ready' },
     }
   })
 
@@ -149,5 +155,89 @@ describe('ApprovalCenter — child join requests', () => {
     renderApprovalCenter()
     expect(screen.getByText(i18n.t('approvals:type.childJoinRequest'))).toBeInTheDocument()
     await i18n.changeLanguage('en')
+  })
+
+  it('repeated listener updates do not duplicate child QR device join card in UI', () => {
+    state.current.childQrJoinRequests = [
+      {
+        id: 'qr-req-dup-1',
+        category: 'child_qr_join',
+        status: 'pending',
+        requesterDisplayName: 'Ali',
+        requesterDeviceLabel: 'iPhone',
+        createdAtMs: Date.now(),
+      },
+    ]
+    const { rerender } = renderApprovalCenter()
+    expect(screen.getAllByText('Ali wants to connect a device')).toHaveLength(1)
+
+    // Simulate repeated listener snapshot arrival with the same request
+    state.current.childQrJoinRequests = [
+      {
+        id: 'qr-req-dup-1',
+        category: 'child_qr_join',
+        status: 'pending',
+        requesterDisplayName: 'Ali',
+        requesterDeviceLabel: 'iPhone',
+        createdAtMs: Date.now(),
+      },
+    ]
+    rerender(
+      <RequestDetailProvider>
+        <ApprovalCenter />
+      </RequestDetailProvider>,
+    )
+    expect(screen.getAllByText('Ali wants to connect a device')).toHaveLength(1)
+  })
+
+  it('renders new_child_join request without dropdown and approves with requestId', async () => {
+    state.current.childQrJoinRequests = [
+      {
+        id: 'qr-new-child-1',
+        category: 'child_qr_join',
+        status: 'pending',
+        intent: 'new_child_join',
+        requesterDisplayName: 'Sam',
+        requesterDeviceLabel: 'iPad Mini',
+        createdAtMs: Date.now(),
+      },
+    ]
+    renderApprovalCenter()
+    expect(screen.getByText('New Child Joining')).toBeInTheDocument()
+    expect(screen.getByText('Sam wants to join your family')).toBeInTheDocument()
+    expect(screen.getByText('Approving will create a new child profile and wallet.')).toBeInTheDocument()
+    expect(screen.queryByTestId('child-selector-dropdown')).not.toBeInTheDocument()
+
+    fireEvent.click(screen.getByTestId('approve-qr-join-button'))
+    await waitFor(() => {
+      expect(qrApi.approveChildQrJoinRequest).toHaveBeenCalledWith('family-1', 'qr-new-child-1', undefined)
+    })
+  })
+
+  it('renders existing_child_device_bind request with target child name', async () => {
+    state.current.familyMembers = [
+      { id: 'child-1', displayName: 'Leo', role: 'child', isManaged: true },
+    ]
+    state.current.childQrJoinRequests = [
+      {
+        id: 'qr-bind-1',
+        category: 'child_qr_join',
+        status: 'pending',
+        intent: 'existing_child_device_bind',
+        targetChildId: 'child-1',
+        targetChildName: 'Leo',
+        requesterDisplayName: 'Tablet',
+        createdAtMs: Date.now(),
+      },
+    ]
+    renderApprovalCenter()
+    expect(screen.getByText('Child Device Join Request')).toBeInTheDocument()
+    expect(screen.getByText('Tablet wants to connect a personal device to Leo')).toBeInTheDocument()
+    expect(screen.queryByTestId('child-selector-dropdown')).not.toBeInTheDocument()
+
+    fireEvent.click(screen.getByTestId('approve-qr-join-button'))
+    await waitFor(() => {
+      expect(qrApi.approveChildQrJoinRequest).toHaveBeenCalledWith('family-1', 'qr-bind-1', 'child-1')
+    })
   })
 })

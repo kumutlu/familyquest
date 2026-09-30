@@ -66,6 +66,7 @@ beforeEach(async () => {
   store.challenges = [];
   store.behaviourEvents = [];
   store.loading = false;
+  await i18n.loadNamespaces(['family', 'familyWorld', 'help', 'rewards', 'tasks', 'dashboard', 'common']);
   await act(async () => { await i18n.changeLanguage('en'); });
 });
 

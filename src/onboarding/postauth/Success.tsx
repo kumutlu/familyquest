@@ -12,7 +12,7 @@ interface SuccessProps {
 export function Success({ draft, onFinish }: SuccessProps) {
   const { t } = useTranslation('onboarding');
   const parent = draft.parentFirstName.trim() || '—';
-  const child = draft.childFirstName.trim() || 'your child';
+  const child = draft.childFirstName?.trim() || 'your child';
 
   const checklist = [
     t('p3.checklistChild', { child }),

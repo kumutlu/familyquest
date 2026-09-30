@@ -65,4 +65,24 @@ test.describe('Family Page & Member Editing', () => {
     await expect(page.locator('text="Child Leo Again"').first()).toBeVisible();
     await logout(page);
   });
+
+  test('Flow 1: Direct navigation to /settings/family redirects to Settings #family-section without blank screen', async ({ page }) => {
+    await loginAs(page, 'owner@test.com');
+    await page.goto('/settings/family');
+    await page.waitForURL('**/settings#family-section');
+    const familySection = page.locator('#family-section');
+    await expect(familySection).toBeVisible();
+    await expect(page.locator('body')).not.toBeEmpty();
+  });
+
+  test('Flow 2: Family page click Family Settings navigates to #family-section without blank screen', async ({ page }) => {
+    await loginAs(page, 'owner@test.com');
+    await page.goto('/family');
+    const settingsBtn = page.getByRole('button', { name: /Family Settings/i });
+    await expect(settingsBtn).toBeVisible({ timeout: 10000 });
+    await settingsBtn.click();
+    await page.waitForURL('**/settings#family-section');
+    const familySection = page.locator('#family-section');
+    await expect(familySection).toBeVisible();
+  });
 });

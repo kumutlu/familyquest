@@ -1,0 +1,52 @@
+import { afterAll, describe, expect, it } from 'vitest';
+import { initializeApp, deleteApp } from 'firebase-admin/app';
+import { getFirestore } from 'firebase-admin/firestore';
+import { getAuth } from 'firebase-admin/auth';
+import { approveChildQrJoinRequestImpl } from './childQrOnboarding';
+import { createChildLoginImpl, getChildCredentialStatusImpl, signInChildImpl } from './childLogin';
+import { repairLegacyQrProfile } from './legacyQrRepair';
+
+const enabled = !!process.env.FIRESTORE_EMULATOR_HOST && !!process.env.FIREBASE_AUTH_EMULATOR_HOST;
+describe.skipIf(!enabled)('real Auth + Firestore legacy QR lifecycle', () => {
+  const app = initializeApp({ projectId: 'demo-qr-review' }, 'legacy-qr-review');
+  afterAll(() => deleteApp(app));
+  it('repairs only display fields, then upgrades and signs in using the SAME identity', async () => {
+    const db = getFirestore(app); const auth = getAuth(app);
+    const suffix = Date.now().toString();
+    const familyId = `legacy-${suffix}`; const parent = `parent-${suffix}`;
+    const requestId = `review-${suffix}`;
+    await db.doc(`users/${parent}`).set({ familyId, role: 'parent' });
+    const familyCode = 'Q' + suffix.slice(-5);
+    await db.doc(`families/${familyId}`).set({ inviteCode: familyCode });
+    await db.doc(`families/${familyId}/child_qr_join_requests/${requestId}`).set({ status: 'pending', intent: 'new_child_join', requesterDisplayName: 'Alex' });
+    const { selectedManagedChildId: childId } = await approveChildQrJoinRequestImpl({ familyId, requestId }, { auth: { uid: parent } } as any, { db, auth });
+    const ctx = { db, auth, rateLimiter: () => true };
+    const ref = db.doc(`users/${childId}`);
+    const profileBefore = (await ref.get()).data()!;
+    const authUid = profileBefore.authUid;
+    const wallet = db.doc(`families/${familyId}/wallets/${childId}`);
+    const walletBefore = (await wallet.get()).data();
+    const linkBefore = (await db.doc(`families/${familyId}/childLogins/${childId}`).get()).data();
+    const count = (await auth.listUsers()).users.length;
+    // Provenance is known here: this test performs the exact legacy injection.
+    await ref.update({ hasLogin: true, loginEnabled: true, username: 'Alex' });
+    expect(await getChildCredentialStatusImpl(ctx, parent, { childId })).toEqual({ state: 'available', identityConnected: true, credentialsExist: false });
+    expect((await repairLegacyQrProfile(db, auth, familyId, childId)).eligible).toBe(false);
+    const dryRun = await repairLegacyQrProfile(db, auth, familyId, childId, { creationWriteVerified: true });
+    expect(dryRun).toMatchObject({ eligible: true, dryRun: true });
+    expect((await ref.get()).data()?.hasLogin).toBe(true);
+    await repairLegacyQrProfile(db, auth, familyId, childId, { dryRun: false, creationWriteVerified: true });
+    expect((await ref.get()).data()).toEqual({ ...profileBefore, hasLogin: false, loginEnabled: false });
+    expect((await wallet.get()).data()).toEqual(walletBefore);
+    expect((await db.doc(`families/${familyId}/childLogins/${childId}`).get()).data()).toEqual(linkBefore);
+    expect((await auth.listUsers()).users.length).toBe(count);
+    expect((await repairLegacyQrProfile(db, auth, familyId, childId, { dryRun: false })).reason).toBe('already-normalized');
+    await createChildLoginImpl(ctx, parent, { childId, username: 'alex', password: 'ReviewPassword123!', clientReqId: 'upgrade' });
+    expect((await ref.get()).data()?.authUid).toBe(authUid);
+    expect((await auth.listUsers()).users.length).toBe(count);
+    expect((await auth.getUser(authUid)).providerData.some(p => p.providerId === 'password')).toBe(true);
+    const login = await signInChildImpl(ctx, { familyCode, username: 'alex', password: 'ReviewPassword123!' });
+    expect(typeof login.customToken).toBe('string');
+    expect(await getChildCredentialStatusImpl(ctx, parent, { childId })).toMatchObject({ state: 'available', identityConnected: true, credentialsExist: true, username: 'alex' });
+  }, 30000);
+});

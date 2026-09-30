@@ -7,6 +7,7 @@ import { ApprovalCenter } from '../parent/ApprovalCenter';
 import { selectParentPriorities, type ParentPriority } from '../../lib/home/priorities';
 import { getFocusModeState } from '../../lib/focusMode';
 import { FocusModeDashboard } from '../parent/dashboard/FocusModeDashboard';
+import { MoneyPrivacyToggle } from '../privacy/MoneyPrivacyToggle';
 import { AddChildModal } from '../family/AddChildModal';
 import { formatMoney } from '../../lib/walletPresentation';
 import { Surface } from '../queki/Surface';
@@ -54,6 +55,7 @@ export function ParentLivingHome() {
     profileUpdateRequests,
     goalRequests,
     childJoinRequests,
+    childQrJoinRequests,
     savingsGoals,
     challenges,
     walletTransactions,
@@ -77,13 +79,14 @@ export function ParentLivingHome() {
         profileUpdateRequests,
         goalRequests,
         childJoinRequests,
+        childQrJoinRequests,
         savingsGoals,
         challenges,
         walletTransactions,
         familyMembers,
         petBoxEnabled: true,
       }),
-    [taskCompletions, transferRequests, moneyRequests, petboxRequests, profileUpdateRequests, goalRequests, childJoinRequests, savingsGoals, challenges, walletTransactions, familyMembers],
+    [taskCompletions, transferRequests, moneyRequests, petboxRequests, profileUpdateRequests, goalRequests, childJoinRequests, childQrJoinRequests, savingsGoals, challenges, walletTransactions, familyMembers],
   );
 
   const approvalsCount = priorities.find(p => p.kind === 'approvals')?.count ?? 0;
@@ -97,20 +100,6 @@ export function ParentLivingHome() {
       resource => bootstrapStatus[resource] === 'loading' || bootstrapStatus[resource] === 'idle',
     );
 
-  // Focus Mode: while family setup is incomplete, suppress every non-essential
-  // section and show the single guided next action instead (preserved from the
-  // previous dashboard experience).
-  const focus = getFocusModeState({ familyMembers, rewards, tasks, joinRequests: [], currentUser });
-  if (focus.isFocusMode) {
-    return (
-      <div data-testid="dashboard-focus-mode">
-        <FocusModeDashboard onAddChild={() => setIsAddChildOpen(true)} />
-        {isAddChildOpen && (
-          <AddChildModal familyId={currentUser.familyId} onClose={() => setIsAddChildOpen(false)} />
-        )}
-      </div>
-    );
-  }
 
   const renderPriority = (priority: ParentPriority) => {
     switch (priority.kind) {
@@ -201,6 +190,28 @@ export function ParentLivingHome() {
     );
   }
 
+  const focus = getFocusModeState({ familyMembers, rewards, tasks, currentUser });
+  const setupResourcesReady = (['members', 'tasks', 'rewards'] as const).every(
+    resource => bootstrapStatus?.[resource] === 'ready',
+  );
+
+  if (setupResourcesReady && focus.isFocusMode && children.length > 0) {
+    return (
+      <div data-testid="dashboard-focus-mode" className="space-y-6 pb-8">
+        <div className="flex justify-end">
+          <MoneyPrivacyToggle />
+        </div>
+        <FocusModeDashboard onAddChild={() => setIsAddChildOpen(true)} />
+        {isAddChildOpen && (
+          <AddChildModal
+            familyId={currentUser?.familyId ?? ''}
+            onClose={() => setIsAddChildOpen(false)}
+          />
+        )}
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-6 pb-8" data-testid="parent-living-home">
       {/* ---- Hero ---------------------------------------------------------- */}
@@ -272,6 +283,43 @@ export function ParentLivingHome() {
         )}
       </section>
 
+      {/* ---- Zero-child family onboarding state ---------------------------- */}
+      {children.length === 0 && (
+        <Surface level="card" data-testid="parent-zero-child-card" className="p-6 space-y-4 rounded-3xl border border-gray-100 dark:border-slate-800">
+          <div className="flex flex-col sm:flex-row items-center gap-4">
+            <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl bg-primary-100 text-primary-600 dark:bg-primary-950 dark:text-primary-300">
+              <Sparkles size={28} />
+            </div>
+            <div className="flex-1 text-center sm:text-left">
+              <h2 className="text-card-title qk-text-primary text-xl font-bold">
+                Welcome to your family workspace!
+              </h2>
+              <p className="mt-1 text-body qk-text-secondary text-sm">
+                Your family is ready. Get started by adding your children or inviting another adult to help manage.
+              </p>
+            </div>
+            <div className="flex flex-wrap gap-2 justify-center sm:justify-end w-full sm:w-auto">
+              <button
+                type="button"
+                data-testid="zero-child-add-child-btn"
+                onClick={() => setIsAddChildOpen(true)}
+                className="inline-flex items-center gap-2 rounded-xl bg-primary-600 px-4 py-2.5 text-sm font-bold text-white hover:bg-primary-700 shadow-sm transition active:scale-95 cursor-pointer"
+              >
+                + Add a child
+              </button>
+              <button
+                type="button"
+                data-testid="zero-child-invite-adult-btn"
+                onClick={() => navigate('/settings/family')}
+                className="inline-flex items-center gap-2 rounded-xl bg-gray-100 dark:bg-slate-800 px-4 py-2.5 text-sm font-bold text-gray-700 dark:text-slate-200 hover:bg-gray-200 dark:hover:bg-slate-700 transition active:scale-95 cursor-pointer"
+              >
+                Invite another parent
+              </button>
+            </div>
+          </div>
+        </Surface>
+      )}
+
       {/* ---- Children overview (family-size adaptive) ----------------------- */}
       {children.length > 0 && (
         <section aria-label={t('parent.childrenHeading')}>
@@ -310,6 +358,10 @@ export function ParentLivingHome() {
 
       {/* ---- Approvals sheet (existing Approval Center, preserved) ---------- */}
       <ApprovalsSheet open={approvalsOpen} onClose={() => setApprovalsOpen(false)} />
+
+      {isAddChildOpen && currentUser?.familyId && (
+        <AddChildModal familyId={currentUser.familyId} onClose={() => setIsAddChildOpen(false)} />
+      )}
     </div>
   );
 }

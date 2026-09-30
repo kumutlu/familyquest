@@ -6,6 +6,15 @@ const usesExternalServer = !!process.env.QUEKI_E2E_BASE_URL;
 /**
  * See https://playwright.dev/docs/test-configuration.
  */
+import { loadEnv } from 'vite';
+
+const env = {
+  ...loadEnv('production', process.cwd(), 'VITE_'),
+  ...loadEnv('development', process.cwd(), 'VITE_'),
+  ...process.env,
+  VITE_USE_FIREBASE_EMULATOR: 'true',
+};
+
 export default defineConfig({
   testDir: './tests/e2e',
   /* The mobile regression suite has its own config (playwright.mobile.config.ts). */
@@ -47,6 +56,10 @@ export default defineConfig({
       name: 'chromium',
       use: { ...devices['Desktop Chrome'] },
     },
+    {
+      name: 'webkit',
+      use: { ...devices['Desktop Safari'] },
+    },
   ],
 
   /* Run your local dev server before starting the tests */
@@ -54,9 +67,10 @@ export default defineConfig({
     ? {}
     : {
         webServer: {
-          command: 'VITE_USE_FIREBASE_EMULATOR=true npm run dev -- --port 5174',
+          command: 'npx tsx scripts/firebase-env-preflight.ts && npm run dev -- --port 5174',
           port: 5174,
           reuseExistingServer: !process.env.CI,
+          env,
         },
       }),
 });

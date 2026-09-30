@@ -66,6 +66,8 @@
   "login": {
     "label": "Giriş",
     "noLogin": "Giriş oluşturulmadı",
+    "connectedViaDevice": "Kişisel cihaz ile bağlı",
+    "connectedViaDeviceHelper": "Çıkış yaptıktan sonra tekrar giriş yapabilmeleri için bir kullanıcı adı ve şifre oluşturun.",
     "create": "Giriş Oluştur",
     "username": "Kullanıcı adı:",
     "status": "Durum:",

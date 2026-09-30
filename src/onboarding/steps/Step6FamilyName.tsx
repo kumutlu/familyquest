@@ -24,9 +24,12 @@ export function Step6FamilyName({ draft, patch, onNext, onBack }: Step6Props) {
 
   // A suggestion may be shown, but it is never persisted without explicit user
   // confirmation (tapping the chip). It is fully editable and optional.
-  const suggestion = draft.parentFirstName.trim()
-    ? t('s6.suggestion', { family: `${draft.parentFirstName.trim()}'s Family` })
-    : '';
+  const enteredName = draft.parentFirstName.trim();
+  const safeName = enteredName && !enteredName.includes('@') ? enteredName : t('s6.defaultFamilyName');
+  const suggestedFamilyName = safeName === t('s6.defaultFamilyName')
+    ? safeName
+    : `${safeName}'s Family`;
+  const suggestion = t('s6.suggestion', { family: suggestedFamilyName });
 
   return (
     <OnboardingCard>
@@ -56,7 +59,7 @@ export function Step6FamilyName({ draft, patch, onNext, onBack }: Step6Props) {
         {suggestion ? (
           <button
             type="button"
-            onClick={() => patch({ familyName: `${draft.parentFirstName.trim()}'s Family` })}
+            onClick={() => patch({ familyName: suggestedFamilyName })}
             className="inline-flex min-h-11 items-center rounded-full border border-primary-200 bg-primary-50 px-4 py-2 text-sm font-semibold text-primary-700 hover:bg-primary-100 dark:border-indigo-500/30 dark:bg-indigo-500/15 dark:text-indigo-200"
           >
             {suggestion}

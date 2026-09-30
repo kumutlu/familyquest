@@ -1,9 +1,10 @@
 import { beforeEach, describe, it, expect, vi } from 'vitest';
-import { act, render, screen } from '@testing-library/react';
+import { act, render as rtlRender, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { ChildLoginSection, type ChildLoginMember } from './ChildLoginSection';
 
 const lifecycle = vi.hoisted(() => ({
+  status: vi.fn(),
   reset: vi.fn(),
   disable: vi.fn(),
   enable: vi.fn(),
@@ -14,6 +15,7 @@ vi.mock('../../lib/childLoginApi', async importOriginal => {
   const actual = await importOriginal<typeof import('../../lib/childLoginApi')>();
   return {
     ...actual,
+    getChildCredentialStatus: lifecycle.status,
     resetChildPassword: lifecycle.reset,
     disableChildLogin: lifecycle.disable,
     enableChildLogin: lifecycle.enable,
@@ -21,12 +23,45 @@ vi.mock('../../lib/childLoginApi', async importOriginal => {
   };
 });
 
+async function renderReady(element: Parameters<typeof rtlRender>[0]) {
+  let result!: ReturnType<typeof rtlRender>;
+  await act(async () => { result = rtlRender(element); });
+  return result;
+}
+
 describe('ChildLoginSection', () => {
-  beforeEach(() => vi.clearAllMocks());
-  it('renders a Create Login action for a managed child without a login', () => {
+  it.each(['unavailable', 'network-error'])('never falls back to public credentials when authority is %s', async state => {
+    if (state === 'network-error') lifecycle.status.mockRejectedValueOnce(new Error('offline'));
+    else lifecycle.status.mockResolvedValueOnce({ state: 'unavailable', identityConnected: false, credentialsExist: false });
+    await renderReady(<ChildLoginSection member={{ id: 'c1', displayName: 'Alex', hasLogin: true, username: 'Alex', loginEnabled: true }} onRequestCreate={vi.fn()} />);
+    expect(screen.getByText(/Credential status unavailable/)).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Reset Password' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Create Login' })).not.toBeInTheDocument();
+  });
+  it('does not expose credential actions for the legacy QR-only Alex profile (physical QA regression)', async () => {
+    // Sanitized production structure: private linkage has no username/email,
+    // username index is absent, and Auth has no password provider. Legacy QR
+    // provisioning incorrectly advertised credentials on this public profile.
+    await renderReady(<ChildLoginSection member={{
+      id: 'qr-child-fixture', displayName: 'Alex', authUid: 'qr-child-fixture',
+      isManaged: true, hasLogin: true, username: 'Alex', loginEnabled: true,
+    }} onRequestCreate={vi.fn()} />);
+    expect.soft(screen.queryByRole('button', { name: 'Reset Password' })).not.toBeInTheDocument();
+    expect.soft(screen.queryByRole('button', { name: 'Disable Login' })).not.toBeInTheDocument();
+    expect.soft(screen.queryByText('Username:')).not.toBeInTheDocument();
+    expect.soft(screen.queryByText('Connected via personal device')).toBeInTheDocument();
+    expect.soft(screen.queryByRole('button', { name: 'Create Login' })).toBeInTheDocument();
+  });
+  beforeEach(({ task }) => {
+    vi.clearAllMocks();
+    const name = task.name;
+    const noCredentials = /legacy QR-only|without a login|requests creation|without username/.test(name);
+    lifecycle.status.mockResolvedValue({ state: 'available', identityConnected: /QR|personal device/.test(name) || !noCredentials, credentialsExist: !noCredentials, username: 'milo', loginEnabled: !/disabled/.test(name), requiresPasswordChange: true });
+  });
+  it('renders a Create Login action for a managed child without a login', async () => {
     const member: ChildLoginMember = { id: 'c1', displayName: 'Milo', hasLogin: false };
     const onRequestCreate = vi.fn();
-    render(<ChildLoginSection member={member} onRequestCreate={onRequestCreate} />);
+    await renderReady(<ChildLoginSection member={member} onRequestCreate={onRequestCreate} />);
 
     expect(screen.getByText('Login')).toBeInTheDocument();
     expect(screen.getByText('No login created')).toBeInTheDocument();
@@ -38,13 +73,31 @@ describe('ChildLoginSection', () => {
     const user = userEvent.setup();
     const member: ChildLoginMember = { id: 'c1', displayName: 'Milo', hasLogin: false };
     const onRequestCreate = vi.fn();
-    render(<ChildLoginSection member={member} onRequestCreate={onRequestCreate} />);
+    await renderReady(<ChildLoginSection member={member} onRequestCreate={onRequestCreate} />);
 
     await user.click(screen.getByRole('button', { name: 'Create Login' }));
     expect(onRequestCreate).toHaveBeenCalledWith(member);
   });
 
-  it('renders login details for a managed child with a login', () => {
+  it('renders Connected via personal device with guidance for QR child without username/password', async () => {
+    const member: ChildLoginMember = {
+      id: 'c1',
+      displayName: 'Alex',
+      hasLogin: false,
+      authUid: 'child_qr_req1',
+    };
+    const onRequestCreate = vi.fn();
+    await renderReady(<ChildLoginSection member={member} onRequestCreate={onRequestCreate} />);
+
+    expect(screen.getByText('Login')).toBeInTheDocument();
+    expect(screen.getByText('Connected via personal device')).toBeInTheDocument();
+    expect(
+      screen.getByText('Create a username and password so they can sign in again after signing out.')
+    ).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Create Login' })).toBeInTheDocument();
+  });
+
+  it('renders login details for a managed child with a login', async () => {
     const member: ChildLoginMember = {
       id: 'c1',
       displayName: 'Milo',
@@ -53,7 +106,7 @@ describe('ChildLoginSection', () => {
       loginEnabled: true,
       requiresPasswordChange: true,
     };
-    render(<ChildLoginSection member={member} onRequestCreate={() => {}} />);
+    await renderReady(<ChildLoginSection member={member} onRequestCreate={() => {}} />);
 
     expect(screen.getByText('Username:')).toBeInTheDocument();
     expect(screen.getByText('milo')).toBeInTheDocument();
@@ -66,7 +119,7 @@ describe('ChildLoginSection', () => {
     expect(screen.getByText('Never')).toBeInTheDocument();
   });
 
-  it('exposes working Reset/Disable actions without a Coming soon placeholder', () => {
+  it('exposes working Reset/Disable actions without a Coming soon placeholder', async () => {
     const member: ChildLoginMember = {
       id: 'c1',
       displayName: 'Milo',
@@ -74,7 +127,7 @@ describe('ChildLoginSection', () => {
       username: 'milo',
       loginEnabled: true,
     };
-    render(<ChildLoginSection member={member} onRequestCreate={() => {}} />);
+    await renderReady(<ChildLoginSection member={member} onRequestCreate={() => {}} />);
 
     const reset = screen.getByRole('button', { name: 'Reset Password' }) as HTMLButtonElement;
     const disable = screen.getByRole('button', { name: 'Disable Login' }) as HTMLButtonElement;
@@ -83,7 +136,7 @@ describe('ChildLoginSection', () => {
     expect(screen.queryByText('Coming soon')).not.toBeInTheDocument();
   });
 
-  it('shows the Enable Login action when the login is disabled', () => {
+  it('shows the Enable Login action when the login is disabled', async () => {
     const member: ChildLoginMember = {
       id: 'c1',
       displayName: 'Milo',
@@ -92,7 +145,7 @@ describe('ChildLoginSection', () => {
       loginEnabled: false,
       requiresPasswordChange: false,
     };
-    render(<ChildLoginSection member={member} onRequestCreate={() => {}} />);
+    await renderReady(<ChildLoginSection member={member} onRequestCreate={() => {}} />);
 
     expect(screen.getByText('Disabled')).toBeInTheDocument();
     const enable = screen.getByRole('button', { name: 'Enable Login' }) as HTMLButtonElement;
@@ -104,7 +157,7 @@ describe('ChildLoginSection', () => {
   it('resets with the parent-entered temporary password and explains the forced change', async () => {
     lifecycle.reset.mockResolvedValue({ childId: 'c1', loginEnabled: true, requiresPasswordChange: true });
     const user = userEvent.setup();
-    render(<ChildLoginSection
+    await renderReady(<ChildLoginSection
       member={{ id: 'c1', displayName: 'Milo', hasLogin: true, username: 'milo', loginEnabled: true }}
       onRequestCreate={() => {}}
     />);
@@ -120,21 +173,23 @@ describe('ChildLoginSection', () => {
     lifecycle.disable.mockResolvedValue({});
     lifecycle.enable.mockResolvedValue({});
     const user = userEvent.setup();
-    const { rerender } = render(<ChildLoginSection
+    const { rerender } = await renderReady(<ChildLoginSection
       member={{ id: 'c1', displayName: 'Milo', hasLogin: true, username: 'milo', loginEnabled: true }}
       onRequestCreate={() => {}}
     />);
     await user.click(screen.getByRole('button', { name: 'Disable Login' }));
     expect(lifecycle.disable).toHaveBeenCalledWith('c1');
+    lifecycle.status.mockResolvedValue({ state: 'available', identityConnected: true, credentialsExist: true, username: 'milo', loginEnabled: false });
     rerender(<ChildLoginSection
+      refreshKey={1}
       member={{ id: 'c1', displayName: 'Milo', hasLogin: true, username: 'milo', loginEnabled: false }}
       onRequestCreate={() => {}}
     />);
-    await user.click(screen.getByRole('button', { name: 'Enable Login' }));
+    await user.click(await screen.findByRole('button', { name: 'Enable Login' }));
     expect(lifecycle.enable).toHaveBeenCalledWith('c1');
   });
 
-  it('never renders authUid, synthetic email, or internal ids', () => {
+  it('never renders authUid, synthetic email, or internal ids', async () => {
     const member: ChildLoginMember = {
       id: 'c1',
       displayName: 'Milo',
@@ -142,11 +197,11 @@ describe('ChildLoginSection', () => {
       username: 'milo',
       loginEnabled: true,
     };
-    const { container } = render(<ChildLoginSection member={member} onRequestCreate={() => {}} />);
+    const { container } = await renderReady(<ChildLoginSection member={member} onRequestCreate={() => {}} />);
     expect(container.textContent).not.toMatch(/authUid|@managed\.familyquest\.app|synthetic/i);
   });
 
-  describe('Delete Child dialog', () => {
+  describe('Delete Child dialog', async () => {
     const member: ChildLoginMember = {
       id: 'c1',
       displayName: 'Alisya',
@@ -163,7 +218,7 @@ describe('ChildLoginSection', () => {
 
     it('shows visible Cancel and Delete labels with a validation hint, delete disabled initially', async () => {
       const user = userEvent.setup();
-      render(<ChildLoginSection member={member} onRequestCreate={() => {}} />);
+      await renderReady(<ChildLoginSection member={member} onRequestCreate={() => {}} />);
       const dialog = await openDialog(user);
 
       const cancel = screen.getByRole('button', { name: 'Cancel' });
@@ -184,7 +239,7 @@ describe('ChildLoginSection', () => {
     it('trims whitespace, enables delete on exact name, and calls deleteChild', async () => {
       lifecycle.deleteChild.mockResolvedValue({});
       const user = userEvent.setup();
-      render(<ChildLoginSection member={member} onRequestCreate={() => {}} />);
+      await renderReady(<ChildLoginSection member={member} onRequestCreate={() => {}} />);
       const dialog = await openDialog(user);
 
       const input = screen.getByLabelText(/full name to confirm/i);
@@ -208,7 +263,7 @@ describe('ChildLoginSection', () => {
         () => new Promise(resolve => { resolveDelete = resolve; }),
       );
       const user = userEvent.setup();
-      render(<ChildLoginSection member={member} onRequestCreate={() => {}} />);
+      await renderReady(<ChildLoginSection member={member} onRequestCreate={() => {}} />);
       const dialog = await openDialog(user);
 
       await user.type(screen.getByLabelText(/full name to confirm/i), 'Alisya');
@@ -228,7 +283,7 @@ describe('ChildLoginSection', () => {
 
     it('closes the dialog via Cancel without deleting', async () => {
       const user = userEvent.setup();
-      render(<ChildLoginSection member={member} onRequestCreate={() => {}} />);
+      await renderReady(<ChildLoginSection member={member} onRequestCreate={() => {}} />);
       await openDialog(user);
 
       await user.click(screen.getByRole('button', { name: 'Cancel' }));

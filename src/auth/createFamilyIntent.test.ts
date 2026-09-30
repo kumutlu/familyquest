@@ -1,6 +1,8 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import {
+  capturePreAuthCreateFamilySelection,
+  clearBoundCreateFamilyIntent,
   clearCreateFamilyIntent,
   CREATE_FAMILY_INTENT_KEY,
   hasCreateFamilyIntent,
@@ -21,6 +23,33 @@ afterEach(() => {
 });
 
 describe('create-family intent', () => {
+  it('binds an explicit pre-auth create selection to the first authenticated UID', () => {
+    capturePreAuthCreateFamilySelection(1_000);
+
+    expect(readCreateFamilyIntent('uid-a', 2_000)).toEqual({
+      version: 1,
+      kind: 'create-family',
+      authUid: 'uid-a',
+      createdAt: 1_000,
+    });
+  });
+
+  it('does not let a second account reuse a pre-auth selection already bound to another UID', () => {
+    capturePreAuthCreateFamilySelection(1_000);
+    expect(readCreateFamilyIntent('uid-a', 2_000)).not.toBeNull();
+
+    expect(readCreateFamilyIntent('uid-b', 2_001)).toBeNull();
+  });
+
+  it('preserves a pre-auth selection during signed-out bootstrap cleanup but clears a bound intent', () => {
+    capturePreAuthCreateFamilySelection(1_000);
+    clearBoundCreateFamilyIntent();
+    expect(readCreateFamilyIntent('uid-a', 2_000)).not.toBeNull();
+
+    clearBoundCreateFamilyIntent();
+    expect(readCreateFamilyIntent('uid-a', 2_001)).toBeNull();
+  });
+
   it('stores only the exact UID-bound envelope in session storage', () => {
     startCreateFamilyIntent('uid-a', 1_000);
 

@@ -28,6 +28,7 @@ import { triggerHaptic } from '../../lib/interaction/haptics';
 import { playCue } from '../../lib/interaction/sound';
 import { MoneyValue } from '../privacy/MoneyValue';
 import { WalletMoneyText } from '../privacy/WalletMoneyText';
+import { ApprovalCenter } from './ApprovalCenter';
 
 /**
  * SwipeReview — Queki v2 parent fast-review flow (Waves 2 + 3).
@@ -75,9 +76,11 @@ export function SwipeReview() {
     taskCompletions,
     transferRequests,
     moneyRequests,
+    childQrJoinRequests,
     familyMembers,
     familyData,
     bootstrapStatus,
+    featureErrors,
   } = useStore();
 
   const [handledKeys, setHandledKeys] = useState<Set<string>>(new Set());
@@ -95,7 +98,7 @@ export function SwipeReview() {
 
   const loading =
     !bootstrapStatus ||
-    (['tasks', 'members'] as const).some(
+    (['tasks', 'members', 'childQrJoinRequests'] as const).some(
       resource =>
         bootstrapStatus[resource] === 'loading' || bootstrapStatus[resource] === 'idle',
     );
@@ -274,6 +277,17 @@ export function SwipeReview() {
       <div className="space-y-4 pb-8" data-testid="swipe-review-loading" aria-busy="true">
         <div className="h-64 animate-pulse rounded-card qk-bg-inset" aria-hidden="true" />
         <div className="h-14 animate-pulse rounded-card qk-bg-inset" aria-hidden="true" />
+      </div>
+    );
+  }
+
+  const qrStatus = bootstrapStatus?.['childQrJoinRequests'];
+  const isQrError = qrStatus === 'error' || Boolean(featureErrors?.['childQrJoinRequests']);
+  const hasPendingQr = (childQrJoinRequests || []).some((r: any) => r.status === 'pending');
+  if (hasPendingQr || isQrError) {
+    return (
+      <div className="max-w-2xl mx-auto py-4 px-2">
+        <ApprovalCenter />
       </div>
     );
   }

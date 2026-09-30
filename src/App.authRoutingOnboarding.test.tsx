@@ -53,7 +53,11 @@ vi.mock('./store/useStore', async () => {
 
 vi.mock('./lib/firebase', () => ({
   app: {},
-  auth: { currentUser: { uid: 'owner-1' } },
+  auth: { currentUser: {
+    uid: 'owner-1', emailVerified: true,
+    reload: vi.fn(async () => {}),
+    getIdTokenResult: vi.fn(async () => ({ claims: { email_verified: true, firebase: { sign_in_provider: 'password' } } })),
+  } },
   db: {},
   googleProvider: {},
 }));
@@ -153,6 +157,7 @@ vi.mock('./help/pages/HelpHome', () => ({ HelpHome: () => null }));
 vi.mock('./help/pages/HelpArticlePage', () => ({ HelpArticlePage: () => null }));
 vi.mock('./help/pages/HelpCategoryPage', () => ({ HelpCategoryPage: () => null }));
 vi.mock('./help/pages/HelpSearchResults', () => ({ HelpSearchResults: () => null }));
+vi.mock('./pages/ChildQrScanPage', () => ({ ChildQrScanPage: () => <div data-testid="child-qr-scan-page" /> }));
 
 import App from './App';
 
@@ -202,6 +207,40 @@ beforeEach(() => {
 });
 
 describe('App auth routing and onboarding composition', () => {
+  it('honours the initial Set up your family choice after authentication without asking Create or Join again', async () => {
+    const user = userEvent.setup();
+    publishStore({
+      authStatus: 'unauthenticated',
+      authUser: null,
+      currentUser: null,
+      profileServerConfirmed: false,
+      appReady: true,
+    });
+    window.history.pushState({}, '', '/onboarding');
+
+    const view = render(<App />);
+    await user.click(await screen.findByRole('button', { name: 'Set up your family' }));
+
+    await act(async () => {
+      savePostAuthCreateDraft();
+      publishStore({
+        authStatus: 'authenticated',
+        authUser: { uid: 'owner-1' },
+        currentUser: { id: 'owner-1', role: 'parent' },
+        profileServerConfirmed: true,
+        appReady: true,
+        pendingMembershipStatus: 'none',
+      });
+      view.rerender(<App />);
+    });
+
+    await waitFor(() => expect(window.location.pathname).toBe('/onboarding'));
+    await waitFor(() => expect(window.location.search).toBe('?mode=create'));
+    await waitFor(() => expect(firestoreBoundary.transactions).toBe(1));
+    expect(screen.queryByRole('button', { name: 'Create a family' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Join a family' })).not.toBeInTheDocument();
+  });
+
   it('does not create a family when an auth transition reaches no-family root routing with a stale post-auth draft', async () => {
     savePostAuthCreateDraft();
     // Task 8 owns the /no-family screen itself. Task 7 deliberately owns the
@@ -292,11 +331,6 @@ describe('App auth routing and onboarding composition', () => {
     expect(window.location.pathname).toBe('/onboarding');
     expect(window.location.search).toBe('?mode=create');
     await user.click(await screen.findByRole('button', { name: 'Continue' }));
-    expect(await screen.findByRole('heading', { name: /first win/i })).toBeVisible();
-    await user.click(screen.getByRole('button', { name: 'Skip' }));
-    expect(await screen.findByRole('button', { name: 'Go to my dashboard' })).toBeVisible();
-    await user.click(screen.getByRole('button', { name: 'Go to my dashboard' }));
-
     await waitFor(() => expect(window.location.pathname).toBe('/'));
   });
 
@@ -450,5 +484,22 @@ describe('App auth routing and onboarding composition', () => {
     });
     expect(await screen.findByTestId('app-layout')).toBeVisible();
     await waitFor(() => expect(window.location.pathname).toBe('/'));
+  });
+
+  it('allows an unauthenticated user to access /join-qr?token=... without redirecting to login', async () => {
+    publishStore({
+      authStatus: 'unauthenticated',
+      authUser: null,
+      currentUser: null,
+      profileServerConfirmed: false,
+      appReady: true,
+    });
+    window.history.pushState({}, '', '/join-qr?token=test-qr-token-12345');
+
+    render(<App />);
+
+    await waitFor(() => expect(screen.getByTestId('child-qr-scan-page')).toBeInTheDocument());
+    expect(window.location.pathname).toBe('/join-qr');
+    expect(window.location.search).toBe('?token=test-qr-token-12345');
   });
 });

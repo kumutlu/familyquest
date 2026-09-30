@@ -53,6 +53,7 @@ beforeEach(async () => {
   store.savingsGoals = [];
   store.myWallet = { balance: 5000 };
   store.loading = false;
+  await i18n.loadNamespaces(['goals', 'wallet', 'funds', 'help', 'common']);
   await act(async () => { await i18n.changeLanguage('en'); });
 });
 

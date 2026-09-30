@@ -1,4 +1,4 @@
-import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
+import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import { AppLayout } from './components/layout/AppLayout';
 import { Dashboard } from './pages/Dashboard';
 import { Family } from './pages/Family';
@@ -12,12 +12,17 @@ import { Settings } from './pages/Settings';
 import { ContinueSetup } from './pages/ContinueSetup';
 import { Login } from './pages/Login';
 import { Signup } from './pages/Signup';
+import { VerifyEmail } from './pages/VerifyEmail';
+import { EmailActionVerify } from './pages/EmailActionVerify';
+import { EmailAction } from './pages/EmailAction';
 import { JoinFamily } from './pages/JoinFamily';
 import { JoinInvite } from './pages/JoinInvite';
 import { AdultInvite } from './pages/AdultInvite';
 import { PendingMembership } from './pages/PendingMembership';
 import { NoFamilyChoice } from './pages/NoFamilyChoice';
+import { ChildQrScanPage } from './pages/ChildQrScanPage';
 import { OnboardingFlow } from './onboarding/OnboardingFlow';
+
 import { PrivacyPolicy } from './pages/legal/PrivacyPolicy';
 import { TermsOfService } from './pages/legal/TermsOfService';
 import { AccountDeletion } from './pages/legal/AccountDeletion';
@@ -43,7 +48,7 @@ import { DevPreviewRoot } from './components/preview/EngagementPreviewRoute';
 import { ThemeShop } from './pages/ThemeShop';
 import { isDevPreviewQueryActive } from './components/preview/engagementPreviewUrl';
 import {
-  clearCreateFamilyIntent,
+  clearBoundCreateFamilyIntent,
   hasCreateFamilyIntent,
   subscribeCreateFamilyIntent,
 } from './auth/createFamilyIntent';
@@ -109,11 +114,18 @@ function App() {
   const authUser = useStore(state => state.authUser);
   const currentFamilyId = useStore(state => state.currentUser?.familyId);
   const authUid = authUser?.uid ?? null;
-  const hasExplicitCreateIntent = useSyncExternalStore(
+  const previousAuthStatusRef = useRef(authStatus);
+  const reactiveCreateIntent = useSyncExternalStore(
     subscribeCreateFamilyIntent,
     () => authUid ? hasCreateFamilyIntent(authUid) : false,
     () => false,
   );
+  // Auth UID can become available in the same render that makes the routing
+  // gate authoritative. Read that UID directly as well as subscribing to
+  // same-tab intent changes so pre-auth selection binding cannot lose a race
+  // to the no-family redirect.
+  const hasExplicitCreateIntent = reactiveCreateIntent
+    || Boolean(authUid && hasCreateFamilyIntent(authUid));
   const [creationContinuation, setCreationContinuation] = useState<CreationContinuation | null>(null);
   // Firestore can publish the new family membership while React batches the
   // state update from the onboarding callback. The ref is the synchronous
@@ -151,7 +163,13 @@ function App() {
     // Keep the UID-bound intent for the whole P1-P3 journey. Clearing it as
     // soon as the profile listener publishes familyId races the in-flight P1
     // transaction and can eject the user before its continuation is confirmed.
-    if (authStatus === 'unauthenticated') clearCreateFamilyIntent();
+    if (
+      previousAuthStatusRef.current === 'authenticated'
+      && authStatus === 'unauthenticated'
+    ) {
+      clearBoundCreateFamilyIntent();
+    }
+    previousAuthStatusRef.current = authStatus;
   }, [authStatus]);
 
   useEffect(() => {
@@ -207,6 +225,9 @@ function App() {
             <Routes>
           <Route path="/login" element={<Login />} />
           <Route path="/signup" element={<Signup />} />
+          <Route path="/verify-email" element={<VerifyEmail />} />
+          <Route path="/auth/verify" element={<EmailActionVerify />} />
+          <Route path="/auth/action" element={<EmailAction />} />
           <Route path="/join-family" element={<JoinFamily />} />
           {/* Code-specific invitation link. Public: the invitation is
               validated server-side before any family detail is rendered. */}
@@ -216,6 +237,8 @@ function App() {
           <Route path="/invite/:token" element={<AdultInvite />} />
           <Route path="/join/pending" element={<PendingMembership />} />
           <Route path="/no-family" element={<NoFamilyChoice />} />
+          <Route path="/join-qr" element={<ChildQrScanPage />} />
+
 
           {/* Public pre-auth onboarding. Rendered OUTSIDE <AppLayout> so it is
               reachable by unauthenticated visitors; it carries its own internal
@@ -241,6 +264,7 @@ function App() {
             <Route index element={<Dashboard />} />
             <Route path="family" element={<Family />} />
             <Route path="family/:id" element={<MemberProfile />} />
+            <Route path="family/members/:id" element={<Navigate to="/family" replace />} />
             <Route path="tasks" element={<Tasks />} />
             {/* Queki v2 Wave 2: parent fast review (swipe) flow. */}
             <Route path="review" element={<ReviewPage />} />
@@ -254,6 +278,7 @@ function App() {
             <Route path="notifications" element={<Notifications />} />
             <Route path="history" element={<TransactionHistoryScreen />} />
             <Route path="settings" element={<Settings />} />
+            <Route path="settings/family" element={<Navigate to="/settings#family-section" replace />} />
             <Route path="continue-setup" element={<ContinueSetup />} />
 
             {/* Help Center. `search` and `category/:id` are declared before the

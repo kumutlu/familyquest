@@ -417,7 +417,7 @@ export async function getFamilyDeletionStatusImpl(
 // Identity classification (server records only)
 // ---------------------------------------------------------------------------
 
-class LinkageError extends Error {
+export class LinkageError extends Error {
   code: SanitizedErrorCode = 'IDENTITY_LINKAGE_ERROR';
 }
 
@@ -426,7 +426,7 @@ class InvariantViolation extends Error {
   code: SanitizedErrorCode = 'INVARIANT_VIOLATION';
 }
 
-async function verifyManagedChild(
+export async function verifyManagedChild(
   ctx: FamilyDeletionContext,
   familyId: string,
   profileId: string,
@@ -438,19 +438,47 @@ async function verifyManagedChild(
   const hasLogin = profile.hasLogin === true;
   const publicAuthUid = typeof profile.authUid === 'string' && profile.authUid ? profile.authUid : null;
   const loginSnap = await ctx.db.doc(`families/${familyId}/childLogins/${profileId}`).get();
+  const hasLoginDoc = loginSnap.exists;
 
-  if (!hasLogin) {
-    // Profile-only managed child: must have no login artefacts at all.
-    if (publicAuthUid || loginSnap.exists) throw new LinkageError('unprovisioned child has login artefacts');
+  // STATE A — PROFILE ONLY CHILD:
+  // Must have no authUid, no childLogin document, and hasLogin != true.
+  if (!publicAuthUid && !hasLoginDoc && !hasLogin) {
     return { authUid: null };
   }
 
-  // Provisioned login: both links are mandatory and must agree.
-  if (!publicAuthUid || !loginSnap.exists) throw new LinkageError('provisioned child missing linkage');
+  // STATE D — CORRUPT / PARTIAL LINKAGE PRE-CHECKS:
+  // If profile has no authUid but childLogin document exists.
+  if (!publicAuthUid && hasLoginDoc) {
+    throw new LinkageError('unprovisioned child has login artefacts');
+  }
+
+  // If profile has authUid (or claims hasLogin) but childLogin document is missing.
+  if (!hasLoginDoc) {
+    throw new LinkageError('provisioned child missing linkage');
+  }
+
+  // If childLogin doc exists but profile has no authUid.
+  if (!publicAuthUid) {
+    throw new LinkageError('provisioned child missing linkage');
+  }
+
+  // Both publicAuthUid and childLogin document exist.
   const login = loginSnap.data() as Record<string, any>;
   const privateAuthUid = typeof login.authUid === 'string' ? login.authUid : null;
+
+  // Verify authUid linkage agrees.
   if (!privateAuthUid || privateAuthUid !== publicAuthUid) {
     throw new LinkageError('auth uid linkage mismatch');
+  }
+
+  // Verify childId linkage agrees if present.
+  if (login.childId && login.childId !== profileId) {
+    throw new LinkageError('child id linkage mismatch');
+  }
+
+  // Verify familyId linkage agrees if present.
+  if (login.familyId && login.familyId !== familyId) {
+    throw new LinkageError('family id linkage mismatch');
   }
 
   let authUser: any = null;
