@@ -1633,7 +1633,7 @@ service cloud.firestore {
       // expensive in the rules expression budget); the operationType allow-list
       // uses `in` (cheap) and denies the colon-form forged doc from the
       // anti-forgery test (operationType "goalContribution" != "goal_contribution").
-      return data.operationType in ['goal_create', 'goal_contribution', 'goal_contribution_request', 'goal_parent_contribution', 'goal_withdrawal_request', 'goal_withdrawal_approve', 'goal_purchased', 'goal_returned', 'goal_cancelled', 'goal_deleted', 'goal_match_approve']
+      return data.operationType in ['goal_create', 'goal_contribution', 'goal_contribution_request', 'goal_parent_contribution', 'goal_withdrawal_request', 'goal_withdrawal_approve', 'goal_purchased', 'goal_returned', 'goal_cancelled', 'goal_deleted', 'goal_match_approve', 'theme_purchase']
         && data.status == 'completed'
         && data.createdAt == request.time
         && data.expiresAt == request.time;
@@ -1672,24 +1672,158 @@ service cloud.firestore {
       return !('avatarConfig' in data) || isValidAvatarConfig(data.avatarConfig);
     }
 
-    // P0 base semantic, retained for backwards compatibility with the
-    // production tests. The Engagement semantic (no direct displayName
-    // write) is enforced by a stricter overlap test in
-    // childAppearance.rules.test.ts; both are pinned so the strict
-    // child-appearance tests do not regress.
+    // Child self-service profile writes, split exactly like the parent-approval
+    // model (0df6761) and the ProfileEditorModal flows:
+    //   - IDENTITY branch: displayName only. The child may rename themselves
+    //     directly (docs/superpowers/plans/2026-08-29-child-profile-direct-save.md,
+    //     pinned by behaviour.rules and childLogin.rules regressions).
+    //   - APPEARANCE branch: avatarId/avatarConfig only — starter or owned
+    //     premium avatars under the closed AvatarConfigV1 schema. avatarUrl
+    //     stays derived and non-writable.
+    // A write mixing the two (or touching anything else) matches neither
+    // branch, so a child can never combine a rename with an avatar swap or
+    // smuggle points/role/family fields through this validator.
     function isValidChildSelfCosmeticUpdate(uid) {
-      let avatarId = request.resource.data.get('avatarId', '');
-      let familyId = resource.data.get('familyId', '');
+      let data = request.resource.data;
+      let oldData = resource.data;
+      let familyId = oldData.get('familyId', '');
+      let avatarId = data.get('avatarId', '');
+      let affected = data.diff(oldData).affectedKeys();
       return authProfileId() == uid
-        && resource.data.get('role', '') == 'child'
+        && oldData.get('role', '') == 'child'
         && familyId != ''
-        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['displayName', 'avatarId', 'avatarConfig'])
-        && request.resource.data.displayName is string
-        && request.resource.data.displayName.trim().size() > 0
-        && request.resource.data.displayName.size() <= 40
-        && (avatarId == null || avatarId == '' || isStarterAvatar(avatarId)
-          || exists(/databases/$(database)/documents/families/$(familyId)/users/$(uid)/avatar_unlocks/$(avatarId)))
-        && hasValidOptionalAvatarConfig(request.resource.data);
+        && (
+          (affected.hasOnly(['displayName'])
+            && data.displayName is string
+            && data.displayName.trim().size() > 0
+            && data.displayName.size() <= 40)
+          || (affected.hasOnly(['avatarId', 'avatarConfig'])
+            && (avatarId == null || avatarId == '' || isStarterAvatar(avatarId)
+              || exists(/databases/$(database)/documents/families/$(familyId)/users/$(uid)/avatar_unlocks/$(avatarId)))
+            && hasValidOptionalAvatarConfig(data))
+        );
+    }
+
+    // THEME SHOP: a child may change ONLY their own equipped theme, and only
+    // to a theme they have a right to use. Everything else on the profile
+    // (points, role, family, avatar) stays untouched: the affected-keys set
+    // is pinned to ['theme'] so a "theme" update can never smuggle a points
+    // or role mutation through this validator.
+    // Converts a promo boundary value (server-written epoch millis int, or a
+    // Timestamp) to epoch millis; anything else fails closed (-1).
+    function themePromoBoundaryMillis(value) {
+      return value is timestamp ? value.toMillis() : (value is int ? value : -1);
+    }
+
+    // True when `themeId` is the family's LIVE Theme of the Week: the catalog
+    // row must exist, be active, promote the SAME theme, and its authoritative
+    // window (server-written) must contain `now` (end exclusive). This grants
+    // temporary, non-owning access — a purchase record is never implied.
+    function themeOfTheWeekIsLive(familyId, themeId) {
+      let shopItemId = themeId.replace('theme.shop.', '');
+      let rowPath = /databases/$(database)/documents/families/$(familyId)/themes/$(shopItemId);
+      return exists(rowPath)
+        && get(rowPath).data.get('isActive', true) == true
+        && get(rowPath).data.get('promo', {}).get('themeId', '') == themeId
+        && request.time.toMillis() >= themePromoBoundaryMillis(get(rowPath).data.get('promo', {}).get('startsAt', null))
+        && request.time.toMillis() < themePromoBoundaryMillis(get(rowPath).data.get('promo', {}).get('endsAt', null));
+    }
+
+    function isValidChildThemePreferenceUpdate(uid) {
+      // Only the child's own profile: a sibling's theme is theirs to choose.
+      return authProfileId() == uid
+        // A theme write may not smuggle any other field through.
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['theme'])
+        // The new preference must be a theme the client catalog knows.
+        && (request.resource.data.theme is string
+          && request.resource.data.theme.matches('theme\\.(standard|christmas|halloween|ramadan|eid|weekly\\.[a-z]+|shop\\.[a-z]+)'))
+        && (
+          // The default theme is always allowed.
+          request.resource.data.theme == 'theme.standard'
+          // Shop themes require an immutable purchase record for THIS child.
+          || (request.resource.data.theme.matches('theme\\.shop\\.[a-z]+')
+            && exists(/databases/$(database)/documents/families/$(resource.data.familyId)/themes/$(request.resource.data.theme.replace('theme.shop.', ''))/purchases/$(uid)))
+          // …OR the item is the family's LIVE Theme of the Week (temporary,
+          // non-owning access — see themeOfTheWeekIsLive).
+          || (request.resource.data.theme.matches('theme\\.shop\\.[a-z]+')
+            && themeOfTheWeekIsLive(resource.data.familyId, request.resource.data.theme))
+          // Event/weekly themes are allowed only while a matching live window
+          // document exists for the family (published by trusted tooling), so a
+          // child cannot pin a dead promotion year-round.
+          || exists(/databases/$(database)/documents/families/$(resource.data.familyId)/themes/$(('event.' + request.resource.data.theme.replace('theme.', ''))))
+        );
+    }
+
+    // THEME SHOP — built-in shop defaults, mirroring the avatarCatalogCost
+    // pattern: the compiled-in values are the fallback authority when a
+    // family has no explicit catalog row yet, so the shop works from the
+    // first day. A parent-published row (families/{id}/themes/{shopItemId})
+    // overrides price/active/themeId without a code deployment.
+    function themeCatalogPrice(shopItemId) {
+      return shopItemId in ['neon', 'space', 'rainbow', 'pixel', 'calm']
+        ? (shopItemId == 'space' || shopItemId == 'neon' ? 500 : 300)
+        : 0;
+    }
+
+    function themeCatalogThemeId(shopItemId) {
+      return shopItemId in ['neon', 'space', 'rainbow', 'pixel', 'calm']
+        ? ('theme.shop.' + shopItemId)
+        : 'theme.standard';
+    }
+
+    function themeShopPrice(familyId, shopItemId) {
+      let row = get(/databases/$(database)/documents/families/$(familyId)/themes/$(shopItemId));
+      return row == null ? themeCatalogPrice(shopItemId) : row.data.get('pricePoints', themeCatalogPrice(shopItemId));
+    }
+
+    function themeShopActive(familyId, shopItemId) {
+      let row = get(/databases/$(database)/documents/families/$(familyId)/themes/$(shopItemId));
+      return row == null ? true : row.data.get('isActive', true) == true;
+    }
+
+    function themeShopThemeId(familyId, shopItemId) {
+      let row = get(/databases/$(database)/documents/families/$(familyId)/themes/$(shopItemId));
+      return row == null ? themeCatalogThemeId(shopItemId) : row.data.get('themeId', themeCatalogThemeId(shopItemId));
+    }
+
+    // Parent engagement gate: when the family has explicitly disabled theme
+    // shopping (engagementPreferences.themeShoppingEnabled == false) no
+    // purchase may commit — the client toggle is UX, this is the boundary.
+    // Absent family doc or absent preference means enabled (backward compat).
+    function themeShoppingEnabled(familyId) {
+      let family = get(/databases/$(database)/documents/families/$(familyId));
+      return family == null
+        ? true
+        : family.data.get('engagementPreferences', {}).get('themeShoppingEnabled', true) != false;
+    }
+
+    // THEME SHOP purchase: mirrors isValidRedemptionDeduction — the points
+    // deduction must be paired, in the same atomic commit, with a fresh,
+    // child-owned purchase record whose cost equals the authoritative
+    // catalog price for the theme being bought.
+    function isValidThemePurchaseDeduction(uid) {
+      let data = request.resource.data;
+      let oldData = resource.data;
+      let diff = data.diff(oldData).affectedKeys();
+      let familyId = oldData.get('familyId', 'null');
+      let purchaseId = data.get('lastThemePurchaseId', 'null');
+      // purchaseId is the shopItemId (theme ids are deterministic child docs).
+      let purchase = getAfter(/databases/$(database)/documents/families/$(familyId)/themes/$(purchaseId)/purchases/$(uid));
+
+      return authProfileId() == uid
+        && 'lastThemePurchaseId' in data
+        && diff.hasOnly(['rewardPoints', 'lastThemePurchaseId'])
+        && themeShoppingEnabled(familyId)
+        && purchase != null
+        && purchase.data.childId == uid
+        && purchase.data.purchasedAt == request.time
+        && purchase.data.costPoints == themeShopPrice(familyId, purchaseId)
+        && purchase.data.themeId == themeShopThemeId(familyId, purchaseId)
+        && themeShopActive(familyId, purchaseId)
+        && purchase.data.costPoints == (oldData.get('rewardPoints', 0) - data.get('rewardPoints', 0))
+        && purchase.data.costPoints > 0
+        && data.get('rewardPoints', 0) >= 0
+        && !exists(/databases/$(database)/documents/families/$(familyId)/themes/$(purchaseId)/purchases/$(uid));
     }
 
     function isValidChildLastActiveUpdate(uid) {
@@ -1747,8 +1881,22 @@ service cloud.firestore {
     // that the client Surge engine reads.
     function isValidEngagementPreferences(value) {
       return value is map
-        && value.keys().hasOnly(['surgeHours'])
-        && (!('surgeHours' in value) || value.surgeHours is bool);
+        && value.keys().hasOnly(['surgeHours', 'seasonalEvents', 'themeShoppingEnabled'])
+        && (!('surgeHours' in value) || value.surgeHours is bool)
+        // Theme content visibility: per-family opt-in keys validated as a
+        // boolean-only map. Keys are open-ended (new celebrations register a
+        // new key) but values must be bool so the resolver never reads a
+        // non-boolean truthiness. The map is capped in size so a malicious
+        // parent client cannot stuff unbounded data into the field.
+        && (!('seasonalEvents' in value) || (
+          value.seasonalEvents is map
+          && value.seasonalEvents.size() <= 32
+          && value.seasonalEvents.keys().hasOnly(
+            ['christmas', 'halloween', 'easter', 'ramadan', 'eid', 'winter', 'summer'])
+        ))
+        // Parent control: allow children to spend points in the Theme Shop.
+        // Defaults to true when absent (existing families keep the feature).
+        && (!('themeShoppingEnabled' in value) || value.themeShoppingEnabled is bool);
     }
 
     // SMART NOTIFICATIONS V1 — closed-shape validator for the family-level
@@ -1844,6 +1992,8 @@ service cloud.firestore {
 
       allow update: if isAuthenticated() && (!isManagedChildCaller() || isTrustedManagedChild()) && (
         isValidChildSelfCosmeticUpdate(uid) ||
+        isValidChildThemePreferenceUpdate(uid) ||
+        isValidThemePurchaseDeduction(uid) ||
         isValidChildTaskActivityUpdate(uid) ||
         isValidChildLastActiveUpdate(uid) ||
         isValidReversalPointsUpdate(uid) ||
@@ -2018,7 +2168,16 @@ service cloud.firestore {
       match /users/{userId} {
         allow read, write: if false;
       }
-      allow update: if isParent(familyId)
+      // Family identity, regional, setup-audit, and Pet Box settings are
+      // OWNER-only (pinned by familySettings.rules): the owner is the billing
+      // identity and the only role that can rename the family or move it to a
+      // new currency/timezone. Co-parents keep engagement, theme-shop, and
+      // notification preferences — every write (owner or parent) still passes
+      // the closed-shape validators below.
+      allow update: if (isOwner(familyId) || (isParent(familyId)
+        && !request.resource.data.diff(resource.data).affectedKeys().hasAny([
+          'name', 'currencyCode', 'timezone', 'weekStartsOn', 'setup', 'petBoxEnabled'
+        ])))
         && !request.resource.data.diff(resource.data).affectedKeys().hasAny(['inviteCode'])
         && !request.resource.data.diff(resource.data).affectedKeys().hasAny([
           'lifecycleState', 'deletionJobId', 'deletionRequestedAt', 'deletionRequestedBy'
@@ -2035,6 +2194,14 @@ service cloud.firestore {
         // household setting both co-parents manage.
         && (!('engagementPreferences' in request.resource.data)
             || isValidEngagementPreferences(request.resource.data.engagementPreferences))
+        // THEME SHOP — themeShoppingEnabled (children may spend points on
+        // themes) follows the engagementPreferences gate: parent-writable,
+        // closed shape. Listed separately so an engagementPreferences-only
+        // write cannot accidentally carry the shop toggle, and vice versa.
+        && (!('themeShoppingEnabled' in request.resource.data)
+            || (request.resource.data.themeShoppingEnabled is bool
+                && request.resource.data.diff(resource.data).affectedKeys()
+                    .hasOnly(['themeShoppingEnabled'])))
         // SMART NOTIFICATIONS V1 — notificationPreferences is parent/owner-
         // writable, validated for closed shape on write. The diff is pinned
         // to the closed key set so a malicious caller cannot mutate unrelated
@@ -2692,7 +2859,10 @@ service cloud.firestore {
         }
         allow read: if isParent(familyId) || (isAuthenticated() && resource.data.childId == authProfileId());
         allow create: if isChildInFamily(familyId, authProfileId())
-          && request.resource.data.keys().hasAll(['familyId', 'childId', 'childName', 'requestedDisplayName', 'requestedAvatar', 'currentDisplayName', 'currentAvatar', 'status', 'createdAt', 'actorId'])
+          // Identity-only contract (0df6761): new requests carry NO avatar fields.
+          // requestedAvatar* keys remain in hasOnly so a legacy-shaped client
+          // still validates, but requestedAvatar is no longer REQUIRED.
+          && request.resource.data.keys().hasAll(['familyId', 'childId', 'childName', 'requestedDisplayName', 'currentDisplayName', 'currentAvatar', 'status', 'createdAt', 'actorId'])
           && request.resource.data.keys().hasOnly(['familyId', 'childId', 'childName', 'requestedDisplayName', 'requestedAvatar', 'requestedAvatarId', 'requestedAvatarConfig', 'currentDisplayName', 'currentAvatar', 'currentAvatarId', 'currentAvatarConfig', 'status', 'createdAt', 'actorId', 'id'])
           && request.resource.data.familyId == familyId
           && request.resource.data.childId == authProfileId()
@@ -2743,6 +2913,147 @@ service cloud.firestore {
             // Prevent duplicate unlocks: the record must not already exist.
             && !exists(/databases/$(database)/documents/families/$(familyId)/users/$(userId)/avatar_unlocks/$(avatarId));
           // Immutable after creation.
+          allow update, delete: if false;
+        }
+
+        // THEME SHOP ownership mirror (per-child hydration projection):
+        //   families/{familyId}/users/{childId}/theme_purchases/{shopItemId}
+        // This per-child subcollection exists because rules-are-not-filters:
+        // a rules-driven bootstrap needs a directly scoppable ownership
+        // collection (exactly like avatar_unlocks above). It is a MIRROR of
+        // the canonical immutable record at
+        // families/{familyId}/themes/{item}/purchases/{childId}: the create
+        // here is only valid when committed in the SAME transaction as that
+        // canonical record (getAfter sees it), so ownership still can never
+        // be self-granted without the paired points deduction.
+        match /theme_purchases/{itemId} {
+          function allowedMirrorKeys() {
+            return ['shopItemId', 'themeId', 'costPoints', 'purchasedAt'];
+          }
+          allow read: if isFamilyMember(familyId)
+            && (authProfileId() == userId || isParent(familyId));
+          allow create: if authProfileId() == userId
+            && isChildInFamily(familyId, userId)
+            && themeShoppingEnabled(familyId)
+            && request.resource.data.keys().hasOnly(allowedMirrorKeys())
+            && request.resource.data.shopItemId == itemId
+            && request.resource.data.purchasedAt == request.time
+            && request.resource.data.costPoints == themeShopPrice(familyId, itemId)
+            && request.resource.data.costPoints > 0
+            && request.resource.data.themeId == themeShopThemeId(familyId, itemId)
+            && themeShopActive(familyId, itemId)
+            // PAIRED WRITE: the canonical immutable purchase record must
+            // exist after this commit at the same authoritative price.
+            && getAfter(/databases/$(database)/documents/families/$(familyId)/themes/$(itemId)/purchases/$(userId)).data.costPoints == request.resource.data.costPoints
+            && !exists(/databases/$(database)/documents/families/$(familyId)/users/$(userId)/theme_purchases/$(itemId));
+          // Mirror immutability follows the canonical record.
+          allow update, delete: if false;
+        }
+      }
+
+      // =========================================================================
+      // THEME SHOP — child theme ownership, purchase, and Theme of the Week.
+      //
+      // One canonical catalog document per shop theme:
+      //   families/{familyId}/themes/{shopItemId}
+      // The catalog row is the AUTHORITY for price, active flag, and the
+      // Theme of the Week promotional window (published by parent/owner
+      // tooling). Clients may NEVER set these values on their own themes.
+      //
+      // Ownership lives in a per-child immutable subcollection:
+      //   families/{familyId}/themes/{shopItemId}/purchases/{childId}
+      // A child can only create their own purchase record, only when the
+      // catalog row is active, only at the authoritative price, and only if
+      // they do not already own the theme. The rewardPoints deduction is
+      // validated by isValidThemePurchaseDeduction() (see users rules above),
+      // which mirrors the redemption deduction contract: same transaction,
+      // exact catalog price, lastThemePurchaseId marker, created this instant.
+      // =========================================================================
+      match /themes/{shopItemId} {
+        // Catalog shape: identity, presentation, authority, and promotion.
+        // themeId must be a theme the client catalog actually knows (closed
+        // prefix set) so a parent typo can never point a shop card at a
+        // nonexistent theme.
+        function isValidThemeCatalogRow() {
+          let data = request.resource.data;
+          return data.shopItemId == shopItemId
+            && data.themeId is string
+            && data.themeId.matches('theme\\.(standard|christmas|halloween|ramadan|eid|weekly\\.[a-z]+|shop\\.[a-z]+)')
+            && data.name is string
+            && data.name.size() > 0
+            && data.name.size() <= 48
+            && data.pricePoints is int
+            && data.pricePoints >= 0
+            && data.pricePoints <= 100000
+            && data.isActive is bool
+            && (!('featured' in data) || data.featured is bool)
+            && (!('promo' in data) || (
+              data.promo is map
+              && data.promo.keys().hasOnly(['themeId', 'startsAt', 'endsAt'])
+              && data.promo.themeId is string
+              && data.promo.themeId.matches('theme\\.(standard|christmas|halloween|ramadan|eid|weekly\\.[a-z]+|shop\\.[a-z]+)')
+              && data.promo.startsAt is number
+              && data.promo.endsAt is number
+              && data.promo.endsAt > data.promo.startsAt
+            ));
+        }
+
+        // Catalog rows are readable by the whole family (the shop needs the
+        // price + promo to render) but writable only by parents/owners.
+        allow read: if isFamilyMember(familyId);
+        allow create, update: if isParent(familyId)
+          && isValidThemeCatalogRow();
+        allow delete: if isParent(familyId);
+
+        // Per-child immutable purchase records. Mirrors avatar_unlocks:
+        // create-once by the owning child, exact authoritative price,
+        // catalog row (or built-in default) must be active, no duplicates.
+        match /purchases/{childId} {
+          function allowedPurchaseKeys() {
+            return ['shopItemId', 'childId', 'familyId', 'themeId', 'costPoints', 'source', 'purchasedAt', 'actorId'];
+          }
+          // The purchase record is only valid when committed ATOMICALLY with
+          // the paired rewardPoints deduction on the buying child's profile:
+          // after the commit the profile must carry this shop item's marker
+          // and exactly costPoints fewer points. A standalone purchase write
+          // (no deduction) fails both checks, so ownership can never be
+          // forged without paying.
+          function purchasePairedWithDeduction() {
+            let userAfter = getAfter(/databases/$(database)/documents/users/$(childId));
+            let userBefore = get(/databases/$(database)/documents/users/$(childId));
+            return userAfter.data.get('lastThemePurchaseId', 'null') == shopItemId
+              && userAfter.data.get('rewardPoints', 0)
+                == userBefore.data.get('rewardPoints', 0) - request.resource.data.costPoints;
+          }
+          allow read: if isFamilyMember(familyId)
+            && (authProfileId() == childId || isParent(familyId));
+          allow create: if authProfileId() == childId
+            && isChildInFamily(familyId, childId)
+            && themeShoppingEnabled(familyId)
+            && request.resource.data.keys().hasOnly(allowedPurchaseKeys())
+            && purchasePairedWithDeduction()
+            && request.resource.data.shopItemId == shopItemId
+            && request.resource.data.childId == childId
+            && request.resource.data.familyId == familyId
+            && request.resource.data.actorId == childId
+            && request.resource.data.source == 'points'
+            && request.resource.data.purchasedAt == request.time
+            // The purchased theme must be the canonical theme of this shop
+            // item: the parent-published row when present, otherwise the
+            // compiled-in default (themeCatalogThemeId above).
+            && request.resource.data.themeId == themeShopThemeId(familyId, shopItemId)
+            // The item must be active and the price authoritative.
+            && themeShopActive(familyId, shopItemId)
+            && request.resource.data.costPoints == themeShopPrice(familyId, shopItemId)
+            && request.resource.data.costPoints > 0
+            // Duplicate purchases denied (idempotent replays are resolved
+            // through the idempotency ledger, not by rewriting this record).
+            && !exists(/databases/$(database)/documents/families/$(familyId)/themes/$(shopItemId)/purchases/$(childId))
+            // PAIRED WRITE: the per-child mirror projection must exist after
+            // this commit too, so the rules-driven bootstrap can hydrate
+            // ownership from families/{id}/users/{childId}/theme_purchases.
+            && getAfter(/databases/$(database)/documents/families/$(familyId)/users/$(childId)/theme_purchases/$(shopItemId)).data.shopItemId == shopItemId;
+          // Immutable after creation — ownership cannot be revoked or forged.
           allow update, delete: if false;
         }
       }
@@ -2947,5 +3258,8 @@ service cloud.firestore {
         allow write: if false;
       }
     }
+
   }
+
+
 }

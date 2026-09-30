@@ -197,14 +197,21 @@ describe('CHILD APPEARANCE — invalid writes (DENY)', () => {
     }));
   });
 
-  it('child CANNOT update displayName directly', async () => {
+  // Identity-only model (0df6761): displayName self-writes are allowed by
+  // the child identity branch (pinned by behaviour.rules + childLogin.rules
+  // regressions); only displayName+avatar COMBINED writes are denied.
+  it('child CAN update displayName directly (identity branch), but not with appearance fields', async () => {
     const db = childDb();
+    await assertSucceeds(updateDoc(doc(db, 'users', childId), {
+      displayName: 'Not Hacked, Just Renamed',
+    }));
     await assertFails(updateDoc(doc(db, 'users', childId), {
       displayName: 'Hacked',
+      avatarConfig: validAvatarConfig,
     }));
   });
 
-  it('child CANNOT update avatarConfig + displayName together', async () => {
+  it('child CANNOT update displayName + avatarConfig together', async () => {
     const db = childDb();
     await assertFails(updateDoc(doc(db, 'users', childId), {
       avatarConfig: validAvatarConfig,

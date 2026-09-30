@@ -36,6 +36,7 @@ export type TransactionType =
   | 'goal_return'
   | 'goal_closure'
   | 'reward_redemption'
+  | 'theme_purchase'
   | 'manual_adjustment'
   | 'transfer_request'
   | 'money_request'
@@ -214,6 +215,7 @@ export const TRANSACTION_ICONS: Record<TransactionType, string> = {
   goal_return: 'Target',
   goal_closure: 'Flag',
   reward_redemption: 'Gift',
+  theme_purchase: 'Theme',
   manual_adjustment: 'Settings',
   transfer_request: 'ArrowRightLeft',
   money_request: 'ArrowDownRight',
@@ -242,6 +244,7 @@ export const TRANSACTION_COLORS: Record<TransactionType, { bg: string; text: str
   goal_return: { bg: 'bg-success-50', text: 'text-success-600' },
   goal_closure: { bg: 'bg-primary-50', text: 'text-primary-600' },
   reward_redemption: { bg: 'bg-reward-50', text: 'text-reward-600' },
+  theme_purchase: { bg: 'bg-primary-50', text: 'text-primary-600' },
   manual_adjustment: { bg: 'bg-gray-100', text: 'text-gray-600' },
   transfer_request: { bg: 'bg-gray-100', text: 'text-gray-900' },
   money_request: { bg: 'bg-success-50', text: 'text-success-600' },
@@ -270,6 +273,7 @@ export const TRANSACTION_CATEGORIES: Record<TransactionType, TransactionCategory
   goal_return: 'income',
   goal_closure: 'goal',
   reward_redemption: 'reward',
+  theme_purchase: 'reward',
   manual_adjustment: 'adjustment',
   transfer_request: 'income', // direction-dependent
   money_request: 'income', // direction-dependent
@@ -421,6 +425,7 @@ export const TRANSACTION_TRANSLATION_KEYS = {
     goal_return: 'goals:return',
     goal_closure: 'goals:closure',
     reward_redemption: 'rewards:redemption',
+    theme_purchase: 'themes:purchase',
     manual_adjustment: 'tx.adjustment',
     transfer_request: 'tx.transfer',
     money_request: 'tx.moneyReceived',

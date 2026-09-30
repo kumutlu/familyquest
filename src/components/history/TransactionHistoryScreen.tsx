@@ -122,7 +122,7 @@ function fundFrom(value: unknown): HistoryFund | undefined {
 
 export function TransactionHistoryScreen() {
   const { t } = useTranslation('wallet');
-  const { t: transactionT } = useTranslation(['wallet', 'goals', 'rewards', 'reversals']);
+  const { t: transactionT } = useTranslation(['wallet', 'goals', 'rewards', 'reversals', 'themes']);
   const {
     currentUser,
     walletTransactions,
@@ -137,6 +137,7 @@ export function TransactionHistoryScreen() {
     funds,
     goalLedger,
     redemptions,
+    themePurchases,
     behaviourEvents,
     loading,
     bootstrapError,
@@ -212,6 +213,7 @@ export function TransactionHistoryScreen() {
       reversals,
       goalLedger,
       redemptions,
+      themePurchases,
       behaviourEvents,
       petboxRequests,
       transferRequests,
@@ -252,6 +254,7 @@ export function TransactionHistoryScreen() {
     reversals,
     goalLedger,
     redemptions,
+    themePurchases,
     behaviourEvents,
     petboxRequests,
     transferRequests,

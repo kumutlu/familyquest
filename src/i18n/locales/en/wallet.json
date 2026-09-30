@@ -97,6 +97,7 @@
       "withdrawalHeadline": "{{amount}} withdrawn from {{child}}’s wallet",
       "transferHeadline": "{{amount}} sent from {{from}} to {{to}}",
       "rewardRedemptionHeadline": "{{amount}} redeemed by {{child}}",
+      "themePurchaseHeadline": "{{child}} bought {{theme}} for {{amount}}",
       "status": {
         "completed": "Completed",
         "pending": "Pending",

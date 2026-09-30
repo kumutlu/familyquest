@@ -87,7 +87,7 @@ export function normalizeAvatarConfig(config: unknown): AvatarConfigV1 | null {
  */
 export function randomAvatarConfig(random: () => number = Math.random): AvatarConfigV1 {
   const pick = <K extends ConfigKey>(key: K): AvatarConfigV1[K] => {
-    const options = AVATAR_CONFIG_OPTIONS[key];
+    const options = AVATAR_CONFIG_OPTIONS[key] as readonly AvatarConfigV1[K][];
     const index = Math.min(
       options.length - 1,
       Math.max(0, Math.floor(random() * options.length)),

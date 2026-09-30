@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 200" preserveAspectRatio="none" role="img" aria-label="Distant hill silhouette">
+  <path
+    d="M0 200
+       L 0 170
+       C 80 158 160 150 240 154
+       C 320 158 380 138 460 138
+       C 540 138 620 152 700 158
+       C 740 160 770 162 800 168
+       L 800 200 Z"
+    fill="currentColor" />
+</svg>

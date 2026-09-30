@@ -20,6 +20,7 @@ import {
   updateDoc,
   deleteDoc,
   setLogLevel,
+  serverTimestamp,
 } from 'firebase/firestore'
 import { afterAll, beforeAll, beforeEach, describe, it } from 'vitest'
 import { readFileSync } from 'node:fs'
@@ -253,7 +254,10 @@ describe('Firestore Rules — task_completions create still enforces assigneeId'
         assigneeId: 'child-1',
         status: 'pending_approval',
         approvedAt: null,
-        completedAt: new Date(),
+        // Server timestamp: since e5a8612 the rules pin completedAt to
+        // request.time so a child cannot backdate a completion, and the
+        // production client (api.completeTask) writes serverTimestamp().
+        completedAt: serverTimestamp(),
         familyId: 'fam-1',
       }),
     )

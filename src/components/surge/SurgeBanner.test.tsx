@@ -13,7 +13,7 @@ import { initReactI18next } from 'react-i18next'
 import { SurgeBanner, type SurgeBannerProps } from './SurgeBanner'
 import type { SurgeEligibilityDefinition } from '../../domain/surge/types'
 
-let onSelectTask: ReturnType<typeof vi.fn>
+let onSelectTask: ReturnType<typeof vi.fn<(taskId: string) => void>>
 
 beforeEach(async () => {
   vi.useFakeTimers()

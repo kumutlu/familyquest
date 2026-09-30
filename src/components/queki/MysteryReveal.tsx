@@ -4,6 +4,7 @@ import { Gift, Sparkles, X } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { cn } from '../../lib/utils';
 import type { MysteryDropReward } from '../../domain/mysteryDrop/types';
+import type { TFunction } from 'i18next';
 
 /**
  * <MysteryReveal /> — the reward feedback surface for a Mystery Drop.
@@ -89,7 +90,7 @@ interface RewardCopy {
   readonly description: string;
 }
 
-function rewardCopy(reward: MysteryDropReward | null, t: (key: string, params?: Record<string, unknown>) => string): RewardCopy {
+function rewardCopy(reward: MysteryDropReward | null, t: TFunction<'home'>): RewardCopy {
   if (!reward) return { title: '', description: '' };
   if (reward.type === 'cosmetic_unlock') {
     return {

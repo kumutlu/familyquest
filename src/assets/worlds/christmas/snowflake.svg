@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" role="img" aria-label="Snowflake ornament">
+  <g fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round">
+    <line x1="12" y1="2" x2="12" y2="22" />
+    <line x1="2" y1="12" x2="22" y2="12" />
+    <line x1="5" y1="5" x2="19" y2="19" />
+    <line x1="19" y1="5" x2="5" y2="19" />
+    <path d="M12 6 l -1.5 -2 M12 6 l 1.5 -2" />
+    <path d="M12 18 l -1.5 2 M12 18 l 1.5 2" />
+    <path d="M6 12 l -2 -1.5 M6 12 l -2 1.5" />
+    <path d="M18 12 l 2 -1.5 M18 12 l 2 1.5" />
+  </g>
+</svg>

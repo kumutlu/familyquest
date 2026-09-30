@@ -26,6 +26,9 @@ vi.mock('../../lib/api', () => ({
   approveJoinRequest: (...args: any[]) => mockApproveJoinRequest(...args),
   rejectJoinRequest: (...args: any[]) => mockRejectJoinRequest(...args),
   signOut: (...args: any[]) => mockSignOut(...args),
+  // Theme Shop parent controls: the seasonal-content grid iterates this
+  // closed key set; the component renders nothing without it.
+  SEASONAL_EVENT_KEYS: ['christmas', 'halloween', 'easter', 'ramadan', 'eid', 'winter', 'summer'],
 }));
 vi.mock('../../lib/familyMembershipApi', () => ({
   regenerateFamilyCode: (...args: any[]) => mockRegenerateInviteCode(...args),
@@ -758,5 +761,57 @@ describe('FamilySettings — pending join requests', () => {
       ],
     });
     expect(screen.queryByText('Pending Approvals')).not.toBeInTheDocument();
+  });
+});
+
+describe('FamilySettings — Theme Shop parent controls', () => {
+  it('parent sees the shop toggle and seasonal switches, and toggling persists', async () => {
+    const user = userEvent.setup();
+    renderFamilySettings('parent');
+    await user.click(screen.getByRole('button', { name: 'Gamification' }));
+    const shopping = screen.getByTestId('family-settings-theme-shopping');
+    expect(shopping).toHaveAttribute('aria-checked', 'true');
+    expect(screen.getByTestId('family-settings-seasonal-christmas')).toHaveAttribute('aria-checked', 'false');
+
+    await user.click(screen.getByTestId('family-settings-seasonal-christmas'));
+    await waitFor(() => {
+      expect(mockUpdateFamilySettings).toHaveBeenCalledWith('fam1', {
+        seasonalEvents: { christmas: true },
+      });
+    });
+
+    await user.click(shopping);
+    await waitFor(() => {
+      expect(mockUpdateFamilySettings).toHaveBeenCalledWith('fam1', { themeShoppingEnabled: false });
+    });
+  });
+
+  it('a child cannot toggle the parent-only theme controls', async () => {
+    const user = userEvent.setup();
+    renderFamilySettings('child');
+    await user.click(screen.getByRole('button', { name: 'Gamification' }));
+    // The shopping switch is not rendered for children; only a status label.
+    expect(screen.queryByTestId('family-settings-theme-shopping')).not.toBeInTheDocument();
+    expect(screen.getByTestId('family-settings-seasonal-christmas')).toBeDisabled();
+  });
+
+  it('toggling seasonal content does not overwrite unrelated family settings', async () => {
+    const user = userEvent.setup();
+    renderFamilySettings('owner', {
+      familyData: {
+        engagementPreferences: { themeShoppingEnabled: false, surgeHours: true },
+      },
+    });
+    await user.click(screen.getByRole('button', { name: 'Gamification' }));
+    await user.click(screen.getByTestId('family-settings-seasonal-eid'));
+    await waitFor(() => {
+      expect(mockUpdateFamilySettings).toHaveBeenCalledWith('fam1', {
+        seasonalEvents: { eid: true },
+      });
+    });
+    // The payload is scoped to the seasonal map only: no unrelated family
+    // setting (shopping toggle, petBox, currency, …) rides along.
+    const call = mockUpdateFamilySettings.mock.calls.at(-1)![1] as Record<string, unknown>;
+    expect(Object.keys(call)).toEqual(['seasonalEvents']);
   });
 });

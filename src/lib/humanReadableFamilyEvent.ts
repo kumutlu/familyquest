@@ -99,7 +99,7 @@ function translatedHeadline(
 
 /** Generates a semantic headline solely from structured event fields. */
 export function humanReadableFamilyEventHeadline(event: Pick<HumanReadableFamilyEvent,
-  'eventKind' | 'amountPence' | 'unit' | 'currency' | 'subject' | 'from' | 'to' | 'actor'>, t?: TransactionAdapterOptions['t']): string {
+  'eventKind' | 'amountPence' | 'unit' | 'currency' | 'subject' | 'from' | 'to' | 'actor'>, t?: TransactionAdapterOptions['t'], transactionSubtitle?: string): string {
   const amount = event.unit === 'points'
     ? `${Math.abs(event.amountPence)} points`
     : money(event.amountPence, event.currency);
@@ -117,6 +117,12 @@ export function humanReadableFamilyEventHeadline(event: Pick<HumanReadableFamily
   if (event.eventKind === 'reward_redemption') return actor
     ? translatedHeadline(t, 'ledger.activity.rewardRedemptionHeadline', `${amount} redeemed by ${actor}`, { amount, child: actor })
     : `${amount} redeemed`;
+  if (event.eventKind === 'theme_purchase') {
+    const theme = transactionSubtitle || 'Theme';
+    return actor
+      ? translatedHeadline(t, 'ledger.activity.themePurchaseHeadline', `${theme} bought by ${actor}`, { amount, child: actor, theme })
+      : `${amount} spent on a theme`;
+  }
   if (event.eventKind === 'transfer' || event.eventKind === 'transfer_in' || event.eventKind === 'transfer_out' || event.eventKind === 'request_payment' || event.eventKind === 'transfer_request') {
     if (from && to) return translatedHeadline(t, 'ledger.activity.transferHeadline', `${amount} sent from ${from} to ${to}`, { amount, from, to });
     if (from) return `${amount} sent from ${from}`;

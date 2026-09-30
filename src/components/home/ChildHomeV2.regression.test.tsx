@@ -1,3 +1,4 @@
+/// <reference types="node" />
 /**
  * Child Home V2 (2026-09-02) — production regression coverage.
  *

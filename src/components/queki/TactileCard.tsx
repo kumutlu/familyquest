@@ -6,10 +6,12 @@ export interface TactileCardProps {
   children: React.ReactNode;
   className?: string;
   /** When set the whole card becomes a real button that depresses on touch. */
+  onClick?: () => void;
   onPress?: () => void;
   /** Accessible name for pressable cards. */
   'aria-label'?: string;
   tone?: 'neutral' | 'xp' | 'mint' | 'coral' | 'streak' | 'family' | 'brand';
+  [key: `data-${string}`]: string | undefined;
 }
 
 const TONES: Record<NonNullable<TactileCardProps['tone']>, string> = {
@@ -30,17 +32,19 @@ const TONES: Record<NonNullable<TactileCardProps['tone']>, string> = {
 export function TactileCard({
   children,
   className,
+  onClick,
   onPress,
   tone = 'neutral',
   ...rest
 }: TactileCardProps) {
+  const press = onPress ?? onClick;
   const shell = cn(
     'rounded-card qk-bg-card qk-border-subtle qk-shadow-card border text-left',
     TONES[tone],
     className,
   );
 
-  if (!onPress) {
+  if (!press) {
     return (
       <div className={shell} {...rest}>
         {children}
@@ -51,7 +55,7 @@ export function TactileCard({
   return (
     <button
       type="button"
-      onClick={onPress}
+      onClick={press}
       onPointerDown={() => triggerHaptic('tap')}
       className={cn(
         shell,

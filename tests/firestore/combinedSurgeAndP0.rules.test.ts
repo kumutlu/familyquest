@@ -28,6 +28,7 @@ import {
   getDoc,
   setLogLevel,
   serverTimestamp,
+  Timestamp,
 } from 'firebase/firestore'
 import { readFileSync } from 'node:fs'
 import { afterAll, beforeAll, beforeEach, describe, it } from 'vitest'

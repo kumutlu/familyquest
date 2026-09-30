@@ -149,7 +149,7 @@ export function ChildLivingHome() {
     if (!mysteryDropHost) return null;
     return {
       id: mysteryDropHost.id,
-      rarity: mysteryDropHost.definition.rarity ?? ('common' as const),
+      rarity: mysteryDropHost.definition.presentation.rarity ?? ('common' as const),
       isRevealReady: mysteryDropHost.isRevealReady,
     };
   }, [mysteryDropHost]);
@@ -319,7 +319,7 @@ export function ChildLivingHome() {
     if (!mysteryDropHost) return null;
     return {
       id: mysteryDropHost.id,
-      rarity: mysteryDropHost.definition.rarity ?? ('common' as const),
+      rarity: mysteryDropHost.definition.presentation.rarity ?? ('common' as const),
       messageKey: 'child.adventure.mystery.lockedLead',
       isRevealReady: mysteryDropHost.isRevealReady,
       progressLabel: mysteryDropHost.progressLabel,
@@ -362,7 +362,7 @@ export function ChildLivingHome() {
   // Theme accent is fed into the surface style so the world visibly
   // shifts for base / weekly / seasonal states. The ambient token is
   // already applied by the existing `ChildExperienceShell`.
-  const themeAccent = experienceTheme.theme?.tokens?.accent as string | undefined;
+  const themeAccent = experienceTheme.theme?.tokens?.accent;
   const surfaceStyle = themeAccent
     ? ({ ['--qk-theme-accent' as any]: themeAccent } as React.CSSProperties)
     : undefined;
@@ -625,7 +625,7 @@ export function ChildLivingHome() {
         <MysteryReveal
           open={mysteryRevealOpen}
           reward={pendingReward}
-          rarity={mysteryDropHost?.definition.rarity ?? 'rare'}
+          rarity={mysteryDropHost?.definition.presentation.rarity ?? 'rare'}
           onClose={handleCloseMystery}
           acknowledged={mysteryDropHost ? isMysteryRevealAcknowledged(mysteryDropHost.id) : false}
         />

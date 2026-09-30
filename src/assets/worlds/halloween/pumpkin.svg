@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="Friendly pumpkin">
+  <g fill="currentColor">
+    <ellipse cx="32" cy="38" rx="22" ry="18" />
+    <ellipse cx="22" cy="40" rx="10" ry="14" opacity="0.6" />
+    <ellipse cx="42" cy="40" rx="10" ry="14" opacity="0.6" />
+    <path d="M32 22 c -2 -6 0 -10 4 -10 c -2 4 0 6 2 8 z" />
+  </g>
+  <g fill="#1a1530" opacity="0.55">
+    <path d="M24 34 l 4 4 4 -4 -4 -2 z" />
+    <path d="M34 34 l 4 4 4 -4 -4 -2 z" />
+    <path d="M28 44 q 4 4 8 0 z" />
+  </g>
+</svg>

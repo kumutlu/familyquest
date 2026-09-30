@@ -131,9 +131,11 @@ export type Rarity = 'common' | 'rare' | 'epic' | 'legendary';
 
 export interface ThemeVisuals {
   /**
-   * Token that maps to a documented CSS / Tailwind variable, e.g.
-   * `'bg-snow'`, `'bg-cream'`. Renderers should look the token up, never
-   * branch on theme identity.
+   * LEGACY (V1) display metadata. No runtime consumer reads these values —
+   * the live visual contract is the CSS-value {@link ThemeTokens} bundle
+   * (`tokens`), which the shell cascades as `--qk-theme-*` custom properties.
+   * Kept for backwards compatibility with existing documents; new themes
+   * should populate `tokens` and treat `visuals` as descriptive only.
    */
   backgroundToken: string;
   cardToken: string;
@@ -143,6 +145,20 @@ export interface ThemeVisuals {
 export interface ThemeEffects {
   completionEffect?: string;
   confettiPreset?: string;
+}
+
+/**
+ * CSS-value token bundle for a theme. Keys map 1:1 to the custom
+ * properties the shell emits (`--qk-theme-accent`, `--qk-theme-accent-soft`,
+ * `--qk-theme-ambient-from/to`, `--qk-theme-pattern-density`). Values are
+ * plain CSS strings so themes stay data, not code.
+ */
+export interface ThemeTokens {
+  accent: string;
+  accentSoft?: string;
+  ambientFrom: string;
+  ambientTo: string;
+  patternDensity?: number;
 }
 
 export interface ThemeCollection {
@@ -165,6 +181,19 @@ export interface ThemeDefinition {
   name: string;
   category: ThemeCategory;
   visuals: ThemeVisuals;
+  /**
+   * Optional CSS-value token bundle (`--qk-theme-*` values). When present,
+   * the shell cascades these as custom properties so the theme visibly
+   * shapes the child world; when absent the theme stays token-neutral.
+   * Presentation only — never eligibility.
+   */
+  tokens?: ThemeTokens;
+  /**
+   * Canonical Theme Shop item id for purchasable themes. Present only on
+   * `theme.shop.*` themes; ties the theme to its authoritative
+   * `families/{familyId}/themes/{shopItemId}` document.
+   */
+  shopItemId?: string;
   effects?: ThemeEffects;
   /** Optional mascot costume reference. */
   mascotCostumeId?: string;

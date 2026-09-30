@@ -38,6 +38,8 @@ export type BootstrapResource =
   | 'profileUpdateRequests'
   | 'reversals'
   | 'avatarUnlocks'
+  | 'themeShopItems'
+  | 'themePurchases'
   | 'wallets'
   | 'gamificationSummaries'
   | 'dailyProgress'
@@ -169,6 +171,8 @@ export const bootstrapResources: BootstrapResource[] = [
   'profileUpdateRequests',
   'reversals',
   'avatarUnlocks',
+  'themeShopItems',
+  'themePurchases',
   'wallets',
   'gamificationSummaries',
   'dailyProgress',
@@ -235,7 +239,12 @@ export function createBootstrapQueryPlan(
       { resource: 'taskCompletions', key: 'taskCompletions', kind: 'query', target: collection(db, `${familyPath}/task_completions`) },
       { resource: 'redemptions', key: 'redemptions', kind: 'query', target: query(collection(db, `${familyPath}/redemptions`), where('userId', '==', userId)) },
       { resource: 'walletTransactions', key: 'walletTransactions', kind: 'query', target: query(collection(db, `${familyPath}/wallet_transactions`), where('childId', '==', userId)) },
-      { resource: 'savingsGoals', key: 'savingsGoals', kind: 'query', target: query(collection(db, `${familyPath}/savings_goals`), where('childId', '==', userId)) },
+      // Family-wide on purpose: family goals carry a `kind === 'family'`
+      // marker instead of the viewer's childId, and the store renders those
+      // for every child (it re-filters to family goals + own goals from this
+      // snapshot). A childId-constrained query would silently hide every
+      // family goal from children — pinned by bootstrapQueries.rules.
+      { resource: 'savingsGoals', key: 'savingsGoals', kind: 'query', target: collection(db, `${familyPath}/savings_goals`) },
       // NOTE: intentionally NO orderBy here for goalRequests or transferRequests.
       // A `where('childId','==',uid)` plus `orderBy('createdAt','desc')` requires a composite
       // index. Filtering by the childId alone uses the automatic single-field index,
@@ -271,6 +280,19 @@ export function createBootstrapQueryPlan(
     // Current user's own avatar unlocks (premium ownership records). Scoped to
     // the user so a child only ever sees their own collection.
     { resource: 'avatarUnlocks', key: 'avatarUnlocks', kind: 'query', target: query(collection(db, `${familyPath}/users/${userId}/avatar_unlocks`)) },
+    // THEME SHOP — catalog rows (price/promo authority) and this child's
+    // ownership records. Both are plain single-collection queries, so they
+    // need no composite index. Family-wide availability keeps the parent
+    // seasonal-preference gate cheap on the client.
+    { resource: 'themeShopItems', key: 'themeShopItems', kind: 'query', target: collection(db, `${familyPath}/themes`) },
+    // THEME SHOP ownership is hydrated from the per-child mirror collection
+    // (families/{id}/users/{childId}/theme_purchases), mirroring how
+    // avatar_unlocks is scoped. The canonical immutable purchase records live
+    // under families/{id}/themes/{item}/purchases/{childId}, but a
+    // collection-group query over them cannot satisfy rules-are-not-filters
+    // scoping on this rules version, so the purchase commit mirrors each
+    // record into the directly scoppable per-child subcollection atomically.
+    { resource: 'themePurchases', key: 'themePurchases', kind: 'query', target: collection(db, `${familyPath}/users/${userId}/theme_purchases`) },
   )
 
   // Gamification queries: parent/owner reads all family summaries/progress,

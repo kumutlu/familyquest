@@ -8,7 +8,7 @@ export interface TactileButtonProps extends React.ButtonHTMLAttributes<HTMLButto
    * Visual family. Semantic variants map to Queki v2 identities:
    * `xp` (gold), `mint` (wallet/money), `coral` (rewards).
    */
-  variant?: 'primary' | 'secondary' | 'ghost' | 'danger' | 'xp' | 'mint' | 'coral';
+  variant?: 'primary' | 'secondary' | 'ghost' | 'danger' | 'xp' | 'mint' | 'coral' | 'inverse';
   size?: 'sm' | 'md' | 'lg';
   fullWidth?: boolean;
   /** Shows an accessible spinner and disables interaction. */
@@ -67,6 +67,10 @@ export function TactileButton({
     mint: 'bg-mint-500 text-white shadow-[0_4px_0_0_var(--color-mint-700)] hover:bg-mint-600 active:translate-y-[3px] active:shadow-[0_1px_0_0_var(--color-mint-700)]',
     coral:
       'bg-coral-500 text-white shadow-[0_4px_0_0_var(--color-coral-700)] hover:bg-coral-600 active:translate-y-[3px] active:shadow-[0_1px_0_0_var(--color-coral-700)]',
+    // On-brand dark container for buttons sitting on strong colour blocks
+    // (e.g. the surge card): inverts the neutral text pair.
+    inverse:
+      'bg-[#231f2e] text-white shadow-[0_4px_0_0_rgba(23,21,31,0.45)] hover:bg-[#2c2739] active:translate-y-[3px] active:shadow-[0_1px_0_0_rgba(23,21,31,0.45)]',
   } as const;
 
   const sizes = {

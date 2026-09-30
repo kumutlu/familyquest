@@ -63,6 +63,25 @@ const baseRequest = (child: string, avatarId: string | null) => ({
 });
 
 describe('PROFILE REQUEST permission bug (Part A.20)', () => {
+  it('allows the EXACT identity-only payload the client writes (no avatar fields)', async () => {
+    // Pins the current submitProfileUpdateRequest write shape: identity-only,
+    // requestedAvatar/requestedAvatarId/requestedAvatarConfig omitted.
+    const db = testEnv.authenticatedContext(childId).firestore();
+    await assertSucceeds(setDoc(doc(db, `families/${familyId}/profile_update_requests`, 'identity-only'), {
+      id: 'identity-only',
+      familyId,
+      childId,
+      childName: 'Alin',
+      requestedDisplayName: 'Alin The Brave',
+      currentDisplayName: 'Alin',
+      currentAvatarId: 'starter-cat',
+      currentAvatar: 'https://api.dicebear.com/7.x/avataaars/svg?seed=Alin',
+      status: 'pending',
+      createdAt: serverTimestamp(),
+      actorId: childId,
+    }));
+  });
+
   it('allows a child to request a valid allowlisted avatarConfig for only their profile', async () => {
     const db = testEnv.authenticatedContext(childId).firestore();
     await assertSucceeds(setDoc(doc(db, `families/${familyId}/profile_update_requests`, 'config-ok'), {
@@ -109,9 +128,12 @@ describe('PROFILE REQUEST permission bug (Part A.20)', () => {
     await assertSucceeds(updateDoc(doc(db, 'users', childId), { avatarConfig: validAvatarConfig }));
   });
 
-  it('allows the same-family parent to apply a valid config but no unrelated field', async () => {
+  // Parent approval is identity-only since 0df6761: parents can no longer
+  // write child appearance fields (the child self-serves via
+  // updateChildAppearance / families/{id}/users/{childId} avatar gate).
+  it('a same-family parent can NO LONGER write child appearance (identity-only approval)', async () => {
     const db = testEnv.authenticatedContext(parentId).firestore();
-    await assertSucceeds(updateDoc(doc(db, 'users', childId), { avatarConfig: validAvatarConfig }));
+    await assertFails(updateDoc(doc(db, 'users', childId), { avatarConfig: validAvatarConfig }));
     await assertFails(updateDoc(doc(db, 'users', childId), { avatarConfig: validAvatarConfig, rewardPoints: 99_999 }));
   });
 
@@ -125,10 +147,24 @@ describe('PROFILE REQUEST permission bug (Part A.20)', () => {
     await assertSucceeds(setDoc(doc(db, `families/${familyId}/profile_update_requests`, 'req1'), baseRequest(childId, 'starter-robot')));
   });
 
-  it('2. child can directly update only their own valid cosmetic profile fields', async () => {
+  // Child self-service is branch-split (see 0df6761 and
+  // docs/superpowers/plans/2026-08-29-child-profile-direct-save.md):
+  //   - IDENTITY branch: displayName only (behaviour.rules + childLogin.rules
+  //     pin this as an intentional product capability),
+  //   - APPEARANCE branch: avatarId/avatarConfig only.
+  // A single write mixing both branches matches neither and must fail —
+  // otherwise a rename could ride along with an unapproved avatar swap.
+  it('2. child can update their own profile only through the split identity/appearance branches', async () => {
     const db = testEnv.authenticatedContext(childId).firestore();
+    await assertFails(updateDoc(doc(db, 'users', childId), {
+      displayName: 'Alin Updated',
+      avatarId: 'starter-robot',
+      avatarConfig: validAvatarConfig,
+    }));
     await assertSucceeds(updateDoc(doc(db, 'users', childId), {
       displayName: 'Alin Updated',
+    }));
+    await assertSucceeds(updateDoc(doc(db, 'users', childId), {
       avatarId: 'starter-robot',
       avatarConfig: validAvatarConfig,
     }));
@@ -501,14 +537,20 @@ describe('CHILD avatar immediate write (no parent approval)', () => {
     }));
   });
 
-  it('child CANNOT update displayName directly (still requires approval)', async () => {
+  // Identity-only model (0df6761): displayName self-writes are the documented
+  // child identity branch (pinned by behaviour.rules + childLogin.rules
+  // regressions); only combined displayName+appearance writes are denied.
+  it('child CAN update displayName directly (identity branch)', async () => {
     const db = testEnv.authenticatedContext(childId).firestore();
-    await assertFails(updateDoc(doc(db, 'users', childId), {
+    await assertSucceeds(updateDoc(doc(db, 'users', childId), {
       displayName: 'Hacked',
     }));
   });
 
-  it('child CANNOT update displayName + avatar together directly (requires approval)', async () => {
+  // Identity-only model (0df6761): displayName self-writes are the
+  // documented child capability (behaviour.rules regression), and avatar
+  // writes are the separate appearance branch — never both in one write.
+  it('child CANNOT update displayName + avatar together directly (branch-split)', async () => {
     const db = testEnv.authenticatedContext(childId).firestore();
     await assertFails(updateDoc(doc(db, 'users', childId), {
       displayName: 'Hacked',

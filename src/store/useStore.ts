@@ -111,6 +111,8 @@ const emptyFamilyState = () => ({
   profileUpdateRequests: [] as any[],
   reversals: [] as any[],
   avatarUnlocks: [] as any[],
+  themeShopItems: [] as any[],
+  themePurchases: [] as any[],
   myWallet: null,
   childWallets: [] as any[],
   gamificationSummaries: [] as any[],
@@ -172,6 +174,8 @@ interface AppState {
   profileUpdateRequests: any[];
   reversals: any[];
   avatarUnlocks: any[];
+  themeShopItems: any[];
+  themePurchases: any[];
   myWallet: any | null;
   childWallets: any[];
   gamificationSummaries: any[];
@@ -1055,6 +1059,8 @@ export const useStore = create<AppState>((set, get) => ({
           subscribePlanned('profileUpdateRequests', 'Profile update requests', snapshot => set({ profileUpdateRequests: docs(snapshot) }));
           subscribePlanned('reversals', 'Reversals', snapshot => set({ reversals: docs(snapshot) }));
           subscribePlanned('avatarUnlocks', 'Avatar unlocks', snapshot => set({ avatarUnlocks: docs(snapshot) }));
+          subscribePlanned('themeShopItems', 'Theme shop', snapshot => set({ themeShopItems: docs(snapshot) }));
+          subscribePlanned('themePurchases', 'Theme purchases', snapshot => set({ themePurchases: docs(snapshot) }));
         } else {
           subscribePlanned('taskCompletions', 'Task completions', snapshot => set({ taskCompletions: docs(snapshot) }));
           subscribePlanned('redemptions', 'Redemptions', snapshot => set({ redemptions: normalizeRedemptions(docs(snapshot)) }));
@@ -1077,6 +1083,8 @@ export const useStore = create<AppState>((set, get) => ({
           subscribePlanned('petboxRequests', 'Pet Box requests', snapshot => set({ petboxRequests: docs(snapshot) }));
           subscribePlanned('profileUpdateRequests', 'Profile update requests', snapshot => set({ profileUpdateRequests: docs(snapshot) }));
           subscribePlanned('avatarUnlocks', 'Avatar unlocks', snapshot => set({ avatarUnlocks: docs(snapshot) }));
+          subscribePlanned('themeShopItems', 'Theme shop', snapshot => set({ themeShopItems: docs(snapshot) }));
+          subscribePlanned('themePurchases', 'Theme purchases', snapshot => set({ themePurchases: docs(snapshot) }));
 
           const moneyRequestResults: any[][] = [[], []];
           const moneyRequestReady = [false, false];

@@ -81,12 +81,15 @@ export function ComebackMissionCard({
   if (tier === 'none') return null;
   const tone = TIER_TONE[tier];
 
-  const titleKey = missionCompleted
+  // Dynamic keys assembled per-tier at runtime; both key families exist in
+  // en+tr home.json (verified). The cast bypasses the template-literal key
+  // check that cannot statically prove the tier union expansion.
+  const titleKey = (missionCompleted
     ? `child.comeback.completed.${tier}.title`
-    : `child.comeback.mission.${tier}.title`;
-  const descKey = missionCompleted
+    : `child.comeback.mission.${tier}.title`) as Parameters<typeof t>[0];
+  const descKey = (missionCompleted
     ? `child.comeback.completed.${tier}.description`
-    : `child.comeback.mission.${tier}.description`;
+    : `child.comeback.mission.${tier}.description`) as Parameters<typeof t>[0];
 
   return (
     <TactileCard
@@ -107,11 +110,12 @@ export function ComebackMissionCard({
         {missionCompleted ? <Sparkles size={22} /> : <RefreshCw size={22} />}
       </span>
       <div className="min-w-0 flex-1">
-        <p className="text-card-title qk-text-primary">{t(titleKey, {
+        <p className="text-card-title qk-text-primary">{t(String(titleKey), {
           days: inactivityDays,
+          defaultValue: '',
         })}</p>
         <p className="mt-0.5 text-meta qk-text-secondary">
-          {t(descKey, { days: inactivityDays })}
+          {t(String(descKey), { days: inactivityDays, defaultValue: '' })}
         </p>
       </div>
     </TactileCard>

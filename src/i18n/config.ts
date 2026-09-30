@@ -43,6 +43,7 @@ export const NAMESPACES = [
   'help',
   'onboarding',
   'familyWorld',
+  'themes',
 ] as const;
 export type Namespace = (typeof NAMESPACES)[number];
 

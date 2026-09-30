@@ -14,6 +14,16 @@ export type GamificationEventTypeV1 =
   | 'behaviour_positive'
   | 'behaviour_negative'
   | 'behaviour_financial'
+  // Engagement engine event types (functions/src/mysteryDrop + functions/src/comeback
+  // are the write authorities; see docs/engagement/mystery-drops-comeback-design.md).
+  // The client-side XP projection (xp.ts fold + rebuildNormalization.ts) must be
+  // able to represent them so rebuilds converge.
+  | 'MYSTERY_DROP_XP_AWARDED'
+  | 'MYSTERY_DROP_XP_REVERSED'
+  | 'COMEBACK_MISSION_XP_AWARDED'
+  | 'COMEBACK_MISSION_XP_REVERSED'
+  | 'SURGE_BONUS_AWARDED'
+  | 'SURGE_BONUS_REVERSED'
 
 export type GamificationSourceTypeV1 = 'task_completion' | 'daily_progress' | 'migration' | 'behaviour_event'
 export type GamificationCreatedByV1 =

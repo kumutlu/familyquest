@@ -49,7 +49,7 @@ export const CHRISTMAS_EVENT_2026: EventDefinition = Object.freeze(
     Date.UTC(2026, 11, 31, 23, 59, 59),
     {
       themeId: 'theme.christmas',
-      collectibles: Object.freeze(['theme.christmas.2026', 'avatar.frame.festive', 'badge.kindness-2026']),
+      collectibles: (Object.freeze(['theme.christmas.2026', 'avatar.frame.festive', 'badge.kindness-2026']) as readonly string[]) as string[],
       eligibility: Object.freeze({ preferenceKey: 'christmas' }) as EventDefinition['eligibility'],
     },
   ),
@@ -67,7 +67,7 @@ export const HALLOWEEN_EVENT_2026: EventDefinition = Object.freeze(
     Date.UTC(2026, 9, 31, 23, 59, 59),
     {
       themeId: 'theme.halloween',
-      collectibles: Object.freeze(['theme.halloween.2026', 'avatar.frame.pumpkin']),
+      collectibles: (Object.freeze(['theme.halloween.2026', 'avatar.frame.pumpkin']) as readonly string[]) as string[],
       eligibility: Object.freeze({ preferenceKey: 'halloween' }) as EventDefinition['eligibility'],
     },
   ),
@@ -87,7 +87,7 @@ export const RAMADAN_EVENT_2026: EventDefinition = Object.freeze(
     Date.UTC(2026, 2, 18, 23, 59, 59),
     {
       themeId: 'theme.ramadan',
-      collectibles: Object.freeze(['theme.ramadan.2026', 'avatar.frame.lantern', 'badge.kindness-ramadan-2026']),
+      collectibles: (Object.freeze(['theme.ramadan.2026', 'avatar.frame.lantern', 'badge.kindness-ramadan-2026']) as readonly string[]) as string[],
       eligibility: Object.freeze({ preferenceKey: 'ramadan' }) as EventDefinition['eligibility'],
     },
   ),
@@ -105,7 +105,7 @@ export const EID_EVENT_2026: EventDefinition = Object.freeze(
     Date.UTC(2026, 2, 22, 23, 59, 59),
     {
       themeId: 'theme.eid',
-      collectibles: Object.freeze(['theme.eid.2026', 'avatar.frame.festive-emerald']),
+      collectibles: (Object.freeze(['theme.eid.2026', 'avatar.frame.festive-emerald']) as readonly string[]) as string[],
       eligibility: Object.freeze({ preferenceKey: 'eid' }) as EventDefinition['eligibility'],
     },
   ),
@@ -124,7 +124,7 @@ export const NEON_WEEK_EVENT: EventDefinition = Object.freeze(
     Date.UTC(2026, 6, 7, 23, 59, 59),
     {
       themeId: 'theme.weekly.neon',
-      collectibles: Object.freeze(['theme.weekly.neon']),
+      collectibles: (Object.freeze(['theme.weekly.neon']) as readonly string[]) as string[],
     },
   ),
 ) as EventDefinition;

@@ -10,6 +10,7 @@ import {
   Settings,
   CircleHelp,
   MessageSquarePlus,
+  Palette,
 } from 'lucide-react';
 import { BottomSheet } from '../queki/BottomSheet';
 import { TactileButton } from '../queki/TactileButton';
@@ -27,6 +28,7 @@ type MoreLabelKey =
   | 'more.wallets'
   | 'more.wallet'
   | 'more.catBox'
+  | 'more.themes'
   | 'more.history'
   | 'more.notifications'
   | 'more.settings'
@@ -58,6 +60,7 @@ export const MORE_DESTINATIONS: MoreDestination[] = [
   { testId: 'more-wallets', path: '/wallets', labelKey: 'more.wallets', icon: <WalletCards size={20} aria-hidden="true" />, roles: 'parent' },
   { testId: 'more-wallet', path: '/wallet', labelKey: 'more.wallet', icon: <Wallet size={20} aria-hidden="true" />, roles: 'child' },
   { testId: 'more-cat-box', path: '/pet-box', labelKey: 'more.catBox', icon: <Cat size={20} aria-hidden="true" />, roles: 'parent' },
+  { testId: 'more-themes', path: '/themes', labelKey: 'more.themes', icon: <Palette size={20} aria-hidden="true" />, roles: 'child' },
   { testId: 'more-history', path: '/history', labelKey: 'more.history', icon: <History size={20} aria-hidden="true" />, roles: 'all' },
   { testId: 'more-notifications', path: '/notifications', labelKey: 'more.notifications', icon: <Bell size={20} aria-hidden="true" />, roles: 'all' },
   { testId: 'more-settings', path: '/settings', labelKey: 'more.settings', icon: <Settings size={20} aria-hidden="true" />, roles: 'all' },

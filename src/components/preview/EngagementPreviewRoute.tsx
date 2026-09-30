@@ -47,9 +47,14 @@ import {
 import {
   PREVIEW_FIXTURES as FIXTURES,
   findFixtureById,
+  FIXTURE_KIND_WORLD,
   type PreviewFixture,
   type PreviewFixtureKind,
 } from './previewFixtures';
+import {
+  setExperienceWorldOverride,
+  resetExperienceWorldOverride,
+} from '../../hooks/useExperienceWorld';
 export type { PreviewFixture };
 
 declare const importMetaEnv: { PROD?: boolean } | undefined;
@@ -344,6 +349,10 @@ const HERO_XP_FOR: Record<PreviewFixtureKind, number> = {
   'seasonal-halloween': 460,
   'seasonal-ramadan-eid': 420,
   'seasonal-neon': 500,
+  'world-christmas-surge': 430,
+  'world-halloween-mystery': 380,
+  'world-eid-comeback': 220,
+  'world-normal-surge': 410,
   'xp-pop-mystery': 360,
   'xp-pop-comeback': 220,
   'reduced-motion': 300,
@@ -362,6 +371,10 @@ const HERO_LEVEL_FOR: Record<PreviewFixtureKind, number> = {
   'seasonal-halloween': 5,
   'seasonal-ramadan-eid': 4,
   'seasonal-neon': 5,
+  'world-christmas-surge': 4,
+  'world-halloween-mystery': 4,
+  'world-eid-comeback': 2,
+  'world-normal-surge': 4,
   'xp-pop-mystery': 4,
   'xp-pop-comeback': 2,
   'reduced-motion': 3,
@@ -380,9 +393,29 @@ const HERO_STREAK_FOR: Record<PreviewFixtureKind, number> = {
   'seasonal-halloween': 5,
   'seasonal-ramadan-eid': 4,
   'seasonal-neon': 7,
+  'world-christmas-surge': 5,
+  'world-halloween-mystery': 4,
+  'world-eid-comeback': 0,
+  'world-normal-surge': 5,
   'xp-pop-mystery': 4,
   'xp-pop-comeback': 0,
   'reduced-motion': 2,
+}
+
+/**
+ * Tiny bridge that sets the world override while the fixture canvas
+ * is mounted and clears it on unmount. The world layer then paints
+ * the requested world through the SAME production code path the
+ * live app uses. There is no second world renderer.
+ */
+function WorldOverrideBridge({ worldId }: { worldId: string }) {
+  useEffect(() => {
+    setExperienceWorldOverride(worldId as any)
+    return () => {
+      resetExperienceWorldOverride()
+    }
+  }, [worldId])
+  return null
 }
 
 function PreviewFixtureCanvas({ fixture }: { fixture: PreviewFixture }) {
@@ -390,15 +423,18 @@ function PreviewFixtureCanvas({ fixture }: { fixture: PreviewFixture }) {
   // wrapped in the experience shell, so QA judges visual hierarchy, theme,
   // mascot, Adventure, quests and XP relationship — not isolated text rows.
   // MemoryRouter is included so YourJourney can resolve navigation.
+  const worldId = fixture.worldId ?? FIXTURE_KIND_WORLD[fixture.kind]
   const world = (
     <MemoryRouter>
+      <WorldOverrideBridge worldId={worldId} />
       <ChildExperienceShell
         resolvedTheme={fixtureThemeFor(fixture)}
         mascotPresentation={{
-          characterId: 'queki',
           mood: fixture.mood,
           expression: fixture.expression,
           messageKey: fixture.messageKey,
+          priorityTag: 'default',
+          animationId: 'anim.idle.breathe',
         }}
       >
         <div
@@ -408,10 +444,11 @@ function PreviewFixtureCanvas({ fixture }: { fixture: PreviewFixture }) {
           <PreviewHeroBlock fixture={fixture} />
           <MascotScene
             presentation={{
-              characterId: 'queki',
               mood: fixture.mood,
               expression: fixture.expression,
               messageKey: fixture.messageKey,
+              priorityTag: 'default',
+              animationId: 'anim.idle.breathe',
             }}
             message={fixture.mascotLine}
             greeting="Hey, preview"
@@ -423,7 +460,7 @@ function PreviewFixtureCanvas({ fixture }: { fixture: PreviewFixture }) {
             surge={fixture.surge}
             normalQuestCount={fixture.normalQuestCount}
             allCaughtUp={fixture.allCaughtUp}
-            onOpen={() => {}}
+            onPressMysteryDrop={() => {}}
             onSelectSurgeTask={() => {}}
             onViewQuests={() => {}}
           />

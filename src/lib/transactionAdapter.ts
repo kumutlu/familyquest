@@ -28,8 +28,15 @@ export type { NormalizedTransaction } from './transactionModel';
 // Adapter Options
 // ---------------------------------------------------------------------------
 
+export type TransactionAdapterNamespace =
+  | 'wallet'
+  | 'goals'
+  | 'rewards'
+  | 'reversals'
+  | 'themes';
+
 export interface TransactionAdapterOptions {
-  t?: TFunction<'wallet' | 'goals' | 'rewards' | 'reversals'>;
+  t?: TFunction<TransactionAdapterNamespace>;
   currency?: string;
   nameResolver?: (id: string) => string | undefined;
   taskResolver?: (id: string) => { title?: string; pointsReward?: number } | undefined;
@@ -83,6 +90,8 @@ export interface AdaptAllTransactionsParams {
   petboxRequests?: readonly unknown[];
   transferRequests?: readonly unknown[];
   moneyRequests?: readonly unknown[];
+  /** Immutable Theme Shop purchase records (theme_purchases projection). */
+  themePurchases?: readonly unknown[];
   opts: TransactionAdapterOptions;
 }
 
@@ -324,8 +333,8 @@ function directionFromAmount(amountPence: number): TransactionDirection {
   return 'neutral';
 }
 
-function translate<Namespace extends 'wallet' | 'goals' | 'rewards' | 'reversals'>(
-  t: TFunction<Namespace> | undefined,
+function translate(
+  t: TFunction<TransactionAdapterNamespace> | undefined,
   key: string,
   fallback: string,
   values: Readonly<Record<string, string | number>> = {},
@@ -711,6 +720,60 @@ function normalizeRedemption(
   }, opts, getReversal(reversals, 'reward_redemption', record.id));
 }
 
+/**
+ * THEME SHOP purchase → unified history row. Human-readable title and
+ * subtitle (theme name) — never developer-facing labels (spec §6).
+ * Theme purchases are deliberately NOT reversible (ownership is permanent),
+ * so no reversal lookup is performed.
+ */
+function isThemePurchaseRecord(value: unknown): value is ThemePurchaseRecord {
+  if (!isRecord(value)) return false;
+  return typeof value.shopItemId === 'string'
+    && typeof value.childId === 'string'
+    && typeof value.costPoints === 'number'
+    && Number.isFinite(value.costPoints);
+}
+
+interface ThemePurchaseRecord extends SourceRecord {
+  id: string;
+  shopItemId: string;
+  childId: string;
+  themeId?: string;
+  costPoints: number;
+}
+
+function normalizeThemePurchase(
+  record: ThemePurchaseRecord,
+  opts: TransactionAdapterOptions,
+): NormalizedTransaction {
+  const themeName = stringValue(record.themeId) ?? '';
+  const display = themeName
+    ? themeName.replace(/^theme\./, '').replace(/^shop\./, '')
+    : record.shopItemId;
+  const childName = opts.nameResolver?.(record.childId);
+  const pretty = display
+    .split(/[-_.]/)
+    .filter(Boolean)
+    .map(word => word.charAt(0).toUpperCase() + word.slice(1))
+    .join(' ');
+  return buildTransaction({
+    id: record.id,
+    timestamp: timestampFrom(record.purchasedAt, record.createdAt),
+    type: 'theme_purchase',
+    amountPence: -Math.abs(record.costPoints),
+    unit: 'points',
+    status: 'completed',
+    title: translate(opts.t, 'themes:purchase', 'Theme purchase'),
+    subtitle: pretty || childName || '',
+    source: 'redemption',
+    sourceId: record.shopItemId,
+    category: 'reward',
+    childId: record.childId,
+    note: pretty ? undefined : record.shopItemId,
+    searchTerms: [pretty, childName],
+  }, opts);
+}
+
 function normalizeBehaviour(
   record: BehaviourRecord,
   opts: TransactionAdapterOptions,
@@ -903,6 +966,9 @@ export function adaptAllTransactions(params: AdaptAllTransactionsParams): Normal
   }
   for (const value of params.redemptions ?? []) {
     if (isRedemptionRecord(value)) transactions.push(normalizeRedemption(value, params.opts, reversals));
+  }
+  for (const value of params.themePurchases ?? []) {
+    if (isThemePurchaseRecord(value)) transactions.push(normalizeThemePurchase(value, params.opts));
   }
   for (const value of params.behaviourEvents ?? []) {
     if (isBehaviourRecord(value) && !walletLinks.behaviourIds.has(value.id)) {

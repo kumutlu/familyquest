@@ -40,6 +40,7 @@ import { markStartupStage } from './startupDiagnostics';
 import { E2EBootstrapDiagnostics } from './components/E2EBootstrapDiagnostics';
 import { AuthRoutingGate } from './auth/AuthRoutingGate';
 import { DevPreviewRoot } from './components/preview/EngagementPreviewRoute';
+import { ThemeShop } from './pages/ThemeShop';
 import { isDevPreviewQueryActive } from './components/preview/engagementPreviewUrl';
 import {
   clearCreateFamilyIntent,
@@ -244,6 +245,7 @@ function App() {
             {/* Queki v2 Wave 2: parent fast review (swipe) flow. */}
             <Route path="review" element={<ReviewPage />} />
             <Route path="rewards" element={<Rewards />} />
+            <Route path="themes" element={<ThemeShop />} />
             <Route path="pet-box" element={<FundsDashboard />} />
             <Route path="wallet" element={<Wallet />} />
             <Route path="wallets" element={<Wallets />} />

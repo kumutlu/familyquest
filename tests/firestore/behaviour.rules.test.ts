@@ -131,12 +131,18 @@ describe('behaviour event rules', () => {
     }));
   });
 
-  test('owner child edits allow displayName/avatarUrl/avatarId but reject UI-only profile fields', async () => {
+  // Identity-only model (0df6761): the owner may rename a child (identity
+  // branch), but appearance fields are the child's own self-service branch —
+  // an adult can no longer write avatarUrl/avatarId on a child profile.
+  test('owner child edits allow displayName only; appearance is child self-service', async () => {
     const owner = user(OWNER_ID);
     await assertSucceeds(updateDoc(doc(owner, 'users', CHILD_ID), {
+      displayName: 'Updated Child',
+    }));
+    await assertFails(updateDoc(doc(owner, 'users', CHILD_ID), {
       displayName: 'Updated Child', avatarUrl: 'https://example.test/starter-cat',
     }));
-    await assertSucceeds(updateDoc(doc(owner, 'users', CHILD_ID), { avatarId: 'starter-cat' }));
+    await assertFails(updateDoc(doc(owner, 'users', CHILD_ID), { avatarId: 'starter-cat' }));
     await assertFails(updateDoc(doc(owner, 'users', CHILD_ID), { colour: '#ef4444' }));
   });
 

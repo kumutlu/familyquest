@@ -237,7 +237,7 @@ function MysteryReadyCard({
           {t('child.adventure.mystery.readyTitle')}
         </p>
         <p className="mt-0.5 text-meta text-xp-600">
-          {drop.messageKey ? t(drop.messageKey) : ''}
+          {drop.messageKey ? t(drop.messageKey as never) : ''}
         </p>
       </div>
       <span

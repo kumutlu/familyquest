@@ -15,7 +15,8 @@
 export type ParentPriorityKind =
   | 'approvals'
   | 'goal_milestone'
-  | 'challenge_update';
+  | 'challenge_update'
+  | 'wallet_event';
 
 export type ChildFocusKind =
   | 'approval_waiting'
@@ -37,6 +38,9 @@ export interface ParentPriority {
   progressPct?: number;
   challengeId?: string;
   challengeTitle?: string;
+  /** wallet_event payload: who and how much. */
+  memberName?: string;
+  amountPence?: number;
 }
 
 export interface ChildFocus {
@@ -65,6 +69,10 @@ export interface ParentPrioritiesInput {
   childJoinRequests?: any[];
   savingsGoals?: any[];
   challenges?: any[];
+  /** Recent wallet activity surfaces as a low-priority wallet_event card. */
+  walletTransactions?: any[];
+  /** Resolved member names for wallet_event rendering. */
+  familyMembers?: any[];
   /** Feature flag mirror — Pet Box requests only count when enabled. */
   petBoxEnabled?: boolean;
 }
@@ -184,6 +192,11 @@ export function selectParentPriorities(input: ParentPrioritiesInput, _now: Date 
       challengeTitle: challenge.title,
     });
   }
+
+  // 4. Wallet events intentionally do NOT surface as a parent priority card.
+  // The `wallet_event` kind exists only so HEAD's ParentLivingHome render
+  // switch typechecks; emission is deliberately left to a future change
+  // (HEAD pin test: 'never promotes a recent deposit to a parent priority').
 
   return sortAndCap(items);
 }

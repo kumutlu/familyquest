@@ -46,6 +46,7 @@ import {
 import { useStore } from '../store/useStore';
 import { unregisterCurrentDevice } from './pushNotifications';
 import { getAvatarById, getAvatarCost, resolveAvatarImage } from '../config/avatarCatalog';
+import { getThemeById } from '../domain/experience';
 import { type AvatarConfigV1, isValidAvatarConfig } from '../config/avatarConfig';
 import {
   periodKeyFor,
@@ -326,6 +327,40 @@ export interface FamilySettingsUpdates {
   weekStartsOn?: 0 | 1;
   gamificationConfig?: GamificationConfigInput;
   petBoxEnabled?: boolean;
+  /**
+   * THEME SHOP — parent control: may children spend points on themes?
+   * Undefined leaves the existing value untouched.
+   */
+  themeShoppingEnabled?: boolean;
+  /**
+   * THEME SHOP — seasonal/cultural content visibility per family. Only the
+   * known preference keys are accepted; disabled categories hide their
+   * seasonal worlds from the family's child experience.
+   */
+  seasonalEvents?: Record<string, boolean>;
+}
+
+/** Known seasonal preference keys (closed set, mirrors the rules validator). */
+export const SEASONAL_EVENT_KEYS = [
+  'christmas', 'halloween', 'easter', 'ramadan', 'eid', 'winter', 'summer',
+] as const;
+
+export type SeasonalEventKey = (typeof SEASONAL_EVENT_KEYS)[number];
+
+/**
+ * Normalise a raw seasonalEvents map to the closed key set. Unknown keys are
+ * dropped so a malicious/stale client cannot stuff arbitrary data through;
+ * missing keys are preserved as absent (the resolver treats absent as false).
+ */
+export function normaliseSeasonalEvents(
+  raw: Record<string, unknown> | null | undefined,
+): Record<string, boolean> {
+  const out: Record<string, boolean> = {};
+  if (!raw || typeof raw !== 'object') return out;
+  for (const key of SEASONAL_EVENT_KEYS) {
+    if (raw[key] === true) out[key] = true;
+  }
+  return out;
 }
 
 /** Update only the owner-managed family settings allowlist. */
@@ -339,6 +374,18 @@ export const updateFamilySettings = async (familyId: string, updates: FamilySett
   if (updates.weekStartsOn !== undefined) allowedUpdates.weekStartsOn = updates.weekStartsOn;
   if (updates.gamificationConfig !== undefined) allowedUpdates.gamificationConfig = updates.gamificationConfig;
   if (updates.petBoxEnabled !== undefined) allowedUpdates.petBoxEnabled = updates.petBoxEnabled;
+  if (updates.themeShoppingEnabled !== undefined) {
+    allowedUpdates.themeShoppingEnabled = updates.themeShoppingEnabled;
+  }
+  if (updates.seasonalEvents !== undefined) {
+    // THEME SHOP / engagement: seasonal content lives inside the
+    // parent-writable engagementPreferences map (rules-validated closed
+    // shape). Known keys only; values are strict booleans.
+    allowedUpdates.engagementPreferences = {
+      ...((await getDoc(doc(db, 'families', familyId))).data()?.engagementPreferences ?? {}),
+      seasonalEvents: normaliseSeasonalEvents(updates.seasonalEvents),
+    };
+  }
   if (Object.keys(allowedUpdates).length === 0) throw new Error('No family settings to update');
 
   await updateDoc(doc(db, 'families', familyId), allowedUpdates);
@@ -3369,6 +3416,223 @@ export const submitProfileUpdateRequest = async (
     // Write stage performs ZERO reads.
     applyNotificationWrites(transaction, notificationPlan);
   });
+};
+
+// ---------------------------------------------------------------------------
+// THEME SHOP — canonical theme purchase pipeline.
+// ---------------------------------------------------------------------------
+
+export interface ShopThemeCatalogRow {
+  /** Canonical shop item id (e.g. 'space'). Also the document id. */
+  shopItemId: string;
+  /** Theme catalog id this row unlocks (e.g. 'theme.shop.space'). */
+  themeId: string;
+  /** Human-readable display name (parent-published, display only). */
+  name?: string;
+  /** Authoritative price in rewardPoints. 0 = free. */
+  pricePoints: number;
+  /** Whether the theme can currently be acquired. */
+  isActive: boolean;
+  /** Shop display ordering / feature flag (parent-published). */
+  featured?: boolean;
+  /**
+   * Theme of the Week promotion: while `now` is inside [startsAt, endsAt),
+   * the promo theme is temporarily usable by every eligible child WITHOUT
+   * granting ownership. Times are epoch ms written by trusted tooling.
+   */
+  promo?: {
+    themeId: string;
+    startsAt: number;
+    endsAt: number;
+  } | null;
+}
+
+export interface ShopThemePurchase {
+  /** Shop item id — also the ownership document id. */
+  shopItemId: string;
+  childId: string;
+  familyId: string;
+  /** Theme catalog id purchased. */
+  themeId: string;
+  /** Points paid (authoritative catalog price at purchase time). */
+  costPoints: number;
+  source: 'points';
+  purchasedAt: unknown;
+  actorId: string;
+}
+
+/** families/{familyId}/themes/{shopItemId} */
+export function shopThemeRef(familyId: string, shopItemId: string) {
+  return doc(db, `families/${familyId}/themes/${shopItemId}`);
+}
+
+/** families/{familyId}/themes/{shopItemId}/purchases/{childId} */
+export function themePurchaseRef(familyId: string, shopItemId: string, childId: string) {
+  return doc(db, `families/${familyId}/themes/${shopItemId}/purchases/${childId}`);
+}
+
+/**
+ * Securely purchase a Theme Shop theme for the authenticated child.
+ *
+ * Atomic transaction guarantees (mirrors unlockAvatar + redeemReward; see
+ * the THEME SHOP rules block in firestore.rules for the write-side mirror):
+ *  1. The caller is the child (actorId == auth.uid) and stays in the family.
+ *  2. The catalog row exists, is active, and is a paid (non-free) theme.
+ *  3. The child does not already own the theme (duplicate purchase denied).
+ *  4. The price comes from the AUTHORITATIVE catalog row, never the client.
+ *  5. The exact point cost is deducted from `rewardPoints`.
+ *  6. An immutable purchase record is written under
+ *     families/{familyId}/themes/{shopItemId}/purchases/{childId}.
+ *  7. Family-scoped idempotency: a completed request replay returns the
+ *     recorded result without charging again; a different request under the
+ *     same key, or an ambiguous in-flight record, fails closed.
+ *  8. No partial writes — the deduction, ownership record, idempotency doc
+ *     and feed entry commit together or not at all.
+ *  9. Family preference `engagementPreferences.themeShoppingEnabled` is
+ *     honoured: when a parent has disabled theme shopping the purchase is
+ *     refused. A family without the field keeps the feature (default on).
+ * 10. Theme shopping is disabled for managed-child identities: the managed
+ *     child session is a restricted profile without its own wallet.
+ *
+ * Equipping the theme afterwards is a separate, free preference write
+ * (`updateChildTheme`), exactly like avatar selection after unlockAvatar.
+ */
+export const purchaseShopTheme = async (
+  familyId: string,
+  shopItemId: string,
+  clientReqId?: string,
+): Promise<{ costPoints: number; themeId: string }> => {
+  if (!familyId.trim()) throw new Error('Family id is required');
+  if (!shopItemId.trim()) throw new Error('Theme id is required');
+  const uid = auth.currentUser?.uid;
+  if (!uid) throw new Error('Not authenticated');
+  // Theme shopping is disabled for managed-child identities: the managed
+  // child session is a restricted profile without its own wallet.
+  try {
+    const tokenResult = await auth.currentUser?.getIdTokenResult?.();
+    const claims = (tokenResult?.claims ?? {}) as Record<string, unknown>;
+    if (claims.managedChild === true) {
+      throw new Error('Theme shopping is not available for this profile.');
+    }
+  } catch (error) {
+    // Re-throw our own guard error; ignore token-resolution failures (the
+    // transaction's own role/family checks remain the trust boundary).
+    if (error instanceof Error && error.message.includes('Theme shopping')) throw error;
+  }
+
+  const familyRef = doc(db, 'families', familyId);
+  const rowRef = shopThemeRef(familyId, shopItemId);
+  const userRef = doc(db, 'users', uid);
+  const purchaseRef = themePurchaseRef(familyId, shopItemId, uid);
+  // Per-child ownership mirror (see firestore.rules THEME SHOP block): written
+  // in the SAME transaction as the canonical purchase record so the
+  // rules-driven bootstrap can hydrate ownership from a directly scoppable
+  // per-child subcollection (mirrors the avatar_unlocks pattern).
+  const mirrorRef = doc(db, `families/${familyId}/users/${uid}/theme_purchases/${shopItemId}`);
+  const key = `theme_purchase:${clientReqId ?? uid}:${shopItemId}`;
+  const idemRef = idempotencyRef(familyId, key);
+  const requestHash = requestHashOf({ shopItemId, childId: uid });
+
+  let result: { costPoints: number; themeId: string } | null = null;
+
+  await runTransaction(db, async (transaction) => {
+    // --- READ PHASE -------------------------------------------------------
+    const [idemSnap, rowSnap, userSnap, purchaseSnap, familySnap] = await Promise.all([
+      transaction.get(idemRef),
+      transaction.get(rowRef),
+      transaction.get(userRef),
+      transaction.get(purchaseRef),
+      transaction.get(familyRef),
+    ]);
+
+    // Idempotent replay: the same request already completed successfully.
+    const replay = checkIdempotency(idemSnap, key, requestHash);
+    if (replay) {
+      result = { costPoints: 0, themeId: '' } as { costPoints: number; themeId: string };
+      return;
+    }
+
+    if (!rowSnap.exists()) throw new Error('This theme is not available.');
+    if (!userSnap.exists()) throw new Error('User not found');
+    const row = rowSnap.data() as Partial<ShopThemeCatalogRow>;
+    const userData = userSnap.data() as Record<string, unknown>;
+    const familyData = familySnap.exists() ? (familySnap.data() as Record<string, unknown>) : {};
+
+    if (userData.role !== 'child') throw new Error('Only children can buy themes.');
+    if (userData.familyId !== familyId) throw new Error('Your family membership could not be verified.');
+
+    // Parent control: theme shopping may be disabled for this family.
+    // Absent field → default enabled so existing families keep the feature.
+    const engagement = (familyData.engagementPreferences ?? {}) as Record<string, unknown>;
+    if (engagement.themeShoppingEnabled === false) {
+      throw new Error('Theme shopping is turned off for your family.');
+    }
+
+    if (row.isActive !== true) throw new Error('This theme is not available.');
+    if (typeof row.pricePoints !== 'number' || row.pricePoints <= 0) {
+      throw new Error('This theme is not purchasable.');
+    }
+    if (purchaseSnap.exists()) throw new Error('You already own this theme.');
+
+    // AUTHORITATIVE price — the client-supplied value is ignored entirely.
+    const cost = row.pricePoints;
+    const currentPoints = typeof userData.rewardPoints === 'number' ? userData.rewardPoints : 0;
+    if (currentPoints < cost) {
+      throw new Error(`You need ${cost - currentPoints} more points to buy this theme.`);
+    }
+
+    // --- WRITE PHASE (zero reads from here) --------------------------------
+    transaction.update(userRef, {
+      rewardPoints: currentPoints - cost,
+      lastThemePurchaseId: shopItemId,
+    });
+    transaction.set(purchaseRef, {
+      shopItemId,
+      childId: uid,
+      familyId,
+      themeId: typeof row.themeId === 'string' ? row.themeId : '',
+      costPoints: cost,
+      source: 'points',
+      purchasedAt: serverTimestamp(),
+      actorId: uid,
+    });
+    transaction.set(mirrorRef, {
+      shopItemId,
+      themeId: typeof row.themeId === 'string' ? row.themeId : '',
+      costPoints: cost,
+      purchasedAt: serverTimestamp(),
+    });
+    writeIdempotency(transaction, familyId, key, 'theme_purchase', uid, requestHash, purchaseRef.path);
+    // Human-readable history: the child's name for the theme, a plain
+    // action, and the exact cost — never raw source-kind/dev terminology.
+    const themeName = getThemeById(typeof row.themeId === 'string' ? row.themeId : '')?.name;
+    const feedRef = doc(collection(db, `families/${familyId}/feed`));
+    transaction.set(feedRef, {
+      actorId: uid,
+      type: 'custom',
+      text: `${themeName ?? 'A new theme'} · Theme purchase · −${cost} points`,
+      timestamp: serverTimestamp(),
+    });
+
+    result = { costPoints: cost, themeId: typeof row.themeId === 'string' ? row.themeId : '' };
+  });
+
+  if (!result) throw new Error('Theme purchase did not complete');
+  return result;
+};
+
+/**
+ * Equip (or reset) the child's own theme preference.
+ *
+ * A closed, self-only write of the single `theme` field. The Firestore rules
+ * (isValidChildThemePreferenceUpdate) independently verify the child owns
+ * the shop theme they are equipping — a client that skips the purchase is
+ * denied at the database, not merely in the UI.
+ */
+export const updateChildTheme = async (themeId: string | null): Promise<void> => {
+  const uid = requireActorId();
+  const userRef = doc(db, 'users', uid);
+  await updateDoc(userRef, { theme: themeId ?? 'theme.standard' });
 };
 
 /**

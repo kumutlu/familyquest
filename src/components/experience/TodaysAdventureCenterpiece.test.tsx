@@ -12,7 +12,7 @@ describe("TodaysAdventureCenterpiece (Today's Adventure V1 productization)", () 
   it('renders normal state with quest count from the host', () => {
     render(wrap(
       <TodaysAdventureCenterpiece
-        presentation={{ kind: 'normal' }}
+        presentation={{ kind: 'normal', reason: 'no_special_opportunity' }}
         normalQuestCount={3}
         allCaughtUp={false}
       />,
@@ -24,7 +24,7 @@ describe("TodaysAdventureCenterpiece (Today's Adventure V1 productization)", () 
   it('renders normal all-caught-up state', () => {
     render(wrap(
       <TodaysAdventureCenterpiece
-        presentation={{ kind: 'normal' }}
+        presentation={{ kind: 'normal', reason: 'no_special_opportunity' }}
         normalQuestCount={0}
         allCaughtUp={true}
       />,
@@ -35,7 +35,7 @@ describe("TodaysAdventureCenterpiece (Today's Adventure V1 productization)", () 
   it('renders surge state with the eligible task and the surge bonus chip', () => {
     render(wrap(
       <TodaysAdventureCenterpiece
-        presentation={{ kind: 'surge' }}
+        presentation={{ kind: 'surge', reason: 'active_surge' }}
         surge={{
           surgeId: 'sg-1',
           eligibleTasks: [{ id: 't-1', title: 'Vacuum the house', pointsReward: 30 }],
@@ -53,9 +53,9 @@ describe("TodaysAdventureCenterpiece (Today's Adventure V1 productization)", () 
   it('renders mystery-ready state as the visual focal point', () => {
     render(wrap(
       <TodaysAdventureCenterpiece
-        presentation={{ kind: 'mystery_ready' }}
+        presentation={{ kind: 'mystery_ready', reason: 'mystery_unlocked' }}
         mysteryDrop={{ id: 'd-1', rarity: 'rare', messageKey: 'k', isRevealReady: true }}
-        onOpen={() => {}}
+        onPressMysteryDrop={() => {}}
       />,
     ));
     const ready = screen.getByTestId('adventure-centerpiece-mystery-ready');
@@ -67,7 +67,7 @@ describe("TodaysAdventureCenterpiece (Today's Adventure V1 productization)", () 
   it('renders mystery-locked state with progress label', () => {
     render(wrap(
       <TodaysAdventureCenterpiece
-        presentation={{ kind: 'mystery_available' }}
+        presentation={{ kind: 'mystery_available', reason: 'mystery_progressing' }}
         mysteryDrop={{ id: 'd-1', rarity: 'common', messageKey: 'k', isRevealReady: false, progressLabel: '0 / 1' }}
       />,
     ));
@@ -80,7 +80,7 @@ describe("TodaysAdventureCenterpiece (Today's Adventure V1 productization)", () 
   it('renders comeback shell without guilt language and surfaces tier XP pill', () => {
     render(wrap(
       <TodaysAdventureCenterpiece
-        presentation={{ kind: 'comeback' }}
+        presentation={{ kind: 'comeback', reason: 'comeback_active' }}
         comeback={{ tier: 'return_3d', inactivityDays: 3, missionCompleted: false }}
       />,
     ));
@@ -99,7 +99,7 @@ describe("TodaysAdventureCenterpiece (Today's Adventure V1 productization)", () 
 
   it('renders seasonal shell when nothing outranks', () => {
     render(wrap(
-      <TodaysAdventureCenterpiece presentation={{ kind: 'seasonal' }} />,
+      <TodaysAdventureCenterpiece presentation={{ kind: 'seasonal', reason: 'seasonal_only' }} />,
     ));
     expect(screen.getByTestId('adventure-centerpiece-seasonal')).toBeInTheDocument();
   });
@@ -108,7 +108,7 @@ describe("TodaysAdventureCenterpiece (Today's Adventure V1 productization)", () 
     // Normal state with 0 quests should not display "X quests" with an invented number.
     render(wrap(
       <TodaysAdventureCenterpiece
-        presentation={{ kind: 'normal' }}
+        presentation={{ kind: 'normal', reason: 'no_special_opportunity' }}
         normalQuestCount={0}
         allCaughtUp={false}
       />,
@@ -124,7 +124,7 @@ describe("TodaysAdventureCenterpiece (Today's Adventure V1 productization)", () 
   it('comeback body shows resolved EN copy for return_1d (1 day)', async () => {
     render(wrap(
       <TodaysAdventureCenterpiece
-        presentation={{ kind: 'comeback' }}
+        presentation={{ kind: 'comeback', reason: 'comeback_active' }}
         comeback={{ tier: 'return_1d', inactivityDays: 1, missionCompleted: false }}
       />,
     ));
@@ -139,7 +139,7 @@ describe("TodaysAdventureCenterpiece (Today's Adventure V1 productization)", () 
   it('comeback body shows resolved EN copy for return_3d', () => {
     render(wrap(
       <TodaysAdventureCenterpiece
-        presentation={{ kind: 'comeback' }}
+        presentation={{ kind: 'comeback', reason: 'comeback_active' }}
         comeback={{ tier: 'return_3d', inactivityDays: 3, missionCompleted: false }}
       />,
     ));
@@ -154,7 +154,7 @@ describe("TodaysAdventureCenterpiece (Today's Adventure V1 productization)", () 
   it('comeback body shows resolved EN copy for return_7d', () => {
     render(wrap(
       <TodaysAdventureCenterpiece
-        presentation={{ kind: 'comeback' }}
+        presentation={{ kind: 'comeback', reason: 'comeback_active' }}
         comeback={{ tier: 'return_7d', inactivityDays: 7, missionCompleted: false }}
       />,
     ));
@@ -170,7 +170,7 @@ describe("TodaysAdventureCenterpiece (Today's Adventure V1 productization)", () 
     await i18n.changeLanguage('tr')
     render(wrap(
       <TodaysAdventureCenterpiece
-        presentation={{ kind: 'comeback' }}
+        presentation={{ kind: 'comeback', reason: 'comeback_active' }}
         comeback={{ tier: 'return_7d', inactivityDays: 7, missionCompleted: false }}
       />,
     ))
@@ -187,7 +187,7 @@ describe("TodaysAdventureCenterpiece (Today's Adventure V1 productization)", () 
 
   it('seasonal shell preserves Today\'s Adventure as the daily anchor', () => {
     render(wrap(
-      <TodaysAdventureCenterpiece presentation={{ kind: 'seasonal' }} />,
+      <TodaysAdventureCenterpiece presentation={{ kind: 'seasonal', reason: 'seasonal_only' }} />,
     ));
     const shell = screen.getByTestId('adventure-centerpiece-seasonal');
     expect(shell).toBeInTheDocument();
@@ -205,7 +205,7 @@ describe("TodaysAdventureCenterpiece (Today's Adventure V1 productization)", () 
   it('seasonal shell preserves Today\'s Adventure under TR locale', async () => {
     await i18n.changeLanguage('tr');
     render(wrap(
-      <TodaysAdventureCenterpiece presentation={{ kind: 'seasonal' }} />,
+      <TodaysAdventureCenterpiece presentation={{ kind: 'seasonal', reason: 'seasonal_only' }} />,
     ));
     const shell = screen.getByTestId('adventure-centerpiece-seasonal');
     expect(shell.textContent ?? '').toMatch(/Bug[uü]n[uü]n Macerası/i);

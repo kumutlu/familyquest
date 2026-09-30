@@ -107,5 +107,16 @@ export function deepLinkFor(type: NotificationType): string {
     case 'family_progress': return '/family'
     case 'seasonal': return '/'
     case 'quest_reminder': return '/tasks'
+    // Mystery Drop / Comeback notifications deep-link into the child home
+    // where the adventure surface (reveal card / mission card) lives.
+    case 'mystery_drop': return '/'
+    case 'comeback': return '/'
+    default: {
+      // Exhaustive per the closed NotificationType union; the default arm
+      // keeps the total function total if the union ever grows.
+      const _exhaustive: never = type
+      void _exhaustive
+      return '/'
+    }
   }
 }

@@ -14,7 +14,19 @@ const firestore = vi.hoisted(() => {
     reset: () => { id = 0 },
   }
 })
-const authState = vi.hoisted(() => ({ currentUser: { uid: 'child-1' } as any }))
+const authState = vi.hoisted(() => {
+  let current: { uid: string; getIdTokenResult?: () => Promise<{ claims: Record<string, unknown> }> } = {
+    uid: 'child-1',
+  }
+  return {
+    get currentUser() {
+      return current
+    },
+    set currentUser(next: { uid: string; getIdTokenResult?: () => Promise<{ claims: Record<string, unknown> }> }) {
+      current = next
+    },
+  }
+})
 
 vi.mock('firebase/firestore', () => ({
   ...firestore, setDoc: vi.fn(), addDoc: vi.fn(), getDoc: vi.fn(), deleteDoc: vi.fn(), writeBatch: vi.fn(),
@@ -37,7 +49,7 @@ import {
   validateProfileUpdateInput,
   unlockAvatar,
   updateLanguagePreference,
-  updateOwnCosmeticProfile,
+  updateChildAppearance,
 } from './api'
 import {
   loadNotificationRecipientsInTransaction,
@@ -61,8 +73,8 @@ function recordingTransaction(docs: Record<string, Record<string, any> | undefin
       ops.push('get')
       return snapshot(docs[ref.path])
     }),
-    update: vi.fn(() => { ops.push('update') }),
-    set: vi.fn(() => { ops.push('set') }),
+    update: vi.fn((_ref: unknown, _payload?: Record<string, unknown>) => { ops.push('update') }),
+    set: vi.fn((_ref: unknown, _payload?: Record<string, unknown>) => { ops.push('set') }),
     delete: vi.fn(() => { ops.push('delete') }),
     _ops: ops,
   }
@@ -73,8 +85,8 @@ function recordingTransaction(docs: Record<string, Record<string, any> | undefin
 function transactionWith(docs: Record<string, Record<string, any> | undefined>) {
   const tx = {
     get: vi.fn(async (ref: { path: string }) => snapshot(docs[ref.path])),
-    update: vi.fn(() => {}),
-    set: vi.fn(() => {}),
+    update: vi.fn((_ref: unknown, _payload?: Record<string, unknown>) => {}),
+    set: vi.fn((_ref: unknown, _payload?: Record<string, unknown>) => {}),
     delete: vi.fn(() => {}),
   }
   firestore.runTransaction.mockImplementation(async (_db: unknown, callback: any) => callback(tx))
@@ -127,22 +139,58 @@ describe('profile update request API', () => {
     })
   })
 
-  describe('child cosmetic self-update', () => {
-    it('writes only validated cosmetic fields to the authenticated child profile', async () => {
-      await updateOwnCosmeticProfile('managed-child-profile-1', '  Muhammed  ', STARTER, {
-        ownedAvatarIds: [],
+  describe('child appearance self-service (updateChildAppearance)', () => {
+    it('writes validated appearance fields to the resolved child profile', async () => {
+      await updateChildAppearance('family-1', {
         avatarConfig: validAvatarConfig,
+        avatarId: STARTER,
       })
 
       expect(firestore.updateDoc).toHaveBeenCalledWith(
-        { id: 'managed-child-profile-1', path: 'users/managed-child-profile-1' },
-        {
-          displayName: 'Muhammed',
-          avatarId: STARTER,
-          avatarConfig: validAvatarConfig,
-        },
+        { id: 'child-1', path: 'users/child-1' },
+        { avatarConfig: validAvatarConfig, avatarId: STARTER },
       )
       expect(firestore.runTransaction).not.toHaveBeenCalled()
+    })
+
+    it('resolves managed-child auth to the profile document, not the auth uid', async () => {
+      authState.currentUser = {
+        uid: 'managed-auth-uid',
+        getIdTokenResult: async () => ({ claims: { managedChild: true, childId: 'managed-child-1' } }),
+      }
+      await updateChildAppearance('family-1', { avatarConfig: validAvatarConfig })
+
+      expect(firestore.updateDoc).toHaveBeenCalledWith(
+        { id: 'managed-child-1', path: 'users/managed-child-1' },
+        { avatarConfig: validAvatarConfig },
+      )
+    })
+
+    it('clears a stale creator config via deleteField when null is supplied', async () => {
+      await updateChildAppearance('family-1', { avatarConfig: null })
+
+      expect(firestore.updateDoc).toHaveBeenCalledWith(
+        { id: 'child-1', path: 'users/child-1' },
+        { avatarConfig: { deleteField: true } },
+      )
+    })
+
+    it('rejects a malformed avatar config before writing', async () => {
+      await expect(updateChildAppearance('family-1', {
+        avatarConfig: { ...validAvatarConfig, background: 'url(https://evil.example)' } as never,
+      })).rejects.toThrow(/avatar configuration/i)
+      expect(firestore.updateDoc).not.toHaveBeenCalled()
+    })
+
+    it('rejects an avatar that is no longer in the catalog before writing', async () => {
+      await expect(updateChildAppearance('family-1', { avatarId: 'not-a-real-avatar' }))
+        .rejects.toThrow(/no longer available/i)
+      expect(firestore.updateDoc).not.toHaveBeenCalled()
+    })
+
+    it('rejects an empty update before writing', async () => {
+      await expect(updateChildAppearance('family-1', {})).rejects.toThrow(/No appearance changes/i)
+      expect(firestore.updateDoc).not.toHaveBeenCalled()
     })
   })
 
@@ -181,44 +229,12 @@ describe('profile update request API', () => {
   })
 
   describe('submit (child flow)', () => {
-    const avatarConfig = {
-      version: 1 as const, base: 'round' as const, skinTone: 'warm' as const,
-      hairStyle: 'curls' as const, hairColor: 'brown' as const, face: 'smile' as const,
-      accessory: 'glasses' as const, outfit: 'hoodie' as const,
-      outfitColor: 'purple' as const, background: 'mint' as const,
-    }
-
-    it('stores validated requested/current avatar configs without changing unlock data', async () => {
-      const tx = transactionWith({
-        'users/child-1': { familyId: 'family-1', role: 'child', displayName: 'Muhammed Osman', avatarUrl: 'https://old', avatarId: 'starter-cat', avatarConfig: { ...avatarConfig, hairStyle: 'waves' } },
-      })
-      firestore.getDocs.mockResolvedValue({ docs: [] })
-      await submitProfileUpdateRequest('family-1', 'Muhammed', STARTER, { avatarConfig })
-
-      expect(tx.set).toHaveBeenCalledWith(
-        expect.objectContaining({ path: 'families/family-1/profile_update_requests/generated-1' }),
-        expect.objectContaining({
-          requestedAvatarConfig: avatarConfig,
-          currentAvatarConfig: expect.objectContaining({ version: 1, hairStyle: 'waves' }),
-        }),
-      )
-      expect(tx.set).not.toHaveBeenCalledWith(expect.objectContaining({ path: expect.stringContaining('avatar_unlocks') }), expect.anything())
-    })
-
-    it('rejects malformed avatar config before any request write', async () => {
-      transactionWith({ 'users/child-1': { familyId: 'family-1', role: 'child', displayName: 'Muhammed Osman' } })
-      firestore.getDocs.mockResolvedValue({ docs: [] })
-      await expect(submitProfileUpdateRequest('family-1', 'Muhammed', STARTER, {
-        avatarConfig: { ...avatarConfig, background: 'url(https://evil.example)' } as any,
-      })).rejects.toThrow(/avatar configuration/i)
-    })
-
-    it('creates a pending request and notifies approvers', async () => {
+    it('creates an identity-only pending request and notifies approvers', async () => {
       const tx = transactionWith({
         'users/child-1': { familyId: 'family-1', role: 'child', displayName: 'Muhammed Osman', avatarUrl: 'https://old', avatarId: 'starter-cat' },
       })
       firestore.getDocs.mockResolvedValue({ docs: [] })
-      await submitProfileUpdateRequest('family-1', 'Muhammed', STARTER, { ownedAvatarIds: [], legacyAvatarUrl: 'https://old' })
+      await submitProfileUpdateRequest('family-1', 'Muhammed', null)
 
       expect(tx.set).toHaveBeenCalledWith(
         expect.objectContaining({ path: 'families/family-1/profile_update_requests/generated-1' }),
@@ -227,12 +243,19 @@ describe('profile update request API', () => {
           childId: 'child-1',
           childName: 'Muhammed Osman',
           requestedDisplayName: 'Muhammed',
-          requestedAvatarId: STARTER,
+          currentDisplayName: 'Muhammed Osman',
           currentAvatarId: 'starter-cat',
           currentAvatar: 'https://old',
           status: 'pending',
         }),
       )
+      // Identity-only contract: the request payload must not gain avatar-change
+      // fields — appearance writes go through updateChildAppearance instead.
+      const requestPayload = tx.set.mock.calls[0]![1] as Record<string, unknown>
+      expect(requestPayload).not.toHaveProperty('requestedAvatarId')
+      expect(requestPayload).not.toHaveProperty('requestedAvatar')
+      expect(requestPayload).not.toHaveProperty('requestedAvatarConfig')
+      expect(requestPayload).not.toHaveProperty('currentAvatarConfig')
       expect(loadNotificationRecipientsInTransaction).toHaveBeenCalledWith(
         expect.anything(),
         'family-1',
@@ -255,50 +278,59 @@ describe('profile update request API', () => {
       await expect(submitProfileUpdateRequest('family-1', 'Kemal', null, { ownedAvatarIds: [] })).rejects.toThrow(/children/i)
     })
 
-    it('rejects a premium avatar the child has not unlocked', async () => {
+    it('rejects an empty display name before any request write', async () => {
       transactionWith({ 'users/child-1': { familyId: 'family-1', role: 'child', displayName: 'Muhammed Osman' } })
       firestore.getDocs.mockResolvedValue({ docs: [] })
-      await expect(submitProfileUpdateRequest('family-1', 'Muhammed', PREMIUM, { ownedAvatarIds: [] }))
-        .rejects.toThrow(/not been unlocked yet/i)
+      await expect(submitProfileUpdateRequest('family-1', '   ', null, { ownedAvatarIds: [] }))
+        .rejects.toThrow(/empty/i)
+      // Ownership enforcement for premium avatars moved to the editor via
+      // validateProfileUpdateInput + unlockAvatar (both covered above/below).
     })
   })
 
   describe('approve', () => {
-    const avatarConfig = {
-      version: 1 as const, base: 'round' as const, skinTone: 'warm' as const,
-      hairStyle: 'curls' as const, hairColor: 'brown' as const, face: 'smile' as const,
-      accessory: 'glasses' as const, outfit: 'hoodie' as const,
-      outfitColor: 'purple' as const, background: 'mint' as const,
-    }
-
-    it('applies only a validated requested avatar config during parent approval', async () => {
+    it('applies only the requested displayName during parent approval', async () => {
       authState.currentUser = { uid: 'owner-1' }
       const tx = transactionWith({
         'families/family-1/profile_update_requests/req-config': {
           childId: 'child-1', childName: 'Muhammed', requestedDisplayName: 'Muhammed',
-          requestedAvatarId: 'starter-cat', requestedAvatar: 'https://old', requestedAvatarConfig: avatarConfig,
+          requestedAvatarId: 'starter-cat', requestedAvatar: 'https://old', requestedAvatarConfig: validAvatarConfig,
           currentDisplayName: 'Muhammed', currentAvatarId: 'starter-cat', currentAvatar: 'https://old', status: 'pending',
         },
         'users/child-1': { familyId: 'family-1', role: 'child', displayName: 'Muhammed', avatarUrl: 'https://old', avatarId: 'starter-cat' },
         'users/owner-1': { familyId: 'family-1', role: 'owner', displayName: 'Kemal' },
       })
       await approveProfileUpdateRequest('family-1', 'req-config')
+      // Identity-only contract: approval writes ONLY the display name. The child
+      // may have changed their appearance via updateChildAppearance since the
+      // request was created, so legacy avatar fields on the request are inert.
       expect(tx.update).toHaveBeenCalledWith(
         expect.objectContaining({ path: 'users/child-1' }),
-        expect.objectContaining({ avatarConfig }),
+        { displayName: 'Muhammed' },
+      )
+      expect(tx.update).toHaveBeenCalledWith(
+        expect.objectContaining({ path: 'families/family-1/profile_update_requests/req-config' }),
+        expect.objectContaining({ status: 'approved', reviewedBy: 'owner-1' }),
       )
     })
 
-    it('rejects a malformed requested config instead of applying it', async () => {
+    it('never applies legacy avatar fields — even malformed ones stay inert', async () => {
       authState.currentUser = { uid: 'owner-1' }
-      transactionWith({
+      const tx = transactionWith({
         'families/family-1/profile_update_requests/req-config': {
-          childId: 'child-1', requestedDisplayName: 'Muhammed', requestedAvatarConfig: { ...avatarConfig, extra: 'bad' }, status: 'pending',
+          childId: 'child-1', requestedDisplayName: 'Muhammed',
+          requestedAvatarConfig: { version: 1, garbage: 'payload' }, status: 'pending',
         },
         'users/child-1': { familyId: 'family-1', role: 'child', displayName: 'Muhammed' },
         'users/owner-1': { familyId: 'family-1', role: 'owner', displayName: 'Kemal' },
       })
-      await expect(approveProfileUpdateRequest('family-1', 'req-config')).rejects.toThrow(/avatar configuration/i)
+      // Legacy request avatar garbage must not break approval — it is simply
+      // ignored, and the profile receives only the display name.
+      await expect(approveProfileUpdateRequest('family-1', 'req-config')).resolves.toBeUndefined()
+      expect(tx.update).toHaveBeenCalledWith(
+        expect.objectContaining({ path: 'users/child-1' }),
+        { displayName: 'Muhammed' },
+      )
     })
 
     it('updates the profile atomically and notifies the child', async () => {
@@ -316,7 +348,7 @@ describe('profile update request API', () => {
 
       expect(tx.update).toHaveBeenCalledWith(
         expect.objectContaining({ path: 'users/child-1' }),
-        expect.objectContaining({ displayName: 'Muhammed', avatarId: STARTER, avatarUrl: 'https://x/starter' }),
+        { displayName: 'Muhammed' },
       )
       expect(tx.update).toHaveBeenCalledWith(
         expect.objectContaining({ path: 'families/family-1/profile_update_requests/req-1' }),
@@ -329,7 +361,7 @@ describe('profile update request API', () => {
       expect(applyNotificationWrites).toHaveBeenCalled()
     })
 
-    it('keeps the current avatar when no avatar id is requested', async () => {
+    it('writes only the display name (avatar fields untouched)', async () => {
       authState.currentUser = { uid: 'owner-1' }
       const tx = transactionWith({
         'families/family-1/profile_update_requests/req-1': {
@@ -343,7 +375,7 @@ describe('profile update request API', () => {
       await approveProfileUpdateRequest('family-1', 'req-1')
       expect(tx.update).toHaveBeenCalledWith(
         expect.objectContaining({ path: 'users/child-1' }),
-        expect.objectContaining({ displayName: 'Muhammed', avatarId: 'starter-cat', avatarUrl: 'https://old' }),
+        { displayName: 'Muhammed' },
       )
     })
 
@@ -489,12 +521,17 @@ describe('profile update request API', () => {
       expect(tx.update).not.toHaveBeenCalled()
     })
 
-    it('locked avatar fails before any writes', async () => {
-      const tx = recordingTransaction({ 'users/child-1': childDoc })
-      firestore.getDocs.mockResolvedValue({ docs: [] })
-      await expect(submitProfileUpdateRequest('family-1', 'Muhammed', PREMIUM, { ownedAvatarIds: [] }))
-        .rejects.toThrow(/not been unlocked yet/i)
-      expect(tx.set).not.toHaveBeenCalled()
+    it('parent approval uses reads-before-writes', async () => {
+      authState.currentUser = { uid: 'owner-1' }
+      const tx = recordingTransaction({
+        'families/family-1/profile_update_requests/req-1': {
+          childId: 'child-1', childName: 'Muhammed', requestedDisplayName: 'Muhammed', status: 'pending',
+        },
+        'users/child-1': { familyId: 'family-1', role: 'child', displayName: 'Muhammed Osman' },
+        'users/owner-1': { familyId: 'family-1', role: 'owner', displayName: 'Kemal' },
+      })
+      await approveProfileUpdateRequest('family-1', 'req-1')
+      expectReadsBeforeWrites(tx)
     })
 
     it('transaction failure creates no partial request', async () => {

@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 200" preserveAspectRatio="none" role="img" aria-label="Crooked distant hill silhouette">
+  <path
+    d="M0 200
+       L 0 160
+       C 60 140 100 130 160 138
+       C 220 146 260 110 320 116
+       C 380 122 420 100 480 96
+       C 540 92 580 80 640 84
+       C 700 88 760 110 800 130
+       L 800 200 Z"
+    fill="currentColor" />
+</svg>

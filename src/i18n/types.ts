@@ -22,6 +22,7 @@ import type enLegal from './locales/en/legal.json';
 import type enStartup from './locales/en/startup.json';
 import type enOnboarding from './locales/en/onboarding.json';
 import type enHome from './locales/en/home.json';
+import type enThemes from './locales/en/themes.json';
 
 /**
  * Strongly-typed resource shape, keyed by NAMESPACE (not language). `en` is the
@@ -53,6 +54,7 @@ interface Resources {
   startup: typeof enStartup;
   onboarding: typeof enOnboarding;
   home: typeof enHome;
+  themes: typeof enThemes;
   familyWorld: typeof enFamilyWorld;
   quests: Record<string, unknown>;
   // The Help Center resolves article/category keys dynamically at runtime, so

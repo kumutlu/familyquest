@@ -1,0 +1,22 @@
+{
+  "title": "Themes",
+  "subtitle": "Make Queki feel like yours.",
+  "back": "Back",
+  "current": "Current",
+  "owned": "Owned",
+  "free": "Free",
+  "freeThisWeek": "Free this week",
+  "price": "{{price}} pts",
+  "apply": "Use this theme",
+  "applied": "Applied",
+  "buy": "Buy for {{price}} points",
+  "confirmBuy": "Buy {{name}} for {{price}} points?",
+  "confirmYes": "Yes, buy it",
+  "confirmNo": "Not now",
+  "previewNote": "This is how your quests could look.",
+  "themesLabel": "Theme",
+  "shoppingDisabled": "Theme shopping is turned off right now.",
+  "loading": "Loading themes…",
+  "totw": "{{name}} is free this week!",
+  "purchase": "Theme purchase"
+}

@@ -8,7 +8,7 @@ import { Users, Globe, AlertTriangle, Copy, Save, Edit, CheckCircle, Loader2, Sh
 import { useStore } from '../../store/useStore';
 import { isOwnerRole, isParentRole, isChildRole, isAdultRole } from '../../lib/roles';
 import { getRoleLabel } from '../../lib/roles';
-import { updateFamilySettings, approveJoinRequest, rejectJoinRequest } from '../../lib/api';
+import { updateFamilySettings, approveJoinRequest, rejectJoinRequest, SEASONAL_EVENT_KEYS } from '../../lib/api';
 import { regenerateFamilyCode } from '../../lib/familyMembershipApi';
 import { resolveFamilyCurrencyCode, type SupportedCurrencyCode } from '../../i18n/format';
 import { Toast, type ToastData } from '../ui/Toast';
@@ -97,6 +97,15 @@ export function FamilySettings({ onSectionChange }: FamilySettingsProps) {
   const [isSavingPetBox, setIsSavingPetBox] = useState(false);
   const [petBoxError, setPetBoxError] = useState<string | null>(null);
 
+  // Theme Shop parent controls (children spending points + seasonal content)
+  const [themeShoppingEnabled, setThemeShoppingEnabled] = useState(familyData?.themeShoppingEnabled !== false);
+  const [seasonalEvents, setSeasonalEvents] = useState<Record<string, boolean>>(() => {
+    const raw = familyData?.engagementPreferences?.seasonalEvents;
+    return raw && typeof raw === 'object' ? { ...raw } : {};
+  });
+  const [isSavingThemePrefs, setIsSavingThemePrefs] = useState(false);
+  const [themePrefsError, setThemePrefsError] = useState<string | null>(null);
+
   // Danger Zone state
   const [showDeleteFamilyDialog, setShowDeleteFamilyDialog] = useState(false);
   const [isLeavingFamily, setIsLeavingFamily] = useState(false);
@@ -148,6 +157,13 @@ export function FamilySettings({ onSectionChange }: FamilySettingsProps) {
     setDailyGoalPercentage(familyData?.gamificationConfig?.dailyGoalPercentage ?? 80);
     setPetBoxEnabled(isPetBoxEnabled(familyData));
   }, [familyData?.gamificationConfig?.dailyGoalPercentage, familyData?.petBoxEnabled]);
+
+  // Reset Theme Shop preferences when data changes
+  useEffect(() => {
+    setThemeShoppingEnabled(familyData?.themeShoppingEnabled !== false);
+    const raw = familyData?.engagementPreferences?.seasonalEvents;
+    setSeasonalEvents(raw && typeof raw === 'object' ? { ...raw } : {});
+  }, [familyData?.themeShoppingEnabled, familyData?.engagementPreferences?.seasonalEvents]);
 
   const handleSaveFamilyName = async () => {
     if (!familyData?.id) return;
@@ -271,6 +287,47 @@ export function FamilySettings({ onSectionChange }: FamilySettingsProps) {
       showToast(message, 'error');
     } finally {
       setIsSavingPetBox(false);
+    }
+  };
+
+  // THEME SHOP — allow children to spend points on themes.
+  const handleToggleThemeShopping = async () => {
+    if (!familyData?.id || isSavingThemePrefs) return;
+    const next = !themeShoppingEnabled;
+    setIsSavingThemePrefs(true);
+    setThemePrefsError(null);
+    setThemeShoppingEnabled(next);
+    try {
+      await updateFamilySettings(familyData.id, { themeShoppingEnabled: next });
+      showToast(t('familySettings.themeShoppingSaved'));
+    } catch (error: any) {
+      console.error('Failed to update theme shopping setting:', error);
+      setThemeShoppingEnabled(!next);
+      const message = error?.message || t('familySettings.themePrefsUpdateError');
+      setThemePrefsError(message);
+      showToast(message, 'error');
+    } finally {
+      setIsSavingThemePrefs(false);
+    }
+  };
+
+  // THEME SHOP — toggle one seasonal/cultural content category.
+  const handleToggleSeasonalEvent = async (key: string) => {
+    if (!familyData?.id || isSavingThemePrefs) return;
+    const next = { ...seasonalEvents, [key]: seasonalEvents[key] !== true };
+    setIsSavingThemePrefs(true);
+    setThemePrefsError(null);
+    setSeasonalEvents(next);
+    try {
+      await updateFamilySettings(familyData.id, { seasonalEvents: next });
+    } catch (error: any) {
+      console.error('Failed to update seasonal preferences:', error);
+      setSeasonalEvents(seasonalEvents);
+      const message = error?.message || t('familySettings.themePrefsUpdateError');
+      setThemePrefsError(message);
+      showToast(message, 'error');
+    } finally {
+      setIsSavingThemePrefs(false);
     }
   };
 
@@ -1101,6 +1158,96 @@ export function FamilySettings({ onSectionChange }: FamilySettingsProps) {
                </div>
                {petBoxError && (
                  <p className="text-sm text-red-600 mt-3" role="alert">{petBoxError}</p>
+               )}
+             </CardContent>
+           </Card>
+
+           {/* Theme Shop parent controls: children spending + seasonal content. */}
+           <Card>
+             <CardContent className="p-6 space-y-6">
+               <div className="flex items-start justify-between gap-4">
+                 <div>
+                   <h3 id="family-settings-theme-shopping-title" className="text-sm font-semibold text-gray-900">
+                     {t('familySettings.themeShopping')}
+                   </h3>
+                   <p id="family-settings-theme-shopping-desc" className="text-sm text-gray-500 mt-1">
+                     {t('familySettings.themeShoppingDesc')}
+                   </p>
+                 </div>
+                 {isParentOrOwner ? (
+                   <div className="flex items-center gap-2">
+                     {isSavingThemePrefs && (
+                       <Loader2 className="h-4 w-4 animate-spin text-primary-500" aria-hidden="true" />
+                     )}
+                     <button
+                       type="button"
+                       id="family-settings-theme-shopping"
+                       role="switch"
+                       aria-checked={themeShoppingEnabled}
+                       aria-label={t('familySettings.themeShopping')}
+                       aria-describedby="family-settings-theme-shopping-desc"
+                       disabled={isSavingThemePrefs}
+                       onClick={handleToggleThemeShopping}
+                       data-testid="family-settings-theme-shopping"
+                       className={`relative inline-flex h-6 w-11 shrink-0 items-center rounded-full transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-500 focus-visible:ring-offset-2 disabled:opacity-50 ${
+                         themeShoppingEnabled ? 'bg-primary-500' : 'bg-gray-300'
+                       }`}
+                     >
+                       <span
+                         aria-hidden="true"
+                         className={`inline-block h-5 w-5 transform rounded-full bg-white shadow transition-transform ${
+                           themeShoppingEnabled ? 'translate-x-5' : 'translate-x-1'
+                         }`}
+                       />
+                     </button>
+                   </div>
+                 ) : (
+                   <span className="text-sm font-medium text-gray-700">
+                     {themeShoppingEnabled
+                       ? t('familySettings.themeShoppingStatusEnabled')
+                       : t('familySettings.themeShoppingStatusDisabled')}
+                   </span>
+                 )}
+               </div>
+
+               <div>
+                 <h3 id="family-settings-seasonal-title" className="text-sm font-semibold text-gray-900">
+                   {t('familySettings.seasonalContent')}
+                 </h3>
+                 <p id="family-settings-seasonal-desc" className="text-sm text-gray-500 mt-1">
+                   {t('familySettings.seasonalContentDesc')}
+                 </p>
+                 <div className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-2" role="group" aria-describedby="family-settings-seasonal-desc">
+                   {SEASONAL_EVENT_KEYS.map((key) => {
+                     const enabled = seasonalEvents[key] === true;
+                     return (
+                       <button
+                         key={key}
+                         type="button"
+                         role="switch"
+                         aria-checked={enabled}
+                         disabled={isSavingThemePrefs || !isParentOrOwner}
+                         onClick={() => handleToggleSeasonalEvent(key)}
+                         data-testid={`family-settings-seasonal-${key}`}
+                         className={`flex items-center justify-between rounded-xl border px-3 py-2 text-sm font-semibold transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-500 disabled:opacity-60 ${
+                           enabled
+                             ? 'border-primary-200 bg-primary-50 text-primary-700'
+                             : 'border-gray-200 bg-white text-gray-500'
+                         }`}
+                       >
+                         <span>{t(`familySettings.seasonal_${key}`)}</span>
+                         <span
+                           aria-hidden="true"
+                           className={`inline-block h-2.5 w-2.5 rounded-full ${enabled ? 'bg-primary-500' : 'bg-gray-300'}`}
+                         />
+                       </button>
+                     );
+                   })}
+                 </div>
+               </div>
+
+               {themePrefsError && (
+                 <p className="text-sm text-red-600" role="alert">{themePrefsError}</p>
                )}
              </CardContent>
            </Card>

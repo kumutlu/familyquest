@@ -21,6 +21,7 @@ import {
   listMascotMessages,
   resolveMascotLocale,
   selectMascotMessage,
+  type MascotLocale,
 } from './index';
 
 const FORBIDDEN_PHRASES = [
@@ -125,7 +126,7 @@ describe('resolveMascotLocale', () => {
 
 describe('getMascotMessageVariants', () => {
   it('returns EN variants for an unknown locale', () => {
-    const out = getMascotMessageVariants('mascot.default.friendly', 'fr');
+    const out = getMascotMessageVariants('mascot.default.friendly', 'fr' as MascotLocale);
     expect(out).toBeTruthy();
     expect(out!.length).toBeGreaterThan(0);
   });

@@ -1,3 +1,4 @@
+/// <reference types="node" />
 /**
  * Hook tests for useMascotPresentation / useMascotPresentationFor.
  *
@@ -12,7 +13,7 @@
  */
 
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { cleanup, render, renderHook } from '@testing-library/react';
+import { cleanup, renderHook } from '@testing-library/react';
 import {
   resetExperienceState,
   setExperiencePreferences,

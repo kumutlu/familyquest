@@ -1,3 +1,4 @@
+/// <reference types="node" />
 /**
  * Tests for the experience-theme resolver.
  *

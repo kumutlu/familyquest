@@ -19,6 +19,10 @@
       "title": "Aile Görevi bitti",
       "description": "“{{title}}” artık kapatılabilir."
     },
+    "walletEvent": {
+      "title": "{{name}} cüzdan hareketi",
+      "description": "Ailede son para hareketleri."
+    },
     "allCalm": {
       "title": "Hepsi sakin",
       "description": "Şu an ilgilenmen gereken bir şey yok."

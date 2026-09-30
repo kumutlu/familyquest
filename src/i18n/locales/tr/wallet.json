@@ -97,6 +97,7 @@
       "withdrawalHeadline": "{{amount}}, {{child}} adlı çocuğun cüzdanından çekildi",
       "transferHeadline": "{{amount}}, {{from}} tarafından {{to}} kişisine gönderildi",
       "rewardRedemptionHeadline": "{{amount}}, {{child}} tarafından kullanıldı",
+      "themePurchaseHeadline": "{{child}}, {{amount}} karşılığında {{theme}} aldı",
       "status": {
         "completed": "Tamamlandı",
         "pending": "Bekliyor",

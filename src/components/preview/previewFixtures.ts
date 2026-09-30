@@ -24,6 +24,7 @@ import type { MascotExpression, MascotMood } from '../../domain/mascot';
 import type { DailyAdventurePresentation } from '../../domain/adventure/presentation.v1';
 import type { ComebackTier } from '../../domain/comeback/types';
 import type { MysteryDropDisplay } from '../queki/TodaysAdventure';
+import type { WorldId } from '../../domain/experienceWorld/types';
 
 export type PreviewFixtureKind =
   | 'normal-quests'
@@ -39,6 +40,10 @@ export type PreviewFixtureKind =
   | 'seasonal-halloween'
   | 'seasonal-ramadan-eid'
   | 'seasonal-neon'
+  | 'world-christmas-surge'
+  | 'world-halloween-mystery'
+  | 'world-eid-comeback'
+  | 'world-normal-surge'
   | 'xp-pop-mystery'
   | 'xp-pop-comeback'
   | 'reduced-motion'
@@ -47,6 +52,13 @@ export interface PreviewFixture {
   readonly id: string
   readonly title: string
   readonly kind: PreviewFixtureKind
+  /**
+   * World the preview should render. When set, the preview route
+   * sets the world override so the production world layer paints
+   * the requested world. When omitted, the world follows the
+   * resolved theme (i.e. kind-derived).
+   */
+  readonly worldId?: WorldId
   readonly mood: MascotMood
   readonly expression: MascotExpression
   readonly messageKey: string
@@ -131,6 +143,36 @@ const FIXTURE_LONG_TERM = {
   primaryGoalTargetPence: 25000,
 } as const
 
+/**
+ * Map a fixture kind to the world it should preview.
+ *
+ * The preview route reads this map to set the world override so QA
+ * can compare worlds with identical content. New fixture kinds MUST
+ * either map a world here or set `worldId` directly on the fixture.
+ */
+export const FIXTURE_KIND_WORLD: Readonly<Record<PreviewFixtureKind, WorldId>> = Object.freeze({
+  'normal-quests': 'world.normal',
+  'normal-all-caught-up': 'world.normal',
+  surge: 'world.normal',
+  'mystery-locked': 'world.normal',
+  'mystery-ready': 'world.normal',
+  'mystery-reveal': 'world.normal',
+  'comeback-1d': 'world.normal',
+  'comeback-3d': 'world.normal',
+  'comeback-7d': 'world.normal',
+  'seasonal-christmas': 'world.christmas',
+  'seasonal-halloween': 'world.halloween',
+  'seasonal-ramadan-eid': 'world.eid',
+  'seasonal-neon': 'world.neon',
+  'world-christmas-surge': 'world.christmas',
+  'world-halloween-mystery': 'world.halloween',
+  'world-eid-comeback': 'world.eid',
+  'world-normal-surge': 'world.normal',
+  'xp-pop-mystery': 'world.normal',
+  'xp-pop-comeback': 'world.normal',
+  'reduced-motion': 'world.normal',
+}) as Record<PreviewFixtureKind, WorldId>;
+
 export const PREVIEW_FIXTURES: readonly PreviewFixture[] = [
   {
     id: 'normal-quests',
@@ -140,7 +182,7 @@ export const PREVIEW_FIXTURES: readonly PreviewFixture[] = [
     expression: 'soft_smile',
     messageKey: 'mascot.welcome.morning',
     mascotLine: 'Three quests are waiting for you.',
-    adventurePresentation: { kind: 'normal' },
+    adventurePresentation: { kind: 'normal', reason: 'no_special_opportunity' },
     mysteryDrop: null,
     surge: null,
     comeback: null,
@@ -157,7 +199,7 @@ export const PREVIEW_FIXTURES: readonly PreviewFixture[] = [
     expression: 'big_smile',
     messageKey: 'mascot.celebrate.complete',
     mascotLine: 'Everything is done for today — amazing work!',
-    adventurePresentation: { kind: 'normal' },
+    adventurePresentation: { kind: 'normal', reason: 'no_special_opportunity' },
     mysteryDrop: null,
     surge: null,
     comeback: null,
@@ -174,7 +216,7 @@ export const PREVIEW_FIXTURES: readonly PreviewFixture[] = [
     expression: 'sparkle_burst',
     messageKey: 'mascot.celebrate.surge',
     mascotLine: 'Surge is live — get a 2× XP bonus right now!',
-    adventurePresentation: { kind: 'surge' },
+    adventurePresentation: { kind: 'surge', reason: 'active_surge' },
     mysteryDrop: null,
     surge: {
       surgeId: 'sg-1',
@@ -195,7 +237,7 @@ export const PREVIEW_FIXTURES: readonly PreviewFixture[] = [
     expression: 'raised_eyebrow',
     messageKey: 'mascot.celebrate.locked',
     mascotLine: 'Something mysterious appeared…',
-    adventurePresentation: { kind: 'mystery_available' },
+    adventurePresentation: { kind: 'mystery_available', reason: 'mystery_progressing' },
     mysteryDrop: {
       id: 'd-1',
       rarity: 'common',
@@ -218,7 +260,7 @@ export const PREVIEW_FIXTURES: readonly PreviewFixture[] = [
     expression: 'sparkle',
     messageKey: 'mascot.celebrate.ready',
     mascotLine: 'Your Mystery Drop is unlocked — tap to open!',
-    adventurePresentation: { kind: 'mystery_ready' },
+    adventurePresentation: { kind: 'mystery_ready', reason: 'mystery_unlocked' },
     mysteryDrop: {
       id: 'd-2',
       rarity: 'rare',
@@ -240,7 +282,7 @@ export const PREVIEW_FIXTURES: readonly PreviewFixture[] = [
     expression: 'sparkle_burst',
     messageKey: 'mascot.celebrate.reward',
     mascotLine: 'You got +25 XP and a brand-new look!',
-    adventurePresentation: { kind: 'mystery_ready' },
+    adventurePresentation: { kind: 'mystery_ready', reason: 'mystery_unlocked' },
     mysteryDrop: {
       id: 'd-3',
       rarity: 'epic',
@@ -262,7 +304,7 @@ export const PREVIEW_FIXTURES: readonly PreviewFixture[] = [
     expression: 'big_smile',
     messageKey: 'mascot.welcome.back',
     mascotLine: 'Hi again!',
-    adventurePresentation: { kind: 'comeback' },
+    adventurePresentation: { kind: 'comeback', reason: 'comeback_active' },
     mysteryDrop: null,
     surge: null,
     comeback: { tier: 'return_1d', inactivityDays: 1, missionCompleted: false },
@@ -279,7 +321,7 @@ export const PREVIEW_FIXTURES: readonly PreviewFixture[] = [
     expression: 'big_smile',
     messageKey: 'mascot.welcome.back',
     mascotLine: 'Great to see you again!',
-    adventurePresentation: { kind: 'comeback' },
+    adventurePresentation: { kind: 'comeback', reason: 'comeback_active' },
     mysteryDrop: null,
     surge: null,
     comeback: { tier: 'return_3d', inactivityDays: 3, missionCompleted: false },
@@ -296,7 +338,7 @@ export const PREVIEW_FIXTURES: readonly PreviewFixture[] = [
     expression: 'big_smile',
     messageKey: 'mascot.welcome.back',
     mascotLine: 'Great to see you again!',
-    adventurePresentation: { kind: 'comeback' },
+    adventurePresentation: { kind: 'comeback', reason: 'comeback_active' },
     mysteryDrop: null,
     surge: null,
     comeback: { tier: 'return_7d', inactivityDays: 7, missionCompleted: false },
@@ -313,7 +355,7 @@ export const PREVIEW_FIXTURES: readonly PreviewFixture[] = [
     expression: 'big_smile',
     messageKey: 'mascot.seasonal.christmas',
     mascotLine: 'Happy holidays — Queki is wearing a Santa hat!',
-    adventurePresentation: { kind: 'seasonal' },
+    adventurePresentation: { kind: 'seasonal', reason: 'seasonal_only' },
     mysteryDrop: null,
     surge: null,
     comeback: null,
@@ -330,7 +372,7 @@ export const PREVIEW_FIXTURES: readonly PreviewFixture[] = [
     expression: 'raised_eyebrow',
     messageKey: 'mascot.seasonal.halloween',
     mascotLine: 'Spooky day — Queki is curious!',
-    adventurePresentation: { kind: 'seasonal' },
+    adventurePresentation: { kind: 'seasonal', reason: 'seasonal_only' },
     mysteryDrop: null,
     surge: null,
     comeback: null,
@@ -347,7 +389,7 @@ export const PREVIEW_FIXTURES: readonly PreviewFixture[] = [
     expression: 'soft_smile',
     messageKey: 'mascot.seasonal.ramadan',
     mascotLine: 'A festive season — welcome back to today.',
-    adventurePresentation: { kind: 'seasonal' },
+    adventurePresentation: { kind: 'seasonal', reason: 'seasonal_only' },
     mysteryDrop: null,
     surge: null,
     comeback: null,
@@ -364,7 +406,7 @@ export const PREVIEW_FIXTURES: readonly PreviewFixture[] = [
     expression: 'sparkle_burst',
     messageKey: 'mascot.weekly.neon',
     mascotLine: 'Neon City week — quests pop with energy!',
-    adventurePresentation: { kind: 'normal' },
+    adventurePresentation: { kind: 'normal', reason: 'no_special_opportunity' },
     mysteryDrop: null,
     surge: null,
     comeback: null,
@@ -381,7 +423,7 @@ export const PREVIEW_FIXTURES: readonly PreviewFixture[] = [
     expression: 'sparkle',
     messageKey: 'mascot.xp.mystery',
     mascotLine: '+20 XP from Mystery!',
-    adventurePresentation: { kind: 'normal' },
+    adventurePresentation: { kind: 'normal', reason: 'no_special_opportunity' },
     mysteryDrop: null,
     surge: null,
     comeback: null,
@@ -398,10 +440,95 @@ export const PREVIEW_FIXTURES: readonly PreviewFixture[] = [
     expression: 'big_smile',
     messageKey: 'mascot.xp.comeback',
     mascotLine: '+25 XP comeback bonus!',
-    adventurePresentation: { kind: 'comeback' },
+    adventurePresentation: { kind: 'comeback', reason: 'comeback_active' },
     mysteryDrop: null,
     surge: null,
     comeback: { tier: 'return_3d', inactivityDays: 3, missionCompleted: true },
+    normalQuestCount: 0,
+    allCaughtUp: false,
+    quests: SAMPLE_QUESTS,
+    longTermPreview: FIXTURE_LONG_TERM,
+  },
+  {
+    id: 'world-normal-surge',
+    title: 'World · Normal + Surge',
+    kind: 'world-normal-surge',
+    worldId: 'world.normal',
+    mood: 'excited',
+    expression: 'sparkle_burst',
+    messageKey: 'mascot.celebrate.surge',
+    mascotLine: 'Surge is live — get a 2× XP bonus right now!',
+    adventurePresentation: { kind: 'surge', reason: 'active_surge' },
+    mysteryDrop: null,
+    surge: {
+      surgeId: 'sg-1',
+      eligibleTasks: [{ id: 't-surge', title: 'House Vacuum', pointsReward: 30 }],
+      endsAt: Date.now() + 18 * 60_000,
+    },
+    comeback: null,
+    normalQuestCount: 0,
+    allCaughtUp: false,
+    quests: SAMPLE_QUESTS,
+    longTermPreview: FIXTURE_LONG_TERM,
+  },
+  {
+    id: 'world-christmas-surge',
+    title: 'World · Christmas + Surge',
+    kind: 'world-christmas-surge',
+    worldId: 'world.christmas',
+    mood: 'excited',
+    expression: 'sparkle_burst',
+    messageKey: 'mascot.celebrate.surge',
+    mascotLine: 'Cosy Christmas + a Surge — snow is on its way!',
+    adventurePresentation: { kind: 'surge', reason: 'active_surge' },
+    mysteryDrop: null,
+    surge: {
+      surgeId: 'sg-x',
+      eligibleTasks: [{ id: 't-xmas', title: 'Wrap the presents', pointsReward: 25 }],
+      endsAt: Date.now() + 18 * 60_000,
+    },
+    comeback: null,
+    normalQuestCount: 0,
+    allCaughtUp: false,
+    quests: SAMPLE_QUESTS,
+    longTermPreview: FIXTURE_LONG_TERM,
+  },
+  {
+    id: 'world-halloween-mystery',
+    title: 'World · Halloween + Mystery Ready',
+    kind: 'world-halloween-mystery',
+    worldId: 'world.halloween',
+    mood: 'curious',
+    expression: 'raised_eyebrow',
+    messageKey: 'mascot.celebrate.ready',
+    mascotLine: 'A friendly mystery is waiting under the moon!',
+    adventurePresentation: { kind: 'mystery_ready', reason: 'mystery_unlocked' },
+    mysteryDrop: {
+      id: 'd-hw',
+      rarity: 'epic',
+      messageKey: 'child.adventure.mystery.readyLead',
+      isRevealReady: true,
+    },
+    surge: null,
+    comeback: null,
+    normalQuestCount: 3,
+    allCaughtUp: false,
+    quests: SAMPLE_QUESTS,
+    longTermPreview: FIXTURE_LONG_TERM,
+  },
+  {
+    id: 'world-eid-comeback',
+    title: 'World · Eid + Comeback',
+    kind: 'world-eid-comeback',
+    worldId: 'world.eid',
+    mood: 'welcome_back',
+    expression: 'big_smile',
+    messageKey: 'mascot.welcome.back',
+    mascotLine: 'Eid Mubarak — welcome back to today\'s quests.',
+    adventurePresentation: { kind: 'comeback', reason: 'comeback_active' },
+    mysteryDrop: null,
+    surge: null,
+    comeback: { tier: 'return_3d', inactivityDays: 3, missionCompleted: false },
     normalQuestCount: 0,
     allCaughtUp: false,
     quests: SAMPLE_QUESTS,
@@ -415,7 +542,7 @@ export const PREVIEW_FIXTURES: readonly PreviewFixture[] = [
     expression: 'soft_smile',
     messageKey: 'mascot.welcome.calm',
     mascotLine: 'Reduced motion is on — animations collapse to instant.',
-    adventurePresentation: { kind: 'mystery_ready' },
+    adventurePresentation: { kind: 'mystery_ready', reason: 'mystery_unlocked' },
     mysteryDrop: {
       id: 'd-rm',
       rarity: 'rare',

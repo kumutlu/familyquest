@@ -7,7 +7,7 @@
     "dev": "vite",
     "build": "tsc -b && vite build",
     "typecheck": "tsc --noEmit",
-    "lint": "oxlint",
+    "lint": "oxlint --ignore-pattern e2e-artifacts/ --ignore-pattern integration-notifications/ --ignore-pattern fddc81f-worktree/ --ignore-pattern .worktrees/",
     "preview": "vite preview",
     "deploy:production:hosting": "node scripts/deploy-production-hosting.mjs",
     "deploy:production:functions": "node scripts/deploy-production-functions.mjs",

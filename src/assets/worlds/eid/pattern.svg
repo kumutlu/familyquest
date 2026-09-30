@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 80 80" role="img" aria-label="Subtle geometric pattern">
+  <g fill="none" stroke="currentColor" stroke-width="0.6" opacity="0.35">
+    <path d="M40 4 L 76 40 L 40 76 L 4 40 Z" />
+    <path d="M40 14 L 66 40 L 40 66 L 14 40 Z" />
+    <path d="M40 24 L 56 40 L 40 56 L 24 40 Z" />
+    <path d="M40 34 L 46 40 L 40 46 L 34 40 Z" />
+  </g>
+</svg>

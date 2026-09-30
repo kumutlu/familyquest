@@ -1,6 +1,22 @@
+/**
+ * FAMILYQUEST — SERVICE WORKER UPDATE & PUSH HANDLING
+ *
+ * This module wires service-worker lifecycle with real push notification
+ * handling. It integrates with the existing Workbox-based SW and ensures
+ * that:
+ *   - Background notifications are handled without breaking app startup
+ *   - Foreground messages do NOT show duplicate browser notifications
+ *   - Notification click/deep-link handling is deterministic
+ *   - The existing SW update/activation behavior is preserved
+ *
+ * Design: minimal, non-breaking additions. No second competing SW.
+ */
+
 import { getStartupPhase, logStartupDiagnostic, subscribeStartupPhase } from './startupDiagnostics';
 import { FAMILYQUEST_BUILD } from './buildInfo';
 import type { StartupPhase } from './components/layout/startupState';
+import { onMessage as onMessageClient } from 'firebase/messaging';
+import type { MessagePayload, Messaging } from 'firebase/messaging';
 
 type ServiceWorkerUpdateSource = {
   controller: unknown;
@@ -216,4 +232,79 @@ export function installServiceWorkerUpdateHandler(
       }
     });
   });
+}
+
+/**
+ * Installs foreground push message listeners on the window Messaging
+ * instance.
+ *
+ * NOTE on background messages: `onBackgroundMessage` is intentionally NOT
+ * imported here. It is exported only from the Service-Worker entry point
+ * (`firebase/messaging/sw`) and can only run INSIDE the service worker — a
+ * window-context import both fails to resolve and is semantically wrong.
+ * Background pushes are therefore delivered through the SW's own push event
+ * (firebase-messaging-sw.js) and surfaced to this app via the realtime
+ * Firestore Notification Center — the authoritative UI per the notifications
+ * architecture. No UI is shown from the SW handler (log-only), so no
+ * window-side background handler is required.
+ *
+ * Foreground messages: intentionally a no-op to avoid showing a duplicate
+ * browser notification on top of the Notification Center. The client-side
+ * `initForegroundMessaging()` in App.tsx also returns a no-op handler.
+ *
+ * @param messaging Firebase Messaging instance (window context).
+ * @param onNotificationOptional Optional callback for when a push
+ *   notification should trigger an in-app UI update (e.g. refresh quest
+ *   list). If not provided, foreground pushes are swallowed silently.
+ */
+export function installPushMessageListeners(
+  messaging: Messaging,
+  onNotificationOptional?: (payload: { type: string; notification: any }) => void,
+): () => void {
+  // --- Foreground message handler (window context) ---
+  // Runs when a push notification arrives while the app is in the FOREGROUND.
+  // We intentionally DO NOT show a browser notification here — the
+  // Notification Center (Firestore realtime listener) is the authoritative
+  // UI. We just log and optionally trigger an in-app refresh.
+  const foregroundUnsub = onMessageClient(messaging, (payload: MessagePayload) => {
+    // payload is a MessagePayload from firebase/messaging
+    const data = payload.data as Record<string, unknown> | undefined;
+    const notificationId = data?.id as string | undefined;
+    const title = data?.title as string | undefined;
+    const body = data?.body as string | undefined;
+
+    // Log structured observability entry (no raw tokens).
+    // In production this would go to a metrics sink; in dev we console.log.
+    // eslint-disable-next-line no-console
+    console.log('[sw-push-foreground]', {
+      notificationId,
+      title,
+      body,
+      // Do NOT log the raw FCM token or full payload.
+    });
+
+    // Optional callback: e.g. refresh the Notification Center unread count.
+    if (onNotificationOptional) {
+      onNotificationOptional({
+        type: 'push-notification',
+        notification: {
+          id: notificationId ?? '',
+          title: title ?? '',
+          body: body ?? '',
+          actionUrl: data?.actionUrl as string | undefined,
+          dedupeKey: data?.dedupeKey as string | undefined,
+          type: data?.type as string | undefined,
+          familyId: data?.familyId as string | undefined,
+          childId: data?.childId as string | undefined,
+          slot: data?.slot as string | undefined,
+          localDate: data?.localDate as string | undefined,
+        },
+      });
+    }
+  });
+
+  // Return an unsubscribe function so callers can clean up.
+  return () => {
+    foregroundUnsub();
+  };
 }

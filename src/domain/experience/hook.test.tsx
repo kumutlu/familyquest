@@ -131,7 +131,7 @@ describe('useExperienceTheme', () => {
   });
 
   it('result contains baseTheme + themes for consumer fallback paths', () => {
-    const { result } = renderHook<unknown, UseExperienceThemeResult>(() => useExperienceTheme());
+    const { result } = renderHook<UseExperienceThemeResult, undefined>(() => useExperienceTheme());
     expect(result.current.baseTheme.id).toBe(STANDARD_THEME.id);
     expect(result.current.themes.length).toBeGreaterThan(0);
   });

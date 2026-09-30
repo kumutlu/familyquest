@@ -25,17 +25,6 @@ import { MascotMessage } from '../mascot/MascotMessage';
 import type { MascotPresentation } from '../../domain/mascot';
 import { cn } from '../../lib/utils';
 
-function prefersReducedMotion(): boolean {
-  if (typeof window === 'undefined' || typeof window.matchMedia !== 'function') {
-    return false;
-  }
-  try {
-    return window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-  } catch {
-    return false;
-  }
-}
-
 export interface MascotSceneProps {
   /** Authoritative mascot presentation from the Mascot Engine. */
   readonly presentation: MascotPresentation | null;

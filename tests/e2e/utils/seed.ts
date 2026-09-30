@@ -54,6 +54,33 @@ export async function seedTestFamily() {
   batch.set(db.doc(`users/child1`), { familyId, role: 'child', displayName: 'Child Leo', rewardPoints: 100, lifetimeXP: 100, walletBalance: 500 });
   batch.set(db.doc(`users/child2`), { familyId, role: 'child', displayName: 'Child Ava', rewardPoints: 50, lifetimeXP: 50, walletBalance: 200 });
 
+  // Theme shop: one published catalog row (space, 500 pts) with a live
+  // Theme of the Week window for the theme E2E. Defaults cover every other
+  // shop item, so a single row is enough for preview/buy/apply flows.
+  batch.set(db.doc(`families/${familyId}/themes/space`), {
+    shopItemId: 'space',
+    themeId: 'theme.shop.space',
+    name: 'Space Explorer',
+    pricePoints: 500,
+    isActive: true,
+    promo: {
+      themeId: 'theme.shop.space',
+      startsAt: Timestamp.now().toMillis() - 60_000,
+      endsAt: Timestamp.now().toMillis() + 7 * 24 * 60 * 60 * 1000,
+    },
+    createdAt: Timestamp.now(),
+  });
+  // A cheap parent-priced item so a child with 50 pts can complete a REAL
+  // purchase through the UI (buy → confirm → deduct → own → apply).
+  batch.set(db.doc(`families/${familyId}/themes/calm`), {
+    shopItemId: 'calm',
+    themeId: 'theme.shop.calm',
+    name: 'Calm Meadow',
+    pricePoints: 40,
+    isActive: true,
+    createdAt: Timestamp.now(),
+  });
+
   // Wallets
   batch.set(db.doc(`families/${familyId}/wallets/child1`), { balance: 500 });
   batch.set(db.doc(`families/${familyId}/wallets/child2`), { balance: 200 });

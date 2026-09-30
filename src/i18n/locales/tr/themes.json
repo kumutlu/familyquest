@@ -1,0 +1,22 @@
+{
+  "title": "Temalar",
+  "subtitle": "Queki'yi kendine ait yap.",
+  "back": "Geri",
+  "current": "Aktif",
+  "owned": "Sende",
+  "free": "Ücretsiz",
+  "freeThisWeek": "Bu hafta ücretsiz",
+  "price": "{{price}} puan",
+  "apply": "Bu temayı kullan",
+  "applied": "Uygulandı",
+  "buy": "{{price}} puana satın al",
+  "confirmBuy": "{{name}} temasını {{price}} puana satın al?",
+  "confirmYes": "Evet, al",
+  "confirmNo": "Şimdi değil",
+  "previewNote": "Görevlerin böyle görünebilir.",
+  "themesLabel": "Tema",
+  "shoppingDisabled": "Tema alışverişi şu anda kapalı.",
+  "loading": "Temalar yükleniyor…",
+  "totw": "{{name}} bu hafta ücretsiz!",
+  "purchase": "Tema satın alma"
+}

@@ -84,7 +84,10 @@ function baseStore(): Record<string, unknown> {
 
 beforeEach(async () => {
   localStorage.clear();
-  await i18n.loadNamespaces(['common', 'wallet', 'goals', 'rewards', 'reversals']);
+  // 'themes' is requested by the screen's theme-purchase rows; without
+  // preloading it the first test suspends inside useTranslation and asserts
+  // against an empty DOM.
+  await i18n.loadNamespaces(['common', 'wallet', 'goals', 'rewards', 'reversals', 'themes']);
   await i18n.changeLanguage('en');
   store.state = baseStore();
 });

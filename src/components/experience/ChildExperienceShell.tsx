@@ -30,6 +30,11 @@
 import { createContext, useContext, useMemo, type ReactNode } from 'react';
 import type { ResolvedExperienceTheme } from '../../domain/experience';
 import type { MascotPresentation } from '../../domain/mascot';
+import { WorldBackground } from './WorldBackground';
+import { useExperienceWorld } from '../../hooks/useExperienceWorld';
+import { useAppearanceSafe } from './useAppearanceSafe';
+import { SeasonalLine } from './SeasonalLine';
+import { validThemeTokens } from '../../domain/experience';
 
 export interface ChildExperienceTheme {
   /**
@@ -86,8 +91,9 @@ export interface ChildExperienceShellProps {
 /**
  * Resolve the presentation-side theme bundle from the authoritative
  * resolver output. We never invent tokens — we map keys the resolver
- * already produced. Anything missing collapses to undefined (no
- * decoration at all) so a calm base state stays calm.
+ * already produced, validated through `validThemeTokens` so a partial
+ * or malformed token bundle fails safe to the calm base world instead
+ * of rendering a broken palette.
  */
 function resolveShellTheme(
   resolvedTheme: ResolvedExperienceTheme | null,
@@ -95,25 +101,13 @@ function resolveShellTheme(
   if (!resolvedTheme) {
     return { tokens: {} };
   }
-  const tokens = resolvedTheme.theme?.tokens as
-    | Record<string, unknown>
-    | undefined;
+  const tokens = validThemeTokens(resolvedTheme.theme?.tokens);
   if (!tokens) return { tokens: {} };
-  const accent = typeof tokens.accent === 'string' ? tokens.accent : undefined;
-  const ambientFrom =
-    typeof tokens.ambientFrom === 'string' ? tokens.ambientFrom : undefined;
-  const ambientTo =
-    typeof tokens.ambientTo === 'string' ? tokens.ambientTo : undefined;
-  const patternDensity =
-    typeof tokens.patternDensity === 'number'
-      ? Math.min(1, Math.max(0, tokens.patternDensity))
-      : undefined;
-  const accentSoft =
-    typeof tokens.accentSoft === 'string' && tokens.accentSoft.length > 0
-      ? tokens.accentSoft
-      : typeof tokens.accent === 'string'
-        ? tokens.accent
-        : undefined;
+  const accent = tokens.accent;
+  const ambientFrom = tokens.ambientFrom;
+  const ambientTo = tokens.ambientTo;
+  const patternDensity = tokens.patternDensity;
+  const accentSoft = tokens.accentSoft ?? tokens.accent;
   return {
     tokens: { accent, ambientFrom, ambientTo, patternDensity, accentSoft },
   };
@@ -150,6 +144,7 @@ function shellStyle(
 /**
  * World wrapper. Provides:
  *   - ambient gradient + token cascade
+ *   - the seasonal world layer (atmosphere + decoration + particles)
  *   - context bundle for descendants
  *   - aria-label so screen readers see the page as one coherent world
  */
@@ -160,6 +155,16 @@ export function ChildExperienceShell({
 }: ChildExperienceShellProps) {
   const theme = useMemo(() => resolveShellTheme(resolvedTheme), [resolvedTheme]);
   const style = useMemo(() => shellStyle(theme), [theme]);
+  // The shell reads the resolved seasonal world through the same hook
+  // the rest of the experience surface uses. The hook consumes the
+  // resolved theme the host already produced — it NEVER re-derives
+  // eligibility. Preview tooling (DEV only) can override the world
+  // through `setExperienceWorldOverride`.
+  const { world, seasonalLine, isPreviewOverride } = useExperienceWorld();
+  // `isDark` is read from the appearance store so the world paints the
+  // correct palette for the current mode without forcing the host to
+  // pipe a prop. The helper is safe in non-React environments.
+  const isDark = useAppearanceSafe();
   const value = useMemo<ChildExperienceContextValue>(
     () => ({ theme, mascotPresentation }),
     [theme, mascotPresentation],
@@ -169,12 +174,30 @@ export function ChildExperienceShell({
     <ChildExperienceContext.Provider value={value}>
       <div
         data-testid="child-experience-shell"
+        // Theme kind is now derived from the world source. The world
+        // consumes the resolved theme; seasonal-event / weekly-event /
+        // equipped-theme are mutually exclusive. `preview-override` and
+        // `base` collapse to `base` for the visual test.
         data-experience-theme-kind={
-          resolvedTheme?.weeklyEvent ? 'weekly' : resolvedTheme?.seasonalEvent ? 'seasonal' : 'base'
+          world.source === 'seasonal-event'
+            ? 'seasonal'
+            : world.source === 'weekly-event'
+              ? 'weekly'
+              : world.source === 'equipped-theme'
+                ? 'equipped'
+                : 'base'
         }
+        data-experience-world={world.definition.id}
+        data-experience-world-source={world.source}
+        data-experience-world-preview-override={isPreviewOverride ? '1' : '0'}
         className="qk-child-experience relative"
         style={style}
       >
+        {/* Seasonal world layer — atmospheric gradient + decoration +
+            particles. ALWAYS behind every content surface. aria-hidden,
+            pointer-events: none, never changes layout dimensions. */}
+        <WorldBackground world={world} isDark={isDark} />
+
         {/* Ambient layer — sits behind every surface. Honours reduced
             motion because no animation lives here. */}
         <div
@@ -183,6 +206,19 @@ export function ChildExperienceShell({
           className="qk-child-experience-ambient pointer-events-none absolute inset-0 -z-10"
         />
         <div className="qk-child-experience-pattern pointer-events-none absolute inset-0 -z-10" aria-hidden="true" />
+
+        {/* Optional short seasonal line. Restrained, decorative — NOT a
+            heading, NOT a button, NOT an Adventure. Hidden under
+            reduced motion only if the host explicitly opts in (the
+            shell does NOT opt in by default; QA tooling can). */}
+        {seasonalLine ? (
+          <SeasonalLine
+            worldId={world.definition.id}
+            line={seasonalLine}
+            className="relative z-0 mx-auto mt-3 flex w-fit max-w-full justify-center px-4"
+          />
+        ) : null}
+
         {children}
       </div>
     </ChildExperienceContext.Provider>
