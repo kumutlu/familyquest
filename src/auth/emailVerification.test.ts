@@ -40,6 +40,38 @@ describe('password email verification authority', () => {
     )).toBe(true);
   });
 
+  it('grants the exemption to a device-bound child profile whose document id differs from the Auth UID but whose linked authUid field matches', () => {
+    // QR/device onboarding binds an existing child profile server-side by writing
+    // authUid onto users/{childId}; the document id and the auth uid are distinct.
+    expect(requiresPasswordEmailVerification(
+      { emailVerified: false, providerData: [{ providerId: 'password' }] },
+      'password',
+      { role: 'child', id: 'child-doc-1', authUid: 'auth-1', familyId: 'family-1' },
+      'auth-1',
+    )).toBe(false);
+  });
+
+  it('grants the exemption when the profile document id matches the Auth UID even if no authUid field is linked', () => {
+    expect(requiresPasswordEmailVerification(
+      { emailVerified: false, providerData: [{ providerId: 'password' }] },
+      'password',
+      { role: 'child', id: 'auth-1', familyId: 'family-1' },
+      'auth-1',
+    )).toBe(false);
+  });
+
+  it('denies the exemption when neither the document id nor the linked authUid matches the Auth UID', () => {
+    // Tripwire: if the second operand ever degenerated into a tautology
+    // (e.g. authUid === authUid), a profile bound to another identity would
+    // wrongly clear the verification gate.
+    expect(requiresPasswordEmailVerification(
+      { emailVerified: false, providerData: [{ providerId: 'password' }] },
+      'password',
+      { role: 'child', id: 'child-doc-1', authUid: 'auth-other', familyId: 'family-1' },
+      'auth-9',
+    )).toBe(true);
+  });
+
   it('does not let a stale child profile bypass verification after an account switch', () => {
     const staleChild = { role: 'child', id: 'child-old', authUid: 'auth-old', familyId: 'family-1' };
     expect(requiresPasswordEmailVerification(
