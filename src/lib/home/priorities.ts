@@ -116,7 +116,7 @@ function millis(value: any): number {
 }
 
 function isPendingStatus(status: unknown): boolean {
-  return status === 'pending' || status === 'pending_approval';
+  return status === 'pending' || status === 'pending_approval' || status === 'pending_acceptance';
 }
 
 /** Count every item waiting on a parent decision across all request families. */
