@@ -19,6 +19,7 @@ import { BalanceChip } from '../queki/semanticDisplays';
 import { StatusBadge } from '../queki/StatusBadge';
 import { BottomSheet } from '../queki/BottomSheet';
 import { TactileButton } from '../queki/TactileButton';
+import { isPetBoxEnabled } from '../../lib/familyFeatures';
 
 /**
  * Parent Living Home — Queki v2 Wave 1.
@@ -84,9 +85,9 @@ export function ParentLivingHome() {
         challenges,
         walletTransactions,
         familyMembers,
-        petBoxEnabled: true,
+        petBoxEnabled: isPetBoxEnabled(familyData),
       }),
-    [taskCompletions, transferRequests, moneyRequests, petboxRequests, profileUpdateRequests, goalRequests, childJoinRequests, childQrJoinRequests, savingsGoals, challenges, walletTransactions, familyMembers],
+    [taskCompletions, transferRequests, moneyRequests, petboxRequests, profileUpdateRequests, goalRequests, childJoinRequests, childQrJoinRequests, savingsGoals, challenges, walletTransactions, familyMembers, familyData],
   );
 
   const approvalsCount = priorities.find(p => p.kind === 'approvals')?.count ?? 0;
