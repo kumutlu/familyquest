@@ -155,6 +155,49 @@ describe('ReviewPage & ApprovalCenter Hydration Regression Tests', () => {
     expect(screen.getByTestId('approve-qr-join-button')).toBeInTheDocument();
   });
 
+  it('C0. Pending non-swipe approvals never produce a false 0-to-review state', () => {
+    mockStoreState = makeStore({
+      profileUpdateRequests: [
+        { id: 'profile-1', childId: 'child1', status: 'pending', createdAt: new Date('2026-10-02T08:00:00Z') },
+      ],
+      goalRequests: [
+        { id: 'goal-1', childId: 'child1', goalId: 'goal-a', status: 'pending', createdAt: new Date('2026-10-02T08:05:00Z') },
+      ],
+      savingsGoals: [{ id: 'goal-a', goalId: 'goal-a', title: 'Bike' }],
+      childQrJoinRequests: [],
+      bootstrapStatus: { tasks: 'ready', members: 'ready', childQrJoinRequests: 'ready' },
+    });
+
+    renderReviewPage(['/review']);
+
+    expect(screen.queryByTestId('swipe-review-caught-up')).not.toBeInTheDocument();
+    expect(screen.queryByText(/0 to review/i)).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /Pending \(2\)/i })).toBeInTheDocument();
+  });
+
+  it('C1. pending_acceptance money requests are counted consistently with Swipe Review', () => {
+    mockStoreState = makeStore({
+      moneyRequests: [{
+        id: 'money-1',
+        requesterId: 'child1',
+        requesterName: 'Ali',
+        requestedFromId: 'parent1',
+        requestedFromName: 'Parent',
+        amountPence: 500,
+        status: 'pending_acceptance',
+        createdAt: new Date('2026-10-02T08:10:00Z'),
+      }],
+      childQrJoinRequests: [],
+      bootstrapStatus: { tasks: 'ready', members: 'ready', childQrJoinRequests: 'ready' },
+    });
+
+    renderReviewPage(['/review']);
+
+    expect(screen.getByTestId('swipe-review')).toBeInTheDocument();
+    expect(screen.getByTestId('review-count')).toHaveTextContent('1');
+    expect(screen.queryByTestId('swipe-review-caught-up')).not.toBeInTheDocument();
+  });
+
   it('C. Ready empty: genuine empty state works when childQrJoinRequests is ready and empty', () => {
     mockStoreState = makeStore({
       childQrJoinRequests: [],
