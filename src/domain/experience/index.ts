@@ -41,6 +41,38 @@ export {
 } from './resolver';
 
 export {
+  THEME_ID_TO_PLATE_ID,
+  getThemePlate,
+} from './themePlate';
+
+export type {
+  ThemePersonality,
+  ThemeShadow,
+  ThemeBorderStyle,
+  ThemePattern,
+  ThemeProgressTrack,
+  ThemeProgressEffect,
+  ThemeSurfaceScheme,
+} from './themePersonality';
+
+export {
+  NEUTRAL_PERSONALITY,
+  validThemePersonality,
+  themePersonalityCustomProperties,
+  themePersonalityAttributes,
+  PERSONALITY_CUSTOM_PROPERTIES,
+  PERSONALITY_ATTRIBUTES,
+} from './themePersonality';
+
+export {
+  DEFAULT_SHOP_PERSONALITY,
+  NEON_ARCADE_PERSONALITY,
+  SPACE_PERSONALITY,
+  CALM_PERSONALITY,
+  SHOP_THEME_PERSONALITY,
+} from './fixtures/themePersonalities';
+
+export {
   THEME_CATALOG,
   STANDARD_THEME,
   CHRISTMAS_THEME,

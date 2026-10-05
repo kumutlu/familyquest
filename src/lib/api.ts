@@ -46,7 +46,8 @@ import {
 import { useStore } from '../store/useStore';
 import { unregisterCurrentDevice } from './pushNotifications';
 import { getAvatarById, getAvatarCost, resolveAvatarImage } from '../config/avatarCatalog';
-import { getThemeById } from '../domain/experience';
+import { DEFAULT_SHOP_PRICES, defaultShopThemeId, getThemeById } from '../domain/experience';
+import { ThemePurchaseError } from './transactionErrors';
 import { type AvatarConfigV1, isValidAvatarConfig } from '../config/avatarConfig';
 import {
   periodKeyFor,
@@ -3512,7 +3513,7 @@ export const purchaseShopTheme = async (
     const tokenResult = await auth.currentUser?.getIdTokenResult?.();
     const claims = (tokenResult?.claims ?? {}) as Record<string, unknown>;
     if (claims.managedChild === true) {
-      throw new Error('Theme shopping is not available for this profile.');
+      throw new ThemePurchaseError('managed-profile', 'Theme shopping is not available for this profile.');
     }
   } catch (error) {
     // Re-throw our own guard error; ignore token-resolution failures (the
@@ -3552,33 +3553,77 @@ export const purchaseShopTheme = async (
       return;
     }
 
-    if (!rowSnap.exists()) throw new Error('This theme is not available.');
-    if (!userSnap.exists()) throw new Error('User not found');
-    const row = rowSnap.data() as Partial<ShopThemeCatalogRow>;
+    if (!userSnap.exists()) throw new ThemePurchaseError('unknown', 'User not found');
     const userData = userSnap.data() as Record<string, unknown>;
     const familyData = familySnap.exists() ? (familySnap.data() as Record<string, unknown>) : {};
 
-    if (userData.role !== 'child') throw new Error('Only children can buy themes.');
-    if (userData.familyId !== familyId) throw new Error('Your family membership could not be verified.');
+    if (userData.role !== 'child') {
+      throw new ThemePurchaseError('not-a-child', 'Only children can buy themes.');
+    }
+    if (userData.familyId !== familyId) {
+      throw new ThemePurchaseError('family-mismatch', 'Your family membership could not be verified.');
+    }
 
     // Parent control: theme shopping may be disabled for this family.
     // Absent field → default enabled so existing families keep the feature.
     const engagement = (familyData.engagementPreferences ?? {}) as Record<string, unknown>;
     if (engagement.themeShoppingEnabled === false) {
-      throw new Error('Theme shopping is turned off for your family.');
+      throw new ThemePurchaseError('shopping-disabled', 'Theme shopping is turned off for your family.');
     }
 
-    if (row.isActive !== true) throw new Error('This theme is not available.');
-    if (typeof row.pricePoints !== 'number' || row.pricePoints <= 0) {
-      throw new Error('This theme is not purchasable.');
+    // --- CATALOGUE RESOLUTION ---------------------------------------------
+    // The family catalogue row is an OVERRIDE, never a prerequisite. The
+    // deployed rules fall back to the compiled-in catalogue whenever a family
+    // has not published a row (`themeCatalogPrice` / `themeCatalogThemeId` /
+    // `themeShopActive` in firestore.rules, which say "the shop works from the
+    // first day"), so the client MUST resolve the same three values the same
+    // way. Requiring the row here refused a purchase the rules would have
+    // committed — the live Theme Shop failure.
+    const row = rowSnap.exists() ? (rowSnap.data() as Partial<ShopThemeCatalogRow>) : null;
+    const isBuiltInShopItem = Object.prototype.hasOwnProperty.call(DEFAULT_SHOP_PRICES, shopItemId);
+    const builtInPrice = isBuiltInShopItem ? DEFAULT_SHOP_PRICES[shopItemId] : 0;
+
+    // No row and not a compiled-in item ⇒ nothing sells this id (rules agree:
+    // themeCatalogPrice() is 0, so the paired-deduction check can never pass).
+    if (!row && !isBuiltInShopItem) {
+      throw new ThemePurchaseError('unavailable', 'This theme is not available.');
     }
-    if (purchaseSnap.exists()) throw new Error('You already own this theme.');
+
+    // themeShopPrice(): the row's `pricePoints` when the field is present,
+    // otherwise the compiled-in price.
+    const cataloguePrice: unknown = row && 'pricePoints' in row ? row.pricePoints : builtInPrice;
+    // themeShopThemeId(): the row's `themeId` when present, otherwise the
+    // compiled-in `theme.shop.<item>` id.
+    const resolvedThemeId = row && typeof row.themeId === 'string'
+      ? row.themeId
+      : (isBuiltInShopItem ? defaultShopThemeId(shopItemId) : 'theme.standard');
+    // themeShopActive(): an absent row is active; a present row must say
+    // exactly `true`, and a missing `isActive` field defaults to active.
+    const catalogueActive = !row || !('isActive' in row) ? true : row.isActive === true;
+
+    if (!catalogueActive) {
+      throw new ThemePurchaseError('unavailable', 'This theme is not available.');
+    }
+    // A malformed row price is un-representable in the rules comparison, so it
+    // must fail closed rather than be coerced into a wrong deduction.
+    if (typeof cataloguePrice !== 'number' || !Number.isFinite(cataloguePrice)) {
+      throw new ThemePurchaseError('unavailable', 'This theme is not available.');
+    }
+    if (cataloguePrice <= 0) {
+      throw new ThemePurchaseError('not-purchasable', 'This theme is not purchasable.');
+    }
+    if (purchaseSnap.exists()) {
+      throw new ThemePurchaseError('already-owned', 'You already own this theme.');
+    }
 
     // AUTHORITATIVE price — the client-supplied value is ignored entirely.
-    const cost = row.pricePoints;
+    const cost = cataloguePrice;
     const currentPoints = typeof userData.rewardPoints === 'number' ? userData.rewardPoints : 0;
     if (currentPoints < cost) {
-      throw new Error(`You need ${cost - currentPoints} more points to buy this theme.`);
+      throw new ThemePurchaseError(
+        'insufficient-points',
+        `You need ${cost - currentPoints} more points to buy this theme.`,
+      );
     }
 
     // --- WRITE PHASE (zero reads from here) --------------------------------
@@ -3590,7 +3635,7 @@ export const purchaseShopTheme = async (
       shopItemId,
       childId: uid,
       familyId,
-      themeId: typeof row.themeId === 'string' ? row.themeId : '',
+      themeId: resolvedThemeId,
       costPoints: cost,
       source: 'points',
       purchasedAt: serverTimestamp(),
@@ -3598,14 +3643,14 @@ export const purchaseShopTheme = async (
     });
     transaction.set(mirrorRef, {
       shopItemId,
-      themeId: typeof row.themeId === 'string' ? row.themeId : '',
+      themeId: resolvedThemeId,
       costPoints: cost,
       purchasedAt: serverTimestamp(),
     });
     writeIdempotency(transaction, familyId, key, 'theme_purchase', uid, requestHash, purchaseRef.path);
     // Human-readable history: the child's name for the theme, a plain
     // action, and the exact cost — never raw source-kind/dev terminology.
-    const themeName = getThemeById(typeof row.themeId === 'string' ? row.themeId : '')?.name;
+    const themeName = getThemeById(resolvedThemeId)?.name;
     const feedRef = doc(collection(db, `families/${familyId}/feed`));
     transaction.set(feedRef, {
       actorId: uid,
@@ -3614,10 +3659,10 @@ export const purchaseShopTheme = async (
       timestamp: serverTimestamp(),
     });
 
-    result = { costPoints: cost, themeId: typeof row.themeId === 'string' ? row.themeId : '' };
+    result = { costPoints: cost, themeId: resolvedThemeId };
   });
 
-  if (!result) throw new Error('Theme purchase did not complete');
+  if (!result) throw new ThemePurchaseError('unknown', 'Theme purchase did not complete');
   return result;
 };
 

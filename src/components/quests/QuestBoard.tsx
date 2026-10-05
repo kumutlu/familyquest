@@ -216,9 +216,13 @@ export function QuestBoard() {
 
   return (
     <div className="space-y-6 pb-8" data-testid="quest-board">
-      {/* ---- TODAY hero --------------------------------------------------- */}
+      {/* ---- TODAY hero ---------------------------------------------------
+          `qk-surface-hero` opts the section frame into the theme personality
+          (radius + interior treatment) so the framing around the content is
+          part of each theme's form language and not only the cards inside it.
+          Presentation only — no layout, spacing or copy change. */}
       <section
-        className="rounded-hero p-6 text-white"
+        className="qk-surface-hero relative rounded-hero p-6 text-white"
         style={{
           background:
             'linear-gradient(135deg, var(--qk-surface-hero-from), var(--qk-surface-hero-to))',

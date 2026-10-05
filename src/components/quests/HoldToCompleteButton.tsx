@@ -105,10 +105,21 @@ export function HoldToCompleteButton({
   };
 
   const ringDegrees = Math.round(progress * 360);
-  const toneClasses =
-    tone === 'xp'
-      ? 'bg-xp-400 text-xp-700 shadow-[0_6px_0_0_var(--color-xp-600)]'
-      : 'bg-primary-500 text-white shadow-[0_6px_0_0_var(--color-primary-700)]';
+  /* Split so the PRESSED state can keep the fill and the on-brand ink while
+     swapping only the shadow. Previously `holding` replaced the whole tone
+     string, which dropped `bg-primary-500` AND `text-white` together: the
+     button went transparent and its label fell back to inherited ink. On the
+     dark-surface themes that was invisible (inherited ink is light), but on a
+     LIGHT-surface theme — Calm Pastel — the label became dark ink sitting on
+     the dark accent fill, which is how a washed-out CTA happens.
+
+     The tone split keeps reward/XP gold byte-identical: `xp` still fills
+     `bg-xp-400` with `text-xp-700` in both states, so no theme can recolour
+     earned points. Timing, gesture and completion logic are untouched. */
+  const toneFill = tone === 'xp' ? 'bg-xp-400' : 'bg-primary-500';
+  const toneInk = tone === 'xp' ? 'text-xp-700' : 'text-white';
+  const toneRestShadow =
+    tone === 'xp' ? 'shadow-[0_6px_0_0_var(--color-xp-600)]' : 'shadow-[0_6px_0_0_var(--color-primary-700)]';
 
   return (
     <button
@@ -117,13 +128,21 @@ export function HoldToCompleteButton({
       aria-disabled={disabled}
       data-testid="hold-to-complete"
       data-holding={holding || undefined}
-      disabled={disabled}
+      /* Presentation hooks only. The track/fill treatment is themed by the
+         child theme scope through `data-qk-progress-track` /
+         `data-qk-progress-effect`; the component never learns a theme name, and
+         the hold TIMING, press gesture, scroll cancellation and completion
+         logic below are untouched. `tone="xp"` deliberately does NOT get these
+         hooks: reward/XP gold keeps its own semantic meaning. */
+      data-qk-tone={tone}
       className={cn(
-        'relative flex min-h-14 w-full select-none items-center justify-center gap-2 rounded-2xl px-6',
+        'qk-hold relative isolate flex min-h-14 w-full select-none items-center justify-center gap-2 rounded-2xl px-6',
         'font-button transition-[transform,box-shadow,opacity] duration-[var(--animate-duration-tap)] ease-tap',
         'focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-500 focus-visible:ring-offset-2',
         'disabled:pointer-events-none disabled:opacity-50',
-        holding ? 'translate-y-[4px] shadow-[0_2px_0_0_rgba(0,0,0,0.25)]' : toneClasses,
+        toneFill,
+        toneInk,
+        holding ? 'translate-y-[4px] shadow-[0_2px_0_0_rgba(0,0,0,0.25)]' : toneRestShadow,
         className,
       )}
       onPointerDown={(event) => {
@@ -155,6 +174,35 @@ export function HoldToCompleteButton({
       onKeyDown={handleKeyDown}
       onContextMenu={(event) => event.preventDefault()}
     >
+      {/* Track + fill: purely decorative presentation layers. The theme scope
+          styles them from `data-qk-progress-track` / `data-qk-progress-effect`.
+          `aria-hidden`, `pointer-events: none`, and never rendered for
+          `tone="xp"` so reward/XP gold keeps its own semantics. */}
+      {tone !== 'xp' && (
+        <span
+          aria-hidden="true"
+          data-testid="hold-track"
+          className="qk-hold-track pointer-events-none absolute inset-0 rounded-2xl"
+        />
+      )}
+      {tone !== 'xp' && progress > 0 && (
+        <span
+          aria-hidden="true"
+          data-testid="hold-fill"
+          className="qk-hold-fill pointer-events-none absolute inset-0 rounded-2xl"
+          style={{
+            /* Width is the only thing driven by state here — the same progress
+               value the completion logic already computed. */
+            clipPath: `inset(0 ${(1 - progress) * 100}% 0 0 round 1rem)`,
+            /* The theme scope may re-point this at a darker mix: the fill is
+               the one surface the light on-brand label is painted ON, so on a
+               dark-surface theme the light accent ink would drop it to ~1.4:1.
+               Falls back to the existing accent ink, which is what Queki
+               Classic and every neutral theme keep. */
+            backgroundColor: 'var(--qk-hold-fill, var(--qk-accent-ink))',
+          }}
+        />
+      )}
       {!reducedMotion && holding && progress > 0 && (
         <span
           aria-hidden="true"

@@ -57,7 +57,10 @@ test.describe('Child theme shop', () => {
     const focus = page.getByTestId('theme-shop-focus');
     await expect(focus.getByRole('button', { name: 'Buy for 40 points' })).toBeVisible();
     await focus.getByRole('button', { name: 'Buy for 40 points' }).click();
-    await focus.getByRole('button', { name: 'Yes, buy it' }).click();
+    // The confirmation step names the price ("Unlock for 40 points") rather
+    // than a bare "Yes, buy it": the child is confirming a spend, and the step
+    // is reached only after an explicit click on the priced CTA.
+    await focus.getByRole('button', { name: 'Unlock for 40 points' }).click();
 
     // The buy-and-apply pipeline equips the theme in-session.
     await expect(focus.getByText('Applied')).toBeVisible({ timeout: 15_000 });

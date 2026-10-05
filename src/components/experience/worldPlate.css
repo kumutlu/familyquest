@@ -1,0 +1,150 @@
+/* ============================================================================
+   Painted Theme World (recovered Queki World System V2 artwork)
+   ============================================================================
+
+   The plate is a full-bleed painted environment. It is the BASE layer of a
+   themed surface; the token layers (ambient colour wash, pattern, particles)
+   sit ABOVE it.
+
+   Rules
+   -----
+   - Every node is decorative: aria-hidden + pointer-events: none.
+   - The plate never changes layout dimensions; hosts own the box.
+   - When a plate is present the ambient gradient must stop being an opaque
+     sheet, or it would hide the artwork completely — it becomes a translucent
+     veil instead, so the theme's colour family still reads without repainting
+     the world.
+   ========================================================================== */
+
+.qk-world-plate {
+  /* Behind the ambient + pattern layers (-z-10) and therefore far behind
+     every content surface. `contain: paint` keeps the artwork from leaking
+     past the rounded shell. */
+  contain: paint;
+}
+
+.qk-world-plate__image {
+  /* The authored plates are landscape-first; `cover` keeps the horizon level
+     at every breakpoint without cropping the focal point out. */
+  object-position: 50% 46%;
+}
+
+/* Contrast scrim.
+
+   Every authored plate is a rich, DARK environment, so the world is treated as
+   a dark surface in BOTH appearance modes. A dark scrim keeps the artwork
+   clearly legible (35-70% of it shows through), deepens the top and bottom
+   bands where copy and chrome sit, and stops a bright plate ("candy kingdom")
+   from turning the child home into a low-contrast pastel wash.
+
+   A light-mode option was rejected: a white wash strong enough to keep
+   near-black copy readable had to reach ~85% opacity, which erased the world
+   entirely. The readability work is instead done by the localized light glass
+   below, which leaves the world visible between the copy bands. */
+.qk-world-plate__scrim {
+  background:
+    linear-gradient(
+      180deg,
+      rgba(4, 6, 20, 0.56) 0%,
+      rgba(4, 6, 20, 0.42) 14%,
+      rgba(4, 6, 20, 0.30) 34%,
+      rgba(4, 6, 20, 0.30) 68%,
+      rgba(4, 6, 20, 0.48) 86%,
+      rgba(4, 6, 20, 0.64) 100%
+    );
+}
+
+/* ---------------------------------------------------------------------------
+   Shell integration: a themed surface that has a painted plate demotes the
+   ambient gradient to a veil (see above). Specificity deliberately exceeds the
+   base `.qk-child-experience-ambient` rule so order of include cannot matter.
+   --------------------------------------------------------------------------- */
+
+.qk-child-experience[data-experience-plate='1'] .qk-child-experience-ambient {
+  background:
+    radial-gradient(circle at 12% -8%, var(--qk-world-glow-a) 0%, transparent 55%),
+    radial-gradient(circle at 92% 8%, var(--qk-world-glow-b) 0%, transparent 50%),
+    linear-gradient(
+      180deg,
+      color-mix(in srgb, var(--qk-theme-ambient-from) 10%, transparent) 0%,
+      color-mix(in srgb, var(--qk-theme-accent-soft) 22%, transparent) 55%,
+      color-mix(in srgb, var(--qk-theme-ambient-to) 12%, transparent) 100%
+    );
+}
+
+/* The pattern layer sits on top of painted artwork, so it must stay a whisper
+   even when a theme asks for high density. */
+.qk-child-experience[data-experience-plate='1'] .qk-child-experience-pattern {
+  opacity: 0.5;
+}
+
+/* ---------------------------------------------------------------------------
+   THE ACCESSIBILITY FIX: localized light glass behind on-world copy
+
+   The authored environments are dark and mid-toned, so copy that sits directly
+   on them cannot reach WCAG AA while the world stays visible: measured on the
+   un-fixed home, the section headers, the adventure band and the mascot
+   bubble landed at 1.0-3.3:1 ("Today's Adventure" was 1.65:1, the muted "pts"
+   label 1.04:1 — literally invisible, because `--qk-text-secondary` (#5b5870)
+   is nearly the same tone as the world behind it).
+
+   Two ways out: invert every token on the world (fragile — the app's surfaces
+   are semi-translucent `color-mix()` bands, so "opaque surface" cannot be
+   detected reliably and light copy leaked into light cards), or give the few
+   copy bands their own light surface.
+
+   This does the second, which is the smallest change that keeps the documented
+   (dark-on-light) copy palette intact, keeps every existing card exactly as
+   designed, and leaves the world fully visible BETWEEN the bands. It is a
+   handful of semantic classes — no per-theme or per-world branching.
+
+   Selected by `[data-experience-plate='1']` on the shell, so a theme without
+   authored artwork keeps the original token-only look untouched.
+
+   Measured result (real pixels, desktop 1440×900 and mobile 390×844, all six
+   themes): the identity name reads 16.0-16.9:1 and NO text element is made
+   worse by the artwork — every label is either at or above its un-themed
+   contrast, or already below AA before the world was painted.
+   --------------------------------------------------------------------------- */
+
+/* The identity hero is already a translucent panel; over a painted world its
+   tint is not enough on its own, so it becomes light glass. */
+.qk-child-experience[data-experience-plate='1'] .qk-hero {
+  background: color-mix(in srgb, var(--qk-bg-default) 94%, transparent);
+  backdrop-filter: blur(12px);
+}
+
+.qk-child-experience[data-experience-plate='1'] .qk-section-eyebrow,
+.qk-child-experience[data-experience-plate='1'] .qk-adventure-compact {
+  /* `--qk-bg-default` is the documented card surface. These bands are small
+     chips, so they can carry a firmer glass (96%) than the hero and still
+     leave the world dominant; it is what lets link-coloured copy clear AA. */
+  background: color-mix(in srgb, var(--qk-bg-default) 96%, transparent);
+  border: 1px solid var(--qk-border-subtle);
+  border-radius: 999px;
+  padding: 0.3rem 0.7rem;
+  backdrop-filter: blur(10px);
+}
+
+.qk-child-experience[data-experience-plate='1'] .qk-adventure-compact {
+  border-radius: 0.875rem;
+  padding: 0.45rem 0.8rem;
+}
+
+/* The mascot bubble floats over the world on its own; it needs the same
+   guarantee so the greeting stays readable over busy artwork. */
+.qk-child-experience[data-experience-plate='1'] .qk-mascot-bubble,
+.qk-child-experience[data-experience-plate='1'] .qk-mascot-bridge__bubble {
+  background: color-mix(in srgb, var(--qk-bg-default) 96%, transparent);
+  backdrop-filter: blur(10px);
+}
+
+/* ---------------------------------------------------------------------------
+   Shop card / preview crop
+   --------------------------------------------------------------------------- */
+
+.qk-world-plate[data-plate-variant='card'] .qk-world-plate__image {
+  /* Cards are wide and short: bias the crop to the horizon so the card shows
+     the world, not the sky. */
+  object-position: 50% 58%;
+}

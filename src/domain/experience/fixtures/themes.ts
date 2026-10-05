@@ -12,6 +12,11 @@
  */
 
 import type { ThemeDefinition } from '../types';
+import {
+  CALM_PERSONALITY,
+  NEON_ARCADE_PERSONALITY,
+  SPACE_PERSONALITY,
+} from './themePersonalities';
 
 /**
  * Theme token values — real CSS values (colours / opacity numbers) the
@@ -271,6 +276,7 @@ export const SPACE_THEME: ThemeDefinition = Object.freeze({
     completionEffect: 'confetti.stars',
     confettiPreset: 'sparkle.indigo',
   }),
+  personality: SPACE_PERSONALITY as ThemeDefinition['personality'],
   collection: Object.freeze({
     rarity: 'epic',
     permanentUnlockAvailable: true,
@@ -352,6 +358,7 @@ export const CALM_THEME: ThemeDefinition = Object.freeze({
     completionEffect: 'confetti.default',
     confettiPreset: 'sparkle.indigo',
   }),
+  personality: CALM_PERSONALITY as ThemeDefinition['personality'],
   collection: Object.freeze({
     rarity: 'common',
     permanentUnlockAvailable: true,
@@ -385,6 +392,7 @@ export const NEON_ARCADE_THEME: ThemeDefinition = Object.freeze({
     completionEffect: 'confetti.neon',
     confettiPreset: 'sparkle.cyan',
   }),
+  personality: NEON_ARCADE_PERSONALITY as ThemeDefinition['personality'],
   collection: Object.freeze({
     rarity: 'epic',
     permanentUnlockAvailable: true,

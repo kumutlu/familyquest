@@ -21,7 +21,7 @@ import { ProgressBar } from '../queki/Progress';
 import { XpPop } from '../queki/XpPop';
 import type { MysteryDropDisplay } from '../queki/TodaysAdventure';
 import { MysteryReveal } from '../queki/MysteryReveal';
-import { ChildExperienceShell } from '../experience/ChildExperienceShell';
+import { ChildThemeSurface } from '../experience/ChildThemeSurface';
 import { QuestTileList } from '../experience/QuestTile';
 import { TodaysAdventureCenterpiece } from '../experience/TodaysAdventureCenterpiece';
 import { MascotBridge } from '../experience/MascotBridge';
@@ -370,7 +370,7 @@ export function ChildLivingHome() {
   const previewSlot = unstable_DevOnlyPreviewRoute();
 
   return (
-    <ChildExperienceShell
+    <ChildThemeSurface
       resolvedTheme={experienceTheme ?? null}
       mascotPresentation={mascotPresentation.presentation}
     >
@@ -630,7 +630,7 @@ export function ChildLivingHome() {
           acknowledged={mysteryDropHost ? isMysteryRevealAcknowledged(mysteryDropHost.id) : false}
         />
       </div>
-    </ChildExperienceShell>
+    </ChildThemeSurface>
   );
 }
 

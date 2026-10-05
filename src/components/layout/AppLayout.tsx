@@ -19,6 +19,8 @@ import { BottomSheet } from '../queki/BottomSheet';
 import { TactileButton } from '../queki/TactileButton';
 import { MoreMenu } from './MoreMenu';
 import { BugReportSheet } from '../bug-report/BugReportSheet';
+import { ChildThemeBoundary } from '../experience/ChildThemeBoundary';
+import { isChildRole } from '../../lib/roles';
 
 // Creation flows are heavy and belong to the composer only — keep them out of
 // the critical startup path behind route-local lazy chunks.
@@ -128,6 +130,10 @@ export function AppLayout() {
   // Queki v2 bottom navigation. See src/config/navigation.ts.
   const navItems = getNavItems();
   const isParent = currentUser?.role === 'owner' || currentUser?.role === 'parent' || currentUser?.role === 'admin';
+  // A child's selected theme is applied ONCE here, around every child route,
+  // instead of page-by-page. See ChildThemeBoundary for why. Parents, owners
+  // and admins never enter this branch, so they never see a child's world.
+  const isChild = isChildRole(currentUser?.role);
 
   return (
     <div className="min-h-dvh qk-bg-page flex flex-col font-sans">
@@ -167,6 +173,9 @@ export function AppLayout() {
                   <Link
                     key={item.path}
                     to={item.path}
+                    // `aria-current` is both an accessibility win and the hook
+                    // the child theme scope uses to accent the selected item.
+                    aria-current={isActive ? 'page' : undefined}
                     className={cn(
                       "flex items-center space-x-2 text-sm font-bold transition-colors",
                       isActive ? "text-primary-600" : "text-gray-500 hover:text-gray-900"
@@ -229,7 +238,11 @@ export function AppLayout() {
           (including the overhanging centre Action button) plus the safe area. */}
       <main className="flex-1 max-w-5xl mx-auto w-full p-4 pb-[calc(6rem+env(safe-area-inset-bottom))] md:pb-10">
         <Suspense fallback={<div data-testid="route-translations-loading" aria-busy="true" className="h-40 animate-pulse rounded-2xl bg-gray-100" />}>
-          <Outlet />
+          {/* The persistent child theme boundary owns the world for the whole
+              child app. It renders the <Outlet /> itself, so the shell is
+              mounted once and survives every child route change — the world
+              no longer disappears the moment the child leaves Home. */}
+          {isChild ? <ChildThemeBoundary /> : <Outlet />}
         </Suspense>
       </main>
 

@@ -31,10 +31,19 @@ import { createContext, useContext, useMemo, type ReactNode } from 'react';
 import type { ResolvedExperienceTheme } from '../../domain/experience';
 import type { MascotPresentation } from '../../domain/mascot';
 import { WorldBackground } from './WorldBackground';
+import { WorldPlate } from './WorldPlate';
+import { getThemePlate } from '../../domain/experience';
 import { useExperienceWorld } from '../../hooks/useExperienceWorld';
 import { useAppearanceSafe } from './useAppearanceSafe';
 import { SeasonalLine } from './SeasonalLine';
 import { validThemeTokens } from '../../domain/experience';
+import {
+  NEUTRAL_PERSONALITY,
+  themePersonalityAttributes,
+  themePersonalityCustomProperties,
+  validThemePersonality,
+  type ThemePersonality,
+} from '../../domain/experience/themePersonality';
 
 export interface ChildExperienceTheme {
   /**
@@ -64,6 +73,13 @@ export interface ChildExperienceTheme {
 export interface ChildExperienceContextValue {
   readonly theme: ChildExperienceTheme;
   /**
+   * The resolved NON-COLOUR personality bundle for this world. Descendants that
+   * need theme-specific presentation (a hold-progress treatment, a card edge)
+   * read these tokens rather than branching on a theme id. Absent themes resolve
+   * to {@link NEUTRAL_PERSONALITY}, which is Queki Classic's own treatment.
+   */
+  readonly personality: ThemePersonality;
+  /**
    * Optional mascot presentation bundle. The shell never inspects
    * internal mascot fields — it only forwards the bundle to the
    * composition. The mascot engine remains the only decision-maker.
@@ -85,6 +101,18 @@ export function useChildExperienceContext(): ChildExperienceContextValue | null 
 export interface ChildExperienceShellProps {
   readonly resolvedTheme: ResolvedExperienceTheme | null;
   readonly mascotPresentation: MascotPresentation | null;
+  /**
+   * Extra classes for the world wrapper. The persistent child boundary uses
+   * this to land `.qk-child-theme` on the SAME element that carries the
+   * inline `--qk-theme-accent`, so the theme-derived surface ladder resolves
+   * against the right accent rather than the root default.
+   */
+  readonly className?: string;
+  /**
+   * Resolved theme id, exposed as `data-child-theme` so the runtime scope in
+   * child-experience.css can match it. `null`/omitted for theme-less surfaces.
+   */
+  readonly dataChildTheme?: string | null;
   readonly children: ReactNode;
 }
 
@@ -120,14 +148,17 @@ function resolveShellTheme(
  */
 function shellStyle(
   theme: ChildExperienceTheme,
+  personality: ThemePersonality,
 ): React.CSSProperties | undefined {
   const tokens = theme.tokens;
-  if (
-    !tokens.accent &&
-    !tokens.ambientFrom &&
-    !tokens.ambientTo &&
-    typeof tokens.patternDensity !== 'number'
-  ) {
+  const hasColourTokens =
+    !!tokens.accent ||
+    !!tokens.ambientFrom ||
+    !!tokens.ambientTo ||
+    typeof tokens.patternDensity === 'number';
+  // Personality always contributes custom properties, so a theme that declares
+  // no colour tokens but does declare a personality still gets a themed world.
+  if (!hasColourTokens && personality === NEUTRAL_PERSONALITY) {
     return undefined;
   }
   const style: Record<string, string> = {};
@@ -138,6 +169,7 @@ function shellStyle(
     style['--qk-theme-pattern-density'] = String(tokens.patternDensity);
   }
   if (tokens.accentSoft) style['--qk-theme-accent-soft'] = tokens.accentSoft;
+  Object.assign(style, themePersonalityCustomProperties(personality));
   return style as React.CSSProperties;
 }
 
@@ -151,23 +183,40 @@ function shellStyle(
 export function ChildExperienceShell({
   resolvedTheme,
   mascotPresentation,
+  className,
+  dataChildTheme,
   children,
 }: ChildExperienceShellProps) {
   const theme = useMemo(() => resolveShellTheme(resolvedTheme), [resolvedTheme]);
-  const style = useMemo(() => shellStyle(theme), [theme]);
+  // The non-colour half of the theme. Validated through `validThemePersonality`
+  // for the same reason the colour tokens are: a theme document may be partial
+  // or malformed, and a broken personality must degrade to the neutral
+  // treatment rather than to an unreadable world.
+  const personality = useMemo(
+    () => validThemePersonality(resolvedTheme?.theme?.personality) ?? NEUTRAL_PERSONALITY,
+    [resolvedTheme],
+  );
+  const personalityAttrs = useMemo(() => themePersonalityAttributes(personality), [personality]);
+  const style = useMemo(() => shellStyle(theme, personality), [theme, personality]);
   // The shell reads the resolved seasonal world through the same hook
   // the rest of the experience surface uses. The hook consumes the
   // resolved theme the host already produced — it NEVER re-derives
   // eligibility. Preview tooling (DEV only) can override the world
   // through `setExperienceWorldOverride`.
   const { world, seasonalLine, isPreviewOverride } = useExperienceWorld();
+  // The painted environment for the resolved theme, when one was authored.
+  // Shop themes resolve through the recovered Queki World System V2 plates;
+  // themes without authored art keep the token-only world and render no
+  // plate at all (no fake placeholder is invented for them).
+  const plateThemeId = resolvedTheme?.theme?.id;
+  const plate = useMemo(() => getThemePlate(plateThemeId) ?? null, [plateThemeId]);
   // `isDark` is read from the appearance store so the world paints the
   // correct palette for the current mode without forcing the host to
   // pipe a prop. The helper is safe in non-React environments.
   const isDark = useAppearanceSafe();
   const value = useMemo<ChildExperienceContextValue>(
-    () => ({ theme, mascotPresentation }),
-    [theme, mascotPresentation],
+    () => ({ theme, mascotPresentation, personality }),
+    [theme, mascotPresentation, personality],
   );
 
   return (
@@ -190,9 +239,28 @@ export function ChildExperienceShell({
         data-experience-world={world.definition.id}
         data-experience-world-source={world.source}
         data-experience-world-preview-override={isPreviewOverride ? '1' : '0'}
-        className="qk-child-experience relative"
+        // Flags that a painted world owns the base colour, which demotes the
+        // ambient gradient to a veil (see worldPlate.css).
+        data-experience-plate={plate ? '1' : '0'}
+        className={className ? `qk-child-experience relative ${className}` : 'qk-child-experience relative'}
+        data-child-theme={dataChildTheme ?? undefined}
+        /* Personality enums ride as data attributes because CSS cannot branch on
+           a `var()`. Every value is allow-listed upstream in
+           `validThemePersonality`, so this cannot inject anything. */
+        {...personalityAttrs}
         style={style}
       >
+        {/* Painted theme world — the BASE layer, behind the token ambient,
+            the pattern and the atmospheric world layer. Decorative only. */}
+        {plate ? (
+          <WorldPlate
+            themeId={plateThemeId}
+            plate={plate}
+            variant="backdrop"
+            scrim
+            className="-z-20"
+          />
+        ) : null}
         {/* Seasonal world layer — atmospheric gradient + decoration +
             particles. ALWAYS behind every content surface. aria-hidden,
             pointer-events: none, never changes layout dimensions. */}
