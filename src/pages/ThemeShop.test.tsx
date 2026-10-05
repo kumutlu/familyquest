@@ -15,7 +15,7 @@
  */
 
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import { render, screen, within, fireEvent } from '@testing-library/react'
+import { render, screen, within, fireEvent, act } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter } from 'react-router-dom'
 import { useSyncExternalStore } from 'react'
@@ -73,7 +73,9 @@ function renderShop() {
 }
 
 const BASE_STORE: StoreState = {
-  currentUser: { id: 'child-1', familyId: 'family-1', theme: null },
+  // `rewardPoints` is the child's spendable balance and drives the shop's
+  // affordability model, so the fixture carries a realistic wallet.
+  currentUser: { id: 'child-1', familyId: 'family-1', theme: null, rewardPoints: 1000 },
   familyData: { id: 'family-1' },
   themeShopItems: [],
   themePurchases: [],
@@ -199,7 +201,13 @@ describe('ThemeShop — focus / preview lifecycle', () => {
     const focus = screen.getByTestId('theme-shop-focus')
     await user.click(within(focus).getByRole('button', { name: 'Buy for 500 points' }))
     const confirm = within(focus).getByTestId('purchase-confirmation')
-    expect(confirm).toHaveTextContent('Buy Space Explorer for 500 points?')
+    // The sheet sells the world: the theme, its price, and the balance maths.
+    expect(confirm).toHaveTextContent('Space Explorer')
+    expect(confirm).toHaveTextContent('500 points')
+    expect(within(confirm).getByTestId('sheet-balance')).toHaveTextContent('1000 points')
+    expect(within(confirm).getByTestId('sheet-after')).toHaveTextContent('500 points')
+    // …and it previews the real, painted world rather than a wireframe.
+    expect(within(confirm).getByTestId('theme-preview-theme.shop.space')).toBeInTheDocument()
     await user.click(within(confirm).getByRole('button', { name: 'Not now' }))
     expect(purchaseMock).not.toHaveBeenCalled()
     expect(within(focus).queryByTestId('purchase-confirmation')).not.toBeInTheDocument()
@@ -211,7 +219,7 @@ describe('ThemeShop — focus / preview lifecycle', () => {
     await user.click(screen.getByTestId('theme-card-space'))
     const focus = screen.getByTestId('theme-shop-focus')
     await user.click(within(focus).getByRole('button', { name: 'Buy for 500 points' }))
-    await user.click(within(focus).getByTestId('purchase-confirmation').querySelector('button') ?? within(focus).getByRole('button', { name: 'Yes, buy it' }))
+    await user.click(within(focus).getByRole('button', { name: 'Unlock for 500 points' }))
     await vi.waitFor(() => expect(purchaseMock).toHaveBeenCalledWith('family-1', 'space'))
     await vi.waitFor(() => expect(updateThemeMock).toHaveBeenCalledWith('theme.shop.space'))
   })
@@ -248,7 +256,7 @@ describe('ThemeShop — focus / preview lifecycle', () => {
     await user.click(screen.getByTestId('theme-card-space'))
     const focus = screen.getByTestId('theme-shop-focus')
     await user.click(within(focus).getByRole('button', { name: 'Buy for 500 points' }))
-    const confirmButton = within(within(focus).getByTestId('purchase-confirmation')).getByRole('button', { name: 'Yes, buy it' })
+    const confirmButton = within(within(focus).getByTestId('purchase-confirmation')).getByRole('button', { name: 'Unlock for 500 points' })
     await user.click(confirmButton)
     // In flight: button shows a loading state and is disabled.
     await vi.waitFor(() => expect(confirmButton).toBeDisabled())
@@ -266,7 +274,7 @@ describe('ThemeShop — focus / preview lifecycle', () => {
     await user.click(screen.getByTestId('theme-card-space'))
     const focus = screen.getByTestId('theme-shop-focus')
     await user.click(within(focus).getByRole('button', { name: 'Buy for 500 points' }))
-    await user.click(within(within(focus).getByTestId('purchase-confirmation')).getByRole('button', { name: 'Yes, buy it' }))
+    await user.click(within(focus).getByRole('button', { name: 'Unlock for 500 points' }))
     await vi.waitFor(() => expect(within(focus).getByRole('alert')).toHaveTextContent(/more points/))
     // Nothing was applied after a failed purchase.
     expect(updateThemeMock).not.toHaveBeenCalled()
@@ -280,5 +288,111 @@ describe('ThemeShop — focus / preview lifecycle', () => {
     const focus = screen.getByTestId('theme-shop-focus')
     expect(within(focus).getByText('Theme shopping is turned off right now.')).toBeInTheDocument()
     expect(within(focus).queryByRole('button', { name: /Buy for/ })).not.toBeInTheDocument()
+  })
+})
+
+describe('ThemeShop — insufficient balance (production regression)', () => {
+  beforeEach(() => {
+    storeListeners.clear()
+    purchaseMock.mockClear()
+    purchaseMock.mockImplementation(async () => ({ costPoints: 500, themeId: 'theme.shop.space' }))
+    updateThemeMock.mockClear()
+    setThemeShopClock(() => Date.UTC(2026, 8, 28, 12, 0, 0))
+    resetExperienceState()
+    localStorage.clear()
+  })
+
+  it('balance 487 / price 500 → preview allowed, no buy CTA, states the 13-point gap', async () => {
+    const user = userEvent.setup()
+    setStore({ ...BASE_STORE, currentUser: { id: 'child-1', familyId: 'family-1', theme: null, rewardPoints: 487 } })
+    renderShop()
+
+    // The card still shows the real theme visual — preview is never gated.
+    expect(screen.getByTestId('theme-preview-theme.shop.space')).toBeInTheDocument()
+    expect(screen.getByTestId('theme-preview-theme.shop.space')).toHaveAttribute('data-preview-kind', 'painted')
+
+    await user.click(screen.getByTestId('theme-card-space'))
+    const focus = screen.getByTestId('theme-shop-focus')
+
+    // Preview open, buy affordance replaced by the exact shortfall.
+    expect(within(focus).getByTestId('theme-preview-theme.shop.space')).toBeInTheDocument()
+    expect(within(focus).queryByRole('button', { name: /Buy for/ })).not.toBeInTheDocument()
+    const shortfall = within(focus).getByTestId('theme-purchase-shortfall')
+    expect(shortfall).toHaveTextContent('Need 13 more points')
+    expect(shortfall).toHaveTextContent('487')
+
+    // And the purchase pipeline is never reached.
+    expect(purchaseMock).not.toHaveBeenCalled()
+  })
+
+  it('a shortfall can never be bought even if the CTA is forced (no doomed transaction)', async () => {
+    const user = userEvent.setup()
+    setStore({ ...BASE_STORE, currentUser: { id: 'child-1', familyId: 'family-1', theme: null, rewardPoints: 499 } })
+    renderShop()
+    await user.click(screen.getByTestId('theme-card-space'))
+    const focus = screen.getByTestId('theme-shop-focus')
+    expect(within(focus).getByTestId('theme-purchase-shortfall')).toHaveTextContent('Need 1 more point')
+    expect(purchaseMock).not.toHaveBeenCalled()
+    expect(updateThemeMock).not.toHaveBeenCalled()
+  })
+
+  it('balance 500 / price 500 → buyable, sheet shows 0 points remaining', async () => {
+    const user = userEvent.setup()
+    setStore({ ...BASE_STORE, currentUser: { id: 'child-1', familyId: 'family-1', theme: null, rewardPoints: 500 } })
+    renderShop()
+    await user.click(screen.getByTestId('theme-card-space'))
+    const focus = screen.getByTestId('theme-shop-focus')
+    expect(within(focus).queryByTestId('theme-purchase-shortfall')).not.toBeInTheDocument()
+    await user.click(within(focus).getByRole('button', { name: 'Buy for 500 points' }))
+    const confirm = within(focus).getByTestId('purchase-confirmation')
+    expect(within(confirm).getByTestId('sheet-balance')).toHaveTextContent('500 points')
+    expect(within(confirm).getByTestId('sheet-after')).toHaveTextContent('0 points')
+  })
+
+  it('balance 501 / price 500 → buyable, sheet shows 1 point remaining', async () => {
+    const user = userEvent.setup()
+    setStore({ ...BASE_STORE, currentUser: { id: 'child-1', familyId: 'family-1', theme: null, rewardPoints: 501 } })
+    renderShop()
+    await user.click(screen.getByTestId('theme-card-space'))
+    const focus = screen.getByTestId('theme-shop-focus')
+    await user.click(within(focus).getByRole('button', { name: 'Buy for 500 points' }))
+    const confirm = within(focus).getByTestId('purchase-confirmation')
+    expect(within(confirm).getByTestId('sheet-after')).toHaveTextContent('1 point')
+  })
+
+  it('flips an already-open card from Buy to Apply when ownership hydrates late', async () => {
+    // The purchase projection is a BACKGROUND bootstrap listener, so a card
+    // can be opened a moment before ownership arrives. The open panel must
+    // re-read the live projection — a frozen snapshot showed "Buy" for a
+    // theme the child already owned, and the transaction then refused.
+    const user = userEvent.setup()
+    setStore({ themePurchases: [] })
+    renderShop()
+
+    await user.click(screen.getByTestId('theme-card-space'))
+    const focus = screen.getByTestId('theme-shop-focus')
+    expect(within(focus).getByRole('button', { name: /Buy for/ })).toBeInTheDocument()
+
+    // Ownership lands: the per-child mirror shape (no childId field).
+    act(() => {
+      setStore({ themePurchases: [{ id: 'space', shopItemId: 'space', themeId: 'theme.shop.space', costPoints: 500 }] })
+    })
+
+    expect(within(focus).getByRole('button', { name: 'Use this theme' })).toBeInTheDocument()
+    expect(within(focus).queryByRole('button', { name: /Buy for/ })).not.toBeInTheDocument()
+  })
+
+  it('an owned theme needs no balance at all', async () => {
+    const user = userEvent.setup()
+    setStore({
+      ...BASE_STORE,
+      currentUser: { id: 'child-1', familyId: 'family-1', theme: null, rewardPoints: 0 },
+      themePurchases: [{ id: 'space', shopItemId: 'space', childId: 'child-1', costPoints: 500 }],
+    })
+    renderShop()
+    await user.click(screen.getByTestId('theme-card-space'))
+    const focus = screen.getByTestId('theme-shop-focus')
+    expect(within(focus).getByRole('button', { name: 'Use this theme' })).toBeInTheDocument()
+    expect(within(focus).queryByTestId('theme-purchase-shortfall')).not.toBeInTheDocument()
   })
 })

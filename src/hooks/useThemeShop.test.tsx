@@ -81,7 +81,9 @@ describe('useThemeShop — shop view model', () => {
     storeListeners.clear()
     setThemeShopClock(() => Date.UTC(2026, 8, 28, 12, 0, 0))
     setStore({
-      currentUser: { id: 'child-1', familyId: 'family-1' },
+      // A realistic balance: the shop's affordability model reads the child's
+      // own rewardPoints, so a wallet-less fixture would (correctly) be gated.
+      currentUser: { id: 'child-1', familyId: 'family-1', rewardPoints: 1000 },
       familyData: { id: 'family-1' },
       themeShopItems: [],
       themePurchases: [],
@@ -192,7 +194,7 @@ describe('Theme of the Week — shop surface', () => {
   beforeEach(() => {
     storeListeners.clear()
     setStore({
-      currentUser: { id: 'child-1', familyId: 'family-1' },
+      currentUser: { id: 'child-1', familyId: 'family-1', rewardPoints: 1000 },
       familyData: { id: 'family-1' },
       themeShopItems: [],
       themePurchases: [],
@@ -646,5 +648,118 @@ describe('equipped-theme localStorage scoping (child isolation)', () => {
     expect(window.localStorage.length).toBe(0)
     expect(getStoredEquippedTheme('', 'child-1')).toBeNull()
     expect(getStoredEquippedTheme('family-1', '')).toBeNull()
+  })
+})
+
+/**
+ * Affordability pre-flight.
+ *
+ * The live failure was a child being walked into a purchase the balance could
+ * not satisfy. The rules stay the authority, but the shop must never START
+ * that transaction — and it must say exactly how far off the child is.
+ */
+describe('useThemeShop — purchase affordability pre-flight', () => {
+  beforeEach(() => {
+    purchaseMock.mockClear()
+    purchaseMock.mockImplementation(async () => ({ costPoints: 500, themeId: 'theme.shop.space' }))
+    storeListeners.clear()
+    setThemeShopClock(() => Date.UTC(2026, 8, 28, 12, 0, 0))
+  })
+
+  function seed(rewardPoints: number) {
+    setStore({
+      currentUser: { id: 'child-1', familyId: 'family-1', rewardPoints },
+      familyData: { id: 'family-1' },
+      themeShopItems: [],
+      themePurchases: [],
+    })
+  }
+
+  it('balance 487 / price 500 → refuses locally and never calls purchaseShopTheme', async () => {
+    seed(487)
+    const { result } = renderHook(() => useThemeShop())
+
+    expect(result.current.items.find(i => i.shopItemId === 'space')).toMatchObject({
+      affordable: false,
+      shortfallPoints: 13,
+    })
+
+    await act(async () => {
+      expect(await result.current.purchase('space')).toBe(false)
+    })
+
+    expect(purchaseMock).not.toHaveBeenCalled()
+    expect(result.current.purchaseError).toMatch(/13 more points/)
+    expect(result.current.purchaseErrorKind).toBe('insufficient-points')
+  })
+
+  it('balance 500 / price 500 → allowed (exact balance is enough)', async () => {
+    seed(500)
+    const { result } = renderHook(() => useThemeShop())
+    expect(result.current.items.find(i => i.shopItemId === 'space')).toMatchObject({
+      affordable: true,
+      shortfallPoints: 0,
+    })
+    await act(async () => {
+      expect(await result.current.purchase('space')).toBe(true)
+    })
+    expect(purchaseMock).toHaveBeenCalledWith('family-1', 'space')
+  })
+
+  it('balance 501 / price 500 → allowed with 1 point to spare', async () => {
+    seed(501)
+    const { result } = renderHook(() => useThemeShop())
+    expect(result.current.items.find(i => i.shopItemId === 'space')).toMatchObject({
+      affordable: true,
+      shortfallPoints: 0,
+    })
+    await act(async () => {
+      expect(await result.current.purchase('space')).toBe(true)
+    })
+    expect(purchaseMock).toHaveBeenCalledTimes(1)
+  })
+
+  it('an owned item reports no shortfall regardless of balance', () => {
+    setStore({
+      currentUser: { id: 'child-1', familyId: 'family-1', rewardPoints: 0 },
+      familyData: { id: 'family-1' },
+      themeShopItems: [],
+      themePurchases: [{ id: 'space', shopItemId: 'space', childId: 'child-1', costPoints: 500 }],
+    })
+    const { result } = renderHook(() => useThemeShop())
+    expect(result.current.items.find(i => i.shopItemId === 'space')).toMatchObject({
+      status: 'owned',
+      affordable: true,
+      shortfallPoints: 0,
+    })
+  })
+
+  it('a live promotion is free, so no balance is needed', () => {
+    const NOW = Date.UTC(2026, 8, 28, 12, 0, 0)
+    setThemeShopClock(() => NOW)
+    setStore({
+      currentUser: { id: 'child-1', familyId: 'family-1', rewardPoints: 0 },
+      familyData: { id: 'family-1' },
+      themeShopItems: [promoRow({
+        promo: { themeId: 'theme.shop.space', startsAt: NOW - 1000, endsAt: NOW + 60_000 },
+      })],
+      themePurchases: [],
+    })
+    const { result } = renderHook(() => useThemeShop())
+    expect(result.current.items.find(i => i.shopItemId === 'space')).toMatchObject({
+      status: 'promo',
+      affordable: true,
+      shortfallPoints: 0,
+    })
+  })
+
+  it('exposes the child balance, defaulting to 0 when the profile has none', () => {
+    seed(730)
+    const withBalance = renderHook(() => useThemeShop())
+    expect(withBalance.result.current.points).toBe(730)
+
+    setStore({ currentUser: { id: 'child-1', familyId: 'family-1' } })
+    const withoutBalance = renderHook(() => useThemeShop())
+    expect(withoutBalance.result.current.points).toBe(0)
   })
 })

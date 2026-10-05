@@ -74,7 +74,6 @@
   filter: blur(18px);
   z-index: 0;
 }
->>> REPLACE
 
 /* Mascot composition --------------------------------------------------- */
 
@@ -730,4 +729,1290 @@
   font-size: 0.8125rem;
   font-weight: 600;
   color: var(--qk-text-secondary);
+}
+
+/* ============================================================================
+   Seasonal World Layer (V1) — presentation-only atmospheric world.
+
+   The world layer is the LAST visual layer above the ambient gradient and
+   BELOW every content surface. The brief: "Theme = world, not skin."
+
+   Rules
+   -----
+   - All world nodes are decorative: aria-hidden, pointer-events: none.
+   - The world layer NEVER changes core surface tokens (cards, quests, hero).
+   - Tokens cascade through the parent `.qk-child-experience` so the same
+     component renders every world without branching on identity.
+   - Particles collapse to static under `prefers-reduced-motion: reduce`.
+   - No continuous GPU-heavy filters; only opacity / transform animations.
+   ========================================================================== */
+
+.qk-world-background {
+  /* The world wrapper sits at -z-10 (set inline). It must not capture
+     pointer events. The token cascade for the world is owned by this
+     wrapper so children stay fully declarative. */
+  contain: strict;
+}
+
+/* Texture layer — applied per-world through a class. The class is
+   pure CSS so a world without a texture renders nothing. */
+.qk-world-texture {
+  opacity: 0.55;
+}
+
+.qk-world-texture--none { display: none; }
+
+.qk-world-texture--starlight {
+  background-image:
+    radial-gradient(1px 1px at 12% 18%, var(--qk-world-accent) 0 1px, transparent 1.5px),
+    radial-gradient(1px 1px at 88% 32%, var(--qk-world-accent) 0 1px, transparent 1.5px),
+    radial-gradient(1px 1px at 24% 78%, var(--qk-world-accent) 0 1px, transparent 1.5px),
+    radial-gradient(1px 1px at 72% 86%, var(--qk-world-accent) 0 1px, transparent 1.5px);
+  background-size: 18rem 18rem, 20rem 20rem, 22rem 22rem, 24rem 24rem;
+}
+
+.qk-world-texture--snow {
+  background-image:
+    radial-gradient(circle at 50% 0%, rgba(255, 255, 255, 0.18) 0%, transparent 60%),
+    radial-gradient(circle at 0% 60%, rgba(255, 255, 255, 0.12) 0%, transparent 50%),
+    radial-gradient(circle at 100% 80%, rgba(255, 255, 255, 0.10) 0%, transparent 50%);
+  opacity: 0.7;
+}
+
+.qk-world-texture--fog {
+  background-image:
+    radial-gradient(circle at 20% 100%, rgba(255, 255, 255, 0.18) 0%, transparent 50%),
+    radial-gradient(circle at 80% 100%, rgba(255, 255, 255, 0.14) 0%, transparent 50%),
+    radial-gradient(circle at 50% 110%, rgba(167, 139, 250, 0.18) 0%, transparent 60%);
+  opacity: 0.7;
+}
+
+.qk-world-texture--warm-bokeh {
+  background-image:
+    radial-gradient(8px 8px at 18% 30%, var(--qk-world-glow-b) 0 6px, transparent 8px),
+    radial-gradient(6px 6px at 78% 18%, var(--qk-world-glow-b) 0 4px, transparent 6px),
+    radial-gradient(10px 10px at 38% 60%, var(--qk-world-glow-b) 0 8px, transparent 10px),
+    radial-gradient(7px 7px at 88% 70%, var(--qk-world-glow-b) 0 5px, transparent 7px);
+  background-size: 26rem 26rem;
+  opacity: 0.85;
+}
+
+.qk-world-texture--pattern-subtle {
+  background-image:
+    radial-gradient(circle at 50% 50%, var(--qk-world-accent) 0 0.6px, transparent 1.2px);
+  background-size: 24px 24px;
+  opacity: 0.18;
+}
+
+/* Decoration base — every decoration is decorative. The renderer
+   positions the wrapper via inline style; this class enforces
+   no-event, no-overflow. */
+.qk-world-decoration {
+  pointer-events: none !important;
+  user-select: none;
+  -webkit-user-drag: none;
+}
+
+.qk-world-decoration img,
+.qk-world-decoration-inline {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  color: inherit;
+}
+
+/* Moon: CSS-only decoration, drawn as a soft glowing disc. */
+.qk-world-moon {
+  border-radius: 9999px;
+  background: radial-gradient(circle at 35% 30%, #fff7d6 0%, #f3d27a 35%, #b08c3b 80%, transparent 100%);
+  box-shadow:
+    0 0 24px 4px rgba(255, 230, 150, 0.35),
+    0 0 60px 16px rgba(255, 200, 100, 0.18);
+  opacity: 0.8;
+}
+
+/* Responsive composition: mobile simplifies, desktop expands. */
+@media (max-width: 640px) {
+  .qk-world-desktop-only { display: none !important; }
+  .qk-world-decoration {
+    transform: scale(0.85);
+    transform-origin: top left;
+  }
+}
+
+@media (min-width: 1024px) {
+  .qk-world-mobile-only { display: none !important; }
+}
+
+/* Particles ---------------------------------------------------------------- */
+
+.qk-world-particles {
+  pointer-events: none !important;
+  overflow: hidden;
+}
+
+.qk-world-particle {
+  position: absolute;
+  top: -8px;
+  border-radius: 9999px;
+  will-change: transform, opacity;
+  background: currentColor;
+  box-shadow: 0 0 6px currentColor;
+}
+
+.qk-world-particle--static {
+  animation: none !important;
+}
+
+/* Sparkle / generic */
+@keyframes qk-particle-sparkle {
+  0%   { transform: translateY(0)   scale(0.8); opacity: 0; }
+  20%  { opacity: 0.9; }
+  60%  { opacity: 0.6; }
+  100% { transform: translateY(20vh) scale(1.2); opacity: 0; }
+}
+.qk-world-particle--sparkle {
+  animation: qk-particle-sparkle var(--qk-particle-duration, 8s) ease-in-out infinite;
+}
+
+/* Snow: vertical drift down. */
+@keyframes qk-particle-snow {
+  0%   { transform: translate3d(0, -10vh, 0); opacity: 0; }
+  10%  { opacity: 0.9; }
+  90%  { opacity: 0.7; }
+  100% { transform: translate3d(8px, var(--qk-particle-drift, 60vh), 0); opacity: 0; }
+}
+.qk-world-particle--snow {
+  background: #ffffff;
+  box-shadow: 0 0 4px rgba(255, 255, 255, 0.6);
+  animation: qk-particle-snow var(--qk-particle-duration, 12s) linear infinite;
+}
+
+/* Fog motes: slow horizontal drift. */
+@keyframes qk-particle-fog {
+  0%   { transform: translate3d(0, 0, 0); opacity: 0; }
+  50%  { opacity: 0.5; }
+  100% { transform: translate3d(-30px, var(--qk-particle-drift, 30vh), 0); opacity: 0; }
+}
+.qk-world-particle--fog-mote {
+  background: rgba(167, 139, 250, 0.55);
+  box-shadow: 0 0 8px rgba(167, 139, 250, 0.5);
+  animation: qk-particle-fog var(--qk-particle-duration, 14s) ease-in-out infinite;
+}
+
+/* Gold dust: slow vertical drift + twinkle. */
+@keyframes qk-particle-gold-dust {
+  0%   { transform: translate3d(0, -10vh, 0) scale(0.6); opacity: 0; }
+  20%  { opacity: 0.85; }
+  50%  { transform: translate3d(4px, 50vh, 0) scale(1.1); }
+  100% { transform: translate3d(-2px, var(--qk-particle-drift, 60vh), 0) scale(0.8); opacity: 0; }
+}
+.qk-world-particle--gold-dust {
+  background: #fcd34d;
+  box-shadow: 0 0 8px rgba(252, 211, 77, 0.7);
+  animation: qk-particle-gold-dust var(--qk-particle-duration, 14s) ease-in-out infinite;
+}
+
+/* Star twinkle: pulse in place, no drift. */
+@keyframes qk-particle-star-twinkle {
+  0%, 100% { transform: scale(0.7); opacity: 0.3; }
+  50%      { transform: scale(1.1); opacity: 0.95; }
+}
+.qk-world-particle--star-twinkle {
+  background: #fde68a;
+  box-shadow: 0 0 6px rgba(253, 230, 138, 0.7);
+  animation: qk-particle-star-twinkle var(--qk-particle-duration, 4s) ease-in-out infinite;
+}
+
+/* Reduced motion: every particle keyframe collapses to its initial
+   frame. The static particles wrapper remains visible so the world
+   still reads as decorated — only the motion stops. */
+@media (prefers-reduced-motion: reduce) {
+  .qk-world-particle,
+  .qk-world-particle--sparkle,
+  .qk-world-particle--snow,
+  .qk-world-particle--fog-mote,
+  .qk-world-particle--gold-dust,
+  .qk-world-particle--star-twinkle {
+    animation: none !important;
+    transform: none !important;
+  }
+}
+
+/* Seasonal line — short deterministic copy. Renders as a small
+   non-heading line above the mascot bubble. Restrained on purpose. */
+.qk-world-seasonal-line {
+  pointer-events: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.375rem;
+  padding: 0.25rem 0.625rem;
+  border-radius: 9999px;
+  background: color-mix(in srgb, var(--qk-world-accent) 14%, transparent);
+  color: var(--qk-world-accent);
+  font-size: 0.75rem;
+  font-weight: 700;
+  letter-spacing: 0.01em;
+  max-width: 100%;
+}
+
+.qk-world-seasonal-line__dot {
+  display: inline-block;
+  width: 0.4rem;
+  height: 0.4rem;
+  border-radius: 9999px;
+  background: currentColor;
+  opacity: 0.7;
+}
+
+/* ============================================================================
+   CHILD THEME RUNTIME SCOPE
+
+   A child selects a theme ONCE. It must stay visibly active on every child
+   surface until they change it — Home, Quests, Rewards, Goals, More, the
+   Theme Shop, the wallet and every sheet opened from them.
+
+   Rather than recolouring components one by one, this scope re-points the
+   EXISTING semantic ladder. Every child surface already paints itself with
+   `qk-bg-canvas` / `qk-bg-card` / `qk-border-subtle` / `qk-text-primary`,
+   and Tailwind v4 emits those as `var()` references, so redefining the few
+   variables below themes the whole child app at once. No component needs a
+   `theme === 'space'` branch — the theme is one accent token, mixed into the
+   neutral tone layer from tokens.css.
+
+   Contrast contract: surfaces only ever receive a SMALL accent cast (4-16%)
+   over the neutral tone, so the text tokens keep the contrast they were
+   tuned for. Accent-coloured COPY cannot do that — neon cyan on white is
+   1.9:1 — so copy reads `--qk-accent-ink`, the accent pulled toward the
+   scheme's anchor ink until it is legible.
+
+   The scope matches `theme.shop.*` only. Queki Classic is deliberately
+   excluded: it is the identity baseline and must keep the exact neutral
+   palette every measurement in the codebase was taken against.
+   ========================================================================== */
+
+.qk-child-theme[data-child-theme^='theme.shop.'] {
+  /* Surfaces — a light accent cast over the theme-agnostic tone layer. */
+  --qk-bg-canvas: color-mix(in srgb, var(--qk-theme-accent) 12%, var(--qk-tone-canvas));
+  --qk-bg-subtle: color-mix(in srgb, var(--qk-theme-accent) 16%, var(--qk-tone-subtle));
+  --qk-bg-default: color-mix(in srgb, var(--qk-theme-accent) 6%, var(--qk-tone-default));
+  --qk-bg-elevated: color-mix(in srgb, var(--qk-theme-accent) 4%, var(--qk-tone-elevated));
+  --qk-bg-interactive: color-mix(in srgb, var(--qk-theme-accent) 10%, var(--qk-tone-interactive));
+
+  /* Borders carry the accent hue directly — identity at no contrast cost. */
+  --qk-border-subtle: color-mix(in srgb, var(--qk-theme-accent) 26%, transparent);
+  --qk-border-default: color-mix(in srgb, var(--qk-theme-accent) 38%, transparent);
+  --qk-border-strong: color-mix(in srgb, var(--qk-theme-accent) 56%, transparent);
+
+  /* Accent ink — safe for text, icons and selected states. */
+  --qk-accent-ink: color-mix(in srgb, var(--qk-theme-accent) 58%, var(--qk-tone-arrow));
+  --qk-accent-soft: color-mix(in srgb, var(--qk-theme-accent) 18%, transparent);
+
+  /* The hero band follows the theme instead of staying Queki indigo. */
+  --qk-surface-hero-from: color-mix(in srgb, var(--qk-theme-accent) 72%, var(--qk-tone-arrow));
+  --qk-surface-hero-to: color-mix(in srgb, var(--qk-theme-accent) 42%, var(--qk-tone-arrow));
+}
+
+/* Selected navigation + any current-page affordance acknowledge the theme.
+   The bar itself keeps its surface so Queki's structure stays recognisable —
+   only the accent treatment moves. */
+/* Two selectors on purpose. The wrapper scope covers everything inside the
+   shell (the routed page). The <html> scope covers the app chrome that is a
+   SIBLING of the shell — the header and the bottom navigation — and the
+   sheets that portal out to document.body. Both are authored by
+   <ChildThemeBoundary />. */
+.qk-child-theme[data-child-theme^='theme.shop.'] [aria-current='page'],
+html[data-child-theme^='theme.shop.'] [aria-current='page'] {
+  color: var(--qk-accent-ink);
+}
+
+.qk-child-theme[data-child-theme^='theme.shop.'] [aria-current='page'] svg,
+html[data-child-theme^='theme.shop.'] [aria-current='page'] svg {
+  color: inherit;
+}
+
+/* Active-tab chip behind the icon — the accent at low alpha rather than the
+   fixed Queki indigo wash. */
+.qk-child-theme[data-child-theme^='theme.shop.'] [aria-current='page'] .qk-nav-active-chip,
+html[data-child-theme^='theme.shop.'] [aria-current='page'] .qk-nav-active-chip {
+  background-color: var(--qk-accent-soft);
+}
+
+/* Progress fills and small accent marks that opted into the token. */
+.qk-child-theme[data-child-theme^='theme.shop.'] .qk-accent-ink {
+  color: var(--qk-accent-ink);
+}
+
+/* Sheets that render through a portal still land inside this scope because
+   the boundary mirrors `data-child-theme` onto <html>. Give every child sheet
+   an opaque themed surface so copy never sits directly on the artwork. */
+.qk-child-theme[data-child-theme^='theme.shop.'] [role='dialog'],
+html[data-child-theme^='theme.shop.'] [role='dialog'] {
+  --qk-bg-default: color-mix(in srgb, var(--qk-theme-accent) 7%, var(--qk-tone-default));
+  --qk-bg-elevated: color-mix(in srgb, var(--qk-theme-accent) 5%, var(--qk-tone-elevated));
+}
+
+/* ============================================================================
+   CHILD PRIMARY RAMP
+   ----------------------------------------------------------------------------
+   Why this exists
+   --------------
+   `--color-primary-*` is Queki's BRAND ramp, and it is the one colour family
+   that stayed fixed while the theme scope only re-pointed the surface ladder.
+   Every `bg-primary-500` CTA, `text-primary-600` selected nav item,
+   `ring-primary-500` focus ring and `focus-visible:ring-primary-500` outline
+   therefore still read as fixed indigo while the world plate and card
+   surfaces were themed — the exact "partly themed" state this closes.
+
+   How the ramp is derived (no per-theme hard-coding)
+   --------------------------------------------------
+   Every shop theme exposes ONE hue-bearing token: `--qk-theme-accent`. The
+   whole ramp is generated from it by mixing toward a single SCHEME anchor:
+
+     light scheme → dark anchor   (--qk-tone-arrow = #12101a)
+     dark scheme  → light anchor  (--qk-tone-arrow = #f3f1fb)
+
+   Because `--qk-tone-arrow` already flips with the colour scheme, ONE set of
+   percentages serves both schemes: in light mode mixing pulls the accent
+   DOWN toward ink (white CTA text stays readable); in dark mode it pulls the
+   accent UP toward paper (dark CTA text stays readable). Steps below 300 are
+   tints mixed toward the card itself, so they stay as quiet as classic's.
+
+   Every percentage below was solved against WCAG, for ALL FIVE shop accents,
+   in BOTH schemes (see tests/theme/childPrimaryRamp.test.ts):
+
+     500/600/700 as a solid CTA + its on-brand label  >= 4.5:1   (AA)
+     600/700 as accent COPY on a card                >= 4.5:1   (AA)
+     300/400 as ring / border on a card              >= 1.9:1   (floor is
+                                                             classic's own
+                                                             400 = 1.99)
+     500 as a solid against the card behind it       >= 3:1
+     tints stay no more saturated than classic's own tint for the
+       same scheme (0.226 light / 0.210 dark) and no further than
+       1.35:1 from the card, so they read as surfaces and never as a
+       status colour
+
+   For reference, classic's own indigo-500 only manages 4.47:1 with white text
+   and 3.28:1 against a dark card, so the derived ramp is strictly more legible
+   than the fixed brand it replaces.
+
+   What it deliberately does NOT touch
+   -----------------------------------
+   `--color-success-*`, `--color-warning-*`, `--color-danger-*`,
+   `--color-reward-*`, `--color-xp-*`, `--color-mint-*`, `--color-coral-*`,
+   `--color-streak-*`, `--color-family-*`. Success, warning, error,
+   destructive, reward/XP gold and wallet mint keep their own meaning: a
+   child must still be able to tell "you earned this" from "this is wrong",
+   and money must never look like a theme colour. Nothing here can reach them
+   because each is a separate custom property.
+   ========================================================================== */
+
+/* The accent share of each step; the remainder is the scheme anchor
+   (`--qk-tone-arrow`) for 300–900 and the card for 50–200. */
+.qk-child-theme[data-child-theme^='theme.shop.'],
+html[data-child-theme^='theme.shop.'] {
+  /* Tints — mixed toward the card so they stay as quiet as classic's. */
+  --color-primary-50: color-mix(in srgb, var(--qk-theme-accent) 4%, var(--qk-bg-default));
+  --color-primary-100: color-mix(in srgb, var(--qk-theme-accent) 7%, var(--qk-bg-default));
+  --color-primary-200: color-mix(in srgb, var(--qk-theme-accent) 10%, var(--qk-bg-default));
+
+  /* Accents, rings and selected states — mixed toward the scheme anchor. */
+  --color-primary-300: color-mix(in srgb, var(--qk-theme-accent) 70%, var(--qk-tone-arrow));
+  --color-primary-400: color-mix(in srgb, var(--qk-theme-accent) 62%, var(--qk-tone-arrow));
+
+  /* Solid steps — the CTA family. Dark enough for white in light mode,
+     light enough for dark ink in dark mode, via the flipping anchor. */
+  --color-primary-500: color-mix(in srgb, var(--qk-theme-accent) 54%, var(--qk-tone-arrow));
+  --color-primary-600: color-mix(in srgb, var(--qk-theme-accent) 44%, var(--qk-tone-arrow));
+  --color-primary-700: color-mix(in srgb, var(--qk-theme-accent) 35%, var(--qk-tone-arrow));
+  --color-primary-800: color-mix(in srgb, var(--qk-theme-accent) 26%, var(--qk-tone-arrow));
+  --color-primary-900: color-mix(in srgb, var(--qk-theme-accent) 18%, var(--qk-tone-arrow));
+
+  /* The label colour that rides ON a solid primary step. Already tracked in
+     tokens.css as --qk-text-onbrand and remapped per scheme; re-pointed here
+     so a themed solid button keeps its AA label contrast in dark mode too. */
+  --qk-child-primary-onbrand: var(--qk-text-onbrand);
+}
+
+/* Header / app chrome
+   ------------------
+   The header is a SIBLING of the themed shell (it lives in AppLayout above
+   <Outlet />), so it inherits the <html> mirror but not the shell's own tint.
+   Restrained treatment only: an accent hairline along the bottom edge and the
+   accent on the brand wordmark. No artwork behind the header, and the surface
+   itself keeps the card colour so Queki's structure stays legible. */
+html[data-child-theme^='theme.shop.'] header {
+  border-bottom-color: var(--qk-accent-soft);
+}
+
+html[data-child-theme^='theme.shop.'] header a[href='/'] > span {
+  color: var(--qk-accent-ink);
+}
+
+/* Progress: theme-identity progress follows the accent.
+   `tone="brand"` / `color="primary"` fills are `bg-primary-500`, which the
+   ramp above already re-points — no component change needed. Reward / XP /
+   mint / coral / streak / family tones use their own semantic tokens and are
+   deliberately left alone (see tests/theme/childPrimaryRamp.test.ts). */
+
+/* On-brand label ink
+   ------------------
+   `--qk-text-onbrand` is #ffffff in BOTH schemes, because it only ever sat on
+   Queki's dark indigo. The derived ramp flips direction with the scheme (see
+   above), so in dark mode the solid step becomes a LIGHT tint of the accent —
+   white text on it would collapse to roughly 1.7:1. The token below therefore
+   flips with the scheme: white on the dark light-mode solid, ink on the light
+   dark-mode solid. Classic keeps its fixed #ffffff behaviour because the
+   classic scope is excluded from the whole ramp. */
+html[data-child-theme^='theme.shop.'] {
+  --qk-child-primary-onbrand: #ffffff;
+}
+
+html.dark[data-child-theme^='theme.shop.'],
+.dark .qk-child-theme[data-child-theme^='theme.shop.'] {
+  --qk-child-primary-onbrand: #12101a;
+}
+
+/* Apply that ink to any label sitting on a themed solid primary step. This is
+   deliberately a `color` override rather than a component edit: every child CTA
+   already declares `bg-primary-500 text-white` (or 600/700), so re-pointing the
+   colour inside the child scope keeps a single source of truth and leaves every
+   parent / auth / onboarding CTA untouched. Specificity is
+   class+attr+class (0,3,0) so it wins over the bare `text-white` utility. */
+.qk-child-theme[data-child-theme^='theme.shop.'] :is(
+    .bg-primary-500, .bg-primary-600, .bg-primary-700, .bg-primary-800, .bg-primary-900
+  ),
+html[data-child-theme^='theme.shop.'] :is(
+    .bg-primary-500, .bg-primary-600, .bg-primary-700, .bg-primary-800, .bg-primary-900
+  ) {
+  color: var(--qk-child-primary-onbrand);
+}
+
+/* ============================================================================
+   ACCENT TOKENS ON THE <html> MIRROR
+   ----------------------------------------------------------------------------
+   Bug this fixes
+   -------------
+   The selected-navigation and header rules above are keyed on the <html> mirror
+   (`html[data-child-theme^='theme.shop.'] [aria-current='page']`), because the
+   app chrome is a SIBLING of the themed shell. But `--qk-accent-ink` and
+   `--qk-accent-soft` were only ever declared on the shell scope itself, so on
+   <html> those two custom properties were UNDEFINED. A declaration using an
+   undefined custom property is invalid at computed-value time, so the browser
+   discarded `color: var(--qk-accent-ink)` entirely and the header nav fell back
+   to the inherited neutral grey — the app chrome silently stayed Classic even
+   though the theme was correctly applied.
+
+   Declaring the two accent tokens on the mirror as well fixes the header
+   wordmark, the desktop selected nav item, the header hairline and any
+   portaled surface in one place, and gives them the same values the shell
+   already used (so the two scopes cannot drift apart).
+   ========================================================================== */
+
+html[data-child-theme^='theme.shop.'] {
+  --qk-accent-ink: color-mix(in srgb, var(--qk-theme-accent) 58%, var(--qk-tone-arrow));
+  --qk-accent-soft: color-mix(in srgb, var(--qk-theme-accent) 18%, transparent);
+}
+
+/* ============================================================================
+   THEME PERSONALITY
+   ----------------------------------------------------------------------------
+   The non-colour half of a theme.
+
+   Why this block exists
+   ---------------------
+   The accent scope above makes the child app the right HUE. It cannot make the
+   child app look different, because when the hue is removed — grayscale, or a
+   colour-blind reviewer, or a printed screenshot — Neon Arcade, Space Explorer
+   and Calm Pastel collapse into the same rectangles with the same borders, the
+   same flat shadow and the same solid progress bar. Hue was carrying 100% of
+   the identity.
+
+   This block spends the channels that survive grayscale:
+
+     tonal depth (surfaceScheme / surfaceDarkness)   light vs dark glass
+     translucency (surfaceOpacity / surfaceBlur)     glass vs solid
+     geometry    (surfaceRadius)                     sharp vs soft
+     edge        (borderStrength / borderStyle)     crisp vs faint
+     depth       (shadow)                            hard offset vs diffuse
+     motif       (pattern / patternOpacity)          grid vs orbit vs none
+     progress    (progressTrack / progressEffect)    deep/luminous/inset/orbital
+     restraint   (decorationDensity / motionScale)   busy vs quiet
+
+   Contract
+   --------
+   * NO COMPONENT NAMES A THEME. Nothing below contains 'neon', 'space' or
+     'calm'. Every rule keys off `data-qk-*` personality attributes or a
+     `--qk-theme-*` custom property published by ChildExperienceShell. Adding a
+     sixth theme is a data change, not a CSS change.
+
+   * STATUS COLOURS ARE UNREACHABLE. This block only writes `--qk-bg-*`,
+     `--qk-border-*`, `--qk-shadow-*`, radius and the personality tokens
+     themselves. `--color-xp-*`, `--color-reward-*`, `--color-success-*`,
+     `--color-warning-*`, `--color-danger-*`, `--color-mint-*` and the rest are
+     separate custom properties and are never assigned here. A "luminous" theme
+     therefore cannot recolour a child's earned points or their wallet balance.
+
+   * CLASSIC IS EXCLUDED. Everything is scoped to `data-child-theme^='theme.shop.'`
+     or `data-qk-*`, and Queki Classic publishes the neutral personality, so the
+     identity baseline keeps the exact neutral surfaces every measurement in the
+     codebase was taken against.
+
+   * MOTION IS DOUBLE-GATED. `motionScale` scales decorative animation, and the
+     reduced-motion block at the end of this file collapses all of it to 0ms, so
+     a theme can be lively without ever overriding a user's accessibility
+     setting.
+   ========================================================================== */
+
+/* ---------------------------------------------------------------------------
+   1. Shared scope
+   Both the routed shell and the <html> mirror resolve the SAME personality, so
+   the app chrome and portaled sheets match the page beneath them.
+   --------------------------------------------------------------------------- */
+.qk-child-theme[data-child-theme^='theme.shop.'][data-child-theme^='theme.shop.'],
+html[data-child-theme^='theme.shop.'] {
+  /* Geometry — published by the shell, consumed by every themed surface. */
+  --qk-theme-radius: calc(var(--qk-theme-surface-radius, 16) * 1px);
+  --qk-theme-blur: calc(var(--qk-theme-surface-blur, 0) * 1px);
+  --qk-theme-alpha: var(--qk-theme-surface-opacity, 1);
+
+  /* Motif strength, used by the world layer below. */
+  --qk-theme-motif-alpha: var(--qk-theme-pattern-opacity, 0);
+  --qk-theme-decoration: var(--qk-theme-decoration-density, 0);
+  --qk-theme-glow-alpha: var(--qk-theme-glow, 0);
+
+  /* Border strength is a MULTIPLIER on the accent share of every themed
+     border, which is how Neon's crisp edge (1.9) and Calm's faint one (0.55)
+     come from a single knob. 1 reproduces the accent scope's own values, so a
+     theme that leaves this at 1 is indistinguishable from Classic's edge. */
+  --qk-border-scale: var(--qk-theme-border-strength, 1);
+
+  /* Interior ink. The inside of a surface is drawn from the same two signals
+     as everything else, so a theme with neither glow nor decoration (Calm)
+     resolves this to 0 and paints nothing at all — the interior treatment
+     cannot survive on its own. */
+  --qk-theme-inner-alpha: calc(
+    var(--qk-theme-decoration, 0) * 0.55 + var(--qk-theme-glow-alpha, 0) * 0.45
+  );
+  --qk-inner-ink: color-mix(
+    in srgb,
+    var(--qk-theme-accent) calc(var(--qk-theme-inner-alpha, 0) * 100%),
+    transparent
+  );
+  --qk-inner-ink-strong: color-mix(
+    in srgb,
+    var(--qk-theme-accent) calc(min(var(--qk-theme-inner-alpha, 0) * 1.7, 0.72) * 100%),
+    transparent
+  );
+
+  /* Motion budget. `motionScale` scales the DURATION of the one decorative
+     animation the personality layer owns, so a lively theme is faster and a
+     calm theme is slower and steadier. It is a theme preference only — the
+     reduced-motion gate at the end of this file still collapses it to 0ms, so
+     this can never override a user's accessibility setting. */
+  --qk-theme-motion-duration: calc(var(--animate-duration-card, 240ms) * var(--qk-theme-motion-scale, 1));
+}
+
+/* ---------------------------------------------------------------------------
+   2. Tonal depth
+   `surfaceScheme` decides which tonal family the surfaces belong to, and
+   `surfaceDarkness` pulls them toward ink (dark) or paper (light).
+
+   Copy tokens flip WITH the surfaces. A dark glass panel physically cannot
+   carry light-scheme ink copy — #17151f on a surface pulled 62% toward ink is
+   roughly 1.3:1 — so declaring dark surfaces and leaving the text dark would
+   trade one defect for a worse one. Flipping the copy token here is what lets a
+   theme spend tonal depth, the strongest grayscale signal available, without
+   breaking AA.
+   --------------------------------------------------------------------------- */
+
+/* Dark-surface themes: Night glass. Copy inverts to light ink.
+
+   Each rung is the accent tinted over a DARK neutral that `surfaceDarkness`
+   interpolates between a soft dark and the deepest ink. The first cut mixed
+   the dark anchor with WHITE scaled by `surfaceDarkness`, which at 0.62
+   produced a LIGHT grey-teal ladder (rgb(96,120,133) on Neon) — and every
+   on-world copy band that builds its glass from `--qk-bg-default` (the
+   plate's localized light glass) then painted LIGHT glass under the newly
+   LIGHT ink: measured 2.79:1 for the home eyebrow, a regression the
+   artwork-contrast probe caught. Anchoring between two darks keeps the
+   ladder genuinely dark at any darkness, keeps `surfaceDarkness` meaningful
+   (Neon 0.62 vs Space 0.74 still differ tonally), and the accent share keeps
+   each theme's identity. */
+.qk-child-theme[data-child-theme^='theme.shop.'][data-qk-surface-scheme='dark'],
+html[data-child-theme^='theme.shop.'][data-qk-surface-scheme='dark'] {
+  --qk-bg-canvas: color-mix(
+    in srgb,
+    var(--qk-theme-accent) 8%,
+    color-mix(in srgb, #17142b calc(var(--qk-theme-surface-darkness, 0) * 100%), #0d0b18)
+  );
+  --qk-bg-subtle: color-mix(
+    in srgb,
+    var(--qk-theme-accent) 11%,
+    color-mix(in srgb, #1e1936 calc(var(--qk-theme-surface-darkness, 0) * 100%), #100e1e)
+  );
+  --qk-bg-default: color-mix(
+    in srgb,
+    var(--qk-theme-accent) 13%,
+    color-mix(in srgb, #251f3f calc(var(--qk-theme-surface-darkness, 0) * 100%), #13111f)
+  );
+  --qk-bg-elevated: color-mix(
+    in srgb,
+    var(--qk-theme-accent) 9%,
+    color-mix(in srgb, #2c2650 calc(var(--qk-theme-surface-darkness, 0) * 100%), #171426)
+  );
+  --qk-bg-interactive: color-mix(
+    in srgb,
+    var(--qk-theme-accent) 15%,
+    color-mix(in srgb, #342d5c calc(var(--qk-theme-surface-darkness, 0) * 100%), #1a1730)
+  );
+
+  --qk-text-primary: #f4f6fb;
+  --qk-text-secondary: #c3c8dc;
+  --qk-text-muted: #9aa0ba;
+
+  /* Borders keep the accent so identity survives, but gain a light base so a
+     dark surface still shows a visible edge against a dark plate. The accent
+     share is scaled by `borderStrength`, which is the crisp-vs-faint axis. */
+  --qk-border-subtle: color-mix(
+    in srgb,
+    var(--qk-theme-accent) calc(22% * var(--qk-border-scale, 1)),
+    rgba(255, 255, 255, 0.10)
+  );
+  --qk-border-default: color-mix(
+    in srgb,
+    var(--qk-theme-accent) calc(34% * var(--qk-border-scale, 1)),
+    rgba(255, 255, 255, 0.14)
+  );
+  --qk-border-strong: color-mix(
+    in srgb,
+    var(--qk-theme-accent) calc(52% * var(--qk-border-scale, 1)),
+    rgba(255, 255, 255, 0.18)
+  );
+
+  /* Accent ink on a dark surface must be the LIGHT mix, the mirror image of
+     the light-scheme rule above. */
+  --qk-accent-ink: color-mix(in srgb, var(--qk-theme-accent) 62%, #ffffff);
+  --qk-accent-soft: color-mix(in srgb, var(--qk-theme-accent) 20%, transparent);
+
+  /* The hold-progress fill needs its OWN ink, and on a dark-surface theme it
+     must be DARKER than `--qk-accent-ink`, not lighter.
+
+     `--qk-accent-ink` is the light mix because it carries ink-coloured COPY on
+     a dark surface. The hold fill is the opposite case: the light on-brand
+     label is painted ON it. Pointing the fill at the light accent mix put a
+     near-white label on a near-white fill — a measured 1.41:1 on Neon Arcade
+     and 2.76:1 on Space Explorer, both far below AA. A colour guard cannot
+     catch this, because both colours are individually correct.
+
+     So the fill becomes a deep accent and the theme's luminous rim carries the
+     brightness. White ink stays above 6:1 on both dark themes and the
+     "deep track / luminous fill" language is unchanged. */
+  --qk-hold-fill: color-mix(in srgb, var(--qk-theme-accent) 45%, #05060d);
+
+  --qk-child-primary-onbrand: #f7f9ff;
+}
+
+/* Fixed app link ink (`text-family-600`) was authored for light surfaces. On
+   a dark-surface theme it sits below AA on the personality glass AND below
+   its own un-themed baseline once the world is behind it (measured on Space:
+   "View quests" 3.11:1 → 2.90:1). Text controls inside the three on-world
+   copy bands take the theme's light accent ink instead. Filled controls and
+   the wallet/mint pill are NOT matched — status and money semantics stay
+   exactly as authored. */
+.qk-child-theme[data-child-theme^='theme.shop.'][data-qk-surface-scheme='dark'] .qk-hero :is(a, button),
+.qk-child-theme[data-child-theme^='theme.shop.'][data-qk-surface-scheme='dark'] .qk-section-eyebrow :is(a, button),
+.qk-child-theme[data-child-theme^='theme.shop.'][data-qk-surface-scheme='dark'] .qk-adventure-compact :is(a, button) {
+  color: var(--qk-accent-ink);
+}
+
+/* Light-surface themes: soft paper. Copy stays dark ink. */
+.qk-child-theme[data-child-theme^='theme.shop.'][data-qk-surface-scheme='light'],
+html[data-child-theme^='theme.shop.'][data-qk-surface-scheme='light'] {
+  --qk-text-primary: #17151f;
+  --qk-text-secondary: #45415a;
+  --qk-text-muted: #6b6780;
+  --qk-accent-ink: color-mix(in srgb, var(--qk-theme-accent) 58%, #12101a);
+  /* On a light-surface theme the accent mix is ALREADY the dark one, so the
+     hold fill inherits it unchanged — Calm needs no override and gets none. */
+  --qk-hold-fill: var(--qk-accent-ink);
+  --qk-accent-soft: color-mix(in srgb, var(--qk-theme-accent) 16%, transparent);
+  --qk-child-primary-onbrand: #ffffff;
+
+  /* Same `borderStrength` multiplier as the dark branch, applied over the
+     accent scope's own transparent-based borders. Calm's 0.55 is what makes its
+     edges read as soft rather than drawn. */
+  --qk-border-subtle: color-mix(
+    in srgb,
+    var(--qk-theme-accent) calc(26% * var(--qk-border-scale, 1)),
+    transparent
+  );
+  --qk-border-default: color-mix(
+    in srgb,
+    var(--qk-theme-accent) calc(38% * var(--qk-border-scale, 1)),
+    transparent
+  );
+  --qk-border-strong: color-mix(
+    in srgb,
+    var(--qk-theme-accent) calc(56% * var(--qk-border-scale, 1)),
+    transparent
+  );
+}
+
+/* ---------------------------------------------------------------------------
+   3. Surfaces — translucency + blur
+   The `--qk-theme-alpha` multiply is what makes a card read as GLASS: the
+   world plate stays faintly visible through it, and `backdrop-filter` blurs
+   whatever is behind. A fully opaque tint of the same accent reads as a flat
+   rectangle in grayscale; a 0.74-alpha blurred panel reads as a material.
+   --------------------------------------------------------------------------- */
+.qk-child-theme[data-child-theme^='theme.shop.'][data-child-theme^='theme.shop.'] .qk-surface-personality,
+.qk-child-theme[data-child-theme^='theme.shop.'][data-qk-surface-scheme='dark'] .qk-bg-card,
+.qk-child-theme[data-child-theme^='theme.shop.'][data-qk-surface-scheme='dark'] .qk-bg-subtle,
+html[data-child-theme^='theme.shop.'][data-qk-surface-scheme='dark'] [role='dialog'] {
+  /* Translucency: the world plate stays faintly readable through the surface.
+     `backdrop-filter` blurs whatever sits behind, which is what turns a tinted
+     rectangle into a material. Calm sets blur to 0 and opacity to 0.97, so it
+     resolves to a near-opaque sheet with no blur at all. */
+  backdrop-filter: blur(var(--qk-theme-blur)) saturate(1.1);
+  -webkit-backdrop-filter: blur(var(--qk-theme-blur)) saturate(1.1);
+}
+
+/* ---------------------------------------------------------------------------
+   4. Geometry, edge and depth
+   `borderStrength` multiplies the accent share of every themed border, so the
+   CRISP-vs-SOFT edge difference between Neon and Space is a single number.
+   `shadow` is the grayscale depth cue: Neon gets a hard offset (reads as
+   hardware lifted off the surface), Space a wide diffuse wash (reads as
+   atmosphere), Calm almost none.
+   --------------------------------------------------------------------------- */
+.qk-child-theme[data-child-theme^='theme.shop.'][data-child-theme^='theme.shop.'] .qk-surface-personality,
+.qk-child-theme[data-child-theme^='theme.shop.'][data-child-theme^='theme.shop.'] .qk-bg-card {
+  border-radius: var(--qk-theme-radius);
+}
+
+/* Border weight/strength. Applies to the card surface family.
+   This branches on the VALUE, not just on attribute presence: matching
+   `[data-qk-border-style]` alone made `dashed` a silent no-op, so the axis
+   looked wired up while selecting it changed nothing. */
+.qk-child-theme[data-child-theme^='theme.shop.'][data-qk-border-style='solid'] .qk-surface-personality,
+html[data-child-theme^='theme.shop.'][data-qk-border-style='solid'] .qk-surface-personality {
+  border-width: 1px;
+  border-style: solid;
+}
+
+.qk-child-theme[data-child-theme^='theme.shop.'][data-qk-border-style='dashed'] .qk-surface-personality,
+html[data-child-theme^='theme.shop.'][data-qk-border-style='dashed'] .qk-surface-personality {
+  border-width: 1px;
+  border-style: dashed;
+}
+
+/* BEVEL — a machined edge. Two hard lines 2px apart (a dark inner shadow and a
+   bright inner highlight) read as a cut metal bevel the way no opacity change
+   ever can. This is the strongest grayscale "sharp / hardware" signal on a card. */
+.qk-child-theme[data-child-theme^='theme.shop.'][data-qk-border-style='bevel'] .qk-surface-personality,
+html[data-child-theme^='theme.shop.'][data-qk-border-style='bevel'] .qk-surface-personality {
+  border-width: 1px;
+  border-style: solid;
+  border-color: color-mix(in srgb, var(--qk-theme-accent) calc(60% * var(--qk-border-scale, 1)), transparent);
+  box-shadow:
+    /* the luminous rim: a TIGHT ring that hugs the edge, scaled by `glow`.
+       This is the difference between an edge that is drawn and an edge that
+       is emitting — in grayscale it is the brightest thing on the card. */
+    0 0 0 1px color-mix(
+      in srgb,
+      var(--qk-theme-accent) calc(var(--qk-theme-glow-alpha, 0) * 62%),
+      transparent
+    ),
+    0 0 calc(6px + var(--qk-theme-glow-alpha, 0) * 14px)
+      color-mix(in srgb, var(--qk-theme-accent) calc(var(--qk-theme-glow-alpha, 0) * 38%), transparent),
+    inset 0 1px 0 0 rgba(255, 255, 255, 0.16),
+    inset 0 -1px 0 0 rgba(0, 0, 0, 0.5),
+    var(--qk-shadow-card);
+}
+
+/* HALO — no hard line at all. The edge is carried entirely by a soft outward
+   bloom, so the card has no drawn boundary: it sits inside the world rather
+   than on top of it. Deliberately NOT a weaker `solid`. */
+.qk-child-theme[data-child-theme^='theme.shop.'][data-qk-border-style='halo'] .qk-surface-personality,
+html[data-child-theme^='theme.shop.'][data-qk-border-style='halo'] .qk-surface-personality {
+  border-width: 1px;
+  border-style: solid;
+  border-color: color-mix(in srgb, var(--qk-theme-accent) calc(16% * var(--qk-border-scale, 1)), transparent);
+  box-shadow:
+    0 0 0 1px color-mix(in srgb, var(--qk-theme-accent) calc(8% * var(--qk-border-scale, 1)), transparent),
+    /* Two rings, LARGE and weak — 34px then 72px. The spread is what separates
+       a halo from a glow: a glow concentrates its light within a few px of the
+       edge, a halo pushes it far out. Larger spread, lower alpha, no hard line. */
+    0 0 34px 3px color-mix(in srgb, var(--qk-theme-accent) calc(8% * var(--qk-border-scale, 1)), transparent),
+    0 0 72px 10px color-mix(in srgb, var(--qk-theme-accent) calc(5% * var(--qk-border-scale, 1)), transparent),
+    var(--qk-shadow-card);
+}
+
+/* Shadow profiles — the depth axis. */
+.qk-child-theme[data-child-theme^='theme.shop.'][data-qk-shadow='lifted'],
+html[data-child-theme^='theme.shop.'][data-qk-shadow='lifted'] {
+  --qk-shadow-card:
+    0 2px 0 0 color-mix(in srgb, var(--qk-theme-accent) calc(var(--qk-theme-glow-alpha, 0) * 55%), transparent),
+    0 10px 24px -14px rgba(0, 0, 0, 0.55);
+}
+
+.qk-child-theme[data-child-theme^='theme.shop.'][data-qk-shadow='halo'],
+html[data-child-theme^='theme.shop.'][data-qk-shadow='halo'] {
+  /* Atmospheric depth: one very wide, very faint drop with NO hard inner line
+     and no offset. Where `lifted` sits the card on a surface, `halo` lets light
+     fall off around it — the difference is large-scale, not an edge. */
+  --qk-shadow-card:
+    0 28px 70px -28px rgba(4, 6, 16, 0.62),
+    0 8px 26px -18px color-mix(in srgb, var(--qk-theme-accent) calc(var(--qk-theme-glow-alpha, 0) * 40%), transparent);
+}
+
+.qk-child-theme[data-child-theme^='theme.shop.'][data-qk-shadow='deep'],
+html[data-child-theme^='theme.shop.'][data-qk-shadow='deep'] {
+  --qk-shadow-card:
+    0 18px 48px -20px color-mix(in srgb, var(--qk-theme-accent) calc(var(--qk-theme-glow-alpha, 0) * 60%), rgba(0, 0, 0, 0.5)),
+    0 2px 10px -6px rgba(0, 0, 0, 0.35);
+}
+
+.qk-child-theme[data-child-theme^='theme.shop.'][data-qk-shadow='soft'],
+html[data-child-theme^='theme.shop.'][data-qk-shadow='soft'] {
+  --qk-shadow-card: 0 6px 18px -14px rgba(23, 21, 31, 0.16);
+}
+
+.qk-child-theme[data-child-theme^='theme.shop.'][data-qk-shadow='matte'],
+html[data-child-theme^='theme.shop.'][data-qk-shadow='matte'] {
+  /* Matte paper lift: a tight 1px contact shadow and NOTHING else. No cast
+     shadow, no accent tint — the depth comes from the edge, not from a glow,
+     which is what reads as "low stimulation" rather than "flat and unfinished". */
+  --qk-shadow-card: 0 1px 2px -1px rgba(23, 21, 31, 0.1);
+}
+
+.qk-child-theme[data-child-theme^='theme.shop.'][data-qk-shadow='none'],
+html[data-child-theme^='theme.shop.'][data-qk-shadow='none'] {
+  --qk-shadow-card: none;
+}
+
+/* Accent glow on active/selected state. `glow` scales an alpha, so Calm (0)
+   produces literally no glow layer at all. */
+.qk-child-theme[data-child-theme^='theme.shop.'][data-qk-shadow] .qk-surface-personality:hover,
+html[data-child-theme^='theme.shop.'][data-qk-shadow] .qk-surface-personality:hover {
+  box-shadow:
+    var(--qk-shadow-card),
+    0 0 calc(var(--qk-theme-glow-alpha, 0) * 22px)
+      color-mix(in srgb, var(--qk-theme-accent) calc(var(--qk-theme-glow-alpha, 0) * 40%), transparent);
+}
+
+/* Translucency proper. `--qk-theme-alpha` is the theme's declared surface
+   opacity; compositing the (already accent-mixed) surface colour against
+   `transparent` at that share is what lets the world plate read through the
+   card. The semantic token itself stays fully opaque — only the painted
+   surface goes translucent — so anything reading `--qk-bg-default` for a
+   contrast calculation still gets a real colour, not a half-transparent one. */
+.qk-child-theme[data-child-theme^='theme.shop.'][data-child-theme^='theme.shop.'] .qk-surface-personality {
+  background-color: color-mix(
+    in srgb,
+    var(--qk-surface-solid, var(--qk-bg-default)) calc(var(--qk-theme-alpha, 1) * 100%),
+    transparent
+  );
+}
+
+/* ---------------------------------------------------------------------------
+   4b. INTERIOR TREATMENT — the axis that separates Neon from Space
+
+   Why this section exists
+   ----------------------
+   Edge, radius, blur, opacity, shadow, glow and motif had all already diverged
+   between Neon Arcade and Space Explorer, and a grayscale measurement still put
+   the two card INTERIORS ~3% apart in local contrast. With the world plate
+   cropped away, both cards were the same smooth rectangle with copy on it. An
+   edge treatment alone cannot fix that: two rectangles with different borders
+   are still the same rectangle.
+
+   So the inside of a surface became its own axis, and it is split by FREQUENCY
+   rather than by degree:
+
+     machined     — hard, small, repeated detail. A top rail, two corner
+                    brackets, a short inner seam, and a hard seam under the rail.
+                    Many tiny straight edges, all of them high contrast.
+     atmospheric  — no straight line anywhere. One very wide soft light across
+                    the top and a soft inner falloff at the rim, so the card
+                    reads as a VOLUME instead of a panel.
+     flat         — nothing at all.
+
+   Space is not "Neon with the brackets turned off": its interior contains no
+   straight edge, so the two themes fail to match at a different frequency
+   rather than at a different strength of the same one.
+
+   Placement
+   ---------
+   Both treatments paint on `::after` with `z-index: -1`, inside an
+   `isolation: isolate` host, so they render ABOVE the surface colour and BELOW
+   the card's text. A pattern may sit behind a label; it may never sit on it.
+   That isolation is also what makes the rule work for Calm, whose card has no
+   `backdrop-filter` and therefore no stacking context of its own.
+   --------------------------------------------------------------------------- */
+
+/* Host: a stacking context, so `z-index: -1` decoration lands between the
+   surface colour and the copy instead of behind the card entirely. */
+.qk-child-theme[data-child-theme^='theme.shop.'][data-child-theme^='theme.shop.'] .qk-surface-personality,
+.qk-child-theme[data-child-theme^='theme.shop.'][data-child-theme^='theme.shop.'] .qk-surface-hero {
+  isolation: isolate;
+}
+
+/* Section framing — the quest board's hero follows the personality's radius so
+   the frame around the content is part of the theme's form language, not just
+   the cards inside it. */
+.qk-child-theme[data-child-theme^='theme.shop.'][data-child-theme^='theme.shop.'] .qk-surface-hero {
+  border-radius: var(--qk-theme-radius);
+}
+
+/* MACHINED — HUD furniture. Every layer is a hard, tiny, high-contrast edge. */
+.qk-child-theme[data-child-theme^='theme.shop.'][data-qk-inner-treatment='machined'] .qk-surface-personality::after,
+.qk-child-theme[data-child-theme^='theme.shop.'][data-qk-inner-treatment='machined'] .qk-surface-hero::after,
+html[data-child-theme^='theme.shop.'][data-qk-inner-treatment='machined'] .qk-surface-hero::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  border-radius: inherit;
+  overflow: hidden;
+  background-repeat: no-repeat;
+  background-image:
+    /* full-width top rail, 2px */
+    linear-gradient(var(--qk-inner-ink-strong), var(--qk-inner-ink-strong)),
+    /* top-left bracket, horizontal arm */
+    linear-gradient(var(--qk-inner-ink-strong), var(--qk-inner-ink-strong)),
+    /* top-left bracket, vertical arm */
+    linear-gradient(var(--qk-inner-ink-strong), var(--qk-inner-ink-strong)),
+    /* bottom-right bracket, horizontal arm */
+    linear-gradient(var(--qk-inner-ink-strong), var(--qk-inner-ink-strong)),
+    /* bottom-right bracket, vertical arm */
+    linear-gradient(var(--qk-inner-ink-strong), var(--qk-inner-ink-strong)),
+    /* short seam along the bottom inner edge */
+    linear-gradient(var(--qk-inner-ink), var(--qk-inner-ink));
+  background-size:
+    100% 2px,
+    18px 2px,
+    2px 18px,
+    18px 2px,
+    2px 18px,
+    38% 1px;
+  background-position:
+    0 0,
+    12px 9px,
+    12px 9px,
+    right 12px bottom 9px,
+    right 9px bottom 12px,
+    left 12px bottom 9px;
+}
+
+/* ATMOSPHERIC — depth by light falloff. Two very wide radial washes and not one
+   straight edge in the whole interior. */
+.qk-child-theme[data-child-theme^='theme.shop.'][data-qk-inner-treatment='atmospheric'] .qk-surface-personality::after,
+.qk-child-theme[data-child-theme^='theme.shop.'][data-qk-inner-treatment='atmospheric'] .qk-surface-hero::after,
+html[data-child-theme^='theme.shop.'][data-qk-inner-treatment='atmospheric'] .qk-surface-hero::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  border-radius: inherit;
+  overflow: hidden;
+  background-image:
+    radial-gradient(
+      140% 120% at 50% -18%,
+      color-mix(in srgb, var(--qk-theme-accent) calc(var(--qk-theme-inner-alpha, 0) * 78%), transparent) 0%,
+      transparent 66%
+    ),
+    radial-gradient(
+      100% 100% at 50% 50%,
+      transparent 56%,
+      color-mix(in srgb, var(--qk-theme-accent) calc(var(--qk-theme-inner-alpha, 0) * 62%), transparent) 100%
+    );
+}
+
+/* FLAT — the explicit reset. Without this rule a theme switch in place would
+   leave the previous theme's rails or wash painted on the surface. */
+.qk-child-theme[data-child-theme^='theme.shop.'][data-qk-inner-treatment='flat'] .qk-surface-personality::after,
+.qk-child-theme[data-child-theme^='theme.shop.'][data-qk-inner-treatment='flat'] .qk-surface-hero::after,
+html[data-child-theme^='theme.shop.'][data-qk-inner-treatment='flat'] .qk-surface-hero::after {
+  content: none;
+  background-image: none;
+  box-shadow: none;
+}
+
+/* ---------------------------------------------------------------------------
+   5. Motif — the strongest non-colour differentiator
+   Laid over the WORLD layer only, never over body copy. `.qk-child-experience-pattern`
+   is already a decorative, `aria-hidden`, `pointer-events: none` sheet behind
+   all content, so repainting it changes the world's texture without ever
+   putting a pattern between a child and their task text.
+   --------------------------------------------------------------------------- */
+
+/* GRID — tech / structured / hardware. A faint 32px lattice plus a soft scanline
+   wash, so it reads as a screen rather than as wallpaper. */
+.qk-child-theme[data-child-theme^='theme.shop.'][data-qk-pattern='grid'] .qk-child-experience-pattern {
+  opacity: calc(var(--qk-theme-motif-alpha, 0) * 1);
+  background-image:
+    repeating-linear-gradient(
+      to right,
+      color-mix(in srgb, var(--qk-theme-accent) 26%, transparent) 0 1px,
+      transparent 1px 32px
+    ),
+    repeating-linear-gradient(
+      to bottom,
+      color-mix(in srgb, var(--qk-theme-accent) 26%, transparent) 0 1px,
+      transparent 1px 32px
+    ),
+    repeating-linear-gradient(
+      to bottom,
+      color-mix(in srgb, var(--qk-theme-accent) 10%, transparent) 0 2px,
+      transparent 2px 7px
+    );
+  background-size: 32px 32px, 32px 32px, 100% 7px;
+}
+
+/* SCANLINE — the grid motif without the lattice. Horizontal bands only, on a
+   wide gap, so it reads as a display rather than as graph paper. */
+.qk-child-theme[data-child-theme^='theme.shop.'][data-qk-pattern='scanline'] .qk-child-experience-pattern,
+html[data-child-theme^='theme.shop.'][data-qk-pattern='scanline'] .qk-child-experience-pattern {
+  opacity: calc(var(--qk-theme-motif-alpha, 0) * 1);
+  background-image: repeating-linear-gradient(
+    to bottom,
+    color-mix(in srgb, var(--qk-theme-accent) 22%, transparent) 0 1px,
+    transparent 1px 11px
+  );
+  background-size: 100% 11px;
+}
+
+/* ORBIT — spatial / atmospheric. Concentric rings and a sparse starfield
+   instead of a lattice: irregular, wide, and low contrast. */
+.qk-child-theme[data-child-theme^='theme.shop.'][data-qk-pattern='orbit'] .qk-child-experience-pattern {
+  opacity: calc(var(--qk-theme-motif-alpha, 0) * 1);
+  background-image:
+    radial-gradient(
+      circle at 78% 18%,
+      transparent 0 84px,
+      color-mix(in srgb, var(--qk-theme-accent) 34%, transparent) 84px 85px,
+      transparent 85px 132px,
+      color-mix(in srgb, var(--qk-theme-accent) 22%, transparent) 132px 133px,
+      transparent 133px 196px
+    ),
+    radial-gradient(circle at 14% 72%, var(--qk-theme-accent) 0 1.2px, transparent 2.4px),
+    radial-gradient(circle at 42% 26%, var(--qk-theme-accent) 0 1px, transparent 2px),
+    radial-gradient(circle at 88% 62%, var(--qk-theme-accent) 0 1.4px, transparent 2.6px),
+    radial-gradient(circle at 62% 88%, var(--qk-theme-accent) 0 1px, transparent 2px),
+    radial-gradient(circle at 26% 44%, var(--qk-theme-accent) 0 1.1px, transparent 2.2px);
+  background-size: 100% 100%, 240px 240px, 320px 320px, 280px 280px, 360px 360px, 200px 200px;
+}
+
+/* MIST / NONE — the calm end of the axis. Explicitly empty so a theme that
+   declares `pattern: 'none'` cannot inherit a previous theme's texture. */
+.qk-child-theme[data-child-theme^='theme.shop.'][data-qk-pattern='none'] .qk-child-experience-pattern,
+.qk-child-theme[data-child-theme^='theme.shop.'][data-qk-pattern='mist'] .qk-child-experience-pattern {
+  opacity: 0;
+  background-image: none;
+}
+
+/* ---------------------------------------------------------------------------
+   6. World integration — vignette + atmospheric veil
+
+   The complaint this fixes: the artwork showed through the GAPS between cards,
+   so the page read as a desktop wallpaper with content pasted on top. Two
+   changes make the content feel located INSIDE the world instead:
+
+     (a) a vignette that darkens/lightens the outer frame, pulling the eye to
+         the centre and implying a light source in the world rather than a flat
+         image behind the content, and
+     (b) an atmospheric veil over the whole world at a low alpha, which sits
+         between the plate and every surface so text never sits on raw artwork.
+
+   Both are non-interactive (`pointer-events: none`) and behind all content, so
+   neither can affect layout, focus order or the hit-testing of a task button.
+   --------------------------------------------------------------------------- */
+.qk-child-theme[data-child-theme^='theme.shop.'][data-qk-surface-scheme='dark']::before,
+.qk-child-theme[data-child-theme^='theme.shop.'][data-qk-surface-scheme='dark']::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: -5;
+}
+
+/* (a) Vignette — corner falloff. */
+.qk-child-theme[data-child-theme^='theme.shop.'][data-qk-surface-scheme='dark']::before {
+  background: radial-gradient(
+    ellipse at 50% 38%,
+    transparent 30%,
+    rgba(3, 4, 12, 0.55) 100%
+  );
+}
+
+/* (b) Atmospheric veil — a faint accent haze so the plate is never raw behind
+   text. Kept under 14% so it cannot read as a colour wash. */
+.qk-child-theme[data-child-theme^='theme.shop.'][data-qk-surface-scheme='dark']::after {
+  background: linear-gradient(
+    180deg,
+    color-mix(in srgb, var(--qk-theme-accent) 7%, transparent) 0%,
+    color-mix(in srgb, var(--qk-theme-accent) 3%, transparent) 45%,
+    color-mix(in srgb, var(--qk-theme-accent) 9%, transparent) 100%
+  );
+}
+
+/* ---------------------------------------------------------------------------
+   7. Progress treatment
+
+   Theme-identity progress (the hold-to-complete track, `tone="brand"` fills)
+   follows the personality. Reward / XP progress deliberately does NOT: gold is
+   the product meaning of points earned, and `tone="xp"` maps to `--color-xp-*`,
+   which nothing in this file assigns. So a luminous theme cannot recolour a
+   child's earned points. See tests/theme/themePersonality.test.ts.
+   --------------------------------------------------------------------------- */
+
+/* TRACK treatments — how the unfilled bar reads. */
+.qk-child-theme[data-child-theme^='theme.shop.'][data-qk-progress-track='deep'] .qk-hold-track,
+html[data-child-theme^='theme.shop.'][data-qk-progress-track='deep'] .qk-hold-track {
+  /* Recessed dark channel: the fill appears to travel through a well. */
+  background: color-mix(in srgb, #05060d 76%, var(--qk-theme-accent));
+  box-shadow: inset 0 2px 6px rgba(0, 0, 0, 0.65);
+}
+
+.qk-child-theme[data-child-theme^='theme.shop.'][data-qk-progress-track='inset'] .qk-hold-track,
+html[data-child-theme^='theme.shop.'][data-qk-progress-track='inset'] .qk-hold-track {
+  /* Soft inset well, no hard dark floor. */
+  background: color-mix(in srgb, var(--qk-theme-accent) 12%, rgba(6, 8, 20, 0.72));
+  box-shadow: inset 0 1px 3px rgba(0, 0, 0, 0.4);
+}
+
+.qk-child-theme[data-child-theme^='theme.shop.'][data-qk-progress-track='matte'] .qk-hold-track,
+html[data-child-theme^='theme.shop.'][data-qk-progress-track='matte'] .qk-hold-track {
+  /* Matte track: a flat wash with no inset well and no dark floor, so the
+     unfilled bar does not read as a carved channel. */
+  background: color-mix(in srgb, var(--qk-theme-accent) 8%, rgba(255, 255, 255, 0.72));
+  box-shadow: none;
+}
+
+.qk-child-theme[data-child-theme^='theme.shop.'][data-qk-progress-track='soft'] .qk-hold-track,
+html[data-child-theme^='theme.shop.'][data-qk-progress-track='soft'] .qk-hold-track {
+  background: color-mix(in srgb, var(--qk-theme-accent) 10%, rgba(255, 255, 255, 0.55));
+}
+
+/* FILL effects — how the advancing fill reads. */
+.qk-child-theme[data-child-theme^='theme.shop.'][data-qk-progress-effect='luminous'] .qk-hold-fill,
+html[data-child-theme^='theme.shop.'][data-qk-progress-effect='luminous'] .qk-hold-fill {
+  /* Crisp luminous edge with a tight bloom just outside it. */
+  box-shadow:
+    0 0 calc(6px + var(--qk-theme-glow-alpha, 0) * 10px)
+      color-mix(in srgb, var(--qk-theme-accent) calc(40% + var(--qk-theme-glow-alpha, 0) * 40%), transparent),
+    inset 0 1px 0 rgba(255, 255, 255, 0.45);
+}
+
+.qk-child-theme[data-child-theme^='theme.shop.'][data-qk-progress-effect='orbital'] .qk-hold-fill,
+html[data-child-theme^='theme.shop.'][data-qk-progress-effect='orbital'] .qk-hold-fill {
+  /* Orbital sweep: a bright leading head with a trailing comet tail, which
+     reads as light travelling rather than as a bar being filled. */
+  background-image: linear-gradient(
+    90deg,
+    transparent 0%,
+    color-mix(in srgb, var(--qk-theme-accent) 28%, transparent) 55%,
+    color-mix(in srgb, var(--qk-theme-accent) 85%, #ffffff) 100%
+  );
+  box-shadow: 0 0 14px color-mix(in srgb, var(--qk-theme-accent) 45%, transparent);
+}
+
+.qk-child-theme[data-child-theme^='theme.shop.'][data-qk-progress-effect='gentle'] .qk-hold-fill,
+html[data-child-theme^='theme.shop.'][data-qk-progress-effect='gentle'] .qk-hold-fill {
+  /* Gentle advance: motion with no bloom, no gradient and no trailing head —
+     the fill simply eases in steadily. Deliberately weaker than `luminous`. */
+  background-image: linear-gradient(
+    90deg,
+    color-mix(in srgb, var(--qk-theme-accent) 92%, #ffffff) 0%,
+    var(--color-primary-500) 100%
+  );
+  box-shadow: none;
+  transition: background-color var(--qk-theme-motion-duration) ease-out;
+}
+
+/* `flat` is Queki's neutral default: a plain surface, no bloom, no gradient.
+   Stated explicitly rather than left as an absent rule, so switching themes in
+   place can never leave the previous theme's glow behind. */
+.qk-child-theme[data-child-theme^='theme.shop.'][data-qk-progress-effect='flat'] .qk-hold-fill,
+html[data-child-theme^='theme.shop.'][data-qk-progress-effect='flat'] .qk-hold-fill {
+  background-image: none;
+  box-shadow: none;
+}
+
+/* ---------------------------------------------------------------------------
+   8. Decorative edge on the task-card surface family
+
+   `decorationDensity` scales this, so a theme that does not want decorative
+   furniture sets it to 0 and the layer collapses to fully transparent. This is
+   an EDGE treatment (an accent hairline inset on the leading border), not an
+   overlay across the card, so it never sits between a child and their task
+   title — the accessibility constraint that stops this from being decoration
+   over content.
+   --------------------------------------------------------------------------- */
+.qk-child-theme[data-child-theme^='theme.shop.'][data-child-theme^='theme.shop.'] .qk-surface-personality {
+  position: relative;
+}
+
+.qk-child-theme[data-child-theme^='theme.shop.'][data-qk-shadow] .qk-surface-personality::before,
+html[data-child-theme^='theme.shop.'][data-qk-shadow] .qk-surface-personality::before {
+  content: '';
+  position: absolute;
+  inset-block: 10%;
+  inset-inline-start: 0;
+  width: 3px;
+  border-radius: 0 3px 3px 0;
+  pointer-events: none;
+  background: linear-gradient(
+    180deg,
+    transparent,
+    color-mix(in srgb, var(--qk-theme-accent) calc(var(--qk-theme-decoration, 0) * 100%), transparent) 22%,
+    color-mix(in srgb, var(--qk-theme-accent) calc(var(--qk-theme-decoration, 0) * 100%), transparent) 78%,
+    transparent
+  );
+  /* PURELY multiplicative. There used to be a 0.35 floor here, which quietly
+     contradicted the axis's own contract — `decorationDensity: 0` is documented
+     as "this theme contributes no decorative furniture", yet a Calm card still
+     measured a visible 0.495 opacity on the edge. The rendered structure probe
+     caught it. A quiet theme now measures exactly zero. */
+  opacity: calc(var(--qk-theme-decoration, 0) * 0.9);
+  /* The one decorative animation the personality layer owns. A slow vertical
+     shimmer along the edge — present enough to read as "alive" in Neon, slow
+     and steady in Calm. Duration comes from `motionScale`. */
+  animation: qk-theme-edge-drift var(--qk-theme-motion-duration) ease-in-out infinite alternate;
+}
+
+@keyframes qk-theme-edge-drift {
+  from { transform: scaleY(0.86); opacity: calc(var(--qk-theme-decoration, 0) * 0.78); }
+  to { transform: scaleY(1); opacity: calc(var(--qk-theme-decoration, 0) * 0.92); }
+}
+
+/* ---------------------------------------------------------------------------
+   9. Reduced motion — the hard gate
+
+   `motionScale` is a THEME preference, never an accessibility override. This
+   block runs last and collapses every personality animation to 0ms under
+   `prefers-reduced-motion: reduce`, so a theme can be as lively as its art
+   direction wants without ever overriding the user's setting.
+   --------------------------------------------------------------------------- */
+@media (prefers-reduced-motion: reduce) {
+  .qk-child-theme[data-child-theme^='theme.shop.'][data-qk-pattern] .qk-child-experience-pattern,
+  html[data-child-theme^='theme.shop.'][data-qk-pattern] .qk-child-experience-pattern {
+    animation: none !important;
+    transition: none !important;
+  }
+
+  .qk-child-theme[data-child-theme^='theme.shop.'][data-child-theme^='theme.shop.'] .qk-surface-personality,
+  .qk-child-theme[data-child-theme^='theme.shop.'][data-child-theme^='theme.shop.'] .qk-hold-fill,
+  .qk-child-theme[data-child-theme^='theme.shop.'][data-child-theme^='theme.shop.'] .qk-hold-track,
+  html[data-child-theme^='theme.shop.'][data-qk-pattern] .qk-surface-personality,
+  html[data-child-theme^='theme.shop.'][data-qk-pattern] .qk-hold-fill,
+  html[data-child-theme^='theme.shop.'][data-qk-pattern] .qk-hold-track {
+    animation: none !important;
+    transition: none !important;
+  }
 }

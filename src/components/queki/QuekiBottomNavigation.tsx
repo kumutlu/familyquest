@@ -41,8 +41,12 @@ export function QuekiBottomNavigation({ role, onActionPress }: QuekiBottomNaviga
       >
         <span
           aria-hidden="true"
+          // `qk-nav-active-chip` lets a child's equipped theme tint the
+          // selected tab's chip. The chip's default Queki wash stays the
+          // baseline for the classic theme and for every parent surface.
           className={cn(
             'flex h-8 w-12 items-center justify-center rounded-full transition-colors',
+            'qk-nav-active-chip',
             isActive && 'bg-primary-50 dark:bg-primary-100',
           )}
         >

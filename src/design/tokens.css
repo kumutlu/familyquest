@@ -134,13 +134,28 @@
    blacks. Both themes use the same token names; values are tuned
    independently so Light and Dark are NOT inverses. */
 :root {
+  /* Neutral tone layer — theme-AGNOSTIC. These are the untinted neutrals the
+     V2 luminance ladder is derived from. A child theme tints the app by
+     mixing its accent into these tones (see `.qk-child-theme` in
+     child-experience.css); it must never redefine them, otherwise the tint
+     would compound on every navigation. Keep every value here neutral. */
+  --qk-tone-canvas: #f5f3fb;
+  --qk-tone-subtle: #ede9f6;
+  --qk-tone-default: #ffffff;
+  --qk-tone-elevated: #ffffff;
+  --qk-tone-interactive: #faf9fd;
+  /* Anchor ink used to darken a theme accent until accent-coloured copy and
+     selected navigation can carry text contrast on a light surface. */
+  --qk-tone-arrow: #12101a;
+
   /* V2 luminance ladder — Light. Each step is a meaningful visual step so
-     cards on the Child Home stay distinct from the canvas. */
-  --qk-bg-canvas: #f5f3fb;
-  --qk-bg-subtle: #ede9f6;
-  --qk-bg-default: #ffffff;
-  --qk-bg-elevated: #ffffff;
-  --qk-bg-interactive: #faf9fd;
+     cards on the Child Home stay distinct from the canvas. Derived from the
+     tone layer above so theming only ever has to override the accents. */
+  --qk-bg-canvas: var(--qk-tone-canvas);
+  --qk-bg-subtle: var(--qk-tone-subtle);
+  --qk-bg-default: var(--qk-tone-default);
+  --qk-bg-elevated: var(--qk-tone-elevated);
+  --qk-bg-interactive: var(--qk-tone-interactive);
 
   --qk-surface-page: var(--qk-bg-canvas);
   --qk-surface-card: var(--qk-bg-default);
@@ -172,15 +187,26 @@
 }
 
 .dark {
+  /* Neutral tone layer — Dark. Theme-agnostic, same contract as the light
+     layer above. The canvas is a deep indigo-violet (Queki nighttime), NOT a
+     near-black, so the whole page reads as one continuous atmospheric world. */
+  --qk-tone-canvas: #1a1530;
+  --qk-tone-subtle: #221b3d;
+  --qk-tone-default: #2a2349;
+  --qk-tone-elevated: #332b56;
+  --qk-tone-interactive: #3d3465;
+  /* Dark surfaces need the anchor to LIGHTEN the accent instead, so
+     accent-coloured copy stays legible on a dark card. */
+  --qk-tone-arrow: #f3f1fb;
+
   /* V2 luminance ladder — Dark. Each step adds a meaningful visual step so
-     cards read as distinct elevation layers at a glance. The canvas is a
-     deep indigo-violet (Queki nighttime), NOT a near-black. The whole
-     page sits inside one continuous atmospheric world. */
-  --qk-bg-canvas: #1a1530;
-  --qk-bg-subtle: #221b3d;
-  --qk-bg-default: #2a2349;
-  --qk-bg-elevated: #332b56;
-  --qk-bg-interactive: #3d3465;
+     cards read as distinct elevation layers at a glance. Derived from the
+     tone layer above. */
+  --qk-bg-canvas: var(--qk-tone-canvas);
+  --qk-bg-subtle: var(--qk-tone-subtle);
+  --qk-bg-default: var(--qk-tone-default);
+  --qk-bg-elevated: var(--qk-tone-elevated);
+  --qk-bg-interactive: var(--qk-tone-interactive);
 
   --qk-surface-page: var(--qk-bg-canvas);
   --qk-surface-card: var(--qk-bg-default);

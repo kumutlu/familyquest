@@ -23,6 +23,10 @@
  *     is the per-family opt-in key.
  */
 
+// Type-only import: the personality bundle is presentation metadata and must not
+// pull any runtime dependency into this file.
+import type { ThemePersonality } from './themePersonality';
+
 /* -------------------------------------------------------------------------- */
 /* Events                                                                     */
 /* -------------------------------------------------------------------------- */
@@ -188,6 +192,13 @@ export interface ThemeDefinition {
    * Presentation only — never eligibility.
    */
   tokens?: ThemeTokens;
+  /**
+   * Optional NON-COLOUR personality bundle (surface opacity/blur/radius,
+   * border weight, shadow depth, glow, motif, progress treatment, motion).
+   * This is what keeps a theme recognisable in grayscale — see
+   * `./themePersonality`. Presentation only, never eligibility.
+   */
+  personality?: ThemePersonality;
   /**
    * Canonical Theme Shop item id for purchasable themes. Present only on
    * `theme.shop.*` themes; ties the theme to its authoritative

@@ -23,6 +23,7 @@
 import { useCallback, useMemo, useRef, useState } from 'react';
 import { useStore } from '../store/useStore';
 import { purchaseShopTheme, type ShopThemeCatalogRow } from '../lib/api';
+import { classifyThemePurchaseFailure, type ThemePurchaseFailure } from '../lib/transactionErrors';
 import {
   DEFAULT_SHOP_PRICES,
   SHOP_THEME_IDS,
@@ -72,6 +73,14 @@ export interface ShopItem {
   readonly shoppingDisabled: boolean;
   /** True when the shop catalog row was parent-published (overriding defaults). */
   readonly hasCatalogRow: boolean;
+  /**
+   * True when this child's balance covers {@link effectivePricePoints}.
+   * Derived here (not in the component) so the buy affordance and any
+   * pre-flight guard agree on the same number.
+   */
+  readonly affordable: boolean;
+  /** Points still needed to afford the item (0 when affordable). */
+  readonly shortfallPoints: number;
 }
 
 export interface ThemeOfTheWeek {
@@ -96,10 +105,14 @@ export interface UseThemeShopResult {
   readonly isLoading: boolean;
   /** True when the parent disabled theme shopping for this family. */
   readonly shoppingDisabled: boolean;
+  /** The child's spendable balance, in points (authoritative profile value). */
+  readonly points: number;
   /** In-flight purchase item id (double-tap guard). */
   readonly purchasingItemId: string | null;
   /** Error message from the last failed purchase (child-readable). */
   readonly purchaseError: string | null;
+  /** Machine-readable reason for {@link purchaseError} (null when none). */
+  readonly purchaseErrorKind: ThemePurchaseFailure | null;
   /** Attempt a purchase through the canonical transaction pipeline. */
   readonly purchase: (shopItemId: string) => Promise<boolean>;
   /** Clear the last purchase error (e.g. on sheet dismiss). */
@@ -157,6 +170,7 @@ export function useThemeShop(): UseThemeShopResult {
   const familyData = useStore((s: any) => s.familyData);
   const [purchasingItemId, setPurchasingItemId] = useState<string | null>(null);
   const [purchaseError, setPurchaseError] = useState<string | null>(null);
+  const [purchaseErrorKind, setPurchaseErrorKind] = useState<ThemePurchaseFailure | null>(null);
 
   // Synchronous in-flight guard. The state mirror drives the disabled UI;
   // the ref drives the guard itself so two rapid taps can never both pass
@@ -165,6 +179,9 @@ export function useThemeShop(): UseThemeShopResult {
 
   const familyId: string = familyData?.id ?? currentUser?.familyId ?? '';
   const childId: string = currentUser?.id ?? currentUser?.uid ?? '';
+  // The child's own spendable balance. Authoritative value only — the shop
+  // never derives points for itself, it mirrors the profile the rules read.
+  const points: number = typeof currentUser?.rewardPoints === 'number' ? currentUser.rewardPoints : 0;
 
   const shoppingDisabled = useMemo(() => {
     const engagement = familyData?.engagementPreferences as Record<string, unknown> | undefined;
@@ -251,21 +268,27 @@ export function useThemeShop(): UseThemeShopResult {
             : isActive && pricePoints > 0
               ? 'purchasable'
               : 'free';
+        const effectivePricePoints = isPromo ? 0 : pricePoints;
+        // Ownership and a live promotion both mean "nothing left to pay".
+        const alreadyMine = owned || isPromo;
+        const shortfallPoints = alreadyMine ? 0 : Math.max(0, effectivePricePoints - points);
         return Object.freeze({
           shopItemId,
           theme,
           pricePoints,
-          effectivePricePoints: isPromo ? 0 : pricePoints,
+          effectivePricePoints,
           isActive,
           status,
           promo: isPromo ? themeOfTheWeek : null,
           shoppingDisabled,
           hasCatalogRow: row != null,
+          affordable: alreadyMine || shortfallPoints === 0,
+          shortfallPoints,
         }) as ShopItem;
       })
       .filter((item): item is ShopItem => item != null);
     return Object.freeze(shopItems) as ShopItem[];
-  }, [rowsById, ownedItemIds, themeOfTheWeek, shoppingDisabled]);
+  }, [rowsById, ownedItemIds, themeOfTheWeek, shoppingDisabled, points]);
 
   const purchase = useCallback(
     async (shopItemId: string): Promise<boolean> => {
@@ -274,26 +297,48 @@ export function useThemeShop(): UseThemeShopResult {
       // transaction. (The transaction's idempotency ledger is the second,
       // authoritative line of defence.)
       if (!familyId || purchasingRef.current) return false;
+
+      // Pre-flight affordability. The rules remain the authority on price and
+      // balance, but a transaction the balance cannot satisfy is a guaranteed
+      // failure — refusing it here means no doomed round trip, and the shop
+      // can state the exact shortfall instead of "something went wrong".
+      const item = items.find((candidate) => candidate.shopItemId === shopItemId);
+      if (item && !item.affordable) {
+        setPurchaseError(`You need ${item.shortfallPoints} more points to buy this theme.`);
+        setPurchaseErrorKind('insufficient-points');
+        return false;
+      }
+
       purchasingRef.current = true;
       setPurchaseError(null);
+      setPurchaseErrorKind(null);
       setPurchasingItemId(shopItemId);
       try {
         await purchaseShopTheme(familyId, shopItemId);
         return true;
       } catch (error) {
-        const message = error instanceof Error ? error.message : 'Purchase failed';
-        // Surface child-friendly copy; keep raw codes out of the UI.
-        setPurchaseError(message.includes('more points') ? message : 'Purchase could not be completed.');
+        const { kind, message, technical } = classifyThemePurchaseFailure(error);
+        // Child-facing copy is classified, never string-matched in the view.
+        setPurchaseError(message);
+        setPurchaseErrorKind(kind);
+        // The raw cause used to be swallowed behind generic copy, which made
+        // the live production failure impossible to diagnose. Log the exact
+        // detail (never rendered to a child).
+        // eslint-disable-next-line no-console
+        console.error('[theme-shop] purchase failed', { shopItemId, kind, technical });
         return false;
       } finally {
         purchasingRef.current = false;
         setPurchasingItemId(null);
       }
     },
-    [familyId],
+    [familyId, items],
   );
 
-  const clearError = useCallback(() => setPurchaseError(null), []);
+  const clearError = useCallback(() => {
+    setPurchaseError(null);
+    setPurchaseErrorKind(null);
+  }, []);
 
   return {
     items,
@@ -301,8 +346,10 @@ export function useThemeShop(): UseThemeShopResult {
     themeOfTheWeek,
     isLoading,
     shoppingDisabled,
+    points,
     purchasingItemId,
     purchaseError,
+    purchaseErrorKind,
     purchase,
     clearError,
   };

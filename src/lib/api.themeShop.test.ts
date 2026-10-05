@@ -288,6 +288,128 @@ describe('purchaseShopTheme — canonical points pipeline', () => {
   })
 })
 
+/**
+ * PRODUCTION PARITY — a family that has NEVER published a
+ * `families/{familyId}/themes/{shopItemId}` catalogue row.
+ *
+ * This is the real production shape: no product code path publishes those
+ * rows (only the E2E seed and the rules suite do), so every real family has
+ * an empty catalogue. The deployed rules resolve price / themeId / active
+ * from the COMPILED-IN catalogue in that case, so the client must resolve
+ * them identically — otherwise a purchase the rules would happily commit is
+ * refused before the rules are ever consulted.
+ */
+function noCatalogueDocs(rewardPoints: number) {
+  return {
+    [USER_PATH]: { familyId: 'family-1', role: 'child', rewardPoints },
+    'families/family-1/themes/space': undefined,
+    [PURCHASE_PATH]: undefined,
+    [IDEM_PATH]: undefined,
+  }
+}
+
+describe('purchaseShopTheme — family with no published catalogue row (production shape)', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    firestore.reset()
+    authState.currentUser = { uid: 'child-1', getIdTokenResult: tokenResult }
+  })
+
+  it('buys Space Explorer at the compiled-in 500 pts and writes the canonical commit shape', async () => {
+    const tx = transactionWith(noCatalogueDocs(800))
+    const result = await purchaseShopTheme('family-1', 'space')
+    expect(result).toEqual({ costPoints: 500, themeId: 'theme.shop.space' })
+    expect(tx.update).toHaveBeenCalledWith(
+      expect.objectContaining({ path: USER_PATH }),
+      { rewardPoints: 300, lastThemePurchaseId: 'space' },
+    )
+    // Canonical immutable record — the shape isValidThemePurchaseDeduction()
+    // and the paired-deduction rule read back.
+    expect(tx.set).toHaveBeenCalledWith(
+      expect.objectContaining({ path: PURCHASE_PATH }),
+      expect.objectContaining({
+        shopItemId: 'space', childId: 'child-1', familyId: 'family-1',
+        themeId: 'theme.shop.space', costPoints: 500, source: 'points', actorId: 'child-1',
+      }),
+    )
+    // Per-child ownership mirror, same transaction, same price + themeId.
+    expect(tx.set).toHaveBeenCalledWith(
+      expect.objectContaining({ path: 'families/family-1/users/child-1/theme_purchases/space' }),
+      expect.objectContaining({ shopItemId: 'space', themeId: 'theme.shop.space', costPoints: 500 }),
+    )
+    expectReadsBeforeWrites(tx)
+  })
+
+  it('prices every compiled-in shop item exactly as themeCatalogPrice() does', async () => {
+    const cases: ReadonlyArray<[string, number, string]> = [
+      ['neon', 500, 'theme.shop.neon'],
+      ['space', 500, 'theme.shop.space'],
+      ['rainbow', 300, 'theme.shop.rainbow'],
+      ['pixel', 300, 'theme.shop.pixel'],
+      ['calm', 300, 'theme.shop.calm'],
+    ]
+    for (const [shopItemId, price, themeId] of cases) {
+      firestore.reset()
+      vi.clearAllMocks()
+      authState.currentUser = { uid: 'child-1', getIdTokenResult: tokenResult }
+      const tx = transactionWith({
+        [USER_PATH]: { familyId: 'family-1', role: 'child', rewardPoints: 1000 },
+        [`families/family-1/themes/${shopItemId}`]: undefined,
+        [`families/family-1/themes/${shopItemId}/purchases/child-1`]: undefined,
+        [`families/family-1/idempotency/theme_purchase:child-1:${shopItemId}`]: undefined,
+      })
+      const result = await purchaseShopTheme('family-1', shopItemId)
+      expect(result).toEqual({ costPoints: price, themeId })
+      expect(tx.update).toHaveBeenCalledWith(
+        expect.objectContaining({ path: USER_PATH }),
+        { rewardPoints: 1000 - price, lastThemePurchaseId: shopItemId },
+      )
+    }
+  })
+
+  it('balance 487 / price 500 → quotes exactly 13 more points and writes nothing', async () => {
+    const tx = transactionWith(noCatalogueDocs(487))
+    await expect(purchaseShopTheme('family-1', 'space')).rejects.toThrow(/need 13 more points/i)
+    expect(tx.update).not.toHaveBeenCalled()
+    expect(tx.set).not.toHaveBeenCalled()
+  })
+
+  it('balance 500 / price 500 → succeeds once and leaves 0 points', async () => {
+    const tx = transactionWith(noCatalogueDocs(500))
+    await expect(purchaseShopTheme('family-1', 'space'))
+      .resolves.toEqual({ costPoints: 500, themeId: 'theme.shop.space' })
+    expect(tx.update).toHaveBeenCalledTimes(1)
+    expect(tx.update).toHaveBeenCalledWith(
+      expect.objectContaining({ path: USER_PATH }),
+      { rewardPoints: 0, lastThemePurchaseId: 'space' },
+    )
+  })
+
+  it('balance 501 / price 500 → succeeds once and leaves 1 point', async () => {
+    const tx = transactionWith(noCatalogueDocs(501))
+    await expect(purchaseShopTheme('family-1', 'space')).resolves.toEqual({ costPoints: 500, themeId: 'theme.shop.space' })
+    expect(tx.update).toHaveBeenCalledWith(
+      expect.objectContaining({ path: USER_PATH }),
+      { rewardPoints: 1, lastThemePurchaseId: 'space' },
+    )
+  })
+
+  it('exposes a machine-readable failure kind, not a message to parse', async () => {
+    transactionWith(noCatalogueDocs(487))
+    await expect(purchaseShopTheme('family-1', 'space'))
+      .rejects.toMatchObject({ kind: 'insufficient-points' })
+  })
+
+  it('still refuses an id the compiled-in catalogue does not sell', async () => {
+    const tx = transactionWith({
+      ...noCatalogueDocs(800),
+      'families/family-1/themes/ghost': undefined,
+    })
+    await expect(purchaseShopTheme('family-1', 'ghost')).rejects.toMatchObject({ kind: 'unavailable' })
+    expect(tx.update).not.toHaveBeenCalled()
+  })
+})
+
 describe('updateChildTheme — equip preference', () => {
   beforeEach(() => {
     vi.clearAllMocks()

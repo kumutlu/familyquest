@@ -12,8 +12,9 @@ import {
 } from '../hooks/useThemeShop';
 import { useExperienceTheme } from '../hooks/useExperienceTheme';
 import { storeEquippedTheme } from '../hooks/useChildThemeRights';
-import { ChildExperienceShell } from '../components/experience/ChildExperienceShell';
-import type { ThemeDefinition } from '../domain/experience';
+import { ChildThemeSurface } from '../components/experience/ChildThemeSurface';
+import { WorldPlate } from '../components/experience/WorldPlate';
+import { getThemePlate, type ThemeDefinition } from '../domain/experience';
 
 /**
  * Child-facing Theme Shop.
@@ -30,7 +31,17 @@ import type { ThemeDefinition } from '../domain/experience';
  * re-skin the whole app session-wide until the child commits.
  */
 
-type Focus = { kind: 'classic' } | { kind: 'shop'; item: ShopItem } | null;
+/**
+ * Which card the child opened.
+ *
+ * The shop item is stored as its ID and re-resolved from `items` on every
+ * render, NOT as a snapshot. Ownership hydrates asynchronously (the purchase
+ * projection is a background bootstrap listener), so a card opened a moment
+ * before it landed used to keep rendering its stale state — the child saw
+ * "Buy for 500 points" for a theme they already own, and the transaction then
+ * refused with "You already own this theme".
+ */
+type Focus = { kind: 'classic' } | { kind: 'shop'; shopItemId: string } | null;
 
 interface ThemePreviewProps {
   readonly theme: ThemeDefinition;
@@ -39,12 +50,19 @@ interface ThemePreviewProps {
 }
 
 /**
- * Live theme preview. Renders a miniature world (ambient gradient +
- * sample surfaces) using the theme's real tokens — the same bundle the
- * shell cascades, so "what you see is what you get".
+ * The theme's real visual.
+ *
+ * Renders the RECOVERED painted Queki world for this theme (the artwork the
+ * themes were authored with), cropped to the card. The previous implementation
+ * drew abstract rectangles — a skeleton that looked nothing like the world a
+ * child actually gets — which is why the live shop felt like a wireframe.
+ *
+ * A theme with no authored world falls back to its own token gradient; that is
+ * a real (if quiet) themed surface, not a placeholder.
  */
 function ThemePreview({ theme, isDark, badge }: ThemePreviewProps) {
   const tokens = theme.tokens;
+  const plate = useMemo(() => getThemePlate(theme.id), [theme.id]);
   const style = useMemo(() => {
     if (!tokens) return undefined;
     return {
@@ -59,21 +77,20 @@ function ThemePreview({ theme, isDark, badge }: ThemePreviewProps) {
     <div
       data-testid={`theme-preview-${theme.id}`}
       data-preview-theme={theme.id}
-      className="relative h-28 w-full overflow-hidden rounded-xl"
+      data-preview-kind={plate ? 'painted' : 'tokens'}
+      className="relative h-32 w-full overflow-hidden rounded-xl"
       style={style}
     >
-      <div className="absolute inset-0" style={{ background: 'linear-gradient(180deg, var(--qk-theme-ambient-from) 0%, var(--qk-theme-ambient-to) 100%)' }} />
-      {/* Sample surfaces: card + button + progress — all read the tokens. */}
-      <div className="absolute inset-x-4 top-4 bottom-4 flex flex-col gap-2">
-        <div className="h-6 rounded-lg border" style={{ background: 'var(--qk-theme-accent-soft)', borderColor: 'var(--qk-theme-accent)' }} />
-        <div className="h-2.5 w-3/4 self-start rounded-full" style={{ background: 'var(--qk-theme-accent)', opacity: 0.8 }} />
-        <div className="mt-auto flex items-center gap-2">
-          <span className="h-6 w-16 rounded-md" style={{ background: 'var(--qk-theme-accent)' }} />
-          <span className="h-2 w-10 rounded-full bg-black/10 dark:bg-white/15" />
-        </div>
-      </div>
+      {plate ? (
+        <WorldPlate themeId={theme.id} plate={plate} variant="card" />
+      ) : (
+        <div
+          className="absolute inset-0"
+          style={{ background: 'linear-gradient(180deg, var(--qk-theme-ambient-from) 0%, var(--qk-theme-ambient-to) 100%)' }}
+        />
+      )}
       {badge ? (
-        <span className="absolute right-2 top-2 rounded-full bg-white/85 px-2 py-0.5 text-[11px] font-bold text-gray-900 shadow-sm dark:bg-black/60 dark:text-white">
+        <span className="absolute right-2 top-2 rounded-full bg-white/85 px-2 py-0.5 text-[11px] font-bold text-gray-900 shadow-sm backdrop-blur dark:bg-black/60 dark:text-white">
           {badge}
         </span>
       ) : null}
@@ -99,10 +116,13 @@ function PromoCountdown({ endsAt, now }: { endsAt: number; now: number }) {
 export function ThemeShop() {
   const { t } = useTranslation('themes');
   const currentUser = useStore((s: any) => s.currentUser);
-  const { items, classicTheme, themeOfTheWeek, isLoading, shoppingDisabled, purchasingItemId, purchaseError, purchase, clearError } = useThemeShop();
+  const {
+    items, classicTheme, themeOfTheWeek, isLoading, shoppingDisabled,
+    points, purchasingItemId, purchaseError, purchase, clearError,
+  } = useThemeShop();
   const { theme: activeTheme } = useExperienceTheme();
   const [focus, setFocus] = useState<Focus>(null);
-  const [confirming, setConfirming] = useState<ShopItem | null>(null);
+  const [confirming, setConfirming] = useState(false);
 
   const classicActive = activeTheme.id === 'theme.standard';
 
@@ -122,25 +142,40 @@ export function ThemeShop() {
   };
 
   const buyAndApply = async (item: ShopItem) => {
+    // Pre-flight: never fire a transaction the balance cannot satisfy. The
+    // rules stay the authority; this only prevents a doomed round trip and
+    // lets the sheet state the exact shortfall instead of a generic failure.
+    if (!item.affordable) return;
     const ok = await purchase(item.shopItemId);
     if (ok) {
-      setConfirming(null);
+      setConfirming(false);
       await applyTheme(item.theme.id);
     }
   };
 
   // ---------------------------------------------------------------- focus ---
   if (focus) {
-    const focusTheme = focus.kind === 'classic' ? classicTheme : focus.item.theme;
-    const isOwned = focus.kind === 'classic' || focus.item.status === 'owned';
-    const isPromo = focus.kind === 'shop' && focus.item.status === 'promo';
+    // Always the LIVE item: ownership, promo windows and affordability can
+    // all change while this panel is open.
+    const focusItem =
+      focus.kind === 'shop' ? items.find(item => item.shopItemId === focus.shopItemId) ?? null : null;
+    const focusTheme = focus.kind === 'classic' ? classicTheme : focusItem?.theme ?? classicTheme;
+    const isOwned = focus.kind === 'classic' || focusItem?.status === 'owned';
+    const isPromo = focus.kind === 'shop' && focusItem?.status === 'promo';
     const isCurrent = focus.kind === 'classic' ? classicActive : activeTheme.id === focusTheme.id;
     return (
-      <ChildExperienceShell resolvedTheme={{ theme: focusTheme, source: 'base', appliedEventName: null }} mascotPresentation={null}>
+      <ChildThemeSurface
+        resolvedTheme={{ theme: focusTheme, source: 'base', appliedEventName: null }}
+        mascotPresentation={null}
+        // Inside the persistent child boundary there is already a shell, so
+        // this publishes the world being previewed rather than stacking a
+        // second painted plate. Standalone (tests) it mounts its own shell.
+        publishPreview
+      >
         <div className="mx-auto w-full max-w-xl px-4 pb-24 pt-4" data-testid="theme-shop-focus">
           <button
             type="button"
-            onClick={() => { setFocus(null); setConfirming(null); clearError(); }}
+            onClick={() => { setFocus(null); setConfirming(false); clearError(); }}
             className="mb-4 inline-flex items-center gap-1 rounded-full px-3 py-1.5 text-sm font-semibold text-gray-700 hover:bg-black/5 dark:text-gray-200 dark:hover:bg-white/10 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-500"
           >
             <ChevronLeft size={16} aria-hidden="true" />
@@ -165,31 +200,87 @@ export function ThemeShop() {
               <TactileButton className="mt-4" fullWidth size="lg" onClick={() => applyTheme(focusTheme.id)}>
                 {t('apply', 'Use this theme')}
               </TactileButton>
-            ) : focus.kind === 'shop' && !focus.item.shoppingDisabled ? (
+            ) : focus.kind === 'shop' && focusItem && !focusItem.shoppingDisabled ? (
               confirming ? (
-                <div className="mt-4 rounded-xl border border-coral-200 bg-coral-50 p-3 dark:border-coral-800 dark:bg-coral-900/20" data-testid="purchase-confirmation">
-                  <p className="text-sm font-semibold text-coral-800 dark:text-coral-100">
-                    {t('confirmBuy', 'Buy {{name}} for {{price}} points?', { name: focusTheme.name, price: focus.item.effectivePricePoints })}
-                  </p>
-                  <div className="mt-2 flex gap-2">
-                    <TactileButton
-                      variant="coral"
-                      size="sm"
-                      loading={purchasingItemId === focus.item.shopItemId}
-                      disabled={purchasingItemId != null}
-                      onClick={() => buyAndApply(focus.item)}
-                    >
-                      {t('confirmYes', 'Yes, buy it')}
-                    </TactileButton>
-                    <TactileButton variant="ghost" size="sm" onClick={() => { setConfirming(null); clearError(); }}>
-                      {t('confirmNo', 'Not now')}
-                    </TactileButton>
+                /* Purchase sheet. Deliberately a themed Queki surface rather
+                   than a browser-style warning: the child sees the world they
+                   are buying, what they have, and what is left afterwards. */
+                <div
+                  className="mt-4 rounded-2xl border border-black/10 bg-white/80 p-3 backdrop-blur dark:border-white/15 dark:bg-white/5"
+                  data-testid="purchase-confirmation"
+                  role="group"
+                  aria-label={focusTheme.name}
+                >
+                  <div className="flex items-baseline justify-between gap-2">
+                    <p className="text-body font-extrabold">{focusTheme.name}</p>
+                    <p className="text-body font-extrabold tabular-nums" style={{ color: 'var(--qk-theme-accent)' }}>
+                      {t('sheetPrice', '{{price}} points', { price: focusItem.effectivePricePoints })}
+                    </p>
                   </div>
+
+                  {/* Themed preview — the same painted world the card shows. */}
+                  <div className="mt-3">
+                    <ThemePreview theme={focusTheme} isDark={false} />
+                  </div>
+
+                  <dl className="mt-3 space-y-1 text-sm">
+                    <div className="flex items-center justify-between">
+                      <dt className="font-semibold text-gray-600 dark:text-gray-300">{t('sheetBalance', 'Your balance')}</dt>
+                      <dd className="font-bold tabular-nums" data-testid="sheet-balance">
+                        {t('sheetPoints', '{{value}} points', { value: points })}
+                      </dd>
+                    </div>
+                    <div className="flex items-center justify-between">
+                      <dt className="font-semibold text-gray-600 dark:text-gray-300">{t('sheetAfter', 'After purchase')}</dt>
+                      <dd className="font-bold tabular-nums" data-testid="sheet-after">
+                        {t('sheetPoints', '{{value}} points', { value: Math.max(0, points - focusItem.effectivePricePoints) })}
+                      </dd>
+                    </div>
+                  </dl>
+
+                  <TactileButton
+                    className="mt-3"
+                    variant="xp"
+                    fullWidth
+                    size="lg"
+                    loading={purchasingItemId === focusItem.shopItemId}
+                    disabled={purchasingItemId != null}
+                    onClick={() => buyAndApply(focusItem)}
+                  >
+                    {t('unlock', 'Unlock for {{price}} points', { price: focusItem.effectivePricePoints })}
+                  </TactileButton>
+                  <TactileButton
+                    className="mt-2"
+                    variant="ghost"
+                    fullWidth
+                    size="sm"
+                    onClick={() => { setConfirming(false); clearError(); }}
+                  >
+                    {t('confirmNo', 'Not now')}
+                  </TactileButton>
                 </div>
-              ) : (
-                <TactileButton className="mt-4" variant="xp" fullWidth size="lg" onClick={() => { clearError(); setConfirming(focus.item); }}>
-                  {t('buy', 'Buy for {{price}} points', { price: focus.item.effectivePricePoints })}
+              ) : focusItem.affordable ? (
+                <TactileButton className="mt-4" variant="xp" fullWidth size="lg" onClick={() => { clearError(); setConfirming(true); }}>
+                  {t('buy', 'Buy for {{price}} points', { price: focusItem.effectivePricePoints })}
                 </TactileButton>
+              ) : (
+                /* Short on points: preview stays fully available, but the buy
+                   affordance is replaced — the child is told exactly how far
+                   off they are instead of being led into a failed transaction. */
+                <div
+                  className="mt-4 rounded-2xl border border-amber-300 bg-amber-50 p-3 dark:border-amber-700 dark:bg-amber-900/25"
+                  data-testid="theme-purchase-shortfall"
+                >
+                  <p className="text-body font-extrabold text-amber-900 dark:text-amber-100">
+                    {t('needMore', 'Need {{value}} more points', { value: focusItem.shortfallPoints })}
+                  </p>
+                  <p className="mt-1 text-sm font-semibold text-amber-800 dark:text-amber-200">
+                    {t('needMoreHint', 'Your balance: {{balance}} points · {{price}} points to unlock', {
+                      balance: points,
+                      price: focusItem.effectivePricePoints,
+                    })}
+                  </p>
+                </div>
               )
             ) : (
               <p className="mt-4 rounded-xl bg-gray-100 px-3 py-2 text-sm font-semibold text-gray-600 dark:bg-white/5 dark:text-gray-300">
@@ -201,13 +292,13 @@ export function ThemeShop() {
             ) : null}
           </TactileCard>
         </div>
-      </ChildExperienceShell>
+      </ChildThemeSurface>
     );
   }
 
   // ----------------------------------------------------------------- list ---
   return (
-    <ChildExperienceShell resolvedTheme={null} mascotPresentation={null}>
+    <ChildThemeSurface resolvedTheme={null} mascotPresentation={null}>
       <div className="mx-auto w-full max-w-xl px-4 pb-24 pt-4" data-testid="theme-shop">
         <h1 className="flex items-center gap-2 text-title font-extrabold">
           <Palette size={22} aria-hidden="true" />
@@ -267,7 +358,7 @@ export function ThemeShop() {
                 key={item.shopItemId}
                 type="button"
                 className="block w-full text-left focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-500 rounded-2xl"
-                onClick={() => { triggerHaptic('tap'); setFocus({ kind: 'shop', item }); }}
+                onClick={() => { triggerHaptic('tap'); setFocus({ kind: 'shop', shopItemId: item.shopItemId }); }}
                 data-testid={`theme-card-${item.shopItemId}`}
                 aria-label={item.theme.name}
               >
@@ -300,7 +391,7 @@ export function ThemeShop() {
           <p className="mt-4 text-center text-meta text-gray-500">{t('loading', 'Loading themes…')}</p>
         ) : null}
       </div>
-    </ChildExperienceShell>
+    </ChildThemeSurface>
   );
 }
 

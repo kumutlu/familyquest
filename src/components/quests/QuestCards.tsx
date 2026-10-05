@@ -95,7 +95,11 @@ export function FeaturedQuestCard({
     <section
       aria-label={String(quest.task.title ?? '')}
       data-testid="featured-quest"
-      className="rounded-card qk-bg-card qk-border-subtle qk-shadow-card border p-5"
+      /* `qk-surface-personality` opts this card into the theme personality
+         surface treatment (translucency, blur, radius, depth, decorative edge).
+         The theme scope decides what those resolve to; this component names no
+         theme. `tone="xp"` chips keep their gold semantic colour. */
+      className="rounded-card qk-surface-personality qk-bg-card qk-border-subtle qk-shadow-card border p-5"
       style={{
         animation: 'qk-card-in var(--animate-duration-enter) var(--ease-enter) both',
       }}
@@ -163,7 +167,7 @@ export function CompactQuestCard({
     <div
       data-testid="compact-quest"
       className={cn(
-        'rounded-card qk-bg-card qk-border-subtle qk-shadow-card border p-3',
+        'rounded-card qk-surface-personality qk-bg-card qk-border-subtle qk-shadow-card border p-3',
         isRetry && 'border-l-4 border-l-streak-400',
       )}
     >

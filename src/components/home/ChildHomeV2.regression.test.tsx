@@ -581,18 +581,38 @@ describe('V2 design tokens', () => {
     // (Queki nighttime world), NOT a near-black. The light step keeps
     // the warm paper canvas. Dark still introduces a 5-step ladder
     // that the light block does not.
-    expect(light).toMatch(/--qk-bg-canvas:\s*#f5f3fb/);
-    expect(dark).toMatch(/--qk-bg-canvas:\s*#1a1530/);
-    expect(light).not.toMatch(/--qk-bg-canvas:\s*#1a1530/);
+    //
+    // The literal palette moved into the theme-AGNOSTIC tone layer
+    // (`--qk-tone-*`). The ladder now derives from it, which is what lets a
+    // child theme tint every surface by mixing its accent into a neutral base
+    // without ever redefining the neutral itself (a self-referential mix would
+    // be a CSS cycle, and re-declaring the tone would compound the tint on
+    // every navigation). The palette contract below is unchanged — only its
+    // address moved.
+    expect(light).toMatch(/--qk-tone-canvas:\s*#f5f3fb/);
+    expect(dark).toMatch(/--qk-tone-canvas:\s*#1a1530/);
+    expect(light).not.toMatch(/--qk-tone-canvas:\s*#1a1530/);
     // Deep indigo-violet, not a flat black. Each channel in the canvas
     // colour should show a non-trivial violet bias (R < G ≤ B).
-    const canvas = (dark.match(/--qk-bg-canvas:\s*#([0-9a-f]{6})/) ?? [])[1];
+    const canvas = (dark.match(/--qk-tone-canvas:\s*#([0-9a-f]{6})/) ?? [])[1];
     expect(canvas).toBeDefined();
     const r = parseInt(canvas!.slice(0, 2), 16);
     const g = parseInt(canvas!.slice(2, 4), 16);
     const b = parseInt(canvas!.slice(4, 6), 16);
     expect(r).toBeLessThan(g + 8); // violet/blue bias, not warm
     expect(b).toBeGreaterThan(r);   // blue channel dominates
+    // Every rung of both ladders is DERIVED from the tone layer.
+    for (const name of [
+      '--qk-bg-canvas',
+      '--qk-bg-subtle',
+      '--qk-bg-default',
+      '--qk-bg-elevated',
+      '--qk-bg-interactive',
+    ]) {
+      const rung = name.replace('--qk-bg-', '');
+      expect(light).toMatch(new RegExp(`${name}:\\s*var\\(--qk-tone-${rung}\\)`));
+      expect(dark).toMatch(new RegExp(`${name}:\\s*var\\(--qk-tone-${rung}\\)`));
+    }
   });
 
   it('honours prefers-reduced-motion by collapsing animation durations to 0ms', () => {
